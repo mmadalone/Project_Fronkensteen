@@ -143,7 +143,7 @@ To prevent runaway generation, observe these hard ceilings:
 | **Complex** | Multi-trigger, parallel actions, 3+ template conditions, state machine behavior, or cross-entity coordination. Example: bedtime negotiator with LLM conversation + multi-room lights + music duck/restore. | **Must decompose** — extract scripts, use helpers for state, discuss architecture with user before generating. |
 
 ### 1.9 Token budget management — load only what you need
-This style guide is ~111K tokens across 10 files (plus master index). **Never load all files for every task.** AI context is expensive — every token spent on irrelevant rules is a token not available for the user's actual content.
+This style guide is ~126K tokens across 10 files (plus master index). **Never load all files for every task.** AI context is expensive — every token spent on irrelevant rules is a token not available for the user's actual content.
 
 **Priority tiers — what to load and when:**
 
@@ -151,10 +151,10 @@ This style guide is ~111K tokens across 10 files (plus master index). **Never lo
 |------|-------------|-------|--------------------|
 | **T0 — Always (BUILD mode)** | Every BUILD task, no exceptions | `00_core_philosophy.md` (§1 only, skip §2/§9/§12 unless editing those) | ~8.8K (§1 alone) |
 | **T1 — Task-specific** | When the routing table (master index) maps to it | The ONE pattern doc for the task at hand | 6.0–11.8K (see table below) |
-| **T2 — Review/edit** | Only when reviewing or editing existing code | `06_anti_patterns_and_workflow.md` (§10 scan table + relevant §11 workflow) | ~22.4K full, ~4.9K (scan table + one §11 section) |
-| **T3 — Reference only** | Only when explicitly needed | `07_troubleshooting.md`, `08_voice_assistant_pattern.md` | ~6.9K / ~11.8K |
+| **T2 — Review/edit** | Only when reviewing or editing existing code | `06_anti_patterns_and_workflow.md` (§10 scan table + relevant §11 workflow) | ~24.3K full, ~5.6K (scan table + one §11 section) |
+| **T3 — Reference only** | Only when explicitly needed | `07_troubleshooting.md`, `08_voice_assistant_pattern.md` | ~9.2K / ~17.6K |
 
-**Per-file token costs (re-measured 2026-02-16 — re-measure after any structural changes to files):**
+**Per-file token costs (re-measured 2026-03-04 — re-measure after any structural changes to files):**
 
 | File | Full size | Typical load (skip irrelevant sections) |
 |------|-----------|-----------------------------------------|
@@ -165,11 +165,11 @@ This style guide is ~111K tokens across 10 files (plus master index). **Never lo
 | `03_conversation_agents.md` | ~8.3K | ~5.3K (§8.1–8.4 for most tasks) |
 | `04_esphome_patterns.md` | ~6.3K | ~6.3K (load fully for ESPHome tasks) |
 | `05_music_assistant_patterns.md` | ~11.8K | ~6.3K (duck/restore + play_media + voice bridge sections) |
-| `06_anti_patterns_and_workflow.md` | ~22.4K | ~4.9K (scan table + one workflow section) |
-| `07_troubleshooting.md` | ~6.9K | ~3.0K (load specific §13.X on demand) |
-| `08_voice_assistant_pattern.md` | ~11.8K | ~5.3K (relevant layers only) |
-| `09_qa_audit_checklist.md` | ~12.7K | ~6.4K (check definitions only, skip grep appendix) |
-| **Total if everything loaded** | **~111K** | **Never do this** |
+| `06_anti_patterns_and_workflow.md` | ~24.3K | ~5.6K (scan table + one workflow section) |
+| `07_troubleshooting.md` | ~9.2K | ~3.5K (load specific §13.X on demand) |
+| `08_voice_assistant_pattern.md` | ~17.6K | ~7.0K (relevant layers only) |
+| `09_qa_audit_checklist.md` | ~15.4K | ~7.5K (check definitions only, skip grep appendix) |
+| **Total if everything loaded** | **~126K** | **Never do this** |
 
 **Budget ceiling:** Aim to keep total loaded style guide content under ~15K tokens for any single task. That leaves room for the user's actual content, tool outputs, and conversation history. If a cross-domain task pushes past ~15K, apply drop rules below.
 
@@ -490,6 +490,7 @@ Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Pu
   - Bedtime: `<persona>_bedtime_<field>` (e.g., `rick_bedtime_morning`, `quark_gn_devices_question`)
   - Proactive: `<persona>_<area>_<time>` (e.g., `rick_workshop_evening`)
   - Global state: `bedtime_<field>` (e.g., `bedtime_active`, `bedtime_global_lock`)
+- AI architecture helpers: `ai_<system>_<field>` (e.g., `ai_context_user_name`, `ai_dispatcher_era_morning`, `ai_tts_duck_volume`, `ai_dedup_enabled`). These are defined in `packages/ai_*.yaml` and shared across the pyscript orchestration layer.
 - Boolean helpers that track playback state: `<entity_friendly>_was_playing`
 - Keep `max: 255` on text helpers unless a specific reason to go shorter
 

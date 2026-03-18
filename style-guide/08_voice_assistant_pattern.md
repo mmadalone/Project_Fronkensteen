@@ -23,31 +23,36 @@
    - Separation of Concerns — The Golden Rule (§1.2, §8.2)
    - Tool Exposure (§8.3.2)
    - MCP Servers as Tool Sources (HA 2025.2+)
-5. [Layer 4: Blueprints (Orchestration)](#layer-4-blueprints-orchestration)
+5. [Layer 3.5: Pyscript Orchestration](#layer-35-pyscript-orchestration)
+   - Dispatcher, Handoff, Whisper Network
+   - Memory (L1/L2/L3)
+   - TTS Queue Manager
+6. [Layer 4: Blueprints (Orchestration)](#layer-4-blueprints-orchestration)
    - Blueprint Categories in This Setup
    - The Coming Home Pattern (Interactive Conversation)
    - The Proactive LLM Sensors Pattern (One-Shot Announcements)
    - The Voice Active Media Controls Pattern (Command Hub)
-6. [Layer 5: Tool Scripts (Thin Wrappers)](#layer-5-tool-scripts-thin-wrappers)
+   - Blueprint Integration Patterns (Pyscript Calling Conventions)
+7. [Layer 5: Tool Scripts (Thin Wrappers)](#layer-5-tool-scripts-thin-wrappers)
    - Script Blueprint Pattern
    - Current Tool Scripts
    - Why This Architecture?
-7. [Layer 6: Helpers (Shared State)](#layer-6-helpers-shared-state)
+8. [Layer 6: Helpers (Shared State)](#layer-6-helpers-shared-state)
    - Ducking Flags
    - Volume Storage
    - Voice Command Bridges
-8. [TTS Output Patterns](#tts-output-patterns)
+9. [TTS Output Patterns](#tts-output-patterns)
    - Three Ways to Speak
    - `ask_question` — Full Capabilities (HA 2025.7+)
    - ElevenLabs Voice Profile Routing
    - Post-TTS Delay (AP-32)
    - TTS Streaming (HA 2025.10+)
-9. [Data Flow Summary](#data-flow-summary)
-   - Interactive Conversation (Coming Home)
-   - One-Shot Announcement (Proactive LLM Sensors)
-10. [Common Gotchas & Anti-Patterns](#common-gotchas--anti-patterns)
-11. [File Locations Reference](#file-locations-reference)
-12. [Style Guide Cross-References](#style-guide-cross-references)
+10. [Data Flow Summary](#data-flow-summary)
+    - Interactive Conversation (Coming Home)
+    - One-Shot Announcement (Proactive LLM Sensors)
+11. [Common Gotchas & Anti-Patterns](#common-gotchas--anti-patterns)
+12. [File Locations Reference](#file-locations-reference)
+13. [Style Guide Cross-References](#style-guide-cross-references)
 
 ---
 
@@ -55,7 +60,7 @@
 
 ### 14.1 Architecture overview
 
-The voice assistant pattern is a multi-layer stack. Each layer has a single responsibility, and they connect through well-defined interfaces. Here's the full chain:
+The voice assistant pattern is a multi-layer stack. Each layer has a single responsibility, and they connect through well-defined interfaces. YAML examples below are simplified for clarity — when implementing as blueprints, add `min_version` per the thresholds in §3.1 (e.g., `2025.7.0` for `ask_question` features, `2024.10.0` for `assist_satellite` actions). Here's the full chain:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -124,10 +129,12 @@ The physical hardware. Each satellite is an ESPHome-flashed Home Assistant Voice
 
 Two satellites exist in this setup, each assigned to a room and persona:
 
-| Satellite | Hostname | Friendly Name | Persona | Wake Words |
-|-----------|----------|---------------|---------|------------|
-| Workshop  | `home-assistant-voice-0905c5` | HA Workshop | Rick | `hey_rick`, `yo_rick` |
-| Living Room | `home-assistant-voice-0a0109` | HA Living Room | Quark | `hey_quark`, `yo_quark` |
+| Satellite | Hostname | Friendly Name | Wake Words | Status |
+|-----------|----------|---------------|------------|--------|
+| Workshop (Device 1) | `home-assistant-voice-0905c5` | HA Workshop | `hey_rick` + `hey_quark` | Both trained |
+| Living Room (Device 2) | `home-assistant-voice-0a0109` | HA Living Room | `hey_deadpool` + `hey_kramer` | Not yet trained |
+
+Each wake word maps to a separate Assist Pipeline via HA's dual wake word support (HA 2025.10+). "Hey Rick" → Rick's pipeline, "Hey Quark" → Quark's pipeline, on the same device.
 
 ### Config Structure
 
@@ -160,13 +167,13 @@ wifi:
   password: !secret wifi_password
 
 # ── Persona wake words ────────────────────────────────
-# 🔽 Rick's wake words — Workshop satellite
+# 🔽 Device 1 wake words — Workshop satellite (Rick + Quark)
 micro_wake_word:
   models:
     - id: hey_rick
       model: http://homeassistant.local:8123/local/microwake/hey_rick.json
-    - id: yo_rick
-      model: http://homeassistant.local:8123/local/microwake/yo_rick.json
+    - id: hey_quark
+      model: http://homeassistant.local:8123/local/microwake/hey_quark.json
 ```
 
 ### Key Principles
@@ -229,14 +236,11 @@ This is where personality lives. The conversation agent is configured through wh
 
 ### Agent Naming Convention (§8.4)
 
-Pattern: `<Persona> - <Integration>[ - <Variant>]`
+Pattern: `conversation.<persona>_<variant>`
 
-Examples from this setup:
-- `Rick - Extended` — general purpose Rick, Extended OpenAI Conversation
-- `Quark - Extended` — general purpose Quark, same integration
-- `Rick - Extended - Verbose` — detailed responses variant
+Current agents: `rick_standard`, `rick_bedtime`, `quark_standard`, `quark_bedtime`, `deadpool_standard`, `deadpool_bedtime`, `kramer_standard`, `kramer_bedtime`.
 
-> **Note:** Scenario-specific context (arrival, bedtime, proactive) is injected via `extra_system_prompt`, not by creating separate agents — see §8.4.
+> **Note:** Scenario-specific context (arrival, proactive) is injected via `extra_system_prompt`, not by creating separate agents. The only variant that justifies a separate agent is **bedtime** (different tool set). See §8.4.
 
 ### Mandatory Prompt Sections (§8.3)
 
@@ -249,7 +253,7 @@ Every agent prompt MUST contain these four sections in order:
 ```
 | Device             | Entity ID                | Allowed services                         |
 |--------------------|--------------------------|------------------------------------------|
-| Workshop lights    | light.workshop_lights    | light.turn_on / light.turn_off / toggle  |
+| Workshop lights    | light.workshop_lights    | light.turn_on / light.turn_off           |
 | Workshop speaker   | media_player.workshop    | media_player.volume_set / media_pause    |
 ```
 
@@ -309,6 +313,42 @@ Conversely, HA can also act as an **MCP server**, exposing your home's entities 
 
 ---
 
+### 14.4.1 Layer 3.5 — Pyscript Orchestration
+
+Between the conversation agents and the blueprints sits a **pyscript orchestration layer** — 15 Python modules (~510KB) that handle agent routing, inter-agent communication, memory, TTS queuing, predictions, and proactive behaviors. This layer reads from `assist_pipeline.pipelines` for persona discovery and operates on top of the HA Voice Assistant pipelines.
+
+**Core modules:**
+
+| Module | Purpose | Key Service |
+|--------|---------|-------------|
+| `agent_dispatcher.py` | 7-level persona routing (P0: handoff intent → wake word → continuity → keywords → era → preference → random). Alias support via `input_text.ai_handoff_persona_aliases`. | `pyscript.agent_dispatch` |
+| `voice_handoff.yaml` | Voice-initiated agent switching blueprint (I-24). LLM tool sets flag → blueprint switches satellite pipeline → greeting → mic reopen. Per-satellite, chainable. Supersedes archived `agent_handoff.py`. | Blueprint (trigger: `input_text.ai_handoff_pending`) |
+| `agent_whisper.py` | Interaction logging to L2, mood detection, auto-keyword learning | `pyscript.agent_whisper` |
+| `memory.py` | L2 persistent memory (SQLite+FTS5, auto-relationships, scoped by user) | `pyscript.memory_set/get/search` |
+| `tts_queue.py` | Centralized TTS with priority levels (0-4), cache tiers, presence-aware routing | `pyscript.tts_queue_speak` |
+| `duck_manager.py` | Reference-counted volume ducking, crash-safe snapshots | `pyscript.duck_manager_duck/restore` |
+| `notification_dedup.py` | O(1) announcement dedup with hash+TTL, fail-open design | `pyscript.dedup_check/announce` |
+| `proactive_briefing.py` | Multi-section morning briefing assembly and delivery | `pyscript.proactive_briefing_now` |
+| `focus_guard.py` | Anti-ADHD nudge system (6 types, escalation, focus mode, per-type toggles, meal mic follow-up) | `pyscript.focus_guard_evaluate` |
+| `presence_patterns.py` | Markov chain zone predictions from recorder DB | `pyscript.presence_predict_next` |
+| `routine_fingerprint.py` | Routine position tracking, bedtime prediction | `pyscript.routine_track_position` |
+| `predictive_schedule.py` | Calendar + routine + presence fusion for bedtime timing | `pyscript.schedule_bedtime_advisor` |
+| `calendar_promote.py` | Google Calendar L3→L2 daily promotion | `pyscript.calendar_promote_now` |
+| `email_promote.py` | Gmail IMAP priority filter, L3→L2 promotion | `pyscript.email_promote_process` |
+| `common_utilities.py` | SQLite cache layer, `conversation.process` timeout wrapper | (utility, no public service) |
+| `volume_sync.py` | Alexa ↔ MA volume synchronization | (trigger-based, no public service) |
+
+**Supporting infrastructure:** 17 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config).
+
+**Three-layer memory architecture:**
+- **L1 (Hot Context):** `sensor.ai_hot_context` — real-time template sensor injected into every agent's system prompt. Time, presence, media, weather, schedule, mood, focus mode, budget.
+- **L2 (Warm Memory):** SQLite+FTS5 via `pyscript.memory_*` services. Persistent facts, preferences, interaction logs, routine patterns. ~200ms query.
+- **L3 (Cold Context):** Google Calendar, Gmail IMAP. Promoted to L2 by automation (daily sync + event triggers) for fast agent access.
+
+**Full documentation:** `voice_context_architecture.md` in the project root. This section is a summary — the architecture doc contains the complete spec, build order, and 53 architectural decisions.
+
+---
+
 ### 14.5 Layer 4 — Blueprints (orchestration)
 
 Blueprints are the orchestration layer — they handle triggers, conditions, timing, flow control, and conversation initiation. They do NOT contain personality or device rules.
@@ -345,14 +385,16 @@ Key architectural decisions:
 
 ```yaml
 # Generate the greeting (one-shot, no conversation)
-- action: conversation.process
+- alias: "Generate AI greeting for arrival"
+  action: conversation.process
   data:
     agent_id: !input conversation_agent
     text: !input ai_greeting_prompt
   response_variable: ai_greeting
 
 # Start the interactive conversation on the satellite
-- action: assist_satellite.start_conversation
+- alias: "Start arrival conversation on satellite"
+  action: assist_satellite.start_conversation
   target: !input assist_satellites
   data:
     preannounce: true
@@ -362,7 +404,9 @@ Key architectural decisions:
       This is an arrival conversation.
 ```
 
-**4. Guaranteed cleanup.** Every exit path (timeout, entrance never cleared, normal completion) turns off the temporary switches. This is mandatory per §5.1 and AP-06.
+**4. Availability guards.** Before calling `conversation.process` or `assist_satellite.start_conversation`, verify the target entity is not `unavailable` or `unknown` (CQ-9). The satellite or agent may be offline after a reboot.
+
+**5. Guaranteed cleanup.** Every exit path (timeout, entrance never cleared, normal completion) turns off the temporary switches. This is mandatory per §5.1 and AP-06.
 
 ### The Proactive LLM Sensors Pattern (One-Shot Announcements)
 
@@ -378,7 +422,8 @@ Key features:
 The LLM prompt assembly pattern:
 
 ```yaml
-- action: conversation.process
+- alias: "Generate proactive message via LLM"
+  action: conversation.process
   data:
     agent_id: !input conversation_agent
     text: >
@@ -460,6 +505,527 @@ Mode is `parallel` with `max_exceeded: silent` — multiple commands can arrive 
 
 > 📋 **QA Check CQ-10:** Multi-step flows (LLM → TTS → speaker, presence → music → volume duck) should include observability hooks on failure paths. See `09_qa_audit_checklist.md`.
 
+### The Voice Handoff Pattern (I-24 — Agent Switching)
+
+**Blueprint:** `voice_handoff.yaml` — per-satellite agent switching via voice command.
+
+**User flow:** "Hey Rick, pass me to Deadpool" → Rick quips ("Sure, let me get the merc") → Deadpool greets in his voice → mic reopens on Deadpool's pipeline → user talks to Deadpool. Chainable: Rick → Deadpool → Kramer → Quark → Rick.
+
+**How it works — two layers:**
+
+| Layer | Mechanism | When it fires |
+|-------|-----------|---------------|
+| **Layer 1: Dispatcher Priority 0** | Regex detection of "pass me to X" in `intent_text`. Alias support (`deadpool=deepee`). Returns `handoff_detected: true` in dispatch response. | Programmatic callers (notification follow-me, etc.) |
+| **Layer 2: LLM tool function** | `handoff_agent` function in Extended OpenAI config. Agent calls `input_text.set_value` on `ai_handoff_pending`. Blueprint triggers on flag change. | Voice PE conversations (native Assist pipeline) |
+
+**Blueprint flow (Layer 2):**
+
+```
+Flag set ("deadpool") → trigger fires → save current pipeline
+→ clear flag → wait for satellite idle → switch pipeline via
+select.select_option → conversation.process for greeting
+→ assist_satellite.start_conversation (speaks greeting in
+target voice + reopens mic) → update self-awareness
+→ delay → restore original pipeline
+```
+
+**Key design decisions:**
+
+- **True pipeline switching** via `select.*_assistant` entities — changes conversation agent, TTS engine, AND TTS voice. No role-play hack.
+- **Per-satellite isolation** — each blueprint instance monitors one satellite. Condition checks `satellite.last_changed < 30s` to prevent cross-satellite firing from shared flag.
+- **`mode: restart`** — new handoff cancels previous run's restore timer, enabling chains.
+- **`from: ""`** on trigger — prevents spurious firing when flag is cleared.
+
+**Helpers:**
+
+| Helper | Purpose |
+|--------|---------|
+| `input_boolean.ai_voice_handoff_enabled` | Master toggle |
+| `input_boolean.ai_handoff_commentary` | Outgoing agent commentary toggle |
+| `input_select.ai_handoff_greeting_mode` | auto / greet_first / answer_query |
+| `input_text.ai_handoff_pending` | Flag (set by LLM tool, cleared by blueprint) |
+| `input_text.ai_handoff_persona_aliases` | Alias map (e.g., `deadpool=deepee,cosmo=kramer`) |
+| `input_select.ai_expertise_routing_mode` | off / suggest / auto — global LLM routing mode (I-45) |
+
+**Blueprint inputs:** satellite, pipeline_select, greeting_prompt, restore_after_seconds, tts_speaker, bypass_ducking, bypass_follow_me, enable_expertise_handoff, expertise_commentary_prompt, expertise_greeting_prompt.
+
+**Extended OpenAI tool function** (must be on ALL agents):
+
+```yaml
+- spec:
+    name: handoff_agent
+    description: "Switch to another voice agent. reason: user_request if user asked, expertise if proactive routing."
+    parameters:
+      type: object
+      properties:
+        target:
+          type: string
+          enum: [deadpool, quark, kramer, rick, doctor portuondo]
+        reason:
+          type: string
+          enum: [user_request, expertise]
+      required: [target, reason]
+  function:
+    type: script
+    sequence:
+      - event: ai_handoff_request
+        event_data:
+          target: "{{target}}"
+          reason: "{{reason}}"
+```
+
+**Agent system prompt additions** (all 10 Standard + Bedtime agents):
+
+```
+### Agent Expertise Map
+| Agent             | Primary Domains                                                     |
+|-------------------|---------------------------------------------------------------------|
+| Rick              | Science, technology, engineering, computing, repairs, debugging     |
+| Quark             | Finance, budgets, deals, negotiation, trade, costs, investments    |
+| Doctor Portuondo  | Emotions, relationships, psychology, wellbeing, stress, motivation |
+| Kramer            | Ideas, schemes, lifestyle, food, activities, creativity, projects  |
+| Deepee            | General knowledge, pop culture, entertainment, trivia, humor       |
+
+Routing rules:
+- Check "Expertise routing" in Current Context. If absent or "off", skip.
+- If topic clearly belongs to another agent and NOT yours:
+  - "suggest": Answer yourself, mention who's better. Stay in character.
+  - "auto": Call handoff_agent with reason "expertise". Brief in-character farewell.
+- Partial overlap, ambiguous, commands, first message → answer yourself, no routing.
+
+AGENT HANDOFF:
+- Reactive: User asks to switch → handoff_agent(target, reason="user_request").
+- Proactive: Out-of-domain → follow routing mode from Current Context.
+- Bedtime override: Never call handoff_agent for routing. Suggest only.
+```
+
+### 14.5.1 Blueprint Integration Patterns (Pyscript Calling Conventions)
+
+The 16 blueprints in this setup all integrate with the pyscript orchestration layer (§14.4.1) using a common set of calling patterns. These are the **standard conventions** — any new blueprint that interacts with the orchestration layer MUST follow them.
+
+**Before-and-after context:** Prior to pyscript integration, blueprints called `conversation.process` with a hardcoded `agent_id: !input conversation_agent`, built context inline, called `tts.speak` directly, and managed duck/restore cycles themselves. The integrated approach centralizes agent routing, TTS delivery, ducking, and interaction logging in pyscript services. Blueprints become thinner — they handle triggers, flow control, and prompt assembly, then delegate infrastructure concerns to the orchestration layer.
+
+#### Design Principle: Pyscript Features Are Optional Enhancements
+
+Every pyscript feature — dispatcher, TTS queue, dedup, whisper, ducking — MUST be gated behind a boolean toggle input. The orchestration layer is an **enhancement**, not a dependency. Blueprints MUST work standalone when:
+
+- The user sets the toggle to `false`
+- The pyscript layer is not installed
+- A pyscript service call fails (`continue_on_error: true`)
+
+When the orchestration path is unavailable, the blueprint MUST fall through to native HA equivalents: `conversation.process` with `!input conversation_agent`, `tts.speak` directly, no dedup, no whisper preprocessing.
+
+**Standard pyscript toggle inputs.** Every blueprint that integrates with the orchestration layer SHOULD include the relevant subset of these inputs:
+
+```yaml
+input:
+  use_dispatcher:
+    name: Use AI Dispatcher for agent selection
+    description: >
+      Route through pyscript.agent_dispatch for dynamic agent/voice/persona
+      selection. When off, falls back to the conversation_agent input.
+    default: true
+    selector:
+      boolean:
+
+  use_tts_queue:
+    name: Use TTS queue for speech delivery
+    description: >
+      Route TTS through pyscript.tts_queue for zone-aware delivery, caching,
+      and volume ducking. When off, falls back to tts.speak directly.
+    default: true
+    selector:
+      boolean:
+
+  use_dedup:
+    name: Use dedup guard
+    description: >
+      Gate the action sequence through pyscript.interaction_dedup to prevent
+      duplicate triggers within the cooldown window. When off, no dedup — every
+      trigger fires.
+    default: true
+    selector:
+      boolean:
+
+  use_whisper:
+    name: Use Whisper preprocessing
+    description: >
+      Send raw STT text through pyscript.whisper_preprocess for normalization,
+      spelling correction, and intent extraction. When off, raw STT text is
+      passed directly to the conversation agent.
+    default: true
+    selector:
+      boolean:
+```
+
+Only include the toggles relevant to the blueprint — a blueprint that never calls TTS doesn't need `use_tts_queue`.
+
+**Fallback structure.** The canonical pattern is a `choose` block with the pyscript path as a condition and the native HA path as the `default`:
+
+```yaml
+- choose:
+    - alias: "Pyscript path — orchestration handles delivery"
+      conditions:
+        - condition: template
+          value_template: >
+            {{ use_tts_queue and is_state('input_boolean.ai_tts_queue_enabled', 'on') }}
+      sequence:
+        - action: pyscript.tts_queue
+          data:
+            message: "{{ response_text }}"
+            target_player: "{{ target_player }}"
+          continue_on_error: true
+  default:
+    - alias: "Native fallback — direct tts.speak"
+      action: tts.speak
+      target:
+        entity_id: "{{ target_player }}"
+      data:
+        message: "{{ response_text }}"
+```
+
+The double gate — `use_<feature>` input AND `input_boolean.ai_<feature>_enabled` state — lets users disable features at blueprint config time (input) or at runtime (dashboard toggle). Pattern 1 below is the canonical example of this principle applied to agent dispatch.
+
+#### Pattern 1: Dispatcher-First Agent Selection (MANDATORY for agent-calling blueprints)
+
+Every blueprint that calls a conversation agent SHOULD route through `pyscript.agent_dispatch` when the dispatcher is enabled. The dispatcher selects the agent, voice, and persona dynamically. The blueprint still accepts a `conversation_agent` input as the fallback — if the dispatcher is off or unavailable, the blueprint uses that input directly (see Design Principle above).
+
+```yaml
+- choose:
+    - alias: "Dispatcher path — orchestration selects the agent"
+      conditions:
+        - condition: template
+          value_template: >
+            {{ use_dispatcher and is_state('input_boolean.ai_dispatcher_enabled', 'on') }}
+      sequence:
+        - action: pyscript.agent_dispatch
+          response_variable: dispatch
+          data:
+            wake_word: "<intent_label>"
+            intent_text: "<human-readable description>"
+            skip_continuity: true
+          continue_on_error: true
+        - variables:
+            dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+            dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+            dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+            dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+  default:
+    - alias: "Fallback — resolve from pipeline input"
+      action: pyscript.agent_dispatch
+      response_variable: pipeline_resolve
+      data:
+        pipeline_id: "{{ v_pipeline_id }}"
+      continue_on_error: true
+    - variables:
+        dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+        dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+        dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+        dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+```
+
+**Rules:**
+- `skip_continuity: true` on all proactive / non-interactive calls (prevents the dispatcher from favoring the last-used persona when there's no live conversation).
+- Both paths call `pyscript.agent_dispatch` — dispatcher path uses `wake_word`/`intent_text`, fallback uses `pipeline_id`.
+- Always extract 4 fields: `agent`, `tts_engine`, `tts_voice`, `persona`.
+- Always `continue_on_error: true` — if dispatch fails, the blueprint must still function.
+- Defensive `.get()` with defaults on every response field — dispatch may return partial or empty results.
+- `use_dispatcher` is a blueprint input (`boolean`, default `true`) that lets users opt out.
+
+#### Pattern 2: Post-Interaction Whisper (MANDATORY after LLM calls and TTS)
+
+After every LLM call or TTS announcement, blueprints MUST call `pyscript.agent_whisper` to log the interaction to L2 memory:
+
+```yaml
+- alias: "Log interaction to whisper network"
+  action: pyscript.agent_whisper
+  data:
+    agent_name: "{{ dispatch_persona }}"
+    user_query: "<human-readable action summary>"
+    agent_response: "{{ response_text[:200] }}"
+  continue_on_error: true
+```
+
+**Rules:**
+- `agent_response` is optional — omit for non-LLM announcements (TTS-only, device control).
+- `user_query` is a human-readable summary of what happened (e.g., "Bedtime routine started"), NOT the actual user speech or raw prompt.
+- Truncate `agent_response` to first 200 characters — whisper extracts keywords and mood, not full transcripts.
+- Always `continue_on_error: true` — logging must never break the main flow.
+
+#### Pattern 3: TTS via pyscript.tts_queue_speak (PREFERRED for all TTS)
+
+All new blueprints MUST use `pyscript.tts_queue_speak` instead of direct `tts.speak`. The queue handles priority, caching, presence-aware routing, and ducking internally.
+
+```yaml
+- alias: "Announce via TTS queue"
+  action: pyscript.tts_queue_speak
+  data:
+    text: "{{ message }}"
+    voice: "{{ dispatch_voice }}"
+    priority: 2
+    target_mode: presence
+  continue_on_error: true
+```
+
+**Priority levels:**
+
+| Level | Name | Use case |
+|-------|------|----------|
+| 0 | Emergency | Safety alerts, security events |
+| 1 | Alert | Alarms, urgent notifications |
+| 2 | Normal | Standard announcements, greetings |
+| 3 | Low | Informational updates, reminders |
+| 4 | Ambient | Background proactive suggestions |
+
+**Target modes:**
+- `presence` — routes to speakers where people are detected (default for most blueprints).
+- `explicit` — routes to a specific player; requires `target: "{{ target_player }}"`.
+
+**Pre-speech chime (stinger/jingle):**
+- `chime_path` — audio file URL or `/local/` path to play before TTS (e.g. agent stinger).
+- `chime_duration_ms` — duration of the chime in milliseconds. When provided, the queue waits `(duration / 1000) + POST_PLAYBACK_BUFFER` before starting TTS. When 0 or omitted, falls back to `POST_PLAYBACK_BUFFER` only (0.3s). Blueprints should resolve duration from `music_compose_get` (returns `duration_ms` from JSON sidecar metadata) rather than hardcoding delays.
+
+**Migration note:** Existing blueprints using direct `tts.speak` should be migrated to `tts_queue_speak` when next edited. No dedicated migration pass needed — update on touch.
+
+#### Pattern 4: Dedup-Gated Announcements (for proactive/ambient blueprints)
+
+Blueprints that produce repeated or periodic announcements MUST use `pyscript.dedup_announce` to prevent message flooding:
+
+```yaml
+- alias: "Dedup-gated announcement"
+  action: pyscript.dedup_announce
+  data:
+    topic: "{{ area_slug }}_proactive"
+    source: "proactive"
+    text: "{{ message }}"
+    voice: "{{ dispatch_voice }}"
+    priority: 4
+    target_mode: presence
+    ttl_hours: 1
+    volume_level: 0.5
+  continue_on_error: true
+```
+
+**When to use dedup vs direct queue:**
+- **dedup_announce** — proactive suggestions, ambient reminders, any message that might fire multiple times within a window. Uses O(1) hash+TTL to silently drop duplicates.
+- **tts_queue_speak** — one-shot announcements, alarm messages, greetings that should always play.
+
+#### Pattern 5: LLM Response Extraction (MANDATORY defensive parsing)
+
+Every `conversation.process` response MUST be parsed with the full defensive `is defined` chain. Never assume the response structure exists:
+
+```yaml
+response_text: >-
+  {% set res = result.response if result is defined else none %}
+  {% set txt = '' %}
+  {% if res is not none and res.speech is defined
+        and res.speech.plain is defined
+        and res.speech.plain.speech is defined %}
+    {% set txt = res.speech.plain.speech | trim %}
+  {% endif %}
+  {{ txt if txt | length > 0 else fallback_message }}
+```
+
+This pattern is already documented in §14.5 (Proactive LLM Sensors pattern) — the rule here is that it's **mandatory for all blueprints**, not optional. See the response structure table in §14.5 for integration-specific notes.
+
+#### Pattern 6: Sensor Context Assembly (for blueprints accepting context entities)
+
+Blueprints that accept a user-provided list of context entities MUST build the sensor context block using this pattern:
+
+```yaml
+sensor_context: >-
+  {% set ns = namespace(lines=[]) %}
+  {% for eid in context_entities %}
+    {% if states(eid) not in ['unavailable','unknown',''] %}
+      {% set ns.lines = ns.lines + [state_attr(eid,'friendly_name') | default(eid) ~ ': ' ~ states(eid)] %}
+    {% endif %}
+  {% endfor %}
+  {{ ns.lines | join('\n') }}
+```
+
+**Rules:**
+- Filter out `unavailable`, `unknown`, and empty states — never feed garbage to the LLM.
+- Use `friendly_name` with `| default(eid)` fallback — some entities lack friendly names.
+- Pass the assembled block inline to `conversation.process` `text:` field as part of the prompt context section.
+- The `namespace()` pattern is required because Jinja2 scoping rules prevent reassigning loop variables directly (see §3.6).
+
+#### Pattern 7: Conversation via pyscript.conversation_with_timeout
+
+For blueprints that need timeout protection on LLM calls, use the pyscript wrapper instead of direct `conversation.process`:
+
+```yaml
+- alias: "LLM call with timeout guard"
+  action: pyscript.conversation_with_timeout
+  response_variable: llm_result
+  data:
+    agent_id: "{{ dispatch_agent }}"
+    text: "{{ prompt }}"
+    timeout: 60
+  continue_on_error: true
+```
+
+**When to use:** Any proactive or automated flow where a stuck LLM call would block the entire automation. Interactive flows (where the user is actively waiting) can use direct `conversation.process` since the pipeline has its own timeout.
+
+#### Pattern 8: No Blueprint-Level Ducking (MANDATORY — delegate to infrastructure)
+
+Blueprints MUST NOT implement manual duck/restore volume cycles. Ducking is handled by:
+- **`voice_pe_duck_media_volumes.yaml`** — triggered by satellite state changes for interactive voice flows.
+- **`pyscript.tts_queue_speak`** — handles ducking internally via `duck_manager` for queued announcements.
+
+The only exceptions are `email_follow_me` and `notification_follow_me`, which pre-date the centralized duck infrastructure. These should be migrated when next edited.
+
+**Why this matters:** Manual duck/restore in blueprints creates race conditions when multiple automations try to duck simultaneously. The centralized `duck_manager` uses reference counting and crash-safe snapshots (§14.4.1) to handle concurrent ducking correctly.
+
+> **Cross-reference: §7.4 documents the manual duck/restore pattern.** That pattern is the underlying mechanism — it's still valid for understanding how ducking works, and for the exceptions listed above (`email_follow_me`, `notification_follow_me`). New blueprints should use the centralized infrastructure instead of reimplementing §7.4 directly.
+
+> 📋 **QA Check CQ-10:** Verify new blueprints use `tts_queue_speak` or `dedup_announce` for TTS — not direct `tts.speak` with manual ducking. See `09_qa_audit_checklist.md`.
+
+### 14.5.2 Blueprint TTS Routing Guide
+
+Blueprints that produce voice output MUST route through `pyscript.tts_queue_speak`. This section documents the `target_mode` parameter — the single decision that controls where audio plays.
+
+#### Service signature
+
+```yaml
+action: pyscript.tts_queue_speak
+data:
+  text: "{{ message }}"
+  target_mode: presence          # presence | explicit | broadcast | source_room
+  target: "media_player.xxx"    # only required for explicit mode
+  priority: 2                    # 0=emergency … 4=ambient
+  voice: "{{ dispatch_voice }}"  # TTS engine entity
+  cache: session                 # static | daily | session | none
+continue_on_error: true
+```
+
+#### Four target modes
+
+| Mode | Behaviour | When to use |
+|------|-----------|-------------|
+| `presence` | Routes to speakers where people are detected (FP2 zones). This is the **default** — omit `target` entirely. | Most announcements: greetings, reminders, briefings, proactive suggestions. |
+| `explicit` | Forces a specific `media_player` entity; requires `target: media_player.xxx`. | Alarm escalation, bedside-only alerts, kitchen timer where output speaker is fixed by context. |
+| `broadcast` | Plays on **all** speakers simultaneously. | Emergency alerts, security events, whole-house announcements. |
+| `source_room` | Routes to the room that triggered the automation (e.g., the satellite that heard the voice command). | Interactive follow-ups: "Did you mean…?", confirmation prompts, ask-question flows. |
+
+#### Decision tree
+
+```
+Does the user need to hear this in a specific place?
+├── YES → explicit (set target: media_player.xxx)
+└── NO
+    ├── Wherever the user happens to be? → presence (default, omit target)
+    ├── Everyone in the house? → broadcast
+    └── Same room that triggered the event? → source_room
+```
+
+#### Concrete examples
+
+**Presence-aware calendar reminder** (follow the user):
+```yaml
+- alias: "Calendar reminder via TTS queue"
+  action: pyscript.tts_queue_speak
+  data:
+    text: "Heads up — {{ event_summary }} starts in {{ minutes }} minutes."
+    target_mode: presence
+    priority: 3
+    voice: "{{ dispatch_voice }}"
+    cache: session
+  continue_on_error: true
+```
+
+**Explicit alarm announcement** (always bedside speaker):
+```yaml
+- alias: "Alarm announcement"
+  action: pyscript.tts_queue_speak
+  data:
+    text: "Good morning. Time to get up."
+    target_mode: explicit
+    target: "media_player.bedroom_speaker"
+    priority: 1
+    voice: "{{ dispatch_voice }}"
+    cache: daily
+  continue_on_error: true
+```
+
+**Broadcast emergency alert** (all speakers):
+```yaml
+- alias: "Emergency broadcast"
+  action: pyscript.tts_queue_speak
+  data:
+    text: "Security alert — motion detected in {{ zone }}."
+    target_mode: broadcast
+    priority: 0
+    voice: "{{ dispatch_voice }}"
+    cache: none
+  continue_on_error: true
+```
+
+> **Cross-reference:** AP-48 — never bypass the TTS queue when `tts_queue_speak` is available and the blueprint has a TTS queue toggle. Direct `tts.speak` calls should only appear in graceful-degradation fallback paths (§14.5.1).
+
+### 14.5.3 Critical Action PIN Pattern
+
+Some voice commands are too dangerous for a simple "are you sure?" — unlocking doors, disarming alarms, or toggling destructive switches need a **credential layer** on top of confirmation. The `voice_pin_action.yaml` script blueprint adds a spoken passphrase gate before executing any protected action.
+
+#### Architecture — Three-Layer Chain
+
+```
+Voice command → va_confirmation_dialog (automation — sentence trigger)
+  → voice_pin_action instance (script — passphrase challenge)
+    → protected action script (executes the actual service call)
+```
+
+Each layer is a separate blueprint instance, wired by entity references:
+
+| Layer | Blueprint | Role |
+|-------|-----------|------|
+| Trigger | `va_confirmation_dialog` | Matches voice command, calls confirmation script |
+| Credential | `voice_pin_action` | Challenges for passphrase via `ask_question`, retries on wrong answer |
+| Action | Any script entity | Executes the protected action (lock/alarm/toggle) |
+
+#### Passphrase Storage
+
+The passphrase lives in `input_text.ai_voice_pin` (created via UI, mode: **password**). A global `input_boolean.ai_voice_pin_enabled` provides a bypass toggle — when OFF, the PIN script calls the protected action directly without challenging.
+
+**Use word-based passphrases, not numeric PINs.** STT engines may transcribe "1234" as "one thousand two hundred thirty-four", "twelve thirty-four", or "one two three four" — none match the literal string. Word-based passphrases like `banana`, `open sesame`, or `pineapple` are transcribed reliably.
+
+#### When to Use the PIN Pattern
+
+| Scenario | PIN needed? |
+|----------|-------------|
+| Unlock door / disarm alarm | **Yes** — physical security |
+| Toggle expensive HVAC | **Yes** — financial impact |
+| Reboot server / media center | Maybe — use `voice_confirm_device_toggle` if confirmation alone is sufficient |
+| Turn off a light | **No** — use direct voice command |
+
+#### Wiring Example — Front Door Lock
+
+```yaml
+# 1. Action script (simple, no blueprint needed)
+# In scripts.yaml:
+unlock_front_door:
+  alias: "Unlock front door"
+  sequence:
+    - action: lock.unlock
+      target:
+        entity_id: lock.front_door
+
+# 2. voice_pin_action instance (via UI: Settings → Automations & Scenes → Blueprints)
+#    - Satellite: assist_satellite.kitchen
+#    - Protected script: script.unlock_front_door
+#    - PIN / enabled entities: defaults (ai_voice_pin / ai_voice_pin_enabled)
+
+# 3. va_confirmation_dialog instance
+#    - Primary command: "unlock the front door"
+#    - Alt command: "open the front door"
+#    - Confirmation script: script.pin_unlock_front_door (the PIN instance)
+```
+
+Voice flow: *"Unlock the front door"* → *"Please say your access code."* → *"Banana"* → *"Access granted."* → lock unlocks.
+
+#### Known Limitation — Single Satellite per Instance
+
+The `va_confirmation_dialog` automation calls scripts via `script.turn_on` without passing the triggering satellite entity. The PIN script's `satellite_entity` input is set at instance creation time — one satellite per instance. For multi-satellite homes, create one PIN script instance per satellite per protected action. This matches the existing `voice_confirm_device_toggle` pattern and is acceptable for v1.
+
 ---
 
 ### 14.6 Layer 5 — Tool scripts (thin wrappers)
@@ -519,7 +1085,35 @@ sequence:
 
 ### 14.7 Layer 6 — Helpers (shared state)
 
-Helpers are the glue between automations that need to coordinate. Three patterns dominate the voice assistant stack:
+Helpers are the glue between automations that need to coordinate. The primary helper infrastructure is the **17 AI packages** (`packages/ai_*.yaml`), which define helpers, template sensors, automations, and scripts for the voice context architecture. Key packages: `ai_context_hot.yaml` (L1 hot context sensor + user profile helpers), `ai_identity.yaml` (multi-user confidence scoring), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing + cache tracking), `ai_dispatcher.yaml` (era defaults + keyword management). All AI helpers follow the `ai_<system>_<field>` naming convention (§9.3).
+
+#### Design Principle: If It's Tunable, It Gets a Dashboard Element
+
+Every configurable parameter in a pyscript module MUST be backed by a helper entity, and every helper entity MUST have a corresponding element in the AI management dashboard. No hidden tunables — if a value can change behavior, users must be able to see and change it from the UI.
+
+This is a **design-time** principle: when you design a new pyscript module or add a parameter to an existing one, the helper + dashboard element are part of the deliverable, not an afterthought.
+
+**Naming:** helpers follow the existing `ai_<system>_<field>` convention (§9.3). Example: `input_number.ai_tts_queue_duck_volume` → "AI TTS Queue Duck Volume" on the dashboard.
+
+**Helper → dashboard element decision matrix:**
+
+| Parameter type | Helper type | Dashboard element | Example |
+|---|---|---|---|
+| On/off feature toggle | `input_boolean` | Toggle switch | `input_boolean.ai_dispatcher_enabled` |
+| Numeric threshold / range | `input_number` | Slider (with min/max/step) | `input_number.ai_dedup_cooldown_seconds` |
+| Multi-option choice | `input_select` | Dropdown | `input_select.ai_tts_default_voice` |
+| Free-form text / template | `input_text` | Text input field | `input_text.ai_identity_default_persona` |
+
+**Checklist for new pyscript parameters:**
+1. Identify the parameter type from the matrix above
+2. Create the helper in the matching `helpers_input_*.yaml` file (§9.3)
+3. Add the helper to the relevant AI package (`packages/ai_*.yaml`)
+4. Add the corresponding dashboard element to the AI management dashboard
+5. Reference the helper in the pyscript module via `state.get()` or `hass.states.get()`
+
+This principle works hand-in-hand with the graceful degradation principle (§14.5.1): the `input_boolean` toggles that gate pyscript features are themselves dashboard elements, giving users runtime control over the orchestration layer.
+
+Three additional patterns dominate the voice assistant stack:
 
 ### Ducking Flags (`input_boolean`)
 
@@ -560,6 +1154,36 @@ Alexa can't call MA services directly. The bridge pattern:
 | `assist_satellite.ask_question` | Structured Q&A with sentence matching | Auto-ducks via pipeline | Yes (structured answers + slot extraction) |
 
 > 📋 **QA Check CQ-7:** TTS message templates and conversation response extraction must guard against `unavailable`/`unknown`/`None` — use `| default()` and multi-level `is defined` checks. See `09_qa_audit_checklist.md`.
+
+#### TTS Queue Manager (`tts_queue.py`)
+
+In practice, all TTS in this system flows through a centralized **pyscript TTS queue manager** (`pyscript.tts_queue_speak`) rather than calling `tts.speak` directly. The queue provides:
+
+- **Priority levels:** Emergency (0), Alert (1), Normal (2), Low (3), Ambient (4). Higher priority preempts lower.
+- **Cache tiers:** `static` (permanent), `daily` (regenerate at midnight), `session` (per-automation-run), `none` (never cache). Reduces ElevenLabs API costs by ~60% for repeated phrases.
+- **Presence-aware routing:** `presence` (follow user via FP2 zones), `explicit` (named speaker), `broadcast` (all speakers), `source_room` (respond where asked).
+- **Ducking coordination:** Hardware (Sonos announce mode) or software (pyscript capture/restore) per speaker, configured in `tts_speaker_config.json`.
+
+Blueprints call `pyscript.tts_queue_speak` instead of raw `tts.speak`/`media_player.play_media`. See `voice_context_architecture.md` DC-3 and DC-10 for full spec.
+
+#### ElevenLabs Voice Profile Routing (loryanstrant Custom TTS)
+
+The **ElevenLabs Custom TTS** integration (loryanstrant, HACS) provides per-call voice parameter control that the native HA ElevenLabs integration does not expose: **speed** (0.25-4.0x), **stability** (0.0-1.0), **similarity boost**, **style**, and **speaker boost**.
+
+Named voice profiles (e.g., `Rick-Hungover`, `Rick-Baseline`, `Rick-Hammered`) are created via the integration's UI and can be referenced in `tts.speak` calls via the `voice_profile` option. This enables a **voice dimension** to the time-based personality progressions — the agent's cadence formula (§8.3) controls what the LLM *generates*, while voice profiles control how ElevenLabs *renders* that text.
+
+```yaml
+# Example: TTS queue speak with voice profile (time-based)
+pyscript.tts_queue_speak:
+  text: "{{ agent_response }}"
+  voice: tts.elevenlabs_custom_tts
+  voice_profile: "Rick-Hammered"   # Resolved from now().hour mapping
+  target_mode: presence
+  priority: 2
+  cache: none
+```
+
+**Caution:** Keep stability ≥ 0.3 even at "hammered" level. At very low stability, ElevenLabs may garble content unpredictably. Test with actual prompts before committing profile values.
 
 ### `ask_question` — Full Capabilities (HA 2025.7+)
 
@@ -611,12 +1235,14 @@ Key features:
 When using ElevenLabs custom TTS, the `voice_profile` option must be conditionally included — sending an empty profile to non-ElevenLabs engines will choke:
 
 ```yaml
-- choose:
+- alias: "Speak with conditional ElevenLabs voice profile"
+  choose:
     - conditions:
         - condition: template
           value_template: "{{ voice_profile | default('') | string | length > 0 }}"
       sequence:
-        - action: tts.speak
+        - alias: "Speak via ElevenLabs with voice profile"
+          action: tts.speak
           target:
             entity_id: !input tts_engine
           data:
@@ -625,7 +1251,8 @@ When using ElevenLabs custom TTS, the `voice_profile` option must be conditional
             options:
               voice_profile: !input voice_profile
   default:
-    - action: tts.speak
+    - alias: "Speak via default TTS engine (no voice profile)"
+      action: tts.speak
       target:
         entity_id: !input tts_engine
       data:
@@ -696,7 +1323,7 @@ fallback_tts_engine:
 
 ### Post-TTS Delay (AP-32)
 
-ElevenLabs and other streaming TTS engines return from `tts.speak` *before* the audio finishes playing. **Always** include a configurable delay before restoring volume or starting the next action. Default: 5 seconds. Expose it as a blueprint input.
+ElevenLabs and other streaming TTS engines return from `tts.speak` *before* the audio finishes playing. **Always** include a configurable delay before restoring volume or starting the next action. Expose it as a blueprint input. Recommended range: 3–8 seconds (default: 5). Short messages need ~3s; longer LLM-generated responses may need 6–8s. If users report volume restoring mid-sentence, increase the delay.
 
 ### TTS Streaming (HA 2025.10+)
 
@@ -894,6 +1521,7 @@ These are the ones that'll bite you in the ass if you're not careful:
 | TTS duck/restore | §7.4 (Music Assistant Patterns) |
 | Voice command bridges | §7.7 |
 | Unified media control | §7.8 |
+| Critical action PIN pattern | §14.5.3 |
 | All anti-patterns | §10 |
 
 > 📋 **QA Check INT-4:** Voice assistant pattern completeness — verify 6-layer MUST NOT boundaries, TTS streaming config, ElevenLabs fallback, one-agent-per-persona clarification, data flow diagrams, directory tree, and `!secret` for API keys are all documented. See `09_qa_audit_checklist.md`.

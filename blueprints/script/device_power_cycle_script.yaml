@@ -1,0 +1,59 @@
+blueprint:
+  name: "Device Power Cycle (manual script)"
+  description: |
+    ## Version 1.0
+
+    SCRIPT: Turn off a switch, wait, turn it back on. Manual on-demand
+    power cycle for devices like speakers, routers, or smart plugs.
+
+    For scheduled automatic power cycling, use the `device_power_cycle`
+    automation blueprint instead.
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/device_power_cycle_script.yaml
+
+  input:
+    core:
+      name: "① Configuration"
+      icon: mdi:restart
+      collapsed: false
+      input:
+        target_switch:
+          name: "Target switch"
+          description: "The switch entity to power cycle."
+          selector:
+            entity:
+              domain: switch
+
+        delay_seconds:
+          name: "Off duration (seconds)"
+          description: "How long to keep the device off before turning it back on."
+          default: 60
+          selector:
+            number:
+              min: 5
+              max: 300
+              unit_of_measurement: seconds
+
+mode: single
+max_exceeded: silent
+
+variables:
+  target_switch: !input target_switch
+  delay_seconds: !input delay_seconds
+
+sequence:
+  - alias: "Turn off device"
+    action: switch.turn_off
+    target:
+      entity_id: "{{ target_switch }}"
+
+  - alias: "Wait for power cycle duration"
+    delay:
+      seconds: "{{ delay_seconds | int(60) }}"
+
+  - alias: "Turn on device"
+    action: switch.turn_on
+    target:
+      entity_id: "{{ target_switch }}"

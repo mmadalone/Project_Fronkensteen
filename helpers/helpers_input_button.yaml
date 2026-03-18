@@ -1,0 +1,32 @@
+# Input button helpers
+# All previous entries (refresh buttons, TV test buttons) were orphans — removed 2026-03-04
+
+ai_music_taste_rebuild:
+  name: "AI Music Taste - Rebuild Profile"
+  icon: mdi:music-box-multiple
+
+# I-32: Manual budget reset — triggers script.ai_budget_reset from dashboard/voice
+ai_budget_manual_reset:
+  name: "AI Budget - Manual Reset"
+  icon: mdi:refresh-circle
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_music_composer — Music Composition (I-10)
+# ═══════════════════════════════════════════════════════════════════
+ai_music_compose_batch:
+  name: "AI Music - Trigger Batch Generation"
+  icon: mdi:music-box-multiple
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+ai_dispatcher_apply_config:
+  name: "AI Dispatcher - Apply Config"
+  icon: mdi:check-circle-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_weather_forecast — Tomorrow Weather Forecast
+# ═══════════════════════════════════════════════════════════════════
+ai_weather_forecast_rebuild:
+  name: "AI weather forecast rebuild"
+  icon: mdi:refresh

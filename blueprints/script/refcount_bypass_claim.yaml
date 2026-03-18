@@ -1,0 +1,132 @@
+# =============================================================================
+# Refcount Bypass — Claim (v2.0.0)
+# =============================================================================
+# Generic refcount bypass for any shared boolean toggle. Increments an HA
+# counter helper. First claim (0→1) turns OFF the toggle. Zero JSON parsing.
+#
+# Part of the I-45b refcount bypass system. Pair with refcount_bypass_release.
+# =============================================================================
+
+blueprint:
+  name: "Refcount Bypass — Claim (v2.0.0)"
+  author: madalone
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/refcount_bypass_claim.yaml
+  description: >
+    # Refcount Bypass — Claim
+
+
+    Generic refcount bypass for any shared boolean toggle. Increments an
+    HA `counter` helper. First claim (0→1 transition) turns OFF the toggle.
+
+
+    **Usage from automation blueprints:**
+
+    ```yaml
+    - alias: "Script — refcount bypass claim"
+      action: script.refcount_bypass_claim
+      data:
+        owner: "{{ this.entity_id }}"
+    ```
+
+
+    Create one instance per toggle you want to protect. Default configuration
+    targets `notification_follow_me`. Override `refcount_entity` and `toggle`
+    inputs for other toggles (e.g. ducking).
+
+
+    Pair with **Refcount Bypass — Release** to complete the claim/release
+    cycle. Deploy a **Refcount Watchdog** to catch crashed automations that
+    never release.
+
+
+    ### Recent changes
+
+    - **v2.0.0:** Replaced JSON owner list (`input_text`) with HA `counter`
+      helper. Atomic increment/decrement, zero Jinja2 JSON parsing, eliminates
+      BRP-WATCHDOG-001 class of bugs. Added optional debug log helper.
+
+    - **v1.0.0:** Initial release — JSON owner list in `input_text`.
+
+  domain: script
+
+  input:
+    refcount_entity:
+      name: "Refcount counter"
+      description: >-
+        The counter entity that tracks active bypass claims.
+        Must have minimum: 0 and step: 1.
+      default: counter.notification_follow_me_bypass_refcount
+      selector:
+        entity:
+          domain: counter
+
+    toggle:
+      name: "Toggle to turn OFF"
+      description: >-
+        The input_boolean that gets turned OFF on the first claim
+        (0→1 transition) and left alone on subsequent claims.
+      default: input_boolean.notification_follow_me
+      selector:
+        entity:
+          domain: input_boolean
+
+    debug_log_entity:
+      name: "Debug log helper (optional)"
+      description: >-
+        An input_text entity for owner visibility. Appends claiming
+        entity IDs for debugging. Leave default if not needed.
+      default: input_text.notification_follow_me_bypass_log
+      selector:
+        entity:
+          domain: input_text
+
+fields:
+  owner:
+    description: "Entity ID of the claiming automation (use {{ this.entity_id }})"
+    required: true
+    selector:
+      text: {}
+
+variables:
+  _counter_entity: !input refcount_entity
+  _toggle_entity: !input toggle
+  _log_entity: !input debug_log_entity
+
+sequence:
+  - alias: "Read current count before increment"
+    variables:
+      _count_before: >-
+        {{ states(_counter_entity) | int(0) }}
+
+  - alias: "Increment refcount"
+    action: counter.increment
+    target:
+      entity_id: "{{ _counter_entity }}"
+
+  - alias: "First claim — turn OFF toggle"
+    if:
+      - condition: template
+        value_template: "{{ _count_before == 0 }}"
+    then:
+      - alias: "Turn off protected toggle (0→1 transition)"
+        action: input_boolean.turn_off
+        target:
+          entity_id: "{{ _toggle_entity }}"
+
+  - alias: "Append owner to debug log"
+    action: input_text.set_value
+    continue_on_error: true
+    target:
+      entity_id: "{{ _log_entity }}"
+    data:
+      value: >-
+        {% set current = states(_log_entity) | default('') %}
+        {% set entry = owner | default('?') %}
+        {% if current in ['unknown', 'unavailable', ''] %}
+          {{ entry }}
+        {% else %}
+          {{ (current ~ ', ' ~ entry)[:255] }}
+        {% endif %}
+
+mode: queued
+max: 10

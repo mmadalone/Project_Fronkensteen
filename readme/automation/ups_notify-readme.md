@@ -1,85 +1,81 @@
-# UPS – Notify on Power Events (NUT Status Sensor)
+# UPS -- Notify on power events (NUT status sensor)
 
-![UPS Notify header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/ups_notify-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/ups_notify-header.jpeg)
 
-A Home Assistant automation blueprint that sends mobile notifications when your UPS switches to battery power, when utility power returns, and when the battery level drops below a configurable threshold. Uses the NUT integration's status sensor to detect power events.
-
-## What It Does
-
-| Event | Trigger | Notification |
-|-------|---------|--------------|
-| **Power outage** | UPS status changes to contain `OB` (On Battery) | "Mains power is out. UPS switched to battery. Current charge: X%." |
-| **Power restored** | UPS status transitions from `OB` to non-`OB` (back to mains) | "Utility power has returned. UPS is back on mains. Battery now at X%." |
-| **Battery low** | Battery percentage drops below threshold while on battery | "UPS battery is low (X%). System will shut down soon according to NUT settings." |
+Sends notifications when your UPS switches to battery power, when utility power returns, and when the UPS battery is critically low. Uses the NUT integration status sensor (e.g. `sensor.madups_status`) to detect power transitions (OL/OB/CHRG) and a battery percentage sensor for low-charge warnings.
 
 ## How It Works
 
 ```
-NUT Status Sensor (e.g. sensor.madups_status)
-    │
-    ├─ OL        = On line (mains power)
-    ├─ OL CHRG   = On line, charging
-    ├─ OB DISCHRG = On battery, discharging
-    └─ OB LB     = On battery, low battery
-
-         ┌────────────────────┐
-         │  Status changed?   │──→ Contains "OB"? ──→ Power outage notification
-         │                    │──→ Was "OB", now not? ──→ Power restored notification
-         └────────────────────┘
-
-         ┌────────────────────┐
-         │  Battery below     │──→ Currently on battery? ──→ Low battery warning
-         │  threshold?        │
-         └────────────────────┘
+┌─────────────────────┐    ┌───────────────────────┐
+│ UPS status changed  │    │ Battery dropped below  │
+│ (OL/OB transitions) │    │ low-battery threshold  │
+└─────────┬───────────┘    └───────────┬────────────┘
+          │                            │
+          ▼                            ▼
+   ┌──────────────┐            ┌──────────────┐
+   │ Resolve vars │            │ On battery?  │
+   │ status/batt  │            │ (OB check)   │
+   └──────┬───────┘            └──────┬───────┘
+          │                           │ yes
+    ┌─────┼─────────┐                 ▼
+    ▼     ▼         ▼         ┌──────────────┐
+┌──────┐┌────────┐           │  Notify:     │
+│ OB   ││ Was OB │           │  Battery low │
+│ now  ││ now OL │           └──────────────┘
+└──┬───┘└───┬────┘
+   ▼        ▼
+Notify:  Notify:
+Power    Power
+outage   restored
 ```
+
+## Features
+
+- Detects power outage (UPS switches to battery -- status contains "OB")
+- Detects power restored (UPS returns to mains from battery)
+- Low battery warning when charge drops below configurable threshold while on battery
+- Includes current battery percentage in all notifications
+- Uses any Home Assistant notify service (mobile app, Telegram, etc.)
 
 ## Prerequisites
 
-- **NUT integration** configured in Home Assistant with a connected UPS
-- **Two NUT sensors:**
-  - A status sensor (e.g. `sensor.madups_status`) reporting values like `OL`, `OB DISCHRG`, `OL CHRG`
-  - A battery charge sensor (e.g. `sensor.madups_battery_charge`) reporting percentage
-- **Mobile app** or other notification service configured in HA
+- Home Assistant 2024.10.0 or later
+- NUT integration configured with UPS status and battery sensors
+- A Home Assistant notification service (e.g. `notify.mobile_app_your_device`)
 
 ## Installation
 
-1. Copy `ups_notify.yaml` into your blueprints directory:
-   ```
-   config/blueprints/automation/<your_namespace>/ups_notify.yaml
-   ```
-   Or import via URL if hosted on GitHub.
-
-2. Create a new automation from the blueprint: **Settings → Automations → Create Automation → Use Blueprint**
-
-3. Configure the inputs (see below).
+1. Copy `ups_notify.yaml` to `config/blueprints/automation/madalone/`
+2. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
 
 ## Configuration
 
-### ① UPS Sensors
-
-| Input | Description |
-|-------|-------------|
-| **UPS status sensor** | NUT sensor reporting UPS status. Values typically contain `OL` (on line), `OB` (on battery), `LB` (low battery), `CHRG` (charging). |
-| **UPS battery percentage** | NUT sensor reporting battery charge as a percentage (0–100). |
-
-### ② Thresholds & Notifications
+### Section 1 -- UPS sensors
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| **Low battery warning threshold** | 30% | Battery level below which a low-battery warning is sent (only while on battery). NUT itself handles the actual host shutdown based on its own config. |
-| **Notification service** | `notify.mobile_app_madaringer` | HA notify service to use. Free-text field since HA blueprints have no native notify-service selector. |
+|---|---|---|
+| UPS status sensor | _(required)_ | NUT sensor reporting UPS status (OL, OB, OB DISCHRG, OL CHRG, etc.) |
+| UPS battery percentage | _(required)_ | NUT sensor reporting battery charge in percent |
+
+### Section 2 -- Thresholds & notifications
+
+| Input | Default | Description |
+|---|---|---|
+| Low battery warning threshold | 30% | Battery level below which a low-battery warning is sent (while on battery) |
+| Notification service | _(required)_ | Notify service name (e.g. `notify.mobile_app_your_device`) -- free-text field |
 
 ## Technical Notes
 
-- Runs in `mode: restart` / `max_exceeded: silent` — a new power event always takes priority over a previous one in flight.
-- The low-battery notification only fires when the UPS is actually on battery (`OB` in status). A low battery reading while on mains (e.g. during initial charging) won't trigger a warning.
-- Power restoration is detected by checking that the previous status contained `OB` and the current status does not — this catches transitions like `OB DISCHRG` → `OL CHRG` regardless of the specific NUT status strings your UPS reports.
-- This blueprint handles notifications only. It does not perform host shutdown — that's NUT's responsibility based on its own configuration (`upsmon`).
-- Requires **Home Assistant 2024.10.0** or newer.
+- **Mode:** `restart` / `max_exceeded: silent` -- ensures rapid status transitions are handled cleanly
+- **Template safety:** `trigger.from_state` is guarded with `is defined` and `is not none` checks
+- **Low battery gate:** The low-battery notification only fires when the UPS is actually on battery (OB), not during normal charging
+- **continue_on_error:** All notify actions use `continue_on_error: true` to prevent notification failures from crashing the automation
 
-## Acknowledgments
+## Changelog
 
-UPS notification automations based on NUT status sensors are a well-documented pattern in the Home Assistant community. The [official NUT integration documentation](https://www.home-assistant.io/integrations/nut/) includes example automations for power outage and battery monitoring that cover the same core concepts. This blueprint packages the pattern into a reusable, configurable format with style-guide-compliant structure.
+- **v2:** Full style guide compliance -- modern syntax, template safety, aliases
+- **v1:** Initial version
 
 ## Author
 

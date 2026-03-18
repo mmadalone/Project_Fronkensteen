@@ -1,129 +1,144 @@
 # Announce Music Follow Me (TTS, LLM)
 
-![Announce Music Follow Me header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce_music_follow_me_llm-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce_music_follow_me_llm-header.jpeg)
 
-Script blueprint that announces via TTS where the music was moved for a "music follow me" automation. Supports static messages, random message pools, and LLM-generated context-aware announcements with optional ElevenLabs voice customization.
-
-> **Companion blueprint:** Designed for use with the **Music Assistant Follow-Me Multi-Room Advanced** automation blueprint, but works with any automation that transfers music between speakers.
+Script blueprint that announces via TTS where the music was moved for a "music follow me" automation. Supports three message strategies: static default, random message pool, and LLM-generated context-aware announcements. When the LLM path is active, the conversation agent receives playback context (track name, artist, radio station) to produce relevant commentary.
 
 ## How It Works
 
 ```
-Follow-Me automation detects room change
-        │
-        ▼
-  Calls this script with:
-  ├── target_player (where music moved TO)
-  ├── source_player (where music was playing)
-  └── tts_output_player (optional override)
-        │
-        ▼
-  ┌─────────────────────────────────────┐
-  │  Message Strategy Decision          │
-  ├─────────────────────────────────────┤
-  │  LLM enabled?                       │
-  │  ├─ YES → conversation.process      │
-  │  │        (context-aware message)    │
-  │  │        Falls back to default      │
-  │  │        on failure                 │
-  │  ├─ NO, random enabled?             │
-  │  │  ├─ YES → pick from pool         │
-  │  │  └─ NO  → static default         │
-  └─────────────────────────────────────┘
-        │
-        ▼
-  ┌─────────────────────────────────────┐
-  │  TTS Engine Selection               │
-  ├─────────────────────────────────────┤
-  │  Voice profile set?                 │
-  │  ├─ YES → tts.speak + voice_profile │
-  │  ├─ NO, voice name set?            │
-  │  │  ├─ YES → tts.speak + voice     │
-  │  │  └─ NO  → tts.speak (generic)   │
-  └─────────────────────────────────────┘
+START (called with target_player, source_player, tts_output_player)
+  |
+  v
+<Dispatcher enabled?>--YES-->[agent_dispatch]
+  |                              |
+  NO                             v
+  |                     [Set agent/voice/persona]
+  v                              |
+[Resolve pipeline]               |
+  |<-----------------------------+
+  v
+[Resolve player names + playback context + time of day]
+  |
+  v
+<LLM enabled?>---YES--->[conversation.process with context]
+  |        |                |
+  |        |                v
+  |        |          [Sanitize LLM response]
+  |        |                |
+  |        NO but random    |
+  |        |                |
+  |        v                |
+  |  [Pick from pool]       |
+  |        |                |
+  NO (static)               |
+  |        |                |
+  v        v                v
+[Default message]     [tts_message set]
+  |                        |
+  +------------------------+
+  |
+  v
+[TTS queue speak to target player]
+  |
+  v
+[Whisper -- self-awareness]
+  |
+  v
+END
 ```
-
-## Key Design Decisions
-
-### Three-tier message strategy
-
-The blueprint supports three levels of sophistication, each falling back to the one below: LLM-generated context-aware messages (knows what's playing, the time of day, and the target room), a static random message pool with `{player_name}` templating, and a single default message. The LLM path uses `continue_on_error: true` so a failed API call never blocks the announcement — it just falls back to the default.
-
-### ElevenLabs voice branching
-
-TTS output branches three ways depending on whether a voice profile ID is set, a voice name is set, or neither. Voice profiles take priority over voice names. This avoids sending unsupported `options:` keys to non-ElevenLabs engines, which was a crash bug fixed in v2.
-
-### Playback context for LLM
-
-When enabled, the LLM prompt includes the currently playing track or radio station name. The template distinguishes between radio streams and tracks, telling the LLM explicitly when it's a live radio stream so it doesn't comment on "the song" when there isn't one.
 
 ## Features
 
-- **Static, random, or LLM-generated announcements** — three message strategies with automatic fallback
-- **Playback-aware LLM prompts** — tells the LLM what's playing (track, artist, or radio station) for context-aware commentary
-- **ElevenLabs voice support** — voice name or custom voice profile ID, with clean fallback for non-ElevenLabs engines
-- **Customizable message pool** — user-defined templates with `{player_name}` placeholder
-- **Configurable LLM prompt** — full control over the system prompt with `{player_name}`, `{current_time}`, and `{time_of_day}` placeholders
-- **TTS output override** — announce on a different speaker than the music target
-- **Source player context** — reads track info from the source player (where music was) for accurate LLM context
+- Three message strategies: static default, random pool, or LLM-generated
+- LLM context awareness: includes currently playing track/artist or radio station
+- Radio detection via `media_content_type` with string-match fallback
+- Waterfall player resolution: prefers source then target based on active `media_title`
+- LLM response sanitization: catches tool/function definition leakage
+- Playback context toggle (can exclude track info from LLM prompt)
+- Customizable LLM prompt template with `{player_name}`, `{current_time}`, `{time_of_day}` placeholders
+- Optional `tts_output_player` override for announcement target
+- Time-of-day awareness (late night / morning / afternoon / evening)
 
 ## Prerequisites
 
-- Home Assistant 2024.8.0 or later
-- A TTS integration configured (any engine works for basic mode; ElevenLabs for voice customization)
-- A conversation agent configured (Extended OpenAI Conversation, OpenAI Conversation, or similar) — only required for LLM mode
-- Music Assistant with at least one media player entity
+- Home Assistant **2024.10.0** or newer
+- `pyscript.agent_dispatch` service (agent dispatcher)
+- `pyscript.tts_queue_speak` service (TTS queue)
+- `pyscript.agent_whisper` service (agent whisper)
+- A conversation agent configured in an Assist Pipeline (for LLM mode)
 
 ## Installation
 
-Copy `announce_music_follow_me_llm.yaml` to your `config/blueprints/script/madalone/` directory, then reload automations in Developer Tools → YAML.
+1. Copy `announce_music_follow_me_llm.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings > Automations & Scenes > Scripts > Add > Use Blueprint**
 
 ## Configuration
 
-### ① TTS & Voice
+<details>
+<summary><strong>Section 1 -- Voice Assistant</strong></summary>
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| TTS entity | *(required)* | The TTS engine entity to use for announcements |
-| ElevenLabs voice | *(empty)* | Voice name (e.g., "Rachel"). Ignored when voice profile is set |
-| ElevenLabs voice profile | *(empty)* | Custom cloned voice profile ID. Takes priority over voice name |
+|---|---|---|
+| `use_dispatcher` | `true` | AI dispatcher selects persona dynamically |
 
-### ② Message Strategy
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| Use random fun messages | `true` | Pick from the message pool instead of always using the default |
-| Use LLM for fun messages | `false` | Use a conversation agent for context-aware messages (requires random mode on) |
-| Random messages | 3 templates | Pool of `{player_name}`-templated messages for random mode |
-| Default message | "Moving the music to {player_name}." | Fallback message when random/LLM are off or LLM fails |
-
-### ③ LLM Configuration
+<details>
+<summary><strong>Section 2 -- Message Strategy</strong></summary>
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| Include playback context | `true` | Feed current track/station info to the LLM prompt |
-| LLM prompt template | Casual smart home assistant | System prompt with `{player_name}`, `{current_time}`, `{time_of_day}` placeholders |
-| Conversation agent | *(empty)* | The LLM agent for generating messages |
+|---|---|---|
+| `use_random_messages` | `true` | Pick a random message from pool instead of default |
+| `use_llm_fun_messages` | `false` | Use conversation agent for context-aware announcements |
+| `custom_random_messages` | 3 templates | Pool of announcement templates with `{player_name}` placeholder |
+| `default_message` | `Moving the music to {player_name}.` | Fallback message template |
 
-### Script Fields (passed by calling automation)
+</details>
+
+<details>
+<summary><strong>Section 3 -- LLM Configuration</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `use_playback_context` | `true` | Include current track info in LLM prompt |
+| `llm_prompt_template` | _(casual smart home assistant prompt)_ | System prompt with `{player_name}`, `{current_time}`, `{time_of_day}` |
+| `llm_agent_id` | `Rick` | Voice Assistant pipeline (used when dispatcher is disabled) |
+
+</details>
+
+<details>
+<summary><strong>Section 4 -- Infrastructure</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Dispatcher toggle entity |
+
+</details>
+
+### Script Fields (passed at call time)
 
 | Field | Required | Description |
-|-------|----------|-------------|
-| `target_player` | Yes | Media player entity where music is being moved to |
-| `source_player` | No | Media player where music was playing (for LLM context). Falls back to target_player |
-| `tts_output_player` | No | Override which speaker plays the TTS announcement |
+|---|---|---|
+| `target_player` | Yes | Media player where music is being moved to |
+| `source_player` | No | Media player where music was playing before |
+| `tts_output_player` | No | Override where TTS announcement plays |
 
 ## Technical Notes
 
-- **Mode:** `queued` with `max_exceeded: silent` — announcements queue up if Follow-Me triggers rapidly, but excess calls are silently dropped
-- **LLM response extraction:** Handles both `response.speech.plain.speech` (standard HA conversation) and `response.text` (some third-party agents) response formats
-- **Template safety:** All `state_attr()` calls use `| default()` guards. `source_player` existence is checked with `is defined` before access
-- **Radio detection:** The LLM context template checks for "radio" in both `media_title` and `media_artist` to correctly identify live radio streams
+- **Mode:** `queued` / `max_exceeded: silent`
+- **Error handling:** `continue_on_error: true` on all external service calls
+- **LLM timeout caveat:** If the LLM hangs, the script blocks until HA's default timeout (no per-action override)
+- **Silent exit:** If no TTS entity is resolved, the script exits cleanly without announcement
 
 ## Changelog
 
-- **v2:** Fixed voice_profile crash on non-ElevenLabs engines; migrated to `action:` syntax; added collapsible sections, aliases, and descriptions
-- **v1:** Initial version
+- **v6 (2026-02-24):** Audit pass -- trimmed Jinja whitespace, removed redundant filters, clarified silent-exit design
+- **v5 (2026-02-24):** Fixed Jinja whitespace contamination in ctx_player, time_of_day, and tts_message branches
+- **v4 (2026-02-24):** Waterfall ctx_player resolution; radio detection via media_content_type
+- **v3 (2026-02-18):** Bumped min_version to 2024.10.0; added defaults and collapsed sections
+- **v2 (2026-02-15):** Fixed voice_profile crash on non-ElevenLabs; migrated to action: syntax
+- **v1 (2026-02-14):** Initial version
 
 ## Author
 

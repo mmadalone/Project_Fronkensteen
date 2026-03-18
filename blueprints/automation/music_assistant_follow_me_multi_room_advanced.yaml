@@ -1,0 +1,875 @@
+blueprint:
+  name: Music Assistant – Follow me (multi-room advanced)
+  author: madalone
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/music_assistant_follow_me_multi_room_advanced-header.jpeg)
+
+    # Music Assistant – Follow me (multi-room advanced)
+
+    Presence-driven follow-me for Music Assistant queues across multiple zones.
+    Transfers the active queue to whichever room you walk into, with priority
+    ordering, anti-flicker, cooldown, playback protection, optional announcements,
+    and a TTS duration filter to ignore short clips.
+
+    ### Recent changes
+
+    - **v12:** Consistency pass — added `| bool` filter to all six
+      `{% if %}` flag checks in condition templates, matching the pattern
+      already used in `choose` conditions throughout the blueprint.
+
+    - **v11:** Post-audit hardening — added `continue_on_error: true` to
+      all five non-critical service calls (cooldown stamp, silence-others,
+      pre/post/failure announcement scripts). Made post-transfer settling
+      delay configurable via new input `post_transfer_settle_seconds`
+      (default 2 s, max 300 s) instead of hardcoded 1 s.
+
+    - **v10:** Collapsible section compliance — added collapsed keys to
+      all six input sections (① open, ②–⑥ collapsed). Replaced four null
+      defaults with empty strings to enable collapsibility. Removed dead
+      variable `source_is_paused` (computed but never referenced).
+
+    - **v9:** Added source-occupied gate — when enabled, the automation
+      will not transfer music away from a room that still has presence.
+      This prevents "stealing" music from another person who is still
+      listening in their room. Combined with the existing
+      protect-target-playback gate, this provides natural multi-person
+      awareness without requiring per-person tracking.
+
+    - **v8:** Style guide compliance — local header image, min_version
+      bump to 2024.10.0, trigger alias, box-style dividers, trimmed
+      changelog.
+
+  domain: automation
+  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/music_assistant_follow_me_multi_room_advanced.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CORE SETUP
+    # ===========================================================================
+    core_setup:
+      name: "① Core setup"
+      icon: mdi:music-note-bluetooth
+      collapsed: false
+      description: Follow-me toggle and paired presence-sensor / player lists.
+      input:
+        follow_switch:
+          name: Follow music toggle
+          description: >
+            Global on/off switch for this follow-me logic.
+          selector:
+            entity:
+              domain: input_boolean
+          default: ""
+
+        presence_sensors:
+          name: Presence sensors (priority order, first = highest)
+          description: >
+            Binary sensors that indicate someone is in a zone.
+            The order here defines the zone priority (0 = highest).
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+          default: ""
+
+        target_players:
+          name: Music Assistant players (same order as sensors)
+          description: >
+            Music Assistant media_player entities, in the exact same order
+            as the presence sensors above.
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: true
+          default: ""
+
+        tts_pre_players:
+          name: TTS players for pre-transfer announcements (same order as sensors)
+          description: >
+            Physical hardware media_player entities used for TTS announcements
+            BEFORE the queue transfer, in the exact same order as the presence
+            sensors above. Pick speakers that are NOT the target of the incoming
+            queue transfer to avoid TTS colliding with music playback. If left
+            empty, the automation falls back to the MA target_player (not
+            recommended with Voice PE hardware).
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+        tts_post_players:
+          name: TTS players for post-transfer announcements (same order as sensors)
+          description: >
+            Physical hardware media_player entities used for TTS announcements
+            AFTER the queue transfer, in the exact same order as the presence
+            sensors above. Pick speakers in the destination room so the
+            announcement plays where you are. If left empty, the automation
+            falls back to the MA target_player (not recommended with Voice PE
+            hardware).
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+    # ===========================================================================
+    # ② PERSONS GATE
+    # ===========================================================================
+    persons_gate:
+      name: "② Persons gate"
+      icon: mdi:account-check
+      collapsed: true
+      description: Optionally restrict follow-me to when specific persons are home.
+      input:
+        person_required:
+          name: Require persons to be home
+          description: >
+            If enabled, the automation only runs when at least one of the selected
+            persons below is home.
+          default: false
+          selector:
+            boolean: {}
+
+        persons:
+          name: Persons (optional)
+          description: >
+            Optional persons that must be home when "Require persons" is enabled.
+            If left empty and "Require persons" is ON, the person condition will
+            always fail (no follow).
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+    # ===========================================================================
+    # ③ PLAYBACK FILTERS
+    # ===========================================================================
+    playback_filters:
+      name: "③ Playback filters"
+      icon: mdi:clipboard-play
+      collapsed: true
+      description: >
+        Control when follow-me runs based on what's currently playing,
+        source restrictions, and target protection.
+      input:
+        only_follow_when_playing:
+          name: Only follow when music is playing
+          description: >
+            If enabled, follow-me only runs when at least one of the configured
+            players is actually in the "playing" state (or "paused" if
+            follow-paused-music is also enabled). If everything is idle
+            (or only short TTS is playing), no transfer happens and no
+            announcements are made.
+          default: true
+          selector:
+            boolean: {}
+
+        follow_paused_music:
+          name: Follow paused music
+          description: >
+            If enabled, paused music sessions are also eligible for follow-me
+            transfers. The queue will be moved to your new room but will NOT
+            auto-play — it stays paused on the target player so you can resume
+            manually. Only effective when "Only follow when playing" is enabled.
+          default: false
+          selector:
+            boolean: {}
+
+        min_music_duration_seconds:
+          name: Minimum media duration to treat as music
+          description: >
+            When deciding if "music is playing", ignore playback shorter than this
+            many seconds (useful to ignore short TTS clips). Streams or unknown
+            duration (0) are always treated as music.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 600
+              unit_of_measurement: s
+              mode: slider
+
+        treat_unknown_duration_as_music:
+          name: Treat unknown duration as music
+          description: >
+            If enabled, players with media_duration 0 are treated as music sessions
+            (good for radio streams but may also count TTS as music). If disabled,
+            media_duration 0 will be ignored for "music playing" checks.
+          default: true
+          selector:
+            boolean: {}
+
+        protect_target_playback:
+          name: Skip transfer if target is already playing
+          description: >
+            If enabled, the automation skips follow-me when the target player is
+            already actively playing something (playing/buffering). This prevents
+            hijacking an existing session in the room you move into.
+          default: true
+          selector:
+            boolean: {}
+
+        skip_if_source_occupied:
+          name: Skip transfer if source room is still occupied
+          description: >
+            If enabled, the automation will not transfer music away from a room
+            that still has presence. This prevents "stealing" music from another
+            person who is still listening in that room. Music only follows when
+            the source room becomes empty. Combined with "Skip transfer if target
+            is already playing", this provides natural multi-person coexistence —
+            independent listening sessions are never hijacked.
+          default: true
+          selector:
+            boolean: {}
+
+        allowed_source_players:
+          name: Allowed source players (optional)
+          description: >
+            Optional allow-list of players that may act as SOURCE for follow-me.
+            When this list is empty, any player in the configured target list may
+            be used as a source. When not empty, follow-me will only move queues
+            that currently live on one of these players.
+          default: []
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: true
+
+        excluded_source_players:
+          name: Excluded source players (blacklist, optional)
+          description: >
+            Optional block-list of players that must NEVER act as source for
+            follow-me. If the current music source matches any player in this
+            list, the transfer is blocked entirely. Useful for excluding TV
+            players (e.g. madteevee) or other devices whose playback should
+            never be moved. This filter is applied AFTER the allowed source
+            players whitelist.
+          default: []
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: true
+
+        silence_other_players:
+          name: Silence other players after transfer (exclusive room)
+          description: >
+            If enabled, all configured MA players except the transfer target
+            are stopped after a successful queue transfer. Ensures only one
+            room plays at a time. Only affects players currently in the
+            "playing" or "buffering" state — paused sessions are preserved.
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ④ PRIORITY & TIMING
+    # ===========================================================================
+    priority_timing:
+      name: "④ Priority & timing"
+      icon: mdi:timer-cog
+      collapsed: true
+      description: >
+        Priority anchoring, anti-flicker, transfer delay, and cooldown between transfers.
+      input:
+        enforce_priority_anchor:
+          name: Enforce priority anchor
+          description: >
+            If enabled, music will not be moved from a higher-priority zone to a
+            lower-priority zone while the higher-priority zone still has presence.
+            Moving from low → high is always allowed.
+          default: false
+          selector:
+            boolean: {}
+
+        min_presence_on_time:
+          name: Minimum zone presence time before follow
+          description: >
+            Minimum duration a presence sensor must stay ON before it can trigger
+            follow-me. Set to 0 to trigger immediately when the sensor turns ON.
+          default:
+            seconds: 0
+          selector:
+            duration: {}
+
+        delay_seconds:
+          name: Delay before transfer (seconds)
+          description: >
+            Optional delay between the pre-transfer announcement (if any) and
+            transferring the queue. Set to 0 for immediate transfer after the
+            pre-announcement.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              unit_of_measurement: s
+              mode: slider
+
+        cooldown_seconds:
+          name: Global cooldown after successful transfer (seconds)
+          description: >
+            Minimum time between successful queue transfers. Requires the helper
+            below. Set to 0 to disable cooldown.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 3600
+              unit_of_measurement: s
+              mode: slider
+
+        cooldown_helper:
+          name: Cooldown helper (input_datetime, optional)
+          description: >
+            Input_datetime entity used to remember the time of the last successful
+            queue transfer. It must have both date and time. If omitted or if
+            cooldown_seconds is 0, the cooldown check is skipped.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+              multiple: false
+
+        post_transfer_settle_seconds:
+          name: Post-transfer settling delay (seconds)
+          description: >
+            Time to wait after the Music Assistant queue transfer before checking
+            whether the transfer succeeded. Gives MA time to propagate state to
+            the target player. Increase this if you see false-negative transfer
+            detections (e.g. with Spotify or slow backends).
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 300
+              unit_of_measurement: s
+              mode: slider
+
+    # ===========================================================================
+    # ⑤ ANNOUNCEMENTS
+    # ===========================================================================
+    announcements:
+      name: "⑤ Announcements"
+      icon: mdi:bullhorn
+      collapsed: true
+      description: Optional scripts to run before and/or after a queue transfer.
+      input:
+        pre_announcements_enabled:
+          name: Run pre-transfer announcement script
+          description: >
+            If enabled, the automation will call the selected script BEFORE
+            moving the queue, passing "target_player" and "source_player" as
+            variables. The script can e.g. speak on the target player before
+            the music starts there.
+          default: false
+          selector:
+            boolean: {}
+
+        pre_announcement_script:
+          name: Pre-transfer announcement script (optional)
+          description: >
+            Script to call before a successful queue transfer. It will receive
+            variables "target_player" and "source_player".
+            Example: script.announce_music_follow_me_tts_llm_driven
+          default: ""
+          selector:
+            entity:
+              domain: script
+              multiple: false
+
+        announcements_enabled:
+          name: Run post-transfer announcement script
+          description: >
+            If enabled, the automation will call the selected script AFTER
+            moving the queue, passing "target_player" and "source_player"
+            as variables.
+          default: true
+          selector:
+            boolean: {}
+
+        announcement_script:
+          name: Post-transfer announcement script (optional)
+          description: >
+            Script to call after a successful queue transfer. It will receive
+            variables "target_player" and "source_player".
+            Example: script.announce_music_follow_me_tts_llm_driven
+          default: ""
+          selector:
+            entity:
+              domain: script
+              multiple: false
+
+        announce_transfer_failure:
+          name: Announce transfer failures
+          description: >
+            If enabled, the post-transfer announcement script is called with
+            failure context (transfer_failed: true, failure_reason) when the
+            queue transfer fails. The script or its LLM agent can then speak
+            a human-friendly error message instead of a success announcement.
+            Requires a post-transfer announcement script to be configured.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑥ SAFETY
+    # ===========================================================================
+    safety:
+      name: "⑥ Safety"
+      icon: mdi:shield-check
+      collapsed: true
+      description: Guards to prevent follow-me from interfering with voice interactions.
+      input:
+        voice_assistant_guard:
+          name: Block while voice assistant is active (optional)
+          description: >
+            Optional helper (for example input_boolean.voice_pe_ducking_active)
+            that is turned ON while your voice assistant / TTS is speaking.
+            When this is ON, follow-me does nothing.
+          default: ""
+          selector:
+            entity:
+              domain:
+                - input_boolean
+                - binary_sensor
+              multiple: false
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  presence_list: !input presence_sensors
+  player_list: !input target_players
+  tts_pre_player_list: !input tts_pre_players
+  tts_post_player_list: !input tts_post_players
+  person_list: !input persons
+  require_person: !input person_required
+  allowed_source_players_list: !input allowed_source_players
+  excluded_source_players_list: !input excluded_source_players
+  enforce_priority_anchor_flag: !input enforce_priority_anchor
+  delay_seconds_value: !input delay_seconds
+
+  cooldown_seconds_value: !input cooldown_seconds
+  cooldown_helper_entity: !input cooldown_helper
+
+  pre_announcements_enabled_flag: !input pre_announcements_enabled
+  pre_announcement_script_entity: !input pre_announcement_script
+
+  announcements_enabled_flag: !input announcements_enabled
+  announcement_script_entity: !input announcement_script
+  announce_transfer_failure_flag: !input announce_transfer_failure
+
+  only_follow_when_playing_flag: !input only_follow_when_playing
+  follow_paused_music_flag: !input follow_paused_music
+  min_music_duration_value: !input min_music_duration_seconds
+  protect_target_playback_flag: !input protect_target_playback
+  skip_if_source_occupied_flag: !input skip_if_source_occupied
+  treat_unknown_duration_as_music_flag: !input treat_unknown_duration_as_music
+  voice_assistant_guard_entity: !input voice_assistant_guard
+  silence_other_players_flag: !input silence_other_players
+  post_transfer_settle_seconds_value: !input post_transfer_settle_seconds
+
+triggers:
+  - alias: "Presence sensor turned ON — zone occupancy detected after minimum hold time"
+    trigger: state
+    entity_id: !input presence_sensors
+    from: "off"
+    to: "on"
+    for: !input min_presence_on_time
+
+conditions:
+  - alias: "Global follow switch must be ON"
+    condition: state
+    entity_id: !input follow_switch
+    state: "on"
+
+  - alias: "Persons must be home (optional) — skipped when person gate is disabled"
+    condition: template
+    value_template: >
+      {% if not require_person | bool %}
+        true
+      {% else %}
+        {% set ns = namespace(home=false) %}
+        {% for p in person_list %}
+          {% if states(p) | default('unknown') == 'home' %}
+            {% set ns.home = true %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.home }}
+      {% endif %}
+
+  - alias: "Global cooldown since last successful transfer (optional)"
+    condition: template
+    value_template: >
+      {% set cooldown = cooldown_seconds_value | int(0) %}
+      {% if cooldown == 0 or not cooldown_helper_entity %}
+        true
+      {% else %}
+        {% set last = states(cooldown_helper_entity) | default('unknown') %}
+        {% if last in ['unknown', 'unavailable', ''] %}
+          true
+        {% else %}
+          {% set last_dt = as_datetime(last) %}
+          {% if last_dt is none %}
+            true
+          {% else %}
+            {{ (now().timestamp() - last_dt.timestamp()) >= cooldown }}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
+  - alias: "Block while voice assistant guard is ON (optional)"
+    condition: template
+    value_template: >
+      {% if not voice_assistant_guard_entity %}
+        true
+      {% else %}
+        {{ states(voice_assistant_guard_entity) | default('off') != 'on' }}
+      {% endif %}
+
+actions:
+  - alias: "Resolve target player, music source, playback state, and priority indices"
+    variables:
+      trigger_entity: "{{ trigger.entity_id }}"
+
+      target_index: >
+        {% set ns = namespace(idx=-1) %}
+        {% for s in presence_list %}
+          {% if s == trigger_entity and ns.idx == -1 %}
+            {% set ns.idx = loop.index0 %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.idx }}
+
+      target_player: >
+        {% set ti = target_index | int(-1) %}
+        {% if ti == -1 or ti >= player_list | length %}
+          {{ '' }}
+        {% else %}
+          {{ player_list[ti] }}
+        {% endif %}
+
+      tts_pre_player: >
+        {% set ti = target_index | int(-1) %}
+        {% if ti >= 0 and tts_pre_player_list | length > ti %}
+          {{ tts_pre_player_list[ti] }}
+        {% else %}
+          {{ target_player }}
+        {% endif %}
+
+      tts_post_player: >
+        {% set ti = target_index | int(-1) %}
+        {% if ti >= 0 and tts_post_player_list | length > ti %}
+          {{ tts_post_player_list[ti] }}
+        {% else %}
+          {{ target_player }}
+        {% endif %}
+
+      min_music_duration: "{{ min_music_duration_value | int(0) }}"
+
+      music_source_player: >
+        {% set ns = namespace(src='') %}
+        {% for p in player_list %}
+          {% if states(p) | default('unknown') in ['playing', 'paused', 'buffering'] and ns.src == '' %}
+            {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
+            {% if (dur == 0 and treat_unknown_duration_as_music_flag)
+                  or (dur > 0 and dur >= min_music_duration) %}
+              {% set ns.src = p %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.src }}
+
+      any_music_playing: >
+        {% set ns = namespace(any=false) %}
+        {% for p in player_list %}
+          {% if states(p) | default('unknown') == 'playing' %}
+            {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
+            {% if (dur == 0 and treat_unknown_duration_as_music_flag)
+                  or (dur > 0 and dur >= min_music_duration) %}
+              {% set ns.any = true %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.any }}
+
+      any_music_active: >
+        {% set valid_states = ['playing'] %}
+        {% if follow_paused_music_flag | bool %}
+          {% set valid_states = ['playing', 'paused'] %}
+        {% endif %}
+        {% set ns = namespace(any=false) %}
+        {% for p in player_list %}
+          {% if states(p) | default('unknown') in valid_states %}
+            {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
+            {% if (dur == 0 and treat_unknown_duration_as_music_flag)
+                  or (dur > 0 and dur >= min_music_duration) %}
+              {% set ns.any = true %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.any }}
+
+      source_index: >
+        {% set ns = namespace(idx=-1) %}
+        {% for p in player_list %}
+          {% if p == music_source_player and ns.idx == -1 %}
+            {% set ns.idx = loop.index0 %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.idx }}
+
+      other_active_players: >
+        {% set ns = namespace(others=[]) %}
+        {% for p in player_list %}
+          {% if p != target_player
+                and states(p) | default('unknown') in ['playing', 'buffering'] %}
+            {% set ns.others = ns.others + [p] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.others | to_json }}
+
+      target_state: "{{ states(target_player) | default('unknown') }}"
+
+  - alias: "Gate — only follow when music is playing or paused (optional)"
+    condition: template
+    value_template: >
+      {% if not only_follow_when_playing_flag | bool %}
+        true
+      {% else %}
+        {{ any_music_active | bool }}
+      {% endif %}
+
+  - alias: "Gate — valid target and source, not same player"
+    condition: template
+    value_template: >
+      {{ target_player != '' and music_source_player != '' and target_player != music_source_player }}
+
+  - alias: "Gate — source must be in allowed source players list (optional)"
+    condition: template
+    value_template: >
+      {% if allowed_source_players_list | length == 0 %}
+        true
+      {% else %}
+        {{ music_source_player in allowed_source_players_list }}
+      {% endif %}
+
+  - alias: "Gate — source must NOT be in excluded source players blacklist (optional)"
+    condition: template
+    value_template: >
+      {% if excluded_source_players_list | length == 0 %}
+        true
+      {% else %}
+        {{ music_source_player not in excluded_source_players_list }}
+      {% endif %}
+
+  - alias: "Gate — source room still occupied, don't steal music from another person (optional)"
+    condition: template
+    value_template: >
+      {% if not skip_if_source_occupied_flag | bool %}
+        true
+      {% else %}
+        {% set src_idx = source_index | int(-1) %}
+        {% if src_idx == -1 %}
+          true
+        {% else %}
+          {{ states(presence_list[src_idx]) | default('off') != 'on' }}
+        {% endif %}
+      {% endif %}
+
+  - alias: "Gate — priority anchor prevents downgrade while source zone active (optional)"
+    condition: template
+    value_template: >
+      {% if not enforce_priority_anchor_flag | bool %}
+        true
+      {% else %}
+        {% set src_idx = source_index | int(-1) %}
+        {% set tgt_idx = target_index | int(-1) %}
+        {% if src_idx == -1 or tgt_idx == -1 %}
+          true
+        {% else %}
+          {% set src_active = (states(presence_list[src_idx]) | default('off') == 'on') %}
+          {% if not src_active %}
+            true
+          {% else %}
+            {{ tgt_idx < src_idx }}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
+  - alias: "Gate — protect target playback, skip if target already playing (optional)"
+    condition: template
+    value_template: >
+      {% if not protect_target_playback_flag | bool %}
+        true
+      {% else %}
+        {{ target_state not in ['playing', 'buffering'] }}
+      {% endif %}
+
+  - alias: "Pre-transfer announcement — call script before moving queue (optional)"
+    choose:
+      - alias: "Pre-announcement enabled and music is active"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ pre_announcements_enabled_flag | bool
+                 and pre_announcement_script_entity is not none
+                 and pre_announcement_script_entity != ''
+                 and any_music_active | bool }}
+        sequence:
+          - alias: "Call pre-transfer announcement script — TTS targets pre-transfer speaker"
+            continue_on_error: true
+            action: script.turn_on
+            target:
+              entity_id: "{{ pre_announcement_script_entity }}"
+            data:
+              variables:
+                target_player: "{{ target_player }}"
+                source_player: "{{ music_source_player }}"
+                tts_output_player: "{{ tts_pre_player }}"
+
+  - alias: "Delay before transfer — gives TTS announcement a head start"
+    delay:
+      seconds: "{{ delay_seconds_value | int(0) }}"
+
+  - alias: "Transfer queue via Music Assistant — continue_on_error prevents crash on MA failures"
+    choose:
+      - alias: "Music is actively playing (not just paused) — transfer with auto_play true"
+        conditions:
+          - condition: template
+            value_template: "{{ any_music_playing | bool }}"
+        sequence:
+          - alias: "Transfer queue to target player (auto_play: true)"
+            continue_on_error: true
+            action: music_assistant.transfer_queue
+            target:
+              entity_id: "{{ target_player }}"
+            data:
+              source_player: "{{ music_source_player }}"
+              auto_play: true
+    default:
+      - alias: "Transfer queue to target player (auto_play: false) — source was paused or idle"
+        continue_on_error: true
+        action: music_assistant.transfer_queue
+        target:
+          entity_id: "{{ target_player }}"
+        data:
+          source_player: "{{ music_source_player }}"
+          auto_play: false
+
+  - alias: "Post-transfer settling delay — let MA propagate state before checking success"
+    delay:
+      seconds: "{{ post_transfer_settle_seconds_value | int(2) }}"
+
+  - alias: "Evaluate transfer success — target must now be playing/paused/buffering"
+    variables:
+      transfer_succeeded: >
+        {% set post_state = states(target_player) | default('unknown') %}
+        {{ post_state in ['playing', 'paused', 'buffering'] }}
+      failure_reason: >
+        {% if not transfer_succeeded | bool %}
+          Music Assistant could not move the queue — the source player may be stuck or the queue may have been lost
+        {% endif %}
+
+  - alias: "On success — stamp cooldown, silence others, announce arrival"
+    choose:
+      - alias: "Transfer succeeded — run post-transfer steps"
+        conditions:
+          - condition: template
+            value_template: "{{ transfer_succeeded | bool }}"
+        sequence:
+          - alias: "Update cooldown helper timestamp after successful transfer (optional)"
+            choose:
+              - alias: "Cooldown enabled and helper configured"
+                conditions:
+                  - condition: template
+                    value_template: >
+                      {{ cooldown_seconds_value | int(0) > 0
+                         and cooldown_helper_entity is not none
+                         and cooldown_helper_entity != '' }}
+                sequence:
+                  - alias: "Stamp current time into cooldown helper"
+                    continue_on_error: true
+                    action: input_datetime.set_datetime
+                    target:
+                      entity_id: "{{ cooldown_helper_entity }}"
+                    data:
+                      datetime: "{{ now().isoformat() }}"
+
+          - alias: "Silence other players — stop all non-target players after transfer (optional)"
+            choose:
+              - alias: "Exclusive-room enabled and other players are active"
+                conditions:
+                  - condition: template
+                    value_template: >
+                      {% set players = other_active_players if other_active_players is list
+                         else (other_active_players | trim | from_json | default([])) %}
+                      {{ silence_other_players_flag | bool and players | length > 0 }}
+                sequence:
+                  - alias: "Stop all configured players except the transfer target"
+                    continue_on_error: true
+                    action: media_player.media_stop
+                    target:
+                      entity_id: >
+                        {% set players = other_active_players if other_active_players is list
+                           else (other_active_players | trim | from_json | default([])) %}
+                        {{ players }}
+
+          - alias: "Post-transfer announcement — call script after moving queue (optional)"
+            choose:
+              - alias: "Post-announcement enabled and script configured"
+                conditions:
+                  - condition: template
+                    value_template: >
+                      {{ announcements_enabled_flag | bool
+                         and announcement_script_entity is not none
+                         and announcement_script_entity != '' }}
+                sequence:
+                  - alias: "Call post-transfer announcement script — TTS targets post-transfer speaker"
+                    continue_on_error: true
+                    action: script.turn_on
+                    target:
+                      entity_id: "{{ announcement_script_entity }}"
+                    data:
+                      variables:
+                        target_player: "{{ target_player }}"
+                        source_player: "{{ music_source_player }}"
+                        tts_output_player: "{{ tts_post_player }}"
+
+  - alias: "On failure — announce the problem so the user knows what happened (optional)"
+    choose:
+      - alias: "Transfer failed and failure announcements are enabled"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ not (transfer_succeeded | bool)
+                 and announce_transfer_failure_flag | bool
+                 and announcements_enabled_flag | bool
+                 and announcement_script_entity is not none
+                 and announcement_script_entity != '' }}
+        sequence:
+          - alias: "Call announcement script with failure context — script/LLM crafts the message"
+            continue_on_error: true
+            action: script.turn_on
+            target:
+              entity_id: "{{ announcement_script_entity }}"
+            data:
+              variables:
+                target_player: "{{ target_player }}"
+                source_player: "{{ music_source_player }}"
+                tts_output_player: "{{ tts_post_player }}"
+                transfer_failed: true
+                failure_reason: "{{ failure_reason }}"

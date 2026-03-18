@@ -28,7 +28,7 @@ Sections 10 and 11 — Things to never do, and build/review/edit workflows.
 | AP-11 | ⚠️ | Action step missing `alias:` field | §3.5 |
 | AP-12 | ❌ | File edit without git checkpoint | §2.3 |
 | AP-13 | ℹ️ | `selector: text:` where `select:` with `options:` would constrain input | §10 #13 |
-| AP-15 | ⚠️ | Blueprint `description:` field with no `![` image markdown **OR** `![` present but referenced image file does not exist on disk at `HEADER_IMG` (`GIT_REPO/images/header/` — see Project Instructions for resolved path) *(project convention, not HA standard)* — **blocking gate:** do not write YAML until image is approved or explicitly declined. | §11.1 step 4 |
+| AP-15 | ⚠️ | Blueprint `description:` field with no `![` image markdown **OR** `![` present but referenced image file does not exist on disk at `HEADER_IMG` (`GIT_REPO/images/header/` — see Project Instructions for resolved path) *(project convention, not HA standard)* — **blocking gate:** do not write YAML until image is approved or explicitly declined. | §11.1 step 5 |
 | AP-16 | ❌ | `states()` or `state_attr()` without `\| default()` | §3.6 |
 | AP-17 | ⚠️ | `continue_on_error: true` on critical-path actions | §5.2 |
 | AP-18 | ℹ️ | Explicit entity list where area/label target would work | §5.9 |
@@ -61,6 +61,21 @@ Sections 10 and 11 — Things to never do, and build/review/edit workflows.
 | AP-34 | ❌ | Conditions before input_boolean reset in voice bridges | §7.7 |
 | AP-35 | ⚠️ | `media_player.media_stop` where pause would preserve queue | §7.3 |
 
+#### Pyscript Orchestration
+
+| ID | Sev | Trigger pattern (scan output for…) | Fix ref |
+|----|-----|-------------------------------------|--------|
+| AP-45 | ❌ | `action: pyscript.*` call with parameters that don't match the target function's `@service` signature (wrong names, missing required params, wrong types) | PSY-1 |
+| AP-46 | ⚠️ | Blueprint with `action: pyscript.*` call and no corresponding boolean toggle input to make it optional | PSY-3 |
+| AP-47 | ⚠️ | Blueprint that hardcodes agent selection (e.g., `agent_id: conversation.rick_standard`) instead of using the pipeline's configured agent as default with optional dispatcher override | PSY-3, §8.4 |
+| AP-48 | ⚠️ | Direct `tts.speak` or `tts.cloud_say` call in a blueprint that should route through `pyscript.tts_queue_speak` (when TTS queue integration is present and the blueprint has a TTS queue toggle) | §14.8 |
+| AP-49 | ❌ | `ai_*` helper entity referenced in pyscript module but not defined in corresponding `packages/ai_*.yaml` | PSY-2 |
+| AP-50 | ⚠️ | Tunable threshold, timeout, or limit hardcoded in pyscript module with no corresponding `ai_*` helper entity for dashboard exposure | PSY-4 |
+| AP-51 | ⚠️ | Pyscript service called from YAML but no matching `@service` decorator exists in any loaded pyscript module (service doesn't exist — call silently does nothing) | PSY-5 |
+| AP-52 | ⚠️ | `automation:` block inside a package YAML where the trigger/conditions/actions pattern has user-facing inputs that could be blueprint inputs — should be a blueprint in `blueprints/automation/madalone/` instead | §3.0 |
+| AP-53 | ⚠️ | `tts.speak` or `pyscript.tts_queue_speak` called for a pipeline-associated agent without passing the pipeline's `tts_voice` override as `options.voice` / `voice_id`. The TTS entity's default voice may differ from the pipeline's configured voice — omitting the override produces the wrong voice. Always resolve `tts_voice` from `dispatcher_resolve_engine` or the pipeline cache and pass it through. | §8.4 |
+| AP-54 | ⚠️ | `conversation.*` entity ID or 26-char ULID string used as a pipeline selector value in blueprint input defaults or automation/script instance values. These break when pipelines are recreated. Use the pipeline **display name** (e.g., "Rick", "Rick - Bedtime") — it survives pipeline recreation. Applies to inputs like `conversation_agent`, `llm_agent`, `persona_agent_id`, `bedtime_conversation_agent`, and any input with `pipeline` in the name. | LIVE-2 |
+
 #### Development Environment
 
 | ID | Sev | Trigger pattern (scan output for…) | Fix ref |
@@ -76,7 +91,7 @@ Sections 10 and 11 — Things to never do, and build/review/edit workflows.
 
 **Severity key:** ❌ ERROR = must fix before presenting · ⚠️ WARNING = fix unless user explicitly accepts · ℹ️ INFO = flag to user, fix if trivial
 
-**Note on AP numbering:** IDs are non-sequential (AP-01 through AP-44 with gaps and sub-items like AP-10a, AP-25a). This is deliberate — IDs are stable references preserved from the original unified guide. Adding new anti-patterns gets the next available number; removing one retires the ID permanently (never reuse). Don't renumber — external references (changelogs, violation reports, build logs) depend on stable IDs.
+**Note on AP numbering:** IDs are non-sequential (AP-01 through AP-54 with gaps and sub-items like AP-10a, AP-25a). This is deliberate — IDs are stable references preserved from the original unified guide. Adding new anti-patterns gets the next available number; removing one retires the ID permanently (never reuse). Don't renumber — external references (changelogs, violation reports, build logs) depend on stable IDs.
 
 *Rules #14 (verify integration docs) and #28-29 (ESPHome debug sensors, config archiving) require architectural judgment and cannot be mechanically scanned. Everything else is in the tables above.*
 
@@ -99,6 +114,7 @@ This extends the scan tables above. Before presenting generated code to the user
 | S5 | **Agent permissions** | Conversation agent prompts have a complete PERMISSIONS table listing what the agent CAN and CANNOT do. No implicit "you can do anything" — permissions are explicit and deny-by-default. | ⚠️ WARNING |
 | S6 | **Log hygiene** | `logbook.log` messages, notification text, and trace-visible data don't include sensitive info (full names, precise GPS coordinates, API response bodies, health data). | ℹ️ INFO |
 | S7 | **Rate limiting** | Conversation agent tool scripts that call external APIs (OpenAI, ElevenLabs, weather services) have some form of throttling: cooldown timers, daily counters, or `mode: single` to prevent runaway API costs. | ℹ️ INFO |
+| S8 | **Exposed scripts** | Scripts exposed as conversation agent tools are thin wrappers with constrained targets (§8.3.2). No exposed script should accept arbitrary entity IDs from the LLM without validation. | ℹ️ INFO |
 
 **S7 implementation skeleton — rate limiting with `input_datetime`:**
 
@@ -129,7 +145,6 @@ conditions:
 ```
 
 For daily call budgets, pair with a `counter` helper that resets at midnight via a time-triggered automation.
-| S8 | **Exposed scripts** | Scripts exposed as conversation agent tools are thin wrappers with constrained targets (§8.3.2). No exposed script should accept arbitrary entity IDs from the LLM without validation. | ℹ️ INFO |
 
 **How to use this checklist:**
 - Run it mentally after the §10 scan tables, before presenting code.
@@ -154,7 +169,7 @@ For daily call budgets, pair with a `counter` helper that resets at midnight via
 12. **Never edit a file without completing the §2.3 git pre-flight checklist first.** This applies to ALL project files — YAML, markdown, docs, prompts, everything. "It's just a small change" and "it's just docs" are not exemptions. See §2.1 for the full scope definition.
 13. **Never use free-text inputs when a dropdown or multi-select would work.** Constrain user input whenever possible.
 14. **Never assume integration syntax.** Always verify against the official docs for the specific integration.
-15. **Never create a blueprint or script without a header image** in its description, **and never leave a broken image reference** (file referenced but not on disk) *(project convention — not an HA community standard, but mandatory for this project)*. This is a **blocking gate** — do not write a single line of YAML until the header image is either approved by the user or explicitly declined. Always ask. If the user blows past the question, insist — repeat the ask and do not proceed until you get a clear answer. **During reviews**, verify the referenced image file actually exists at `HEADER_IMG` (`GIT_REPO/images/header/` — see Project Instructions for resolved path). Allowed formats: `.jpeg`, `.jpg`, `.png`, `.webp`. See §11.1 step 4 for default image specs (1K, 16:9, premise from `IMG_PREMISES`).
+15. **Never create a blueprint or script without a header image** in its description, **and never leave a broken image reference** (file referenced but not on disk) *(project convention — not an HA community standard, but mandatory for this project)*. This is a **blocking gate** — do not write a single line of YAML until the header image is either approved by the user or explicitly declined. Always ask. If the user blows past the question, insist — repeat the ask and do not proceed until you get a clear answer. **During reviews**, verify the referenced image file actually exists at `HEADER_IMG` (`GIT_REPO/images/header/` — see Project Instructions for resolved path). Allowed formats: `.jpeg`, `.jpg`, `.png`, `.webp`. See §11.1 step 5 for default image specs (1K, 16:9, premise from `IMG_PREMISES`).
 16. **Never write a template without `| default()` safety.** All `states()` and `state_attr()` calls must have fallback values.
 17. **Never blanket-apply `continue_on_error: true`.** Only use it on genuinely non-critical steps — otherwise it masks real bugs.
 18. **Never use entity lists when area/label targeting would work.** Area and label targets auto-include new devices; entity lists require manual updates.
@@ -193,6 +208,17 @@ For daily call budgets, pair with a `counter` helper that resets at midnight via
 40. **Never load an entire large file (1000+ lines) into context just to edit a specific section.** Use `read_file` with line range parameters to read only the relevant section. Use `edit_block` for surgical edits — replace only what changed. Verify with a targeted `read_file` of the edited section, not the whole file. If you need to understand the file's structure first, read the first ~50 lines or use `search_files` / `grep` to locate the target section. Full file reads are only justified when the task genuinely requires understanding the entire file (e.g., full audits, refactors, or new builds). See §11.13.
 41. **Never ignore crash recovery signals.** When the user says "it crashed," "you bugged out," "pick up where we left off," or any variation implying a previous session was interrupted, always execute the §11.0 crash-recovery protocol before starting new work. Check `_build_logs/` for incomplete logs, run `ha_git_pending` / `ha_git_diff` for uncommitted changes, and use `conversation_search` / `recent_chats` to recover conversation context. Present findings to the user before touching any files. Skipping recovery because "it's faster to start fresh" is how you overwrite 80% of a working build with a blank file.
 43. **Never batch build log updates across multiple edits.** After every write to a target file, update the build log's `## Edit Log` section BEFORE starting the next edit. The sequence is: edit target file → append to Edit Log → next edit. If the session crashes between edits 3 and 4, the Edit Log must show edits 1–3 as landed. A build log that exists but was not updated between edits is a stale log — it tells recovery sessions the wrong state and causes duplicate or missed edits. This is the log-after-work invariant (§11.0) made concrete and scannable.
+
+### Pyscript Orchestration (45–51)
+
+45. **Never call a pyscript service with unverified parameters.** Pyscript service calls with wrong or missing parameters produce no HA error, no log entry, no trace failure — the call silently does nothing. Always verify parameter names against the `@service` function signature in the pyscript module source. This is the single hardest class of bug to diagnose in the entire system (see PSY-1).
+46. **Never hardwire pyscript features into blueprints without optional toggles.** Every pyscript integration (dispatcher, TTS queue, ducking, dedup, whisper) must be exposed as an optional boolean input with a sensible default. The blueprint must function without the orchestration layer. Users who haven't installed pyscript must still be able to use the blueprint with basic functionality (see PSY-3).
+47. **Never hardcode agent selection in blueprints.** The HA Voice Assistant pipeline (Decision #49) is the default agent selection mechanism. Blueprints use the pipeline's configured agent by default. The pyscript dispatcher is an optional enhancement — when its toggle is enabled, it overrides the pipeline default with smarter routing. When disabled, the blueprint works normally through the pipeline. Hardcoding `agent_id: conversation.rick_standard` bypasses both mechanisms (see PSY-3, §8.4).
+48. **Never bypass the TTS queue when it's available.** If the blueprint has a TTS queue toggle and it's enabled, all speech output routes through `pyscript.tts_queue_speak` — not direct `tts.speak` or `tts.cloud_say`. The queue handles priority, caching, presence-aware routing, and ducking coordination. Direct TTS calls skip all of this and can cause ducking conflicts, duplicate announcements, and cache misses (see §14.8). When the toggle is disabled, direct `tts.speak` is the correct fallback.
+49. **Never reference an `ai_*` helper in pyscript without defining it in the matching package.** If `agent_dispatcher.py` reads `input_boolean.ai_dispatcher_enabled`, that entity must exist in `packages/ai_dispatcher.yaml`. A missing definition causes `state.get()` to return `None` silently — no error, just wrong behavior. This is Direction B of the helper coupling check (see PSY-2).
+50. **Never hardcode tunable values in pyscript when they could be dashboard-exposed.** Thresholds, timeouts, enable/disable flags, and mode selections that users might reasonably want to adjust should have corresponding `ai_*` helper entities defined in `packages/ai_*.yaml`. Internal implementation details (decay factors, tokenizer configs) and security-sensitive values stay hardcoded. When in doubt, ask: "Would a user want to change this from the dashboard?" (see PSY-4).
+51. **Never assume a pyscript service exists without verifying registration.** Before adding a `pyscript.*` service call to YAML, confirm the target function has an `@service` decorator in a loaded pyscript module. Unregistered services fail silently — HA accepts the action call, routes it to pyscript, and pyscript drops it with no visible error (see PSY-5).
+52. **Never put a user-facing automation in a package when it should be a blueprint.** If an `automation:` block inside `packages/` follows the trigger→conditions→actions pattern with configurable parameters that could be reused across zones, devices, or people — it belongs in `blueprints/automation/madalone/` as a blueprint. Packages hold infrastructure glue only: midnight resets, startup triggers, internal pyscript coordination, shared-state helpers consumed by pyscript or dashboards. **Detection:** any `automation:` block in `packages/` where the logic has user-facing inputs (time schedules, entity selections, thresholds users would want to adjust). **Exception:** infrastructure glue with no user-facing inputs stays in packages. Run the §3.0 decision tree when in doubt. See also §5.0.
 
 ---
 
@@ -238,10 +264,12 @@ The proactive check catches crashes the user *forgot* to mention. The reactive c
 **`_build_logs/` location (MANDATORY):** Build and audit logs are ALWAYS created in `PROJECT_DIR/_build_logs/`, never in `HA_CONFIG` or any other directory. `HA_CONFIG` is for Home Assistant configuration — not development artifacts. If you catch yourself writing a log to the SMB mount path, you're targeting the wrong filesystem. This applies regardless of whether the files being edited live in `PROJECT_DIR` or `HA_CONFIG`.
 
 ### 11.1 When the user asks to build something new
-1. **Clarify scope** — ask about complexity and whether this should be one blueprint, multiple, with helper scripts, etc.
-2. **Check existing patterns** — look at what's already in the blueprints folder. Reuse patterns and stay consistent.
-3. **Draft the structure** — present the input sections and action flow outline before writing full YAML.
-4. **Header image — BLOCKING GATE (AP-15)** — If no header image exists, the referenced image file is missing from disk, or no image has been provided, you **must** ask the user before proceeding. Generate the image, present it for approval, and **wait for an explicit response** — either approval or "not necessary." **Do not write a single line of YAML until you get one of those answers.** If the user ignores the question or moves on to something else, **insist** — repeat the ask and explain that the style guide requires a clear answer before code generation begins. Use these defaults unless the user specifies otherwise:
+0. **Check existing blueprints (MANDATORY — before writing anything).** List `blueprints/automation/madalone/`. Can this feature be a NEW INSTANCE of an existing blueprint? If yes → create instance in `automations.yaml`, done. No new code needed. Check the §5.0 inventory table.
+1. **Apply the blueprint-first decision tree (§3.0).** If no existing blueprint fits, run the decision tree. If the result is "blueprint" → design blueprint inputs first, then write the blueprint YAML backed by existing pyscript services (check the §3.0 Service Shelf). If the result is "package automation" → confirm it's genuinely infrastructure glue with no user-facing inputs before proceeding.
+2. **Clarify scope** — ask about complexity and whether this should be one blueprint, multiple, with helper scripts, etc.
+3. **Check existing patterns** — look at what's already in the blueprints folder. Reuse patterns and stay consistent.
+4. **Draft the structure** — present the input sections and action flow outline before writing full YAML.
+5. **Header image — BLOCKING GATE (AP-15)** — If no header image exists, the referenced image file is missing from disk, or no image has been provided, you **must** ask the user before proceeding. Generate the image, present it for approval, and **wait for an explicit response** — either approval or "not necessary." **Do not write a single line of YAML until you get one of those answers.** If the user ignores the question or moves on to something else, **insist** — repeat the ask and explain that the style guide requires a clear answer before code generation begins. Use these defaults unless the user specifies otherwise:
    - **Resolution:** 1K
    - **Aspect ratio:** 16:9
    - **Style / premise — read `IMG_PREMISES` from Project Instructions.** This variable contains a semicolon-delimited list of episode premise descriptions (e.g., `Rick & Quark series episode premise based off the blueprint features; Rick & Morty series episode premise based off the blueprint features`). Parse the list, then present each entry as a numbered option and ask the user to pick one before generating. The selected premise becomes the creative direction passed to the image generation tool — frame it as an episode scene themed around the blueprint's features in that show's style. If `IMG_PREMISES` is missing, empty, or undefined in project instructions, fall back to a generic prompt: *"a cartoon scene themed around the blueprint's features"* (no assumption about which show). If the list contains only one entry, still present it for confirmation — don't auto-select silently.
@@ -250,15 +278,22 @@ The proactive check catches crashes the user *forgot* to mention. The reactive c
    - **Blueprint URL:** `HEADER_IMG_RAW` + `<blueprint_name>-header.<ext>` (defined in Project Instructions — resolves to `https://raw.githubusercontent.com/...`)
    - After generating, rename the output file from its auto-generated name to the proper `<blueprint_name>-header.<ext>` convention. Save it to `HEADER_IMG`. Ensure the extension in the YAML `![Image](...)` URL matches the actual filename in the repo exactly. **Use `HEADER_IMG_RAW`** — never `github.com/blob/...` (blob URLs render HTML, not the image binary).
    - **Image cleanup (MANDATORY):** After the user approves an image, delete the original auto-generated file (the one with the tool's default filename) if it differs from the renamed target. If earlier attempts were rejected during the session, delete those too — don't accumulate orphaned `attempt-1.jpeg`, `attempt-2.jpeg` files. If the user declines a header image entirely, delete all generated files. Verify `HEADER_IMG` contains only the final approved file for this blueprint (no duplicates with different extensions, e.g., both `.jpeg` and `.png` for the same blueprint).
-5. **Edit directly** — write to the SMB mount. Don't ask "should I write this?" — just do it.
+6. **Edit directly** — write to the SMB mount. Don't ask "should I write this?" — just do it.
    - **Checkpoint:** Create a build log (§11.8) before the first write — this is unconditional per AP-39, not gated by chunk count. Update it after each chunk is confirmed.
-6. **Verify output (MANDATORY)** — after writing the file:
+7. **Verify output (MANDATORY)** — after writing the file:
    - **Self-check against §10 scan table** — run through the machine-scannable anti-pattern triggers. Fix violations before telling the user the file is ready.
    - **Tell the user to validate** — include this in your response: *"File written. Next steps: (1) Reload automations in Developer Tools → YAML, (2) Open the automation/blueprint in the UI and check for schema errors, (3) Run it once manually and check the trace for unexpected behavior."*
    - **For blueprints:** Remind the user to create an instance from the blueprint and verify all `!input` references resolve (missing inputs show as errors in the UI editor).
    - **For templates:** Suggest testing complex templates in Developer Tools → Template before relying on them in automation.
-7. **If a conversation agent prompt is involved**, consult the integration's official docs, then produce the prompt as a separate deliverable (file for copy-paste into the UI).
-8. **README generation (§11.14)** — After the blueprint/script is verified and the user has confirmed it works, generate the companion README. Use the §11.14 template. Save to the appropriate `readme/` subdirectory (`README_AUTO_DIR`, `README_SCRI_DIR`, or `README_TEMPL_DIR` per Project Instructions). If the build session is long and the user seems done, offer rather than force: *"Blueprint's working — want me to generate the README now, or save it for later?"* For fresh builds, default to generating it immediately.
+8. **If a conversation agent prompt is involved**, consult the integration's official docs, then produce the prompt as a separate deliverable (file for copy-paste into the UI).
+8a. **If the blueprint integrates with the pyscript orchestration layer** (dispatcher, TTS queue, ducking, dedup, whisper, memory), verify:
+   - Each pyscript feature is exposed as an optional toggle input with a sensible default (AP-46)
+   - The blueprint functions without pyscript enabled — orchestration features are enhancements, not hard dependencies (AP-46)
+   - Agent selection defaults to the pipeline's configured agent, with dispatcher as an optional override (AP-47)
+   - TTS output routes through `pyscript.tts_queue_speak` when the TTS queue toggle is enabled, falling back to direct `tts.speak` when disabled (AP-48)
+   - All `pyscript.*` service call parameters match the target function's `@service` signature (AP-45)
+   - Any new `ai_*` helpers are defined in the corresponding `packages/ai_*.yaml` (AP-49)
+9. **README generation (§11.14)** — After the blueprint/script is verified and the user has confirmed it works, generate the companion README. Use the §11.14 template. Save to the appropriate `readme/` subdirectory (`README_AUTO_DIR`, `README_SCRI_DIR`, or `README_TEMPL_DIR` per Project Instructions). If the build session is long and the user seems done, offer rather than force: *"Blueprint's working — want me to generate the README now, or save it for later?"* For fresh builds, default to generating it immediately.
 
 ### 11.2 When the user asks to review/improve something
 0. **(Mandatory for any review that produces findings)** Create an audit log per §11.8.1 before reporting findings — even one finding on one file gets a log on disk. Update it after each file completes. Findings are also reported in-chat using the structured `[ISSUE]` format: `[ISSUE] filename | AP-ID | severity | line | description | fix`. Skipping the log is a violation of AP-39. If the review leads to edits (AUDIT → BUILD escalation), a build log (§11.8) is required before the first edit.
@@ -350,7 +385,7 @@ Instead of attempting this as one build, propose:
 2. **Bedtime automation skeleton** — triggers, conditions, flow control, timeout handling.
 3. **Rick conversation agent prompt** (§8.3 structure) — separate deliverable.
 4. **MA duck/restore integration** (§7.4 pattern) — wired into the skeleton.
-5. **Alexa volume sync** (§7.5 pattern) — separate automation with ducking flag coordination.
+5. **Volume sync / ducking coordination** — if Alexa ↔ MA sync is needed, verify `volume_sync.py` pyscript module handles it. Wire ducking flag coordination through `duck_manager.py` rather than building standalone ducking logic. Blueprint exposes ducking as an optional toggle.
 6. **Snooze mechanism** — helper + notification actions + re-trigger logic.
 
 Each piece is buildable, testable, and debuggable independently. Wire them together last.

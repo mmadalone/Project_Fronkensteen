@@ -1,0 +1,38 @@
+# =============================================================================
+# AI Notification Deduplication — Helper Entities (Task 14 / DC-9)
+# =============================================================================
+# Kill switch, default TTL, daily blocked counter, blocked-today sensor.
+# Midnight counter reset handled by notification_dedup.py (dedup_daily_housekeeping).
+# DO NOT add input_boolean.ai_test_mode — already in ai_test_harness.yaml
+#
+# After first deploy, set values:
+#   - input_boolean.ai_dedup_enabled → ON
+#   - input_number.ai_dedup_default_ttl → 240 (minutes, = 4 hours)
+#   - input_number.ai_dedup_blocked_count → 0 (auto-managed)
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+template:
+  - sensor:
+      - name: AI Dedup Blocked Today
+        unique_id: ai_dedup_blocked_today
+        unit_of_measurement: ""
+        icon: mdi:bell-cancel-outline
+        state: >-
+          {{ states('input_number.ai_dedup_blocked_count') | int(0) }}
+
+# ── Dashboard Card (paste into Lovelace YAML) ───────────────────────────────
+# type: entities
+# title: Notification Dedup
+# entities:
+#   - entity: input_boolean.ai_dedup_enabled
+#     name: Dedup Active
+#   - entity: input_number.ai_dedup_default_ttl
+#     name: Default TTL
+#   - entity: sensor.ai_dedup_blocked_today
+#     name: Blocked Today
+#   - entity: sensor.ai_dedup_status
+#     name: Dedup Status

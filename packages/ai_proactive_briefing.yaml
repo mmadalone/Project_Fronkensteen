@@ -1,0 +1,30 @@
+# =============================================================================
+# AI Proactive Briefing Package — Task 19 of Voice Context Architecture
+# =============================================================================
+# Slimmed-down package: kill switch + last summary + per-instance delivered
+# flags. All scheduling, sections, speaker, confidence, and slot controls
+# have moved into the unified proactive_briefing.yaml blueprint inputs.
+#
+# Provides:
+#   input_boolean.ai_proactive_briefing_enabled  — master kill switch
+#   input_boolean.ai_briefing_delivered_morning   — per-instance flag
+#   input_boolean.ai_briefing_delivered_afternoon — per-instance flag
+#   input_boolean.ai_briefing_delivered_evening   — per-instance flag
+#   input_text.ai_last_briefing_summary           — last delivered content
+#
+# Service (pyscript):
+#   pyscript.proactive_build_briefing  — content assembly only
+#   pyscript.proactive_briefing_now    — full delivery pipeline
+#
+# Dependencies:
+#   pyscript/proactive_briefing.py
+#   blueprints/automation/madalone/proactive_briefing.yaml
+#
+# Deployed: 2026-03-02 | Unified: 2026-03-07
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)

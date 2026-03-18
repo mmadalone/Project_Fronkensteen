@@ -1,0 +1,226 @@
+blueprint:
+  name: "Bedtime advisory actions (I-40)"
+  author: madalone
+  description: >
+    # Bedtime Advisory Actions
+
+    Fires when `predictive_schedule.py` detects the user is ≤15 minutes from
+    their target routine start time. Consumes the `ai_bedtime_advisory` event.
+
+    ### Relationship to other blueprints
+
+    - **This blueprint:** Gentle pre-advisory (≤15 min before target)
+    - **proactive_bedtime_escalation.yaml:** Handles **overdue** (past target, escalating nags)
+
+    ### Use cases
+
+    - Dim lights and start a wind-down playlist
+    - Set thermostat to sleep mode
+    - Speak a gentle TTS reminder
+
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/bedtime_advisory_actions.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      description: >
+        Kill switch and confidence gating.
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch.
+          selector:
+            entity:
+              domain: input_boolean
+
+        min_confidence:
+          name: Minimum confidence
+          description: >
+            Only fire if the bedtime prediction confidence is at least this level.
+          default: "medium"
+          selector:
+            select:
+              options:
+                - label: "Low"
+                  value: "low"
+                - label: "Medium"
+                  value: "medium"
+                - label: "High"
+                  value: "high"
+
+        suppress_if_routine_active:
+          name: Suppress if routine active
+          description: >
+            Don't fire if `ai_routine_stage` indicates a routine is already
+            in progress (not "none").
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ② ACTIONS
+    # ===========================================================================
+    actions:
+      name: "② Actions"
+      icon: mdi:cog-play
+      collapsed: false
+      description: >
+        Actions and optional TTS announcement.
+      input:
+        advisory_actions:
+          name: Advisory actions
+          description: >
+            Actions to run (e.g., dim lights, start wind-down playlist,
+            set thermostat to sleep mode).
+          default: []
+          selector:
+            action: {}
+
+        tts_speaker:
+          name: TTS speaker (optional)
+          description: >
+            Media player for TTS announcements.
+          default: {}
+          selector:
+            entity:
+              domain: media_player
+
+        tts_mode:
+          name: TTS mode
+          description: >
+            How to generate the TTS message.
+          default: "static"
+          selector:
+            select:
+              options:
+                - label: "Static text"
+                  value: "static"
+                - label: "LLM-generated"
+                  value: "llm"
+
+        tts_message:
+          name: TTS message (static mode)
+          description: >
+            Static TTS message. Only used in "static" mode.
+          default: "Time to start winding down."
+          selector:
+            text:
+              multiline: true
+
+        llm_prompt:
+          name: LLM prompt (llm mode)
+          description: >
+            Prompt for LLM-generated TTS message. Use `{recommendation}` as a
+            placeholder for the bedtime advisor's recommendation text.
+            Only used in "llm" mode.
+          default: >
+            Generate a brief, gentle bedtime reminder based on this recommendation:
+            {recommendation}. Keep it under 30 words, casual and friendly.
+          selector:
+            text:
+              multiline: true
+
+        llm_agent:
+          name: LLM agent (llm mode)
+          description: >
+            Conversation agent entity to use for LLM-generated messages.
+            Only used in "llm" mode.
+          default: {}
+          selector:
+            entity:
+              domain: conversation
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable_toggle
+  v_min_conf: !input min_confidence
+  v_suppress_routine: !input suppress_if_routine_active
+  v_tts_speaker: !input tts_speaker
+  v_tts_mode: !input tts_mode
+  v_tts_message: !input tts_message
+  v_llm_prompt: !input llm_prompt
+  v_llm_agent: !input llm_agent
+  v_confidence_map:
+    low: 1
+    medium: 2
+    high: 3
+
+triggers:
+  - trigger: event
+    event_type: ai_bedtime_advisory
+
+conditions:
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Confidence gate ──
+  - condition: template
+    value_template: >-
+      {% set conf = trigger.event.data.confidence | default('low') %}
+      {% set conf_level = v_confidence_map.get(conf, 0) %}
+      {% set min_level = v_confidence_map.get(v_min_conf, 2) %}
+      {{ conf_level >= min_level }}
+
+  # ── Routine suppression ──
+  - condition: template
+    value_template: >-
+      {% if not v_suppress_routine %}
+        true
+      {% else %}
+        {% set stage = states('input_text.ai_routine_stage') | default('none') %}
+        {{ stage in ['none', '', 'unknown', 'unavailable'] }}
+      {% endif %}
+
+actions:
+  - alias: "Set recommendation, minutes until"
+    variables:
+      recommendation: "{{ trigger.event.data.recommendation | default('') }}"
+      minutes_until: "{{ trigger.event.data.minutes_until | default(15) }}"
+
+  # ── TTS announcement ──
+  - alias: "TTS announcement"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_tts_mode == 'static' and v_tts_message | trim != '' }}"
+        sequence:
+          - alias: "Speak static bedtime advisory message"
+            action: tts.speak
+            target:
+              entity_id: "{{ v_tts_speaker }}"
+            data:
+              message: "{{ v_tts_message }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ v_tts_mode == 'llm' and v_llm_agent != '' }}"
+        sequence:
+          - alias: "Generate bedtime advisory message via LLM"
+            action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ v_llm_agent }}"
+              text: "{{ v_llm_prompt | replace('{recommendation}', recommendation) }}"
+            response_variable: llm_response
+          - alias: "Speak LLM-generated bedtime advisory message"
+            action: tts.speak
+            continue_on_error: true
+            target:
+              entity_id: "{{ v_tts_speaker }}"
+            data:
+              message: "{{ (llm_response | default({})).get('response', {}).get('speech', {}).get('plain', {}).get('speech', v_tts_message) }}"
+
+  # ── Advisory actions ──
+  - !input advisory_actions

@@ -1,0 +1,123 @@
+blueprint:
+  name: "Music Taste — Manual Rebuild"
+  description: >
+    Triggers a full music taste profile aggregation when the rebuild
+    button is pressed. Merges MA play logs + Spotify data into the
+    unified taste profile on sensor.ai_music_taste_status. Optionally
+    generates an LLM genre/style summary (no artist names).
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/music_taste_rebuild.yaml
+  input:
+    # ===========================================================================
+    # ① Core
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:music-box-outline
+      description: Trigger, schedule, and startup behavior.
+      collapsed: false
+      input:
+        rebuild_button:
+          name: Rebuild Button
+          description: "The input_button entity that triggers the rebuild."
+          default: input_button.ai_music_taste_rebuild
+          selector:
+            entity:
+              domain: input_button
+        refresh_interval:
+          name: Refresh interval (hours)
+          description: >
+            How often to auto-rebuild the taste profile with LLM summarization.
+          default: "/6"
+          selector:
+            select:
+              options:
+                - label: "Every hour"
+                  value: "/1"
+                - label: "Every 2 hours"
+                  value: "/2"
+                - label: "Every 6 hours"
+                  value: "/6"
+                - label: "Every 12 hours"
+                  value: "/12"
+        run_on_start:
+          name: Run on HA start
+          description: >
+            Rebuild the taste profile automatically when Home Assistant starts.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ② LLM Configuration
+    # ===========================================================================
+    llm_config:
+      name: "② LLM Configuration"
+      icon: mdi:brain
+      description: LLM instance and prompt settings for genre summary generation.
+      collapsed: true
+      input:
+        llm_instance:
+          name: LLM Instance
+          description: >
+            ha_text_ai sensor for genre summary generation. Leave blank to
+            skip LLM summarization (raw profile used instead).
+          default: sensor.ha_text_ai_deepseek_chat
+          selector:
+            entity:
+              domain: sensor
+        summary_max_chars:
+          name: Summary Max Characters
+          description: "Maximum characters for the genre summary."
+          default: 100
+          selector:
+            number:
+              min: 40
+              max: 200
+              step: 10
+              mode: slider
+        llm_prompt:
+          name: LLM Prompt
+          description: >
+            Custom prompt for the genre summary LLM call. Use {profile} for the
+            raw music profile and {max_chars} for the character limit.
+          default: >-
+            Given this music profile, write a concise genre/style summary in plain text.
+            No artist or track names. No markdown, no bold, no char counts, no alternatives.
+            Just one short phrase, max {max_chars} characters.
+
+            Profile: {profile}
+          selector:
+            text:
+              multiline: true
+
+mode: single
+
+variables:
+  v_run_on_start: !input run_on_start
+
+triggers:
+  - trigger: state
+    entity_id: !input rebuild_button
+    id: manual
+  - trigger: time_pattern
+    hours: !input refresh_interval
+    minutes: "30"
+    id: scheduled
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'ha_start' or v_run_on_start }}
+
+actions:
+  - alias: "Rebuild music taste profile from play history"
+    action: pyscript.music_taste_rebuild
+    data:
+      llm_instance: !input llm_instance
+      summary_max_chars: !input summary_max_chars
+      llm_prompt: !input llm_prompt
+    response_variable: _rebuild_result

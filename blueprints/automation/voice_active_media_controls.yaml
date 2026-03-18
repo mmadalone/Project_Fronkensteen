@@ -1,0 +1,278 @@
+blueprint:
+  name: "Voice – Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)"
+  author: madalone
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/voice_active_media_controls.yaml
+  description: >
+    ![Voice Active Media Controls](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_active_media_controls.jpeg)
+
+    # Voice – Active Media Controls
+
+    Centralized voice media control automation. It does **not** listen to
+    voice directly — instead, thin wrapper scripts (created from companion
+    script blueprints) call this automation with a `command` variable.
+    This pattern keeps all logic in one place while giving the LLM agent
+    clean, single-purpose tools to call.
+
+    **Commands:** `pause_active` (pause highest-priority active player),
+    `stop_radio` (pause configured MA radio players),
+    `shut_up` (pause ALL currently playing candidates).
+
+    ### Recent changes
+
+    - **v3:** Audit fixes — collapsible sections, defaults on all inputs, source_url
+
+    - **v2:** Restructured choose architecture, migrated to 2024.10+ syntax
+
+    - **v1:** Initial version — unified voice media control dispatcher
+
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① MEDIA PLAYERS
+    # =========================================================================
+    media_players:
+      name: "① Media players"
+      icon: mdi:speaker-group
+      description: Configure which media players this automation can control.
+      collapsed: false
+      input:
+        candidates:
+          name: Candidate media players (priority order)
+          description: >
+            Priority-ordered list of all media players this automation is
+            allowed to control. At least one candidate is required for
+            pause_active and shut_up commands to function.
+
+            Used for "pause_active" (picks the first that is playing or
+            paused) and "shut_up" (pauses ALL currently playing).
+
+            Recommended order: TV first, then Music Assistant speakers,
+            then Spotify, then Alexa/Echo.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+        radio_players:
+          name: Music Assistant "radio" players
+          description: >
+            Music Assistant media players considered "radio" for the
+            "stop_radio" command. When triggered, all of these are paused.
+
+            Leave empty if you don't use the stop_radio command — a
+            notification will remind you if you invoke it unconfigured.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+    # =========================================================================
+    # ② NOTIFICATIONS
+    # =========================================================================
+    notifications:
+      name: "② Notifications"
+      icon: mdi:bell-outline
+      description: Configure misconfiguration notifications.
+      collapsed: true
+      input:
+        enable_notifications:
+          name: Enable persistent notifications
+          description: >
+            When enabled, creates Home Assistant persistent notifications
+            if a command is invoked but the required players are not
+            configured. Recommended ON during setup, OFF once stable.
+          default: true
+          selector:
+            boolean: {}
+
+mode: restart
+
+variables:
+  candidates: !input candidates
+  radio_players: !input radio_players
+  enable_notifications: !input enable_notifications
+  command: "{{ (command | default('none')) if command is defined else 'none' }}"
+  has_candidates: "{{ candidates | count > 0 }}"
+  has_radio_players: "{{ radio_players | count > 0 }}"
+
+triggers:
+  - alias: "Dummy trigger — automation is invoked programmatically by scripts"
+    trigger: event
+    event_type: automation_reloaded
+
+conditions: []
+
+actions:
+  # ===================================================================
+  # Phase 1 — Requirement validation (runs unconditionally)
+  # ===================================================================
+
+  - alias: "Compute requirement flags"
+    variables:
+      missing_candidates: "{{ not has_candidates }}"
+      missing_radio: "{{ command == 'stop_radio' and not has_radio_players }}"
+
+  - alias: "Notify on misconfiguration — help user fix setup"
+    if:
+      - condition: template
+        value_template: >-
+          {{ enable_notifications and (missing_candidates or missing_radio) }}
+    then:
+      - alias: "Create persistent notification for misconfiguration"
+        action: persistent_notification.create
+        data:
+          title: "Voice Active Media Controls – Misconfiguration"
+          message: >-
+            {% if missing_candidates %}
+            No candidate media players are configured in the
+            "Voice – Active Media Controls" automation.
+            Open this automation and add at least one media_player
+            to the "candidates" list.
+            {% elif missing_radio %}
+            The "stop_radio" command was triggered, but there are no
+            "radio_players" configured in the
+            "Voice – Active Media Controls" automation.
+            Open this automation and add your Music Assistant radio
+            players.
+            {% else %}
+            Unknown configuration issue in "Voice – Active Media Controls".
+            {% endif %}
+        continue_on_error: true
+
+  - alias: "Stop if requirements not met for this command"
+    if:
+      - condition: template
+        value_template: >-
+          {{ (command in ['pause_active', 'shut_up'] and not has_candidates)
+             or (command == 'stop_radio' and not has_radio_players) }}
+    then:
+      - alias: "Stop: >-"
+        stop: >-
+          Requirements not met for command "{{ command }}".
+        error: false
+
+  # ===================================================================
+  # Phase 2 — Command dispatch (choose routes to correct handler)
+  # ===================================================================
+
+  - alias: "Dispatch command"
+    choose:
+      # ---------------------------------------------------------------
+      # pause_active — Pause highest-priority active player
+      # ---------------------------------------------------------------
+      - alias: "Command: pause_active"
+        conditions:
+          - condition: template
+            value_template: "{{ command == 'pause_active' }}"
+        sequence:
+          - alias: "Find first active candidate by priority"
+            variables:
+              active_target: >-
+                {% set active = expand(candidates)
+                   | selectattr('state', 'in', ['playing', 'paused'])
+                   | list %}
+                {{ active[0].entity_id if active | count > 0 else 'none' }}
+
+          - alias: "Pause active player or notify if none found"
+            if:
+              - condition: template
+                value_template: "{{ active_target != 'none' }}"
+            then:
+              - alias: "Pause the highest-priority active player"
+                action: media_player.media_pause
+                target:
+                  entity_id: "{{ active_target }}"
+                continue_on_error: true
+            else:
+              - alias: "Notify — no player is currently active"
+                if:
+                  - condition: template
+                    value_template: "{{ enable_notifications }}"
+                then:
+                  - alias: "Create notification for no active player"
+                    action: persistent_notification.create
+                    data:
+                      title: "Voice Active Media Controls – No active player"
+                      message: >-
+                        The "pause_active" command was triggered, but none of
+                        the configured candidate players are currently
+                        playing or paused. Nothing was paused.
+                    continue_on_error: true
+
+      # ---------------------------------------------------------------
+      # stop_radio — Pause configured MA radio players
+      # Phase 1 guarantees radio_players is non-empty at this point
+      # ---------------------------------------------------------------
+      - alias: "Command: stop_radio"
+        conditions:
+          - condition: template
+            value_template: "{{ command == 'stop_radio' }}"
+        sequence:
+          - alias: "Pause all MA radio players"
+            action: media_player.media_pause
+            target:
+              entity_id: "{{ radio_players }}"
+            continue_on_error: true
+
+      # ---------------------------------------------------------------
+      # shut_up — Pause ALL playing candidates
+      # ---------------------------------------------------------------
+      - alias: "Command: shut_up"
+        conditions:
+          - condition: template
+            value_template: "{{ command == 'shut_up' }}"
+        sequence:
+          - alias: "Find all currently playing candidates"
+            variables:
+              playing_targets: >-
+                {{ expand(candidates)
+                   | selectattr('state', 'eq', 'playing')
+                   | map(attribute='entity_id')
+                   | list }}
+
+          - alias: "Pause all playing candidates or notify if none"
+            if:
+              - condition: template
+                value_template: "{{ playing_targets | count > 0 }}"
+            then:
+              - alias: "Pause all playing media players"
+                action: media_player.media_pause
+                target:
+                  entity_id: "{{ playing_targets }}"
+                continue_on_error: true
+            else:
+              - alias: "Notify — nothing is currently playing"
+                if:
+                  - condition: template
+                    value_template: "{{ enable_notifications }}"
+                then:
+                  - alias: "Create notification for no playing candidates"
+                    action: persistent_notification.create
+                    data:
+                      title: "Voice Active Media Controls – No players to pause"
+                      message: >-
+                        The "shut_up" command was triggered, but none of the
+                        configured candidate players are currently playing.
+                        Nothing was paused.
+                    continue_on_error: true
+
+    default:
+      - alias: "Handle unknown command"
+        if:
+          - condition: template
+            value_template: "{{ enable_notifications and command not in ['none'] }}"
+        then:
+          - alias: "Notify — unrecognized command value"
+            action: persistent_notification.create
+            data:
+              title: "Voice Active Media Controls – Unknown command"
+              message: >-
+                The automation was triggered with an unknown command value
+                ("{{ command }}"). Expected one of: "pause_active",
+                "stop_radio", "shut_up".
+            continue_on_error: true

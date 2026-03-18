@@ -1,0 +1,117 @@
+# =============================================================================
+# AI Whisper Package — Agent Whisper Network Configuration
+# =============================================================================
+# All user-facing knobs for the whisper system in one place.
+# Pyscript (agent_whisper.py) reads these helpers at runtime.
+#
+# Helpers:
+#   input_boolean.ai_whisper_enabled               — master kill switch
+#   input_boolean.ai_whisper_mood_detection         — mood auto-detect toggle
+#   input_number.ai_whisper_interaction_expiry_days — TTL for interaction logs
+#   input_number.ai_whisper_mood_expiry_days        — TTL for mood observations
+#   input_number.ai_whisper_topic_expiry_days       — TTL for topic tracking
+#   input_number.ai_whisper_mood_dedup_seconds      — same-mood dedup window
+#   input_number.ai_whisper_max_auto_keywords       — cap on auto-learned keywords
+#   input_number.ai_whisper_keyword_cooldown        — keyword update rate limit
+#   sensor.ai_whisper_config                        — dashboard status sensor
+#
+# Related blueprint:
+#   interaction_summarizer.yaml — scheduled batch summarization (separate config)
+# =============================================================================
+
+input_boolean:
+  ai_whisper_enabled:
+    name: "AI Whisper - Enabled"
+    initial: true
+    icon: mdi:ear-hearing
+
+  ai_whisper_mood_detection:
+    name: "AI Whisper - Mood Detection"
+    initial: true
+    icon: mdi:emoticon-outline
+
+input_number:
+  ai_whisper_interaction_expiry_days:
+    name: "Whisper - Interaction Expiry (days)"
+    icon: mdi:clock-outline
+    min: 1
+    max: 30
+    step: 1
+    initial: 2
+    mode: slider
+    unit_of_measurement: "days"
+
+  ai_whisper_mood_expiry_days:
+    name: "Whisper - Mood Expiry (days)"
+    icon: mdi:clock-outline
+    min: 1
+    max: 14
+    step: 1
+    initial: 1
+    mode: slider
+    unit_of_measurement: "days"
+
+  ai_whisper_topic_expiry_days:
+    name: "Whisper - Topic Expiry (days)"
+    icon: mdi:clock-outline
+    min: 1
+    max: 30
+    step: 1
+    initial: 3
+    mode: slider
+    unit_of_measurement: "days"
+
+  ai_whisper_mood_dedup_seconds:
+    name: "Whisper - Mood Dedup Window"
+    icon: mdi:timer-sand
+    min: 60
+    max: 7200
+    step: 60
+    initial: 3600
+    mode: slider
+    unit_of_measurement: "s"
+
+  ai_whisper_max_auto_keywords:
+    name: "Whisper - Max Auto Keywords"
+    icon: mdi:tag-multiple
+    min: 5
+    max: 100
+    step: 5
+    initial: 30
+    mode: box
+
+  ai_whisper_keyword_cooldown:
+    name: "Whisper - Keyword Update Cooldown"
+    icon: mdi:timer-cog
+    min: 60
+    max: 1800
+    step: 30
+    initial: 300
+    mode: slider
+    unit_of_measurement: "s"
+
+template:
+  - sensor:
+      - name: "AI Whisper Config"
+        unique_id: ai_whisper_config
+        icon: mdi:ear-hearing
+        state: >-
+          {% if is_state('input_boolean.ai_whisper_enabled', 'on') %}active
+          {% else %}disabled{% endif %}
+        attributes:
+          enabled: >-
+            {{ is_state('input_boolean.ai_whisper_enabled', 'on') }}
+          mood_detection: >-
+            {{ is_state('input_boolean.ai_whisper_mood_detection', 'on') }}
+          interaction_expiry_days: >-
+            {{ states('input_number.ai_whisper_interaction_expiry_days') | int(2) }}
+          mood_expiry_days: >-
+            {{ states('input_number.ai_whisper_mood_expiry_days') | int(1) }}
+          topic_expiry_days: >-
+            {{ states('input_number.ai_whisper_topic_expiry_days') | int(3) }}
+          mood_dedup_seconds: >-
+            {{ states('input_number.ai_whisper_mood_dedup_seconds') | int(3600) }}
+          max_auto_keywords: >-
+            {{ states('input_number.ai_whisper_max_auto_keywords') | int(30) }}
+          keyword_cooldown: >-
+            {{ states('input_number.ai_whisper_keyword_cooldown') | int(300) }}

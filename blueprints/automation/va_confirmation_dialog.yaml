@@ -1,0 +1,91 @@
+blueprint:
+  name: "Voice assistant – confirmation dialog"
+  author: madalone
+  description: >
+    # Voice assistant – confirmation dialog
+
+    Routes a voice command to a confirmation script. Use for
+    destructive or expensive operations (turning off media centers,
+    rebooting devices) where the assistant should ask "are you sure?"
+    before acting.
+
+    Create one instance per command pair (on/off, start/stop, etc.).
+
+    **Important:** Both command fields must be filled. An empty command
+    matches ALL voice input. If no alternate phrasing is needed,
+    duplicate the primary command.
+
+    ### Recent changes
+    - **v1:** Initial version
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/va_confirmation_dialog.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① VOICE COMMAND
+    # ===========================================================================
+    voice_command:
+      name: "① Voice command"
+      icon: mdi:microphone
+      description: >
+        The voice command phrases that trigger this confirmation.
+      collapsed: false
+      input:
+        primary_command:
+          name: Primary command
+          description: >
+            The main voice command phrase (e.g. "turn off madteevee").
+            Do not leave empty — an empty command matches ALL voice
+            input.
+          default: ""
+          selector:
+            text: {}
+
+        alt_command:
+          name: Alternate command
+          description: >
+            An alternate phrasing (e.g. "switch madteevee off").
+            Do not leave empty — duplicate the primary command if no
+            alternate is needed.
+          default: ""
+          selector:
+            text: {}
+
+    # ===========================================================================
+    # ② CONFIRMATION ACTION
+    # ===========================================================================
+    confirmation_action:
+      name: "② Confirmation action"
+      icon: mdi:script-text
+      description: The script to call when the command is recognized.
+      collapsed: false
+      input:
+        confirmation_script:
+          name: Confirmation script
+          description: >
+            The script entity that handles the confirmation dialog
+            and executes the action if confirmed.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Voice command recognized"
+    trigger: conversation
+    command:
+      - !input primary_command
+      - !input alt_command
+
+conditions: []
+
+actions:
+  - alias: "Run confirmation script"
+    action: script.turn_on
+    target:
+      entity_id: !input confirmation_script

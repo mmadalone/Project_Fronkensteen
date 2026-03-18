@@ -6,8 +6,157 @@ Sections 3 and 4 — Blueprint YAML structure, inputs, variables, templates, and
 
 ## 3. BLUEPRINT STRUCTURE & YAML FORMATTING
 
+### 3.0 Blueprint-First Decision Tree (MANDATORY — apply before writing any automation)
+
+Before writing ANY automation — package, blueprint, or raw YAML — run this gate. No exceptions.
+
+```
+  ① Is this trigger → conditions → actions?
+  ② Has user-configurable parameters?
+  ③ Could be reused (different zone, device, person, schedule)?
+
+→ YES to ② or ③ (either one)        = BLUEPRINT in blueprints/automation/madalone/
+→ YES to ① only (no params, no reuse) = package automation (infrastructure glue)
+→ NO to all 3                         = package automation (infrastructure glue only)
+```
+
+**Decision rules:**
+- **Blueprint** — user-facing feature, has inputs, reusable across zones/devices/people. Lives in `blueprints/automation/madalone/`. Instances go in `automations.yaml`.
+- **Package automation** — startup housekeeping, midnight resets, pyscript coordination, internal state management with no user-facing inputs. Lives in `packages/ai_*.yaml`.
+- **Raw automation in `automations.yaml`** — NEVER for new work. Legacy only. All new automations are either blueprint instances or package infrastructure glue.
+
+**If in doubt:** It's a blueprint. The overhead of wrapping trigger→conditions→actions in a blueprint is trivial. The cost of discovering later that a package automation should have been a blueprint (and migrating it) is not.
+
+> 📋 **QA Check BPG-1:** Every new automation must pass this decision tree before code is written. See `09_qa_audit_checklist.md`.
+
+**Step 0 — Before even running the decision tree:** Check if an existing blueprint already does the job. List `blueprints/automation/madalone/` — can this feature be a NEW INSTANCE of an existing blueprint? If yes → create instance in `automations.yaml`, done. No new code needed. See §11.1 step 0 for the workflow version.
+
+---
+
+#### Pyscript Service Shelf
+
+Every pyscript service available as a blueprint building block. Blueprints call these — they don't reimplement the logic. Before building new functionality into a blueprint, check if a service already handles it.
+
+**Agent & Pipeline Services** (`agent_dispatcher.py`, `agent_whisper.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.agent_dispatch` | Pipeline-aware persona routing — resolves pipeline to agent/TTS/persona, or dynamically selects by keyword/time | Any blueprint needing LLM conversation (coming_home, bedtime, proactive, wake-up) |
+| `pyscript.dispatcher_load_keywords` | Load routing keywords for a selected agent from L2 memory | Dashboard/admin — keyword management |
+| `pyscript.dispatcher_add_keyword` | Add a keyword to an agent's routing keywords | Dashboard/admin — keyword management |
+| `pyscript.dispatcher_remove_keyword` | Remove a keyword from an agent's routing keywords | Dashboard/admin — keyword management |
+| `pyscript.dispatcher_clear_auto_keywords` | Clear all auto (non-manual) keywords from an agent | Dashboard/admin — keyword maintenance |
+| `pyscript.agent_whisper` | Post-interaction logging — writes mood, topic, interaction log to L2 memory (zero LLM calls) | Any blueprint with LLM conversation (post-interaction hook) |
+| `pyscript.agent_whisper_context` | Pre-interaction context retrieval — searches L2 for recent whisper entries from OTHER agents | Any blueprint with LLM conversation (pre-interaction context) |
+
+**TTS & Audio Services** (`tts_queue.py`, `duck_manager.py`, `volume_sync.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.tts_queue_speak` | Priority TTS with presence-aware speaker targeting, preemption, dedup, caching | Any blueprint needing voice output (wake-up, proactive, notification, bedtime) |
+| `pyscript.tts_queue_clear` | Remove pending items from TTS queue (optionally per-speaker) | Queue management, cleanup flows |
+| `pyscript.tts_queue_stop` | Stop current playback and clear queue (optionally per-speaker) | Interrupt/stop voice output |
+| `pyscript.tts_queue_flush_deferred` | Move items deferred during phone calls back to main queue | Phone call end trigger |
+| `pyscript.tts_cache_generate` | Pre-warm TTS cache without playing audibly | Unwired — self-warms via opportunistic cache in `_play_item()`. Blueprint archived: `GIT_REPO/archive/tts_cache_warmup.yaml` |
+| `pyscript.tts_rebuild_speaker_config` | Scan media_player entities for area-assigned speakers, rebuild config | Speaker setup changes |
+| `pyscript.duck_manager_duck` | Duck media volumes for TTS playback (refcounted) | Notification/email follow-me, any TTS-over-music flow |
+| `pyscript.duck_manager_restore` | Restore volumes after TTS (refcounted) | Paired with duck_manager_duck |
+| `pyscript.duck_manager_force_restore` | Force-restore all ducked volumes (safety reset) | Watchdog/failsafe flows |
+| `pyscript.duck_manager_status` | Get current duck state and refcount | Debugging, dashboard display |
+| `pyscript.duck_manager_mark_user_adjusted` | Mark a player as user-adjusted — skip restore for that player | Volume sync coordination |
+| `pyscript.volume_sync_status` | Get Alexa ↔ MA volume sync status | Dashboard display |
+
+**Memory & Context Services** (`memory.py`, `common_utilities.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.memory_set` | Store key/value in L2 memory with tags, scope, expiration | Any service needing persistent state |
+| `pyscript.memory_get` | Retrieve value from L2 memory by key | Any service needing stored context |
+| `pyscript.memory_search` | Full-text search across L2 memory | Agent context retrieval, dashboard search |
+| `pyscript.memory_forget` | Delete a memory entry by key | Memory management |
+| `pyscript.memory_related` | Find related memories by key (graph traversal) | **Wired:** LLM tool `memory_related` |
+| `pyscript.memory_link` | Create relationship between two memory entries | **Wired:** LLM tool `memory_link` |
+| `pyscript.memory_archive_search` | Search expired/archived memories by keyword | **Wired:** LLM tool `memory_archive_search` |
+| `pyscript.memory_archive_restore` | Restore archived memory to active store + re-embed | Dashboard / dev tools only (not LLM-wired) |
+| `pyscript.memory_purge_expired` | Remove expired entries from L2 | Maintenance automation |
+| `pyscript.memory_reindex_fts` | Rebuild full-text search index | Maintenance automation |
+| `pyscript.memory_health_check` | Check L2 memory database health | Monitoring/dashboard |
+| `pyscript.memory_browse` | Search and write results to sensor for dashboard display | Dashboard memory browser |
+| `pyscript.memory_edit` | Read key/value/tags from dashboard helpers, call memory_set | Dashboard memory editor |
+| `pyscript.memory_delete` | Read key from dashboard helper, call memory_forget | Dashboard memory editor |
+| `pyscript.memory_load` | Load memory entry into dashboard edit fields | Dashboard memory editor |
+| `pyscript.conversation_with_timeout` | Wrapper around conversation.process with enforced timeout | Any blueprint calling LLM with timeout safety |
+| `pyscript.memory_cache_get` | Fetch cached value by key (volatile, in-memory) | Short-term state sharing between services |
+| `pyscript.memory_cache_set` | Store value in volatile cache with optional TTL | Short-term state sharing |
+| `pyscript.memory_cache_forget` | Remove cached entry | Cache cleanup |
+| `pyscript.memory_cache_index_update` | Atomically update a list index in cache | Index management for services |
+| `pyscript.memory_embed` | Generate + store embedding for single memory entry | Maintenance, debugging |
+| `pyscript.memory_embed_batch` | Batch-embed memories missing vectors | `embedding_batch.yaml` nightly job |
+| `pyscript.memory_semantic_search` | Pure KNN semantic search by meaning | Agent context enrichment, debugging |
+| `pyscript.memory_vec_health_check` | Test-load vec0.so, report status | `sqlite_vec_recompile.yaml` |
+| `pyscript.llm_task_call` | Budget-aware LLM chat via ha_text_ai | I-3 summarization (future), any background LLM task |
+| `pyscript.llm_direct_embed` | Budget-aware embedding generation via OpenAI API | memory_embed, memory_semantic_search |
+| `pyscript.summarize_interactions` | Batch-compress whisper interaction logs into per-agent summaries | `interaction_summarizer.yaml` nightly job |
+| `memory_context_refresh` (auto) | Writes recent summaries/mood/topics to `sensor.ai_memory_context` every 15 min + startup | Hot context injection (I-4) — not a callable service |
+| `pyscript.memory_todo_sync` | Bidirectional sync between L2 memory and HA todo list | `memory_todo_mirror.yaml` scheduled job (I-6) |
+
+**Notification & Dedup Services** (`notification_dedup.py`, `email_promote.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.dedup_check` | Check if a topic was already announced recently | Pre-announce dedup check |
+| `pyscript.dedup_register` | Register a successful announcement in L2 | Post-announce registration |
+| `pyscript.dedup_announce` | Combined check + announce + register (single call for blueprints) | calendar_pre_event_reminder, proactive, proactive_bedtime_escalation |
+| `pyscript.email_promote_process` | Process incoming email through priority filter | email_priority_filter blueprint |
+| `pyscript.email_clear_count` | Reset priority email counter | **Wired:** LLM tool `email_clear_count` + dashboard button |
+
+**Presence & Identity Services** (`presence_identity.py`, `presence_patterns.py`, `focus_guard.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.presence_identity_status` | Debug dump of per-person zone tracking state | Dev tools debugging |
+| `pyscript.presence_identity_force_anchor` | Manually pin a person to a zone | Dev tools, testing |
+| `pyscript.presence_identity_reset` | Clear all tracking state and reinitialize | Dev tools, recovery |
+| `pyscript.discover_persons_status` | Return person discovery cache (Task 22) | Dev tools, verifying person config |
+
+**Presence Pattern & Activity Services** (`presence_patterns.py`, `focus_guard.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.presence_extract_transitions` | Extract zone transitions from recorder DB, store as L2 patterns | Pattern learning automation |
+| `pyscript.presence_predict_next` | Predict next zone from frequency table | Proactive pre-positioning |
+| `pyscript.presence_rebuild_patterns` | Full rebuild of presence patterns from recorder | Maintenance automation |
+| `pyscript.sleep_detect_log` | Log sleep detection event to L2 memory | sleep_detection blueprint |
+| `pyscript.meal_passive_log` | Log passive meal detection to L2 memory | meal_detection blueprint |
+| `pyscript.focus_guard_evaluate` | Evaluate all 6 focus guard nudge conditions | Focus guard automation |
+| `pyscript.focus_guard_mark_meal` | Set last_meal_time (optional `meal_time` param: `HH:MM` or `YYYY-MM-DD HH:MM:SS`) | **Wired:** LLM tool `focus_guard_mark_meal` |
+| `pyscript.focus_guard_snooze` | Snooze non-critical nudges for N minutes | **Wired:** LLM tool `focus_guard_snooze` |
+
+**Scheduling & Routine Services** (`predictive_schedule.py`, `routine_fingerprint.py`, `proactive_briefing.py`, `calendar_promote.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.schedule_bedtime_advisor` | Compute bedtime recommendation from L1 + L2 + L3 data | Bedtime routine blueprints |
+| `pyscript.schedule_optimal_timing` | Predict optimal timing for an event | **Wired:** LLM tool `schedule_optimal_timing` + dashboard button |
+| `pyscript.routine_extract_fingerprints` | Extract routine fingerprints from frequency tables | Pattern learning automation |
+| `pyscript.routine_track_position` | Track zone transition, match against known routines | FP2 state change trigger |
+| `pyscript.proactive_build_briefing` | Assemble morning briefing content from all layers | proactive_briefing_morning, proactive_briefing_slot |
+| `pyscript.proactive_briefing_now` | Full briefing delivery pipeline — assemble, select agent, reformulate, speak | proactive_briefing_morning, proactive_briefing_slot |
+| `pyscript.calendar_promote_now` | Promote Google Calendar events to L2 memory | Calendar sync automation |
+
+**Configuration Services** (`sleep_config.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.sleep_lights_add_target` | Add light entity to sleep lights target list | Dashboard configuration |
+| `pyscript.sleep_lights_remove_target` | Remove light entity from sleep lights target list | Dashboard configuration |
+| `pyscript.sleep_lights_load_display` | Load sleep lights config for dashboard display | Dashboard display |
+| `pyscript.sleep_config_populate_pickers` | Populate entity pickers for sleep config dashboard | Dashboard initialization |
+
+---
+
 ### 3.1 Blueprint header and description image
-Every blueprint must include a header image in its `description:` field. See §11.1 step 4 for image generation specs (1K, 16:9, premise from `IMG_PREMISES`). Allowed formats: `.jpeg`, `.jpg`, `.png`, `.webp`. Always ask the user for an image — never skip this step.
+Every blueprint must include a header image in its `description:` field. See §11.1 step 5 for image generation specs (1K, 16:9, premise from `IMG_PREMISES`). Allowed formats: `.jpeg`, `.jpg`, `.png`, `.webp`. Always ask the user for an image — never skip this step.
 
 Every blueprint must include:
 ```yaml
@@ -35,7 +184,7 @@ blueprint:
 **Header fields:**
 - `author:` — Always include. Even for personal blueprints, it identifies ownership.
 - `source_url:` — Include if the blueprint lives on GitHub or will be shared. This enables one-click reimport/update in the HA UI. Omit for strictly private blueprints. Use `GIT_REPO_URL` as the base (defined in Project Instructions).
-- `description:` image URL — Use `HEADER_IMG_RAW` + `<blueprint_name>-header.<ext>` (defined in Project Instructions). Never use `github.com/blob/...` — blob URLs render HTML, not the image binary. See §11.1 step 4 for full image specs.
+- `description:` image URL — Use `HEADER_IMG_RAW` + `<blueprint_name>-header.<ext>` (defined in Project Instructions). Never use `github.com/blob/...` — blob URLs render HTML, not the image binary. See §11.1 step 5 for full image specs.
 - `min_version:` — **Required** when using features from a specific HA version. Always verify which version introduced the features you use.
 - `icon:` — **NOT valid** in the `blueprint:` schema block. HA will reject it with `extra keys not allowed @ data['blueprint']['icon']`. Icons are only available on **instances** created from blueprints, not the blueprint definition itself. See also §4.1.
 
@@ -62,7 +211,7 @@ Common mistakes: `min_version:` and `icon:` placed directly under `blueprint:` i
 | `2024.10.0` | `triggers:`, `conditions:`, `actions:` (plural syntax); `trigger:` keyword replacing `platform:` inside trigger definitions |
 | `2025.12.0` | Purpose-specific triggers (Labs feature — experimental, opt-in via Settings > System > Labs; still expanding as of 2026.2) |
 
-**Image rule (project standard — not an HA requirement):** Every blueprint MUST have an image in its description. When creating or updating a blueprint, ask the user if they want to provide an image. If they don't have one, generate one using the default specs in §11.1 step 4.
+**Image rule (project standard — not an HA requirement):** Every blueprint MUST have an image in its description. When creating or updating a blueprint, ask the user if they want to provide an image. If they don't have one, generate one using the default specs in §11.1 step 5.
 
 **Recent changes (project standard):** The blueprint description MUST include the last 3 version changes. Each entry is a single line, max ~80 characters — verb-first, no articles, no fluff. If a version touched multiple things, pick the most significant change.
 
@@ -233,6 +382,10 @@ conversation_agent:
     text: "{{ my_prompt }}"
 ```
 
+> **Dispatcher pattern note:** In this setup, the `conversation_agent` input is used as a **fallback only**. The standard path routes through `pyscript.agent_dispatch`, which selects the agent, voice, and persona dynamically (see §14.5.1 Pattern 1). The blueprint input still uses the `conversation_agent:` selector so users can override the dispatcher choice, and so the blueprint works standalone if the pyscript layer is unavailable. Include a `use_dispatcher` boolean input (default `true`) to let users opt in/out.
+
+> **Pyscript integration inputs are always optional.** Every pyscript toggle input (`use_dispatcher`, `use_tts_queue`, `use_dedup`, `use_whisper`) MUST default to `true` with a `boolean:` selector. Numeric pyscript inputs (timeouts, thresholds) MUST have sensible defaults. The input `description:` MUST document the fallback behavior when the feature is off (e.g., "When off, falls back to tts.speak directly"). See §14.5.1 Design Principle for the full pattern and reference input template.
+
 ```yaml
 # ❌ WRONG — only shows built-in HA agents, hides Extended OpenAI etc.
 conversation_agent:
@@ -274,7 +427,7 @@ light_target:
 > 📋 **QA Check BP-2:** Every input must use the most appropriate selector type — don't use `text:` where `entity:`, `select:`, `number:`, or `time:` would constrain input. See `09_qa_audit_checklist.md`.
 
 ### 3.4 Variables block
-Declare a top-level `variables:` block immediately after `condition:` to resolve `!input` references into template-usable variables:
+Declare a top-level `variables:` block immediately after `conditions:` to resolve `!input` references into template-usable variables:
 
 ```yaml
 variables:
@@ -378,7 +531,7 @@ variables:
 
 # ✅ FIXED
 variables:
-  volume_pct: "{{ (state_attr(speaker, 'volume_level') | float(0) * 100) | int }}"
+  volume_pct: "{{ ((state_attr(speaker, 'volume_level') | float(0)) * 100) | int }}"
 ```
 
 ```yaml
@@ -669,6 +822,28 @@ Every **standalone script** (created via UI or YAML) MUST include:
 - `icon`: Appropriate `mdi:` icon
 
 > **⚠️ Blueprint exception:** The `icon:` field is NOT valid inside the `blueprint:` schema block. HA will reject it with `extra keys not allowed @ data['blueprint']['icon']`. Script blueprints cannot set an icon — the icon is only available on the **instances** created from the blueprint, not the blueprint definition itself. Do not add `icon:` to the `blueprint:` header.
+
+**Minimal script skeleton:**
+
+```yaml
+script:
+  my_script_id:
+    alias: "My Script Name"
+    description: "What this script does and why it exists."
+    icon: mdi:script-text
+    mode: single
+    fields:
+      example_field:
+        description: "Describe the field."
+        required: true
+        selector:
+          text:
+    sequence:
+      - alias: "First step — describe what and why"
+        action: homeassistant.turn_on
+        target:
+          entity_id: "{{ example_field }}"
+```
 
 ### 4.2 Inline explanations
 Script sequences follow the same alias rules as blueprint actions (see §3.5). Every step gets a descriptive `alias:` that covers the what and why. YAML comments are optional — use them only when the alias can't carry the full explanation.

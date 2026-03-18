@@ -1,0 +1,251 @@
+blueprint:
+  name: "Wake-up music – Music Assistant (simple)"
+  author: madalone
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/wakeup_music_ma.yaml
+  description: >
+    ![Wake-up music MA header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_music_ma-header.jpeg)
+
+    # Wake-up music – Music Assistant (simple)
+
+    Simple helper script: set volume, clear queue, play one item on a Music
+    Assistant player. Supports configurable enqueue mode and radio mode for
+    continuous playback. No AFTER logic — handle post-playback with a
+    separate automation if needed.
+
+    ### Recent changes
+
+    - **v2.2:** Duck guard — volume_set now calls
+    `duck_manager_update_snapshot` so the ducking system's volume
+    snapshot stays accurate when wake-up music starts during active
+    ducking.
+
+    - **v2.1:** QA audit remediation — collapsible section defaults + collapsed
+    flags, continue_on_error on volume set, template default guards
+
+    - **v2:** Full rebuild — music_assistant.play_media, modern syntax,
+    collapsible sections, radio_mode/enqueue inputs, MA entity filter
+
+    - **v1:** Initial version (used generic media_player.play_media)
+
+  domain: script
+  homeassistant:
+    min_version: "2024.10.0"
+
+  # --- version: 2.2 ---
+  input:
+    # ===========================================================================
+    # ① PLAYER & MEDIA
+    # ===========================================================================
+    player_media:
+      name: "① Player & media"
+      icon: mdi:music-box
+      description: Select the MA player and the media to play.
+      collapsed: false
+      input:
+        player:
+          name: Music Assistant player
+          description: >-
+            The Music Assistant speaker to play on. Only MA players are
+            shown — do not use the underlying platform entity (Alexa,
+            ESPHome, Sonos, etc.).
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+
+        media_id:
+          name: Media ID (URI or name)
+          description: >-
+            Music Assistant media identifier. Can be a URI
+            (spotify://track/...), a library name ("Radio Klara"),
+            or any string MA can resolve.
+          default: ""
+          selector:
+            text: {}
+
+        media_type:
+          name: Media type
+          description: >-
+            The type of media being played. Must match the media_id
+            format — e.g. "track" for a single song, "playlist" for
+            a playlist, "radio" for a radio station.
+          default: music
+          selector:
+            select:
+              options:
+                - label: "Music (generic)"
+                  value: music
+                - label: "Track"
+                  value: track
+                - label: "Album"
+                  value: album
+                - label: "Artist"
+                  value: artist
+                - label: "Playlist"
+                  value: playlist
+                - label: "Radio"
+                  value: radio
+
+    # ===========================================================================
+    # ② PLAYBACK SETTINGS
+    # ===========================================================================
+    playback_settings:
+      name: "② Playback settings"
+      icon: mdi:tune-vertical
+      description: Volume, queue behavior, and continuous playback options.
+      collapsed: true
+      input:
+        volume_before:
+          name: Volume BEFORE playback
+          description: >-
+            Set volume to this level before playing. 0.0–1.0 (1.0 = 100%).
+          default: 0.6
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
+
+        enqueue_mode:
+          name: Enqueue mode
+          description: >-
+            How to handle the MA queue when playing. "replace" clears the
+            queue and plays immediately (typical for wake-up). "play" plays
+            immediately but keeps the rest of the queue.
+          default: replace
+          selector:
+            select:
+              options:
+                - label: "Replace — clear queue, play now"
+                  value: replace
+                - label: "Play — play now, keep queue"
+                  value: play
+                - label: "Next — insert after current track"
+                  value: next
+                - label: "Add — append to end of queue"
+                  value: add
+
+        radio_mode:
+          name: Radio mode (continuous playback)
+          description: >-
+            When enabled, Music Assistant keeps adding similar tracks
+            when the queue ends — music never stops. Depends on the
+            provider's ability to generate recommendations.
+          default: "Use player settings"
+          selector:
+            select:
+              options:
+                - label: "Use player settings"
+                  value: "Use player settings"
+                - label: "Always"
+                  value: "Always"
+                - label: "Never"
+                  value: "Never"
+
+    # ===========================================================================
+    # ③ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+variables:
+  radio_mode_value: !input radio_mode
+  v_player: !input player
+  v_volume_before: !input volume_before
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+
+mode: single
+
+sequence:
+  - alias: "Set volume BEFORE playback"
+    continue_on_error: true
+    action: media_player.volume_set
+    target:
+      entity_id: !input player
+    data:
+      volume_level: !input volume_before
+
+  - alias: "Update duck snapshot if active"
+    if:
+      - condition: template
+        value_template: >-
+          {{ is_state(v_duck_guard, 'on')
+             and is_state(v_ducking_flag, 'on') }}
+    then:
+      - alias: "Sync duck snapshot with wake-up volume"
+        action: pyscript.duck_manager_update_snapshot
+        data:
+          entity_id: "{{ v_player }}"
+          volume_level: "{{ v_volume_before }}"
+        continue_on_error: true
+
+  - alias: "Clear queue — fresh start for wake-up"
+    continue_on_error: true
+    action: media_player.clear_playlist
+    target:
+      entity_id: !input player
+
+  - alias: "Play requested media via Music Assistant with radio mode preference"
+    choose:
+      - alias: "Radio mode: Always — force continuous playback"
+        conditions:
+          - condition: template
+            value_template: "{{ radio_mode_value | default('Use player settings') == 'Always' }}"
+        sequence:
+          - alias: "Play media with radio_mode on"
+            action: music_assistant.play_media
+            target:
+              entity_id: !input player
+            data:
+              media_id: !input media_id
+              media_type: !input media_type
+              enqueue: !input enqueue_mode
+              radio_mode: true
+
+      - alias: "Radio mode: Never — disable continuous playback"
+        conditions:
+          - condition: template
+            value_template: "{{ radio_mode_value | default('Use player settings') == 'Never' }}"
+        sequence:
+          - alias: "Play media with radio_mode off"
+            action: music_assistant.play_media
+            target:
+              entity_id: !input player
+            data:
+              media_id: !input media_id
+              media_type: !input media_type
+              enqueue: !input enqueue_mode
+              radio_mode: false
+
+    default:
+      - alias: "Play media with player's default radio mode setting"
+        action: music_assistant.play_media
+        target:
+          entity_id: !input player
+        data:
+          media_id: !input media_id
+          media_type: !input media_type
+          enqueue: !input enqueue_mode

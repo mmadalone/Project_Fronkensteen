@@ -1,0 +1,11 @@
+# =============================================================================
+# AI User Interview Package — I-36
+# =============================================================================
+# Helpers for LLM-driven user preference interview.
+# Engine: pyscript/user_interview.py
+# Deployed: 2026-03-11
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)

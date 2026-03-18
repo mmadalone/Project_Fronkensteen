@@ -1,0 +1,95 @@
+blueprint:
+  name: "Device power cycle – scheduled reboot via smart plug"
+  author: madalone
+  description: >
+    # Device power cycle – scheduled reboot via smart plug
+
+    Turns a smart plug OFF at a scheduled time, waits a configurable
+    number of seconds, then turns it back ON. Use for speakers, routers,
+    or any device that benefits from a daily power cycle.
+
+    ### Recent changes
+    - **v1:** Initial version
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/device_power_cycle.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① DEVICE & SCHEDULE
+    # ===========================================================================
+    device_and_schedule:
+      name: "① Device & schedule"
+      icon: mdi:power-plug
+      description: Smart plug to cycle and the time to do it.
+      collapsed: false
+      input:
+        target_switch:
+          name: Smart plug / switch
+          description: >
+            The switch entity that controls the device to be power
+            cycled.
+          default: ""
+          selector:
+            entity:
+              domain: switch
+
+        cycle_time:
+          name: Cycle time
+          description: >
+            Time of day to trigger the power cycle.
+          default: "07:59:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ② TIMING
+    # ===========================================================================
+    timing:
+      name: "② Timing"
+      icon: mdi:timer-outline
+      description: How long to keep the device off during the cycle.
+      collapsed: true
+      input:
+        off_duration:
+          name: Off duration (seconds)
+          description: >
+            How many seconds to keep the switch off before turning it
+            back on. 60 seconds is usually enough for a clean reboot.
+          default: 60
+          selector:
+            number:
+              min: 5
+              max: 300
+              step: 5
+              unit_of_measurement: "seconds"
+
+variables:
+  target_switch: !input target_switch
+  off_duration: !input off_duration
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Scheduled power cycle time"
+    trigger: time
+    at: !input cycle_time
+
+conditions: []
+
+actions:
+  - alias: "Turn switch OFF"
+    action: switch.turn_off
+    target:
+      entity_id: !input target_switch
+
+  - alias: "Wait for off duration"
+    delay:
+      seconds: !input off_duration
+
+  - alias: "Turn switch back ON"
+    action: switch.turn_on
+    target:
+      entity_id: !input target_switch

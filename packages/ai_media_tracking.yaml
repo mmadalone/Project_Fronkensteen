@@ -1,0 +1,16 @@
+# =============================================================================
+# AI Media Tracking — Radarr/Sonarr Integration (I-47)
+# =============================================================================
+# Thin package — storage helpers only. All config knobs live in the blueprint.
+#
+# Dependencies:
+#   - pyscript/media_promote.py (data service)
+#   - blueprints/automation/madalone/media_tracking.yaml (triggers + config)
+#   - packages/ai_context_hot.yaml (L1 injection reads these helpers)
+#
+# Deployed: 2026-03-10
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)

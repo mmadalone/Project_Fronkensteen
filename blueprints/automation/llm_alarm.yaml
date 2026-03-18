@@ -1,0 +1,819 @@
+blueprint:
+  name: "Wake-up alarm – LLM context"
+  author: madalone
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/llm_alarm.yaml
+  description: '![Wake-up alarm header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_alarm-header.jpeg)
+
+    # Wake-up alarm – LLM context
+
+    Time-based alarm that fires on selected weekdays, optionally generates a
+    wake-up message via a conversation agent, speaks it over TTS, and supports
+    one snooze cycle with mobile notification controls.
+
+    ### Recent changes
+
+    - **v12:** Audit fix — added `| default()` guards to
+      `v_wakeup_time` and `v_post_tts_timeout` in LLM prompt
+      meta block for full defensive consistency
+
+    - **v11:** Audit fix — added `v_tts_volume_before` and
+      `v_tts_volume_after` to variables block for full input-to-variable
+      parity (all 19 inputs now reflected)
+
+    - **v10:** Audit fixes — added `v_tts_engine` and
+      `v_tts_output_player` to variables block for consistency;
+      added runtime guard aborting early if required TTS inputs are
+      unconfigured; trim markers on `sensor_context` template to
+      eliminate leading whitespace in LLM prompt; corrected stale
+      v7 changelog entry
+
+    - **v9:** Audit fix — migrated conversation agent input from
+      `entity` selector (domain: conversation) to native
+      `conversation_agent` selector for consistency with all other
+      LLM blueprints; renamed input `llm_agent` → `conversation_agent`
+      and variable `v_llm_agent` → `v_conversation_agent`
+
+    - **v8:** Audit fixes — `v_tts_message` added to variables block for
+      consistency; `| trim` on LLM response extraction to guard against
+      whitespace-only replies; `| tojson` on `tts_options` for guaranteed
+      JSON serialisation; comment clarifying intentional static notification
+      message; comment flagging duplicated music-script guard for future
+      refactor
+
+    - **v7:** Audit fixes — Unicode section numbering (①–⑤); added
+      `event.data is defined` guard to all three `wait.trigger`
+      templates; added `source_url`; trimmed changelog
+
+    - **v6:** Audit fixes — empty-list guard on `wakeup_entities` before
+      `turn_on`; empty-string guard on `music_script` at both call sites;
+      `v_wakeup_entities` and `v_music_script` added to variables block;
+      `| default([])` on `v_active_days` in weekday condition; removed
+      misleading empty defaults from required TTS inputs; descriptions
+      clarified on `tts_engine` and `tts_output_player`
+
+    See commit history for v1–v5 changes.'
+  domain: automation
+  homeassistant:
+    min_version: "2024.6.0"
+  input:
+
+    stage_1_schedule:
+      name: "① Schedule"
+      icon: mdi:calendar-clock
+      description: When the alarm fires.
+      collapsed: false
+      input:
+
+        active_days:
+          name: Active weekdays
+          description: Days on which this wake-up should run.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+          selector:
+            select:
+              multiple: true
+              mode: list
+              options:
+                - label: Monday
+                  value: mon
+                - label: Tuesday
+                  value: tue
+                - label: Wednesday
+                  value: wed
+                - label: Thursday
+                  value: thu
+                - label: Friday
+                  value: fri
+                - label: Saturday
+                  value: sat
+                - label: Sunday
+                  value: sun
+
+        wakeup_time:
+          name: Wake-up time
+          description: Time at which the alarm should fire.
+          default: "07:00:00"
+          selector:
+            time: {}
+
+        wakeup_entities:
+          name: Wake-up lights / switches (optional)
+          description: >
+            Lights and/or switches to turn on when the alarm starts.
+            Leave empty to skip.
+          default: []
+          selector:
+            entity:
+              domain:
+                - light
+                - switch
+              multiple: true
+
+    stage_2_tts:
+      name: "② TTS & audio"
+      icon: mdi:volume-high
+      description: Output player and volume settings.
+      collapsed: true
+      input:
+
+        tts_output_player:
+          name: TTS output media_player (required)
+          default: ""
+          description: >
+            media_player where the TTS wake-up announcement will play.
+            This is required — the blueprint cannot function without
+            an output player.
+          selector:
+            entity:
+              domain: media_player
+
+        tts_volume_before:
+          name: TTS volume before wake-up
+          description: Volume level for TTS before the wake-up message is played.
+          default: 0.4
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.01
+              mode: slider
+
+        tts_volume_after:
+          name: TTS volume after wake-up
+          description: Volume level to restore on the TTS player after the wake-up flow completes.
+          default: 0.4
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.01
+              mode: slider
+
+        tts_message:
+          name: Static wake-up message text
+          description: >
+            Static wake-up message text if you are not using the LLM, or as a fallback
+            if the LLM call fails.
+          default: "good morning, time to get up."
+          selector:
+            text:
+              multiline: true
+
+    stage_3_llm:
+      name: "③ LLM wake-up message"
+      icon: mdi:robot
+      description: Optional AI-generated wake-up message via a Voice Assistant.
+      collapsed: true
+      input:
+
+        use_llm_wake_message:
+          name: Use LLM for wake-up message
+          description: >
+            If on, the wake-up message will be generated by the Voice Assistant
+            using the prompt and sensor data as context.
+            If off, only the static wake-up message text is used.
+          default: false
+          selector:
+            boolean: {}
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+        conversation_agent:
+          name: Voice Assistant
+          description: >
+            The Voice Assistant (Assist Pipeline) used when the dispatcher is
+            disabled. The pipeline bundles conversation agent, TTS engine,
+            and TTS voice together.
+          default: Rick
+          selector:
+            text:
+
+        llm_wake_prompt:
+          name: LLM wake-up prompt
+          description: >
+            Prompt sent to the conversation agent to generate the message.
+
+            The automation will append current time, configured wakeup time,
+            snooze window duration, and sensor_context from llm_context_entities.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        llm_context_entities:
+          name: Entities for LLM sensor_context (optional)
+          description: >
+            Optional extra entities to feed into the LLM as sensor_context
+            (for example temperature sensors, persons, switches, presence sensors, etc.).
+            These are NEVER used as triggers or conditions, only as context text.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    stage_4_notifications:
+      name: "④ Mobile notifications"
+      icon: mdi:cellphone-message
+      description: Snooze/Stop push notification controls.
+      collapsed: true
+      input:
+
+        notify_service:
+          name: Notify service
+          description: >
+            Notify service for the mobile notification.
+            Expected format: `notify.mobile_app_<your_device>`
+            (e.g. `notify.mobile_app_madaringer`).
+            Find yours in **Developer Tools → Services** under the Notify domain.
+            Leave empty to disable notifications.
+          default: ""
+          selector:
+            text: {}
+
+        mobile_snooze_action_id:
+          name: Mobile Snooze action id
+          description: >
+            Action id used by your mobile app for the Snooze button.
+            The app must send mobile_app_notification_action with this action value.
+          default: "GUARD_SNOOZE"
+          selector:
+            text: {}
+
+        mobile_stop_action_id:
+          name: Mobile Stop action id
+          description: >
+            Action id used by your mobile app for the Stop button.
+            The app must send mobile_app_notification_action with this action value.
+          default: "GUARD_STOP"
+          selector:
+            text: {}
+
+    stage_5_timing:
+      name: "⑤ Snooze & music"
+      icon: mdi:timer-sand
+      description: Snooze timing and post-alarm music.
+      collapsed: true
+      input:
+
+        post_tts_timeout:
+          name: Snooze/Stop listening window (seconds)
+          description: >
+            Seconds after the wake-up announcement during which the automation
+            watches for Snooze/Stop actions. Also used to size the LLM rant length.
+          default: 40
+          selector:
+            number:
+              min: 1
+              max: 600
+              unit_of_measurement: s
+              mode: slider
+
+        snooze_minutes:
+          name: Snooze minutes (max one snooze)
+          description: >
+            Minutes to wait after Snooze before repeating the wake-up TTS once.
+          default: 7
+          selector:
+            number:
+              min: 1
+              max: 60
+              unit_of_measurement: min
+              mode: slider
+
+        music_script:
+          name: Wake-up music script
+          description: >
+            Script to call when the wake-up flow completes (no stop received,
+            or after snooze expires). Leave empty to skip post-alarm music.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+    stage_6_infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    stage_7_privacy:
+      name: "⑦ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_active_days: !input active_days
+  v_use_llm_wake: !input use_llm_wake_message
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_pipeline_name: !input conversation_agent
+  v_llm_wake_prompt: !input llm_wake_prompt
+  v_llm_context_entities: !input llm_context_entities
+  v_notify_service: !input notify_service
+  v_mobile_snooze_action_id: !input mobile_snooze_action_id
+  v_mobile_stop_action_id: !input mobile_stop_action_id
+  v_post_tts_timeout: !input post_tts_timeout
+  v_snooze_minutes: !input snooze_minutes
+  v_wakeup_time: !input wakeup_time
+  v_wakeup_entities: !input wakeup_entities
+  v_music_script: !input music_script
+  v_tts_message: !input tts_message
+  v_tts_output_player: !input tts_output_player
+  v_tts_volume_before: !input tts_volume_before
+  v_tts_volume_after: !input tts_volume_after
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+triggers:
+  - alias: "Wake-up time"
+    trigger: time
+    at: !input wakeup_time
+
+# No native weekday condition exists — template is the only option here.
+conditions:
+  - alias: "Today is in active_days"
+    condition: template
+    value_template: >-
+      {% set idx = now().weekday() %}
+      {% set map = ['mon','tue','wed','thu','fri','sat','sun'] %}
+      {{ map[idx] in (v_active_days | default([])) }}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_llm_alarm') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+
+  - alias: "Validate required TTS inputs"
+    if:
+      - condition: template
+        value_template: >-
+          {{ (v_tts_output_player | default('') | string | length == 0) }}
+    then:
+      - alias: "Stop: llm_alarm: tts_output_player is not configured — aborting"
+        stop: "llm_alarm: tts_output_player is not configured — aborting"
+
+  # ── Infrastructure: Agent selection — dispatcher > manual ─────────────
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for wake-up"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "proactive_wakeup"
+              intent_text: "wake-up alarm"
+              skip_continuity: true
+            continue_on_error: true
+
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve manually selected pipeline to agent"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  - alias: "Turn on wake-up lights / switches"
+    if:
+      - condition: template
+        value_template: >-
+          {{ (v_wakeup_entities | default([])) | length > 0 }}
+    then:
+      - alias: "Activate wake-up lights and switches"
+        action: homeassistant.turn_on
+        target:
+          entity_id: !input wakeup_entities
+
+  - alias: "Set TTS volume before wake-up"
+    action: media_player.volume_set
+    target:
+      entity_id: !input tts_output_player
+    data:
+      volume_level: !input tts_volume_before
+  - alias: "Update duck snapshot after TTS volume set"
+    if:
+      - condition: template
+        value_template: >-
+          {{ is_state(v_duck_guard, 'on')
+             and is_state(v_ducking_flag, 'on') }}
+    then:
+      - alias: "Sync duck snapshot with new volume"
+        action: pyscript.duck_manager_update_snapshot
+        data:
+          entity_id: "{{ v_tts_output_player }}"
+          volume_level: "{{ v_tts_volume_before }}"
+        continue_on_error: true
+
+  - alias: "Default wake message"
+    variables:
+      wake_message: "{{ v_tts_message | default('good morning, time to get up.', true) }}"
+
+  - alias: "Build sensor context for LLM"
+    variables:
+      sensor_context: >-
+        {% set entities = expand(v_llm_context_entities | default([])) %}
+        {%- if entities | length == 0 -%}
+          no extra sensor data
+        {%- else -%}
+          {% set ns = namespace(lines=[]) %}
+          {%- for e in entities -%}
+            {% set ns.lines = ns.lines + [e.entity_id ~ ' (' ~ (e.name or e.entity_id) ~ '): ' ~ e.state] %}
+          {%- endfor -%}
+          {{ ns.lines | join(' | ') }}
+        {%- endif -%}
+
+  - alias: "Optionally generate wake message via LLM"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ v_use_llm_wake and (dispatch_agent | default('') | string | length > 0) }}
+        sequence:
+          # §1.2 — Only structured per-run data goes here.
+          # Behavioral instructions (speech rate, time format preferences,
+          # name, personality) belong in the agent's system prompt configured
+          # in the HA UI, not repeated on every call.
+          - alias: "Generate LLM wake-up message via conversation agent"
+            action: conversation.process
+            data:
+              agent_id: "{{ dispatch_agent }}"
+              text: >-
+                {{ (v_llm_wake_prompt | default('') | string)
+                   ~ '\n\nmeta:\n'
+                   ~ '- configured_wakeup_time: ' ~ (v_wakeup_time | default('07:00:00') | string) ~ '\n'
+                   ~ '- snooze_stop_window_seconds: ' ~ (v_post_tts_timeout | default(40) | string) ~ '\n'
+                   ~ '- target_word_count: ' ~ ((v_post_tts_timeout | default(40) * 2) | int | string) ~ '\n'
+                   ~ '\ncontext:\n'
+                   ~ '- wakeup_reason: alarm time reached\n'
+                   ~ '- calendar_today: ' ~ (states('input_text.ai_calendar_today_summary') | default('No events', true)) ~ '\n'
+                   ~ '- priority_emails: ' ~ (states('input_number.ai_email_priority_count') | int(0) | string) ~ '\n'
+                   ~ '- sensor_context: ' ~ (sensor_context | string)
+                }}
+            response_variable: wake_llm
+            continue_on_error: true
+          # Defensive traversal — any intermediate key could be None
+          # if the LLM call errored or returned an unexpected shape (§3.6).
+          - alias: "Set wake message"
+            variables:
+              wake_message: >-
+                {% set res = wake_llm | default({}) %}
+                {% set text = (((res.get('response') or {}).get('speech') or {}).get('plain') or {}).get('speech', '') | default('', true) | trim %}
+                {{ text if text | length > 0 else wake_message }}
+
+          - alias: "Post-interaction whisper"
+            action: pyscript.agent_whisper
+            response_variable: _whisper
+            data:
+              agent_name: "{{ dispatch_persona }}"
+              user_query: "wake-up alarm"
+              agent_response: "{{ wake_message[:200] }}"
+              source: "automation"
+            continue_on_error: true
+
+  # Notification fires before TTS and uses a static summary intentionally —
+  # the push is a brief heads-up, not a transcript of the LLM wake message.
+  - alias: "Optional mobile notification with Snooze/Stop"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ v_notify_service | default('') | string | length > 0 }}
+        sequence:
+          - alias: "Send mobile push with Snooze/Stop buttons"
+            action: "{{ v_notify_service }}"
+            data:
+              title: "wake-up guard"
+              message: "time to get up."
+              data:
+                actions:
+                  - alias: "Call input-configured action"
+                    action: !input mobile_snooze_action_id
+                    title: "Snooze"
+                  - alias: "Call input-configured action"
+                    action: !input mobile_stop_action_id
+                    title: "Stop"
+
+  - alias: "Speak wake-up message (first round)"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts
+    data:
+      text: "{{ wake_message }}"
+      voice: "{{ dispatch_voice }}"
+      priority: 1
+      target_mode: explicit
+      target: "{{ v_tts_output_player }}"
+
+  - alias: "Whisper — update self-awareness"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "Delivered wake-up alarm announcement"
+      source: "automation"
+    continue_on_error: true
+
+  - alias: "Wait for Snooze/Stop (first round)"
+    wait_for_trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: !input mobile_snooze_action_id
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: !input mobile_stop_action_id
+    timeout:
+      seconds: !input post_tts_timeout
+    continue_on_timeout: true
+
+  - alias: "Handle Snooze/Stop or timeout (first round)"
+    choose:
+      - alias: "Stop pressed in first window"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ wait.trigger is not none
+                 and wait.trigger.event is defined
+                 and wait.trigger.event.data is defined
+                 and wait.trigger.event.data.action == v_mobile_stop_action_id }}
+        sequence:
+          - alias: "Stop TTS immediately (first window)"
+            action: media_player.media_stop
+            target:
+              entity_id: !input tts_output_player
+          - alias: "Restore volume after Stop"
+            action: media_player.volume_set
+            target:
+              entity_id: !input tts_output_player
+            data:
+              volume_level: !input tts_volume_after
+          - alias: "Update duck snapshot after volume restore (stop first window)"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ is_state(v_duck_guard, 'on')
+                     and is_state(v_ducking_flag, 'on') }}
+            then:
+              - alias: "Sync duck snapshot with restored volume"
+                action: pyscript.duck_manager_update_snapshot
+                data:
+                  entity_id: "{{ v_tts_output_player }}"
+                  volume_level: "{{ v_tts_volume_after }}"
+                continue_on_error: true
+          - alias: "Stop: wake-up guard stopped by user (stop in first window)"
+            stop: "wake-up guard stopped by user (stop in first window)"
+
+      - alias: "Snooze pressed in first window"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ wait.trigger is not none
+                 and wait.trigger.event is defined
+                 and wait.trigger.event.data is defined
+                 and wait.trigger.event.data.action == v_mobile_snooze_action_id }}
+        sequence:
+          - alias: "Stop TTS immediately (snooze)"
+            action: media_player.media_stop
+            target:
+              entity_id: !input tts_output_player
+
+          - alias: "Wait for snooze period"
+            delay:
+              minutes: !input snooze_minutes
+
+          - alias: "Speak wake-up message again after snooze"
+            action: pyscript.tts_queue_speak
+            data:
+              text: "{{ wake_message }}"
+              voice: "{{ dispatch_voice }}"
+              priority: 1
+              target_mode: explicit
+              target: "{{ v_tts_output_player }}"
+
+          - alias: "Final wait for Stop after snooze"
+            wait_for_trigger:
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: !input mobile_stop_action_id
+            timeout:
+              seconds: !input post_tts_timeout
+            continue_on_timeout: true
+
+          - alias: "Stop or play music after snooze"
+            choose:
+              - alias: "Stop pressed after snooze"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ wait.trigger is not none
+                         and wait.trigger.event is defined
+                         and wait.trigger.event.data is defined
+                         and wait.trigger.event.data.action == v_mobile_stop_action_id }}
+                sequence:
+                  - alias: "Stop TTS immediately (stop after snooze)"
+                    action: media_player.media_stop
+                    target:
+                      entity_id: !input tts_output_player
+                  - alias: "Restore volume after Stop (after snooze)"
+                    action: media_player.volume_set
+                    target:
+                      entity_id: !input tts_output_player
+                    data:
+                      volume_level: !input tts_volume_after
+                  - alias: "Update duck snapshot after volume restore (stop after snooze)"
+                    if:
+                      - condition: template
+                        value_template: >-
+                          {{ is_state(v_duck_guard, 'on')
+                             and is_state(v_ducking_flag, 'on') }}
+                    then:
+                      - alias: "Sync duck snapshot with restored volume"
+                        action: pyscript.duck_manager_update_snapshot
+                        data:
+                          entity_id: "{{ v_tts_output_player }}"
+                          volume_level: "{{ v_tts_volume_after }}"
+                        continue_on_error: true
+                  - alias: "Stop: wake-up guard stopped by user (stop after snooze)"
+                    stop: "wake-up guard stopped by user (stop after snooze)"
+            default:
+              # Music-script guard is duplicated across exit paths (here and
+              # first-window default). HA choose branches can't share sub-
+              # sequences without a helper script. If a third call site
+              # appears, extract to script.llm_alarm_play_music.
+              - alias: "No stop after snooze – start wake-up music"
+                if:
+                  - condition: template
+                    value_template: >-
+                      {{ v_music_script | default('') | string | length > 0 }}
+                then:
+                  - alias: "Start wake-up music after snooze timeout"
+                    action: script.turn_on
+                    target:
+                      entity_id: !input music_script
+              - alias: "Restore volume after music (after snooze)"
+                action: media_player.volume_set
+                target:
+                  entity_id: !input tts_output_player
+                data:
+                  volume_level: !input tts_volume_after
+              - alias: "Update duck snapshot after volume restore (after snooze music)"
+                if:
+                  - condition: template
+                    value_template: >-
+                      {{ is_state(v_duck_guard, 'on')
+                         and is_state(v_ducking_flag, 'on') }}
+                then:
+                  - alias: "Sync duck snapshot with restored volume"
+                    action: pyscript.duck_manager_update_snapshot
+                    data:
+                      entity_id: "{{ v_tts_output_player }}"
+                      volume_level: "{{ v_tts_volume_after }}"
+                    continue_on_error: true
+              - alias: "Stop: wake-up guard finished after snooze + music"
+                stop: "wake-up guard finished after snooze + music"
+
+    default:
+      - alias: "No Snooze/Stop in first window – play music"
+        if:
+          - condition: template
+            value_template: >-
+              {{ v_music_script | default('') | string | length > 0 }}
+        then:
+          - alias: "Start wake-up music after first window timeout"
+            action: script.turn_on
+            target:
+              entity_id: !input music_script
+      - alias: "Restore volume after music (no snooze)"
+        action: media_player.volume_set
+        target:
+          entity_id: !input tts_output_player
+        data:
+          volume_level: !input tts_volume_after
+      - alias: "Update duck snapshot after volume restore (no snooze music)"
+        if:
+          - condition: template
+            value_template: >-
+              {{ is_state(v_duck_guard, 'on')
+                 and is_state(v_ducking_flag, 'on') }}
+        then:
+          - alias: "Sync duck snapshot with restored volume"
+            action: pyscript.duck_manager_update_snapshot
+            data:
+              entity_id: "{{ v_tts_output_player }}"
+              volume_level: "{{ v_tts_volume_after }}"
+            continue_on_error: true
+      - alias: "Stop: wake-up guard finished after first message + music"
+        stop: "wake-up guard finished after first message + music"

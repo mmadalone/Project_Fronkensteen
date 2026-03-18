@@ -1,0 +1,285 @@
+# =============================================================================
+# Duck Refcount Watchdog (v1.2.0)
+# =============================================================================
+# Safety net for stranded duck refcount. When parallel TTS runs die mid-flight
+# (automation reload, HA restart, supersede exit), the refcount stays >0,
+# the ducking flag stays ON, and media player volumes remain permanently
+# ducked. This watchdog detects the stranded state and force-resets everything.
+#
+# Shared across all blueprints that use the duck refcount system:
+# notification_follow_me, email_follow_me, and any future TTS blueprint.
+# =============================================================================
+
+blueprint:
+  name: "Duck Refcount Watchdog (v1.2.0)"
+  author: madalone
+  description: >
+    # Duck Refcount Watchdog
+
+
+    Safety net for the duck refcount system used by Notification Follow-Me,
+    Email Follow-Me, and other TTS blueprints that duck media player volumes
+    during announcements.
+
+
+    **The problem:** When parallel TTS runs die mid-flight — automation
+    reload, HA restart, supersede exit — the duck refcount stays above zero,
+    the ducking flag stays ON, and your media players remain permanently
+    ducked at low volume until you manually reset them.
+
+
+    **The fix:** This watchdog polls every 3 minutes. If the duck refcount
+    is above zero and stale, the watchdog force-restores all ducked player
+    volumes from the snapshot helper, resets the refcount to zero, clears
+    the ducking flag, and optionally sends a persistent notification so
+    you know it fired.
+
+
+    ### Recent changes
+
+    - **v1.2.0:** Replace one-shot `numeric_state` trigger with
+      `time_pattern /3` poll. The `numeric_state above: 0 for: X` trigger
+      fired exactly once per transition above zero — identical structural
+      weakness to the follow-me watchdog v1.0.0. Removed `timeout_minutes`
+      input (poll interval is fixed at 3 min). Condition block gates on
+      refcount > 0.
+
+    - **v1.1.0:** Startup/reload instant reset — adds `homeassistant` start
+      and `automation_reloaded` event triggers for immediate cleanup when
+      HA restarts or automations are reloaded. Eliminates the timeout-length
+      window where players stay ducked after mid-flight instance kills.
+      Notification now shows trigger source (timeout / startup / reload).
+
+    - **v1.0.0:** Initial release — numeric_state trigger with configurable
+      timeout, snapshot-based volume restore, helper cleanup, optional
+      persistent notification.
+
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/duck_refcount_watchdog.yaml
+
+  input:
+    section_core:
+      name: "① Core — Duck System Helpers"
+      icon: mdi:duck
+      collapsed: false
+      input:
+        duck_refcount_helper:
+          name: "Duck refcount helper"
+          description: >-
+            The input_number entity that tracks active duck cycles across
+            parallel runs. Same helper configured in your Notification
+            Follow-Me and/or Email Follow-Me blueprint instances.
+          selector:
+            entity:
+              domain: input_number
+
+        ducking_flag:
+          name: "Ducking flag"
+          description: >-
+            The input_boolean that signals an active duck cycle. Same
+            helper configured in your TTS blueprints. Turned OFF by the
+            watchdog on reset.
+          selector:
+            entity:
+              domain: input_boolean
+
+        duck_snapshot_helper:
+          name: "Duck volume snapshot helper"
+          description: >-
+            The input_text entity that stores the JSON snapshot of ducked
+            player volumes. The watchdog reads this to restore each
+            player to its pre-duck volume. Same helper configured in
+            your TTS blueprints.
+          selector:
+            entity:
+              domain: input_text
+
+    section_optional:
+      name: "② Optional"
+      icon: mdi:cog-outline
+      collapsed: true
+      input:
+        satellite_volume_snapshot:
+          name: "Satellite volume snapshot helper (optional)"
+          description: >-
+            Optional. The input_text entity that stores the satellite's
+            pre-TTS volume. The watchdog clears this to prevent stale
+            data on the next notification run. Leave empty if not used.
+          default: ""
+          selector:
+            entity:
+              domain: input_text
+
+        notify_on_reset:
+          name: "Send notification when watchdog fires"
+          description: >-
+            When enabled, creates a persistent notification in HA each
+            time the watchdog resets a stranded duck state. Useful for
+            monitoring how often orphaned runs occur.
+          default: true
+          selector:
+            boolean:
+
+# =============================================================================
+# Triggers
+# =============================================================================
+# poll     — every 3 minutes, condition gates on refcount > 0
+# startup  — HA restart: instances killed, refcount orphaned
+# reload   — automation reload: same mid-flight kill scenario
+# =============================================================================
+triggers:
+  - trigger: time_pattern
+    minutes: "/3"
+    id: poll
+
+  - trigger: homeassistant
+    event: start
+    id: startup
+
+  - trigger: event
+    event_type: automation_reloaded
+    id: reload
+
+# =============================================================================
+# Condition — race guard: confirm it's still stranded
+# =============================================================================
+conditions:
+  - condition: numeric_state
+    entity_id: !input duck_refcount_helper
+    above: 0
+
+# =============================================================================
+# Variables
+# =============================================================================
+variables:
+  _duck_snapshot_entity: !input duck_snapshot_helper
+  _ducking_flag_entity: !input ducking_flag
+  _duck_refcount_entity: !input duck_refcount_helper
+  _sat_snapshot_entity: !input satellite_volume_snapshot
+  _notify: !input notify_on_reset
+  _trigger_id: "{{ trigger.id | default('poll') }}"
+
+# =============================================================================
+# Actions — restore volumes, clear helpers, reset state
+# =============================================================================
+actions:
+
+  # ---------------------------------------------------------------------------
+  # 0. Entity settle delay — startup/reload triggers fire before entities
+  #    are fully available. Wait 10s to let helpers settle.
+  # ---------------------------------------------------------------------------
+  - alias: "0 · Entity settle delay (startup/reload only)"
+    if:
+      - condition: template
+        value_template: "{{ _trigger_id in ['startup', 'reload'] }}"
+    then:
+      - alias: "Wait 10 seconds"
+        delay:
+          seconds: 10
+
+  # ---------------------------------------------------------------------------
+  # 1. Parse snapshot and restore ducked player volumes
+  # ---------------------------------------------------------------------------
+  - alias: "1 · Parse duck volume snapshot"
+    variables:
+      _snapshot_raw: >-
+        {{ states(_duck_snapshot_entity)
+           | default('') | string | trim }}
+      _snapshot_valid: >-
+        {{ _snapshot_raw not in ['unknown', 'unavailable', '']
+           and _snapshot_raw[0:1] == '[' }}
+      _ducked_players: >-
+        {% if _snapshot_valid | bool(false) %}
+          {{ _snapshot_raw | from_json | default([]) }}
+        {% else %}
+          {{ [] }}
+        {% endif %}
+
+  - alias: "1a · Restore each ducked player to pre-duck volume"
+    if:
+      - condition: template
+        value_template: "{{ _ducked_players | length > 0 }}"
+    then:
+      - alias: "Repeat for each item"
+        repeat:
+          for_each: "{{ _ducked_players }}"
+          sequence:
+            - alias: "Set volume back to snapshot value"
+              action: media_player.volume_set
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item.entity_id }}"
+              data:
+                volume_level: "{{ repeat.item.volume }}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Clear snapshot helpers
+  # ---------------------------------------------------------------------------
+  - alias: "2a · Clear duck volume snapshot helper"
+    action: input_text.set_value
+    continue_on_error: true
+    target:
+      entity_id: "{{ _duck_snapshot_entity }}"
+    data:
+      value: ""
+
+  - alias: "2b · Clear satellite volume snapshot helper (if configured)"
+    if:
+      - condition: template
+        value_template: >-
+          {{ (_sat_snapshot_entity | default('') | string | trim)
+             not in ['', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Clear satellite volume snapshot to prevent stale data"
+        action: input_text.set_value
+        continue_on_error: true
+        target:
+          entity_id: "{{ _sat_snapshot_entity }}"
+        data:
+          value: ""
+
+  # ---------------------------------------------------------------------------
+  # 3. Reset duck refcount to zero
+  # ---------------------------------------------------------------------------
+  - alias: "3 · Reset duck refcount to 0"
+    action: input_number.set_value
+    continue_on_error: true
+    target:
+      entity_id: "{{ _duck_refcount_entity }}"
+    data:
+      value: 0
+
+  # ---------------------------------------------------------------------------
+  # 4. Turn off ducking flag
+  # ---------------------------------------------------------------------------
+  - alias: "4 · Clear ducking flag"
+    action: input_boolean.turn_off
+    continue_on_error: true
+    target:
+      entity_id: "{{ _ducking_flag_entity }}"
+
+  # ---------------------------------------------------------------------------
+  # 5. Optional notification — so the user knows it fired
+  # ---------------------------------------------------------------------------
+  - alias: "5 · Persistent notification (optional)"
+    if:
+      - condition: template
+        value_template: "{{ _notify | bool(false) }}"
+    then:
+      - alias: "Notify user about stranded duck refcount reset"
+        action: persistent_notification.create
+        data:
+          title: "🦆 Duck Watchdog Reset"
+          message: >-
+            Stranded duck refcount detected
+            (trigger: {{ _trigger_id }}) — forced reset.
+            {% if _ducked_players | length > 0 %}
+            Restored {{ _ducked_players | length }} player(s):
+            {{ _ducked_players | map(attribute='entity_id') | join(', ') }}.
+            {% else %}
+            No snapshot data found — helpers cleared and flag reset only.
+            {% endif %}
+          notification_id: "duck_watchdog_reset"
+
+mode: single
+max_exceeded: silent

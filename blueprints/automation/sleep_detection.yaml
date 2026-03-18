@@ -1,0 +1,386 @@
+blueprint:
+  name: "Sleep detection – presence-based sleep lifecycle"
+  author: madalone
+  description: >
+    # Sleep detection – presence-based sleep lifecycle
+
+    Detects sleep from sustained presence in a bed zone. Manages the
+    full lifecycle: sleep start (flag + timestamp), sleep end (clear +
+    event + optional log), and false positive override. Includes
+    configurable time window and cat mitigation (multi-zone check
+    when a specific person is away).
+
+    ### Recent changes
+    - **v1:** Initial blueprint — replaces 3 automations from ai_sleep_detection.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/sleep_detection.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① PRESENCE SENSOR
+    # ===========================================================================
+    presence_sensor:
+      name: "① Presence sensor"
+      icon: mdi:motion-sensor
+      description: Bed zone presence sensor and minimum detection duration.
+      collapsed: false
+      input:
+        presence_entity:
+          name: Presence sensor
+          description: >
+            Binary sensor for the bed/sleep zone
+            (e.g. binary_sensor.fp2_presence_sensor_bed).
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        min_duration:
+          name: Minimum duration (minutes)
+          description: >
+            How long presence must be sustained before sleep is
+            detected. 60 minutes is a reasonable default.
+          default: 60
+          selector:
+            number:
+              min: 15
+              max: 180
+              step: 15
+              unit_of_measurement: "minutes"
+
+    # ===========================================================================
+    # ② STATE HELPERS
+    # ===========================================================================
+    state_helpers:
+      name: "② State helpers"
+      icon: mdi:database
+      description: >
+        Entity helpers that store the current sleep state. These are
+        shared with other systems (sleep_lights, pyscript, dashboards).
+      collapsed: false
+      input:
+        sleep_detected_flag:
+          name: Sleep detected flag
+          description: >
+            Input boolean set ON when sleep is detected, OFF on wake.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        sleep_start_datetime:
+          name: Sleep start datetime
+          description: >
+            Input datetime recording when sleep was detected.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+
+        sleep_end_datetime:
+          name: Sleep end datetime
+          description: >
+            Input datetime recording when sleep ended.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+
+        false_positive_flag:
+          name: False positive flag
+          description: >
+            Input boolean toggled by the user to mark a false
+            positive. Auto-resets after clearing sleep state.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ③ TIME WINDOW
+    # ===========================================================================
+    time_window:
+      name: "③ Time window"
+      icon: mdi:clock-outline
+      description: >
+        Only detect sleep within this window. Handles cross-midnight
+        ranges (e.g. 23:00–08:00).
+      collapsed: true
+      input:
+        window_start:
+          name: Window start
+          description: "Earliest time sleep detection can trigger."
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        window_end:
+          name: Window end
+          description: "Latest time sleep detection can trigger."
+          default: "08:00:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ④ CAT MITIGATION
+    # ===========================================================================
+    cat_mitigation:
+      name: "④ Cat mitigation"
+      icon: mdi:cat
+      description: >
+        When a specific person is away, check that other zones are
+        not also showing presence (cats roam, humans sleep in one spot).
+      collapsed: true
+      input:
+        enable_cat_mitigation:
+          name: Enable cat mitigation
+          description: >
+            When enabled, checks additional zones to filter out
+            cat-triggered false positives.
+          default: false
+          selector:
+            boolean: {}
+
+        cat_person_entity:
+          name: Person entity to check
+          description: >
+            When this person is NOT home, cat mitigation activates.
+            Typically the pet owner (e.g. person.jessica).
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+        cat_monitoring_zones:
+          name: Monitoring zones
+          description: >
+            Additional presence sensors to check. If 2+ are active
+            alongside the bed sensor while the person is away,
+            it is likely a cat, not sleep.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+
+    # ===========================================================================
+    # ⑤ LOGGING
+    # ===========================================================================
+    logging:
+      name: "⑤ Logging"
+      icon: mdi:notebook
+      description: Optional logging and event firing.
+      collapsed: true
+      input:
+        use_sleep_log:
+          name: Log sleep to L2 via pyscript
+          description: >
+            When enabled, calls pyscript.sleep_detect_log on sleep
+            end to record the session.
+          default: true
+          selector:
+            boolean: {}
+
+        fire_sleep_ended_event:
+          name: Fire sleep_ended event
+          description: >
+            When enabled, fires an ai_sleep_ended event with start
+            and end timestamps for downstream consumers.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  presence_entity: !input presence_entity
+  min_duration: !input min_duration
+  sleep_detected_flag: !input sleep_detected_flag
+  sleep_start_datetime: !input sleep_start_datetime
+  sleep_end_datetime: !input sleep_end_datetime
+  false_positive_flag: !input false_positive_flag
+  window_start: !input window_start
+  window_end: !input window_end
+  enable_cat_mitigation: !input enable_cat_mitigation
+  cat_person_entity: !input cat_person_entity
+  cat_monitoring_zones: !input cat_monitoring_zones
+  use_sleep_log: !input use_sleep_log
+  fire_sleep_ended_event: !input fire_sleep_ended_event
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: restart
+max_exceeded: silent
+
+triggers:
+  - alias: "Presence sustained — potential sleep start"
+    id: sleep_start
+    trigger: state
+    entity_id: !input presence_entity
+    from: "off"
+    to: "on"
+    for:
+      minutes: !input min_duration
+
+  - alias: "Presence ended — potential wake"
+    id: sleep_end
+    trigger: state
+    entity_id: !input presence_entity
+    from: "on"
+    to: "off"
+
+  - alias: "False positive flagged by user"
+    id: false_positive
+    trigger: state
+    entity_id: !input false_positive_flag
+    from: "off"
+    to: "on"
+
+conditions:
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_sleep_detection') | default('off') -%}
+      {%- if not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_t3_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Route by trigger"
+    choose:
+      # ── SLEEP START ─────────────────────────────────────────────────
+      - alias: "Sleep start — set flag and record time"
+        conditions:
+          - condition: trigger
+            id: sleep_start
+          - alias: "Not already detected"
+            condition: state
+            entity_id: !input sleep_detected_flag
+            state: "off"
+          - alias: "Within time window (cross-midnight safe)"
+            condition: template
+            value_template: >-
+              {% set start = today_at(window_start) %}
+              {% set end = today_at(window_end) %}
+              {% set n = now() %}
+              {% if start > end %}
+                {{ n >= start or n <= end }}
+              {% else %}
+                {{ start <= n <= end }}
+              {% endif %}
+          - alias: "Cat mitigation check"
+            condition: template
+            value_template: >-
+              {% if not enable_cat_mitigation %}
+                true
+              {% elif is_state(cat_person_entity, 'home') %}
+                true
+              {% else %}
+                {% set active = cat_monitoring_zones
+                   | select('is_state', 'on') | list | count %}
+                {{ active < 2 }}
+              {% endif %}
+        sequence:
+          - alias: "Set sleep detected flag"
+            action: input_boolean.turn_on
+            target:
+              entity_id: !input sleep_detected_flag
+          - alias: "Record sleep start time"
+            action: input_datetime.set_datetime
+            target:
+              entity_id: !input sleep_start_datetime
+            data:
+              datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+      # ── SLEEP END ───────────────────────────────────────────────────
+      - alias: "Sleep end — clear flag and record time"
+        conditions:
+          - condition: trigger
+            id: sleep_end
+          - alias: "Sleep was detected"
+            condition: state
+            entity_id: !input sleep_detected_flag
+            state: "on"
+        sequence:
+          - alias: "Clear sleep detected flag"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input sleep_detected_flag
+          - alias: "Record sleep end time"
+            action: input_datetime.set_datetime
+            target:
+              entity_id: !input sleep_end_datetime
+            data:
+              datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+          - alias: "Fire sleep ended event (optional)"
+            if:
+              - condition: template
+                value_template: "{{ fire_sleep_ended_event }}"
+            then:
+              - alias: "Fire ai_sleep_ended event"
+                event: ai_sleep_ended
+                event_data:
+                  start: "{{ states(sleep_start_datetime) }}"
+                  end: "{{ now().isoformat() }}"
+          - alias: "Log sleep session to L2 (optional)"
+            if:
+              - condition: template
+                value_template: "{{ use_sleep_log }}"
+            then:
+              - continue_on_error: true
+                action: pyscript.sleep_detect_log
+                response_variable: _sleep_log_resp
+
+      # ── FALSE POSITIVE ──────────────────────────────────────────────
+      - alias: "False positive — clear and auto-reset"
+        conditions:
+          - condition: trigger
+            id: false_positive
+        sequence:
+          - alias: "Clear sleep detected flag"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input sleep_detected_flag
+          - alias: "Wait before auto-reset"
+            delay: "00:00:02"
+          - alias: "Auto-reset false positive flag"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input false_positive_flag

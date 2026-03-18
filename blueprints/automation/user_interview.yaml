@@ -1,0 +1,400 @@
+# =============================================================================
+# User Interview Blueprint — I-36 Orchestration
+# =============================================================================
+# Manages interview mode lifecycle: activate, auto-timeout, deactivate.
+# The actual interview is conducted by the LLM agent using hot context
+# guidance and the save_user_preference tool function.
+#
+# Uses continuous conversation loop (same pattern as voice_handoff.yaml)
+# so the agent keeps asking questions until interview mode is turned off.
+#
+# Instance: automation.ai_user_interview
+#
+# Deployed: 2026-03-11
+# =============================================================================
+
+blueprint:
+  name: "AI User Interview"
+  description: >
+    Manages the LLM-driven user preference interview. Activates interview
+    mode (hot context injection), runs a continuous conversation loop so
+    the agent keeps asking questions, and auto-deactivates after timeout.
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/user_interview.yaml
+  author: madalone
+
+  input:
+    # ===========================================================================
+    # ① Core
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:account-voice
+      description: Satellite, speaker, and interview toggle.
+      collapsed: false
+      input:
+        enable:
+          name: Enable
+          description: Kill switch for this automation instance.
+          default: true
+          selector:
+            boolean:
+
+        interview_toggle:
+          name: Interview mode toggle
+          description: >
+            Input boolean that activates interview mode. Turn ON to start,
+            OFF to stop. Auto-turns off after timeout.
+          default: input_boolean.ai_interview_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        satellite:
+          name: Satellite
+          description: The satellite to run the interview on.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        speaker:
+          name: Speaker (media player)
+          description: >
+            The media player entity for the satellite speaker. Used to detect
+            when TTS finishes playing before reopening the mic.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+    # ===========================================================================
+    # ② Configuration
+    # ===========================================================================
+    configuration:
+      name: "② Configuration"
+      icon: mdi:tune-variant
+      description: Timing, messages, and voice settings.
+      collapsed: true
+      input:
+        timeout_minutes:
+          name: Auto-timeout (minutes)
+          description: >
+            Automatically deactivate interview mode after this many minutes.
+            Prevents forgetting to turn it off.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 120
+              step: 5
+              unit_of_measurement: min
+
+        start_message:
+          name: Start message
+          description: >
+            Opening line spoken via the satellite pipeline TTS when the
+            interview begins. Uses the satellite's configured voice.
+          default: "Alright, time to get to know you. First question — what's your full name?"
+          selector:
+            text:
+              multiline: true
+
+        tts_voice:
+          name: TTS voice entity
+          description: >
+            The TTS entity for the satellite's agent voice (e.g.,
+            tts.elevenlabs_rick_text_to_speech). Used to speak the
+            opening question in the correct voice.
+          default: ""
+          selector:
+            entity:
+              domain: tts
+
+        suppress_toggles:
+          name: Suppress during interview
+          description: >
+            Input booleans to turn OFF while the interview is running.
+            Restored to ON when the interview ends. Useful for silencing
+            notifications, follow-me, email alerts, etc.
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: true
+
+    # ===========================================================================
+    # ③ Infrastructure
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog-outline
+      description: Silence media and other low-level settings.
+      collapsed: true
+      input:
+        silence_media_url:
+          name: Silence media URL
+          description: >
+            URL to a short silence clip. Used to reopen the mic without
+            speaking (start_conversation requires start_message or
+            start_media_id).
+          default: "http://homeassistant.local:8123/local/silence.wav"
+          selector:
+            text:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable
+  v_toggle: !input interview_toggle
+  v_timeout: !input timeout_minutes
+  v_satellite: !input satellite
+  v_speaker: !input speaker
+  v_start_message: !input start_message
+  v_silence_url: !input silence_media_url
+  v_tts_voice: !input tts_voice
+  satellite_entity: !input satellite
+  speaker_entity: !input speaker
+  v_suppress: !input suppress_toggles
+
+triggers:
+  # ── Interview mode toggled ON ──
+  - id: start
+    trigger: state
+    entity_id: !input interview_toggle
+    to: "on"
+
+  # ── Interview mode toggled OFF ──
+  - id: stop
+    trigger: state
+    entity_id: !input interview_toggle
+    to: "off"
+
+conditions:
+  - condition: template
+    value_template: "{{ v_enable }}"
+
+actions:
+  # ── Stop trigger: restore toggles and exit ──
+  - alias: "Stop trigger: restore toggles and exit"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'stop' }}"
+    then:
+      - alias: "Deactivate continuous conversation on stop"
+        action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ai_continuous_conversation_active
+        continue_on_error: true
+      - alias: "Check length condition"
+        if:
+          - condition: template
+            value_template: "{{ v_suppress | length > 0 }}"
+        then:
+          - alias: "Restore suppressed notification toggles"
+            action: input_boolean.turn_on
+            target:
+              entity_id: !input suppress_toggles
+            continue_on_error: true
+      - alias: "Stop: Interview mode deactivated — notifications restored"
+        stop: "Interview mode deactivated — notifications restored"
+
+  # ── Start trigger ──
+
+  # 0. Suppress toggles during interview
+  - alias: "0 · Suppress toggles"
+    if:
+      - condition: template
+        value_template: "{{ v_suppress | length > 0 }}"
+    then:
+      - alias: "Suppress notification toggles during interview"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input suppress_toggles
+        continue_on_error: true
+
+  # 0b. Pre-seed progress from existing L1/L2 data
+  - alias: "0b · Pre-seed progress"
+    action: pyscript.user_interview_preseed
+    data:
+      user: "miquel"
+    response_variable: preseed_result
+    continue_on_error: true
+
+  # 1a. Speak opening question via TTS queue (speaker only, correct voice)
+  - alias: "1a · Speak opening question"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_start_message | length > 0
+             and v_tts_voice not in ['', 'none', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Speak opening interview question via TTS queue"
+        action: pyscript.tts_queue_speak
+        continue_on_error: true
+        response_variable: _tts_result
+        data:
+          text: "{{ v_start_message }}"
+          voice: "{{ v_tts_voice }}"
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+          priority: 1
+      # 1b. Audio download delay — let speaker transition from idle → playing
+      - alias: "1b · Audio download delay"
+        delay:
+          seconds: 3
+      # 1c. Wait for speaker to finish playing
+      - alias: "1c · Wait for speaker idle"
+        wait_template: >-
+          {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+             'paused', 'unknown'] }}
+        timeout: "00:00:15"
+        continue_on_timeout: true
+
+  # 1d. Echo guard — let reverb decay before opening mic
+  - alias: "1d · Echo guard"
+    delay:
+      seconds: 2
+
+  # 1e. Open mic silently (no start_message — no self-hearing)
+  - alias: "1e · Open mic (silent)"
+    action: assist_satellite.start_conversation
+    target:
+      entity_id: !input satellite
+    data:
+      start_media_id: "{{ v_silence_url }}"
+      preannounce: false
+    continue_on_error: true
+
+  # 2. Activate continuous conversation signal
+  - alias: "2 · Activate continuous flag"
+    action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.ai_continuous_conversation_active
+    continue_on_error: true
+
+  # 3. Loop variables (separate step — can't combine with repeat)
+  - alias: "3 · Loop variables"
+    variables:
+      loop_deadline: "{{ as_timestamp(now()) + (v_timeout | float(30)) * 60 }}"
+      no_speech_count: 0
+      mic_open_time: "{{ as_timestamp(now()) }}"
+
+  # 4. Continuous interview loop
+  #   Same pattern as voice_handoff.yaml step 11c.
+  #   Keeps the mic cycling: wait for session end → echo guard →
+  #   wait for speaker done → reopen mic silently.
+  - alias: "4 · Continuous interview loop"
+    repeat:
+      while:
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states('input_boolean.ai_continuous_conversation_active') != 'off' }}
+      sequence:
+        # A0. Wait for session to start (satellite leaves idle)
+        - alias: "Wait for satellite idle"
+          wait_template: "{{ not is_state(satellite_entity, 'idle') }}"
+          timeout: "00:00:05"
+          continue_on_timeout: true
+
+        # A. Wait for session to end (satellite → idle)
+        - alias: "Wait for satellite idle"
+          wait_template: "{{ is_state(satellite_entity, 'idle') }}"
+          timeout: "00:01:00"
+          continue_on_timeout: true
+
+        # B. No-speech detection
+        - alias: "Set session duration, no speech count"
+          variables:
+            session_duration: >-
+              {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
+              {{ dur }}
+            no_speech_count: >-
+              {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
+              {% if dur < 12 %}
+                {{ no_speech_count | int(0) + 1 }}
+              {% else %}
+                0
+              {% endif %}
+
+        # C. Combined exit check
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states('input_boolean.ai_continuous_conversation_active') != 'off' }}
+
+        # D. Echo guard — let TTS audio start downloading
+        - alias: "Wait 3 seconds"
+          delay:
+            seconds: 3
+
+        # E. Wait for speaker to finish TTS playback
+        - alias: "Wait for template condition"
+          wait_template: >-
+            {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+               'paused', 'unknown'] }}
+          timeout: "00:00:15"
+          continue_on_timeout: true
+
+        # F. Record timestamp before new session
+        - alias: "Set mic open time"
+          variables:
+            mic_open_time: "{{ as_timestamp(now()) }}"
+
+        # G. Build progress context for next turn
+        - alias: "Set interview esp"
+          variables:
+            interview_esp: >-
+              {% set raw = states('input_text.ai_interview_progress') | default('{}', true) %}
+              {% if raw not in ['unknown', 'unavailable', '', '{}'] %}
+                {% set progress = raw | from_json | default({}) %}
+                {% set done_items = [] %}
+                {% for cat, keys in progress.items() %}
+                  {% for k in keys %}
+                    {% set done_items = done_items + [cat ~ '.' ~ k] %}
+                  {% endfor %}
+                {% endfor %}
+                {% if done_items | length > 0 %}
+                  ALREADY ASKED (do NOT repeat these): {{ done_items | join(', ') }}. Ask about the NEXT unanswered topic.
+                {% else %}
+                  No preferences saved yet. Start with the first category.
+                {% endif %}
+              {% else %}
+                No preferences saved yet. Start with the first category.
+              {% endif %}
+
+        # H. Reopen mic silently with progress context
+        - alias: "Reopen mic with interview progress context"
+          action: assist_satellite.start_conversation
+          target:
+            entity_id: !input satellite
+          data:
+            start_media_id: "{{ v_silence_url }}"
+            preannounce: false
+            extra_system_prompt: "{{ interview_esp }}"
+          continue_on_error: true
+
+  # 5. Cleanup: deactivate continuous conversation
+  - alias: "5 · Deactivate continuous flag"
+    action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.ai_continuous_conversation_active
+    continue_on_error: true
+
+  # 6. Auto-deactivate interview mode if still on
+  - alias: "6 · Auto-deactivate interview mode"
+    if:
+      - condition: state
+        entity_id: !input interview_toggle
+        state: "on"
+    then:
+      - alias: "Turn off interview mode after loop exit"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input interview_toggle

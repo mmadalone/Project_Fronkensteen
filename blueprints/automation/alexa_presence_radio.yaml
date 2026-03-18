@@ -1,0 +1,984 @@
+blueprint:
+  domain: automation
+  name: "Alexa Presence-Aware Radio – Music Assistant"
+  author: madalone
+  description: |
+    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/alexa_presence_radio-header.jpeg)
+
+    # Play radio where you are — one voice command, any Echo
+
+    Say a single phrase to **any** Alexa device in your home. Home Assistant
+    determines which room you're in using presence sensors and plays the
+    configured radio station (or other media) on that room's Music Assistant
+    speaker.
+
+    ### How it works
+
+    ```
+    "Alexa, turn on Radio Klara"  (from ANY Echo)
+            │
+            ▼
+    input_boolean.radio_klara → ON
+            │
+            ▼
+    This automation fires
+            │
+            ▼
+    Checks presence sensors in priority order
+            │
+            ▼
+    First room with presence → play on that room's MA speaker
+    ```
+
+    ### Setup
+
+    #### 1. Create an input_boolean helper
+
+    Settings → Devices & Services → Helpers → **Toggle**
+
+    Name it after your station (e.g. "Radio Klara"). This creates
+    `input_boolean.radio_klara`.
+
+    #### 2. Expose to Alexa
+
+    Settings → Home Assistant Cloud → Alexa → find your toggle → switch ON.
+    Alexa sees it as a smart switch you can say "turn on".
+
+    #### 3. Create ONE Alexa Routine
+
+    In the Alexa app → More → Routines → +
+
+    * **When:** Voice → "Radio Klara"
+    * **From:** All devices (or leave default)
+    * **Action:** Smart Home → toggle ON `Radio Klara`
+
+    That's it. One routine. Any Echo. HA handles the room detection.
+
+    #### 4. Follow-Me integration
+
+    Pair this with the **Music Assistant Follow-Me** blueprint. Once
+    playback starts on a room speaker, the follow-me automation will
+    transfer the queue when you move between rooms. No changes needed
+    to the follow-me blueprint — it picks up any active MA player
+    automatically.
+
+    #### 5. Additional zones
+
+    Use the **Additional zone mappings** section to map extra presence
+    zones to existing speakers. Each zone has its own dropdown for both
+    sensor and player, so the same speaker can be reused across multiple
+    zones (e.g. kitchen → workshop speaker).
+
+    ### Recent changes
+    - **v6:** Added post-play verification with logbook warning on failure, explicit defaults on all optional entity inputs (AP-17, AP-44)
+    - **v5:** Added optional Follow-Me interlock — disables Follow-Me during room detection, re-enables after playback starts so radio follows the user
+    - **v4:** Folded trigger_entity into Stage 1, de-duplicated zone slot descriptions
+
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/alexa_presence_radio.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① TRIGGER & ROOM MAPPING
+    # ===========================================================================
+    room_mapping:
+      name: "① Trigger & room mapping"
+      icon: mdi:floor-plan
+      description: >
+        Configure the voice-command trigger and map presence sensors to
+        Music Assistant players. **Order matters** — the first sensor is
+        the highest priority room. If multiple rooms detect presence, the
+        highest-priority room wins.
+
+
+        For zones that share a speaker with another room (e.g. kitchen
+        uses the workshop speaker), use the **Additional zone mappings**
+        section below instead.
+      input:
+        trigger_entity:
+          name: Trigger entity (input_boolean)
+          description: >
+            The input_boolean helper that triggers this automation when
+            turned ON. Create one in Settings → Devices & Services →
+            Helpers → Toggle. Expose it to Alexa via HA Cloud, then
+            create a single Alexa Routine with your voice phrase
+            (e.g. "Radio Klara") that turns this toggle ON.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        presence_sensors:
+          name: Presence sensors (priority order)
+          description: >
+            Binary sensors indicating presence in each zone, ordered from
+            highest to lowest priority.
+
+
+            Example: if the living room should take precedence over the
+            bathroom, list the living room sensor first.
+
+
+            Supports Aqara FP2, PIR sensors, or any binary_sensor where
+            ON = someone is in the room.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+
+        target_players:
+          name: Music Assistant players (same order as sensors)
+          description: >
+            Music Assistant media_player entities mapped 1:1 with the
+            presence sensors above. First player = first sensor, etc.
+
+
+            **The order must exactly match the presence sensors list.**
+          default: []
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: true
+
+        fallback_player:
+          name: Fallback player (optional)
+          description: >
+            If no presence is detected in any configured room or zone,
+            play on this speaker instead. Leave empty to skip playback
+            when no presence is detected.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+    # ===========================================================================
+    # ② ADDITIONAL ZONE MAPPINGS (up to 10)
+    # ===========================================================================
+    extra_zones:
+      name: "② Additional zone mappings"
+      icon: mdi:map-marker-plus-outline
+      description: >
+        Map extra presence zones to **existing** speakers. Use this when a
+        zone doesn't have its own speaker and should reuse one from another
+        room (e.g. kitchen → workshop speaker, shower → bathroom speaker).
+
+
+        Each slot has its own dropdown for both sensor and player, so the
+        same speaker can be selected multiple times across different zones.
+
+
+        These zones are checked **after** the primary room mappings above.
+        Leave unused slots empty.
+      collapsed: true
+      input:
+        extra_sensor_1:
+          name: "Extra zone 1 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_1:
+          name: "Extra zone 1 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_2:
+          name: "Extra zone 2 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_2:
+          name: "Extra zone 2 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_3:
+          name: "Extra zone 3 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_3:
+          name: "Extra zone 3 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_4:
+          name: "Extra zone 4 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_4:
+          name: "Extra zone 4 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_5:
+          name: "Extra zone 5 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_5:
+          name: "Extra zone 5 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_6:
+          name: "Extra zone 6 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_6:
+          name: "Extra zone 6 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_7:
+          name: "Extra zone 7 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_7:
+          name: "Extra zone 7 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_8:
+          name: "Extra zone 8 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_8:
+          name: "Extra zone 8 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_9:
+          name: "Extra zone 9 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_9:
+          name: "Extra zone 9 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+        extra_sensor_10:
+          name: "Extra zone 10 — Presence sensor"
+          description: "Binary sensor for this zone. Leave empty if unused."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: false
+        extra_player_10:
+          name: "Extra zone 10 — Music Assistant player"
+          description: "Target speaker — can reuse a primary room speaker."
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+              multiple: false
+
+    # ===========================================================================
+    # ③ MEDIA & PLAYBACK
+    # ===========================================================================
+    media_playback:
+      name: "③ Media & playback"
+      icon: mdi:radio
+      description: >
+        Configure what to play and how.
+      collapsed: true
+      input:
+        media_id:
+          name: Radio station or media to play
+          description: >
+            The name or content ID as it appears in your Music Assistant
+            library.
+
+
+            Find it in Music Assistant → Library → Radio → click the
+            station → copy the name exactly.
+
+
+            Examples: `Radio Klara`, `Studio Brussel`, `BBC Radio 1`
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+        media_type:
+          name: Media type
+          description: >
+            The type of media. Use "radio" for radio streams. Change to
+            "playlist", "album", "track", or "artist" for other media.
+          selector:
+            select:
+              options:
+                - radio
+                - playlist
+                - album
+                - track
+                - artist
+              multiple: false
+              custom_value: false
+              sort: false
+          default: radio
+
+        enqueue_mode:
+          name: Enqueue mode
+          description: >
+            How the media is added to the player queue.
+
+
+            **Replace** — Clear the queue and play immediately (recommended
+            for radio).
+
+            **Add** — Append to the end of the current queue.
+
+            **Play next** — Insert after the currently playing item.
+          selector:
+            select:
+              options:
+                - label: "Replace (recommended)"
+                  value: replace
+                - label: "Add to queue"
+                  value: add
+                - label: "Play next"
+                  value: next
+              multiple: false
+              custom_value: false
+              sort: false
+          default: replace
+
+        radio_mode:
+          name: Radio mode (Don't stop the music)
+          description: >
+            **Use player settings** — Uses the player's own configuration.
+
+            **Always** — Force continuous playback (keeps adding tracks).
+
+            **Never** — Stop when the current content finishes.
+          selector:
+            select:
+              options:
+                - Use player settings
+                - Always
+                - Never
+              multiple: false
+              custom_value: false
+              sort: false
+          default: Use player settings
+
+    # ===========================================================================
+    # ④ VOLUME SETTINGS
+    # ===========================================================================
+    volume_settings:
+      name: "④ Volume settings"
+      icon: mdi:volume-high
+      description: >
+        Optionally set the speaker volume before playback starts.
+      collapsed: true
+      input:
+        set_volume:
+          name: Set volume before playback
+          description: >
+            Enable to set the target speaker to a specific volume level
+            before playback starts. When disabled, the current volume
+            is kept.
+          default: false
+          selector:
+            boolean: {}
+
+        volume_level:
+          name: Volume level
+          description: >
+            Target volume (0–100). Only applied when "Set volume before
+            playback" is enabled above.
+          default: 25
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+              mode: slider
+
+    # ===========================================================================
+    # ⑤ BEHAVIOUR & SAFETY
+    # ===========================================================================
+    behaviour_safety:
+      name: "⑤ Behaviour & safety"
+      icon: mdi:shield-check-outline
+      description: >
+        Control edge-case behaviour: auto-reset, playback protection,
+        presence timing, and multi-room management.
+      collapsed: true
+      input:
+        auto_off_trigger:
+          name: Automatically turn off trigger after playback
+          description: >
+            Turns the input_boolean back OFF after playback starts, so it's
+            ready for the next voice command. Recommended for most setups.
+          default: true
+          selector:
+            boolean: {}
+
+        protect_active_playback:
+          name: Skip if target speaker is already playing
+          description: >
+            If enabled, the automation will NOT start new playback on a
+            speaker that is already actively playing something. Prevents
+            interrupting an existing session.
+          default: false
+          selector:
+            boolean: {}
+
+        min_presence_time:
+          name: Minimum presence time before room counts
+          description: >
+            How long a presence sensor must have been continuously ON before
+            the room is considered valid. Helps avoid picking a room you
+            just walked through. Set to 0 for instant detection.
+          default:
+            seconds: 0
+          selector:
+            duration: {}
+
+        stop_other_players:
+          name: Stop other configured players before playback
+          description: >
+            If enabled, all other Music Assistant players in the configured
+            list will be stopped before starting playback on the detected
+            room's speaker. Useful to avoid audio playing in multiple rooms.
+          default: false
+          selector:
+            boolean: {}
+
+        pause_instead_of_stop:
+          name: Pause instead of stop
+          description: >
+            If enabled, other players will be **paused** instead of stopped.
+            This preserves their queue so playback can be resumed later
+            (e.g. with a voice command or the HA UI). When disabled, queues
+            on other players are cleared.
+          default: false
+          selector:
+            boolean: {}
+
+        disable_follow_me:
+          name: Disable Follow-Me when radio starts
+          description: >
+            If enabled, turns off the specified Follow-Me toggle when
+            this automation fires successfully. Prevents the Follow-Me
+            automation from fighting with Radio Dispatcher for player
+            control.
+          default: false
+          selector:
+            boolean: {}
+
+        follow_me_entity:
+          name: Follow-Me toggle entity
+          description: >
+            The input_boolean that controls your Music Follow-Me
+            automation. Only used when "Disable Follow-Me when radio
+            starts" is enabled above. Leave empty if unused.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: false
+
+    # ===========================================================================
+    # ⑥ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ⑦ ADVANCED OPTIONS
+    # ===========================================================================
+    advanced_options:
+      name: "⑦ Advanced options"
+      icon: mdi:cog-outline
+      description: >
+        Person gating, voice assistant guard, and additional configuration.
+      collapsed: true
+      input:
+        person_required:
+          name: Require a person to be home
+          description: >
+            If enabled, the automation only runs when at least one of the
+            selected persons below has a "home" state. Prevents the
+            automation from firing when triggered accidentally while away.
+          default: false
+          selector:
+            boolean: {}
+
+        persons:
+          name: Persons that must be home
+          description: >
+            Person entities to check. Only used when "Require a person to
+            be home" is enabled. If the list is empty and the requirement
+            is enabled, the automation will never fire.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+        voice_assistant_guard:
+          name: Voice assistant guard entity (optional)
+          description: >
+            An optional input_boolean that blocks this automation while a
+            voice assistant pipeline is active. Useful to prevent the
+            automation from interfering with ongoing voice conversations.
+
+
+            Leave empty to disable this guard.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: false
+
+# =============================================================================
+# TRIGGERS
+# =============================================================================
+triggers:
+  - alias: "Input boolean trigger turned ON"
+    trigger: state
+    entity_id: !input trigger_entity
+    to: "on"
+
+# =============================================================================
+# VARIABLES (computed before conditions and actions)
+# =============================================================================
+variables:
+  # Primary room inputs
+  primary_sensors: !input presence_sensors
+  primary_players: !input target_players
+
+  # Extra zone inputs (individual slots)
+  extra_s1: !input extra_sensor_1
+  extra_p1: !input extra_player_1
+  extra_s2: !input extra_sensor_2
+  extra_p2: !input extra_player_2
+  extra_s3: !input extra_sensor_3
+  extra_p3: !input extra_player_3
+  extra_s4: !input extra_sensor_4
+  extra_p4: !input extra_player_4
+  extra_s5: !input extra_sensor_5
+  extra_p5: !input extra_player_5
+  extra_s6: !input extra_sensor_6
+  extra_p6: !input extra_player_6
+  extra_s7: !input extra_sensor_7
+  extra_p7: !input extra_player_7
+  extra_s8: !input extra_sensor_8
+  extra_p8: !input extra_player_8
+  extra_s9: !input extra_sensor_9
+  extra_p9: !input extra_player_9
+  extra_s10: !input extra_sensor_10
+  extra_p10: !input extra_player_10
+
+  # Build extra zone pairs, filtering out empty slots
+  extra_pairs: >
+    {% set pairs = [
+      (extra_s1, extra_p1),
+      (extra_s2, extra_p2),
+      (extra_s3, extra_p3),
+      (extra_s4, extra_p4),
+      (extra_s5, extra_p5),
+      (extra_s6, extra_p6),
+      (extra_s7, extra_p7),
+      (extra_s8, extra_p8),
+      (extra_s9, extra_p9),
+      (extra_s10, extra_p10)
+    ] %}
+    {% set ns = namespace(sensors=[], players=[]) %}
+    {% for s, p in pairs %}
+      {% if s and p %}
+        {% set ns.sensors = ns.sensors + [s] %}
+        {% set ns.players = ns.players + [p] %}
+      {% endif %}
+    {% endfor %}
+    {{ {"sensors": ns.sensors, "players": ns.players} }}
+
+  # Merged lists: primary rooms first, then extra zones
+  presence_list: "{{ primary_sensors + extra_pairs.sensors }}"
+  player_list: "{{ primary_players + extra_pairs.players }}"
+
+  # Other inputs
+  fallback_player_entity: !input fallback_player
+  media_id_value: !input media_id
+  media_type_value: !input media_type
+  enqueue_mode_value: !input enqueue_mode
+  radio_mode_value: !input radio_mode
+  set_volume_flag: !input set_volume
+  volume_level_value: !input volume_level
+  auto_off_flag: !input auto_off_trigger
+  protect_active_flag: !input protect_active_playback
+  min_presence_time_value: !input min_presence_time
+  stop_other_flag: !input stop_other_players
+  pause_instead_of_stop_flag: !input pause_instead_of_stop
+  disable_follow_me_flag: !input disable_follow_me
+  follow_me_entity_value: !input follow_me_entity
+  person_required_flag: !input person_required
+  persons_list: !input persons
+  voice_guard_entity: !input voice_assistant_guard
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+
+  # Compute minimum presence duration in seconds
+  min_presence_seconds: >
+    {% set h = min_presence_time_value.get('hours', 0) | int(0) %}
+    {% set m = min_presence_time_value.get('minutes', 0) | int(0) %}
+    {% set s = min_presence_time_value.get('seconds', 0) | int(0) %}
+    {{ h * 3600 + m * 60 + s }}
+
+  # Find the first presence sensor that is ON and meets min time requirement
+  detected_index: >
+    {% set ns = namespace(idx=-1) %}
+    {% for sensor in presence_list %}
+      {% if ns.idx == -1 and states(sensor) | default('unknown') == 'on' %}
+        {% if min_presence_seconds | int(0) == 0 %}
+          {% set ns.idx = loop.index0 %}
+        {% else %}
+          {% set changed = as_timestamp(states[sensor].last_changed | default(0), 0) %}
+          {% if changed > 0 and (now().timestamp() - changed) >= min_presence_seconds | int(0) %}
+            {% set ns.idx = loop.index0 %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.idx }}
+
+  # Resolve target player from detected presence or fallback
+  target_player: >
+    {% set idx = detected_index | int(-1) %}
+    {% if idx >= 0 and idx < player_list | length %}
+      {{ player_list[idx] }}
+    {% elif fallback_player_entity %}
+      {{ fallback_player_entity }}
+    {% else %}
+      {{ '' }}
+    {% endif %}
+
+  # All other UNIQUE players (for optional stop — deduplicated)
+  other_players: >
+    {{ player_list | unique | reject('eq', target_player) | list }}
+
+# =============================================================================
+# ACTIONS
+# NOTE: Conditions are inline within actions: so auto-off reset runs
+# before any condition can abort the sequence. Do not add a top-level
+# conditions: block.
+# =============================================================================
+actions:
+  - alias: "Auto-reset trigger boolean — MUST run before any condition that could abort"
+    choose:
+      - alias: "Auto-off enabled — reset the boolean so Alexa can re-trigger"
+        conditions:
+          - condition: template
+            value_template: "{{ auto_off_flag }}"
+        sequence:
+          - alias: "Turn off trigger boolean"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input trigger_entity
+
+  # 1) Person home gate (optional) — moved here so auto-off runs first
+  - condition: template
+    alias: "Person must be home (optional)"
+    value_template: >
+      {% if not person_required_flag %}
+        true
+      {% else %}
+        {% if persons_list | length == 0 %}
+          false
+        {% else %}
+          {{ persons_list | select('is_state', 'home') | list | length > 0 }}
+        {% endif %}
+      {% endif %}
+
+  - condition: template
+    alias: "Block while voice assistant is active (optional)"
+    value_template: >
+      {% if not voice_guard_entity %}
+        true
+      {% else %}
+        {{ states(voice_guard_entity) | default('off') != 'on' }}
+      {% endif %}
+
+  # 3) Bail out if no target player could be determined
+  - condition: template
+    alias: "Target player must be resolved"
+    value_template: "{{ target_player | trim != '' }}"
+
+  - condition: template
+    alias: "Skip if target is already playing (optional)"
+    value_template: >
+      {% if not protect_active_flag %}
+        true
+      {% else %}
+        {{ states(target_player) | default('unknown') not in ['playing', 'buffering'] }}
+      {% endif %}
+
+  - alias: "Disable Follow-Me automation (optional interlock)"
+    choose:
+      - alias: "Follow-Me disable enabled and entity configured"
+        conditions:
+          - condition: template
+            value_template: "{{ disable_follow_me_flag and follow_me_entity_value }}"
+        sequence:
+          - alias: "Turn off Follow-Me toggle to prevent player contention"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input follow_me_entity
+
+  - alias: "Stop or pause other configured players (optional)"
+    choose:
+      - alias: "Pause enabled and other players exist"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ stop_other_flag and pause_instead_of_stop_flag and other_players | length > 0 }}
+        sequence:
+          - alias: "Pause all other MA players — preserves queues"
+            action: media_player.media_pause
+            target:
+              entity_id: "{{ other_players }}"
+      - alias: "Stop enabled and other players exist"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ stop_other_flag and other_players | length > 0 }}
+        sequence:
+          - alias: "Stop all other MA players — clears queues"
+            action: media_player.media_stop
+            target:
+              entity_id: "{{ other_players }}"
+
+  - alias: "Set volume before playback (optional)"
+    choose:
+      - alias: "Volume override enabled"
+        conditions:
+          - condition: template
+            value_template: "{{ set_volume_flag }}"
+        sequence:
+          - alias: "Set target player volume"
+            action: media_player.volume_set
+            target:
+              entity_id: "{{ target_player }}"
+            data:
+              volume_level: "{{ volume_level_value | float / 100.0 }}"
+          - alias: "Update duck snapshot after playback volume set"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ is_state(v_duck_guard, 'on')
+                     and is_state(v_ducking_flag, 'on') }}
+            then:
+              - alias: "Sync duck snapshot with new volume"
+                action: pyscript.duck_manager_update_snapshot
+                data:
+                  entity_id: "{{ target_player }}"
+                  volume_level: "{{ volume_level_value | float / 100.0 }}"
+                continue_on_error: true
+
+  - alias: "Play media on target speaker"
+    choose:
+      - alias: "Radio mode forced ON"
+        conditions:
+          - condition: template
+            value_template: "{{ radio_mode_value == 'Always' }}"
+        sequence:
+          - alias: "Play media with radio_mode true"
+            action: music_assistant.play_media
+            target:
+              entity_id: "{{ target_player }}"
+            data:
+              media_id: "{{ media_id_value }}"
+              media_type: "{{ media_type_value }}"
+              enqueue: "{{ enqueue_mode_value }}"
+              radio_mode: true
+      - alias: "Radio mode forced OFF"
+        conditions:
+          - condition: template
+            value_template: "{{ radio_mode_value == 'Never' }}"
+        sequence:
+          - alias: "Play media with radio_mode false"
+            action: music_assistant.play_media
+            target:
+              entity_id: "{{ target_player }}"
+            data:
+              media_id: "{{ media_id_value }}"
+              media_type: "{{ media_type_value }}"
+              enqueue: "{{ enqueue_mode_value }}"
+              radio_mode: false
+    default:
+      - alias: "Play media with player default radio mode"
+        action: music_assistant.play_media
+        target:
+          entity_id: "{{ target_player }}"
+        data:
+          media_id: "{{ media_id_value }}"
+          media_type: "{{ media_type_value }}"
+          enqueue: "{{ enqueue_mode_value }}"
+
+  - alias: "Post-play verification — wait for player to settle"
+    delay:
+      seconds: 3
+
+  - alias: "Log warning if playback failed to start on target speaker"
+    choose:
+      - alias: "Target speaker not playing — playback may have failed"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ states(target_player) | default('unknown')
+                 not in ['playing', 'buffering'] }}
+        sequence:
+          - alias: "Write playback-failure entry to logbook for troubleshooting"
+            action: logbook.log
+            data:
+              name: "Alexa Presence Radio"
+              message: >
+                Playback failed to start on
+                {{ state_attr(target_player, 'friendly_name')
+                   | default(target_player) }}.
+                Media: {{ media_id_value }} ({{ media_type_value }}).
+              entity_id: "{{ target_player }}"
+
+  - alias: "Re-enable Follow-Me after playback starts (optional interlock restore)"
+    choose:
+      - alias: "Follow-Me was disabled earlier — restore it so playback follows the user"
+        conditions:
+          - condition: template
+            value_template: "{{ disable_follow_me_flag and follow_me_entity_value }}"
+        sequence:
+          - alias: "Turn Follow-Me back on — radio now follows the user between rooms"
+            action: input_boolean.turn_on
+            target:
+              entity_id: !input follow_me_entity
+
+mode: single
+max_exceeded: silent

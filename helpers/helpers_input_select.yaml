@@ -1,0 +1,474 @@
+# Input select helpers
+
+ai_sleep_lights_light_picker:
+  name: "AI Sleep Lights - Light Picker"
+  options:
+    - "(none)"
+  icon: mdi:lightbulb-outline
+
+ai_handoff_llm_lines_mode:
+  name: "AI Handoff - LLM Lines Mode"
+  options:
+    - static
+    - ha_text_ai
+    - conversation_agent
+  icon: mdi:text-box-edit
+  initial: static
+
+ai_handoff_restore_mode:
+  name: "AI Handoff - Restore Mode"
+  options:
+    - source
+    - preferred
+    - never
+  icon: mdi:timer-refresh-outline
+  initial: source
+
+ai_sleep_lights_sensor:
+  name: "AI Sleep Lights - Presence Sensor"
+  options:
+    - binary_sensor.fp2_presence_sensor_bed
+  icon: mdi:motion-sensor
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Layer 1 Hot Context
+# ═══════════════════════════════════════════════════════════════════
+
+ai_context_preferred_language:
+  name: "AI Context - Preferred Language"
+  options:
+    - English
+    - Spanish
+    - Valencian
+    - Dutch
+  initial: English
+
+# ── Per-User Language (Miquel) ──
+ai_context_preferred_language_miquel:
+  name: "AI Context - Preferred Language (Miquel)"
+  options:
+    - English
+    - Spanish
+    - Valencian
+    - Dutch
+    - Portuguese
+  initial: English
+
+# ── Per-User Language (Jessica) ──
+ai_context_preferred_language_jessica:
+  name: "AI Context - Preferred Language (Jessica)"
+  options:
+    - Spanish
+    - Valencian
+    - English
+  initial: Spanish
+
+# I-45: Expertise-based agent routing mode (read by hot context → LLM prompt)
+ai_expertise_routing_mode:
+  name: "AI Expertise Routing Mode"
+  options:
+    - "off"
+    - suggest
+    - auto
+  icon: mdi:head-lightbulb
+  initial: auto
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dispatcher_mode:
+  name: "AI Dispatcher - Mode"
+  options:
+    - auto
+    - round_robin
+    - fixed
+    - random
+  icon: mdi:swap-horizontal
+
+# Time-of-day era persona overrides. Pyscript overwrites options at
+# runtime with discovered personas. These are boot-time fallbacks.
+ai_dispatcher_era_morning:
+  name: "AI Dispatcher - Era Morning"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-sunset-up
+
+ai_dispatcher_era_afternoon:
+  name: "AI Dispatcher - Era Afternoon"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-sunny
+
+ai_dispatcher_era_evening:
+  name: "AI Dispatcher - Era Evening"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-night
+
+ai_dispatcher_era_late_night:
+  name: "AI Dispatcher - Era Late Night"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-night-partly-cloudy
+
+ai_keyword_agent_select:
+  name: "Keyword Manager - Agent"
+  options:
+    - none
+  icon: mdi:account-voice
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Unified Volume Ducking
+# ═══════════════════════════════════════════════════════════════════
+
+# I-39: Duck behavior — volume only, pause media, or both
+ai_duck_behavior:
+  name: "Duck Behavior"
+  options:
+    - volume
+    - pause
+    - both
+  icon: mdi:motion-pause
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+
+# Filter mode:
+#   whitelist — only contacts + keywords get through; everything else filtered
+#   blacklist — everything promoted EXCEPT blocked senders/keywords
+#   hybrid   — contacts + keywords promoted, blocked filtered, unknown filtered
+# Urgent keyword detection applies in all modes.
+ai_email_filter_mode:
+  name: "AI Email Filter Mode"
+  options:
+    - whitelist
+    - blacklist
+    - hybrid
+  initial: blacklist
+  icon: mdi:filter-variant
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — LLM Cost Control
+# ═══════════════════════════════════════════════════════════════════
+
+# I-33: Budget metric selector (display preference — all limits are enforced)
+ai_budget_metric:
+  name: "AI Budget - Display Metric"
+  options:
+    - cost
+    - calls
+    - tokens
+  icon: mdi:chart-bar
+
+# I-33: Currency display label (does NOT convert — user must update rates)
+ai_budget_currency:
+  name: "AI Budget - Currency"
+  options:
+    - "€"
+    - "$"
+    - "£"
+  icon: mdi:currency-sign
+
+# I-33 Phase 2: Per-agent budget view level
+ai_budget_view_level:
+  name: "AI Budget - View Level"
+  options:
+    - engine
+    - agent
+    - model
+    - provider
+  icon: mdi:eye
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_privacy_gate — Identity-Confidence Feature Gating
+# ═══════════════════════════════════════════════════════════════════
+
+ai_privacy_gate_mode:
+  name: "AI Privacy Gate — Mode"
+  options:
+    - auto
+    - force_suppress_all
+    - force_allow_all
+  initial: auto
+  icon: mdi:shield-edit
+
+# ── Per-Feature Overrides ──
+# T1 — Intimate (Miquel)
+ai_privacy_gate_wake_up_guard:
+  name: "Privacy Override — Wake-Up Guard"
+  options: &privacy_override_options
+    - auto
+    - force_suppress
+    - force_allow
+    - "off"
+  initial: auto
+  icon: mdi:alarm
+ai_privacy_gate_calendar_alarm:
+  name: "Privacy Override — Calendar Alarm"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:calendar-clock
+ai_privacy_gate_escalating_wakeup:
+  name: "Privacy Override — Escalating Wake-Up"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:alarm-plus
+ai_privacy_gate_bedtime_routine:
+  name: "Privacy Override — Bedtime Routine"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:weather-night
+ai_privacy_gate_bedtime_routine_plus:
+  name: "Privacy Override — Bedtime Routine Plus"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:weather-night-partly-cloudy
+ai_privacy_gate_bedtime_last_call:
+  name: "Privacy Override — Bedtime Last Call"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:bell-sleep
+
+# T2 — Personal (Miquel)
+ai_privacy_gate_email_follow_me:
+  name: "Privacy Override — Email Follow-Me"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:email-fast
+ai_privacy_gate_notification_follow_me:
+  name: "Privacy Override — Notification Follow-Me"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:bell-ring
+ai_privacy_gate_email_priority_filter:
+  name: "Privacy Override — Email Priority Filter"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:email-alert
+ai_privacy_gate_proactive_briefing:
+  name: "Privacy Override — Proactive Briefing"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:newspaper
+ai_privacy_gate_proactive_unified:
+  name: "Privacy Override — Proactive Unified"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:bullhorn
+ai_privacy_gate_phone_charge_reminder:
+  name: "Privacy Override — Phone Charge Reminder"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:battery-charging
+ai_privacy_gate_bedtime_escalation:
+  name: "Privacy Override — Bedtime Escalation"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:bed-double
+ai_privacy_gate_calendar_pre_event:
+  name: "Privacy Override — Calendar Pre-Event"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:calendar-alert
+ai_privacy_gate_llm_alarm:
+  name: "Privacy Override — LLM Alarm"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:robot
+ai_privacy_gate_voice_handoff:
+  name: "Privacy Override — Voice Handoff"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:swap-horizontal
+
+# T3 — Ambient (Miquel)
+ai_privacy_gate_meal_detection:
+  name: "Privacy Override — Meal Detection"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:food
+ai_privacy_gate_sleep_detection:
+  name: "Privacy Override — Sleep Detection"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:sleep
+ai_privacy_gate_memory_todo_mirror:
+  name: "Privacy Override — Memory Todo Mirror"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:format-list-checks
+ai_privacy_gate_interaction_summarizer:
+  name: "Privacy Override — Interaction Summarizer"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:text-box-check
+ai_privacy_gate_proactive_llm_sensors:
+  name: "Privacy Override — Proactive LLM Sensors"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:creation
+
+# New — Off-by-default features
+ai_privacy_gate_dispatcher_profile:
+  name: "Privacy Override — Dispatcher Profile"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:account-cog
+ai_privacy_gate_sleep_lights:
+  name: "Privacy Override — Sleep Lights"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:lightbulb-night
+ai_privacy_gate_media_tracking:
+  name: "Privacy Override — Media Tracking"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:multimedia
+ai_privacy_gate_refcount_watchdog:
+  name: "Privacy Override — Refcount Watchdog"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:eye-check
+ai_privacy_gate_coming_home:
+  name: "Privacy Override — Coming Home"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:home-account
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep State Detection
+# ═══════════════════════════════════════════════════════════════════
+
+ai_sleep_detection_sensor:
+  name: "AI Sleep Detection - Presence Sensor"
+  options:
+    - binary_sensor.fp2_presence_sensor_main_room
+    - binary_sensor.fp2_presence_sensor_living_room
+    - binary_sensor.fp2_presence_sensor_bed
+    - binary_sensor.fp2_presence_sensor_workshop
+    - binary_sensor.fp2_presence_sensor_kitchen
+    - binary_sensor.fp2_presence_sensor_lobby
+    - binary_sensor.fp2_presence_sensor_bathroom
+    - binary_sensor.fp2_presence_sensor_shower
+  icon: mdi:motion-sensor
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue Speaker Routing
+# ═══════════════════════════════════════════════════════════════════
+
+# I-38: TTS conflict mode — what to do when target speaker is already playing
+ai_tts_conflict_mode:
+  name: "TTS Conflict Mode"
+  options:
+    - override
+    - wait
+    - skip
+  icon: mdi:swap-horizontal-bold
+
+ai_tts_speaker_workshop:
+  name: "TTS Speaker: Workshop"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_living_room:
+  name: "TTS Speaker: Living Room"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_main_room:
+  name: "TTS Speaker: Main Room"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_kitchen:
+  name: "TTS Speaker: Kitchen"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_bed:
+  name: "TTS Speaker: Bed"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_lobby:
+  name: "TTS Speaker: Lobby"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_bathroom:
+  name: "TTS Speaker: Bathroom"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+ai_tts_speaker_shower:
+  name: "TTS Speaker: Shower"
+  icon: mdi:speaker
+  options:
+    - media_player.workshop_sonos
+    - media_player.bathroom_sonos
+    - media_player.ha_voice_pe_living_room_quark_esp
+    - media_player.ha_voice_pe_workshop_rick_esp
+    - none
+
+# ── Volume Restore Mode ─────────────────────────────────────────────────
+ai_tts_restore_mode:
+  name: "TTS Restore Mode"
+  icon: mdi:volume-source
+  options:
+    - dynamic
+    - fixed
+

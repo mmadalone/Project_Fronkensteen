@@ -1,0 +1,278 @@
+blueprint:
+  name: "Meal detection – passive kitchen presence logging"
+  author: madalone
+  description: >
+    # Meal detection – passive kitchen presence logging
+
+    Passive meal time logging from kitchen presence patterns. When the
+    kitchen sensor is occupied for a minimum duration within configured
+    meal windows, updates last_meal_time and optionally logs to L2
+    via pyscript. False positives are acceptable — this is logging only.
+
+    ### Recent changes
+    - **v1:** Initial blueprint — replaces automation from ai_meal_detection.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/meal_detection.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① KITCHEN SENSOR
+    # ===========================================================================
+    kitchen_sensor:
+      name: "① Kitchen sensor"
+      icon: mdi:motion-sensor
+      description: Presence sensor and minimum dwell time.
+      collapsed: false
+      input:
+        kitchen_presence:
+          name: Kitchen presence sensor
+          description: >
+            Binary sensor for kitchen presence
+            (e.g. binary_sensor.fp2_presence_sensor_kitchen).
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        min_kitchen_minutes:
+          name: Minimum kitchen minutes
+          description: >
+            How long someone must be in the kitchen before a meal
+            is logged. Lower values catch more meals but increase
+            false positives.
+          default: 15
+          selector:
+            number:
+              min: 5
+              max: 45
+              step: 5
+              unit_of_measurement: "minutes"
+
+    # ===========================================================================
+    # ② MEAL WINDOWS
+    # ===========================================================================
+    meal_windows:
+      name: "② Meal windows"
+      icon: mdi:clock-outline
+      description: >
+        Hour ranges for breakfast, lunch, and dinner. Only triggers
+        within these windows.
+      collapsed: true
+      input:
+        breakfast_start:
+          name: Breakfast start (hour)
+          description: "Start hour for breakfast window."
+          default: 7
+          selector:
+            number:
+              min: 4
+              max: 12
+              step: 1
+              unit_of_measurement: "hour"
+
+        breakfast_end:
+          name: Breakfast end (hour)
+          description: "End hour for breakfast window."
+          default: 9
+          selector:
+            number:
+              min: 5
+              max: 14
+              step: 1
+              unit_of_measurement: "hour"
+
+        lunch_start:
+          name: Lunch start (hour)
+          description: "Start hour for lunch window."
+          default: 12
+          selector:
+            number:
+              min: 10
+              max: 16
+              step: 1
+              unit_of_measurement: "hour"
+
+        lunch_end:
+          name: Lunch end (hour)
+          description: "End hour for lunch window."
+          default: 14
+          selector:
+            number:
+              min: 12
+              max: 18
+              step: 1
+              unit_of_measurement: "hour"
+
+        dinner_start:
+          name: Dinner start (hour)
+          description: "Start hour for dinner window."
+          default: 19
+          selector:
+            number:
+              min: 16
+              max: 22
+              step: 1
+              unit_of_measurement: "hour"
+
+        dinner_end:
+          name: Dinner end (hour)
+          description: "End hour for dinner window."
+          default: 21
+          selector:
+            number:
+              min: 18
+              max: 24
+              step: 1
+              unit_of_measurement: "hour"
+
+    # ===========================================================================
+    # ③ TRACKING
+    # ===========================================================================
+    tracking:
+      name: "③ Tracking"
+      icon: mdi:food-apple
+      description: Dedup and logging settings.
+      collapsed: true
+      input:
+        last_meal_entity:
+          name: Last meal time entity
+          description: >
+            Input datetime to store the last detected meal time.
+            Also consumed by focus_guard and other systems.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+
+        min_gap_hours:
+          name: Minimum gap between meals (hours)
+          description: >
+            Skip detection if the last meal was less than this
+            many hours ago.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 6
+              step: 0.5
+              unit_of_measurement: "hours"
+
+        use_meal_log:
+          name: Log meals to L2 via pyscript
+          description: >
+            When enabled, calls pyscript.meal_passive_log after
+            each detection.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  kitchen_presence: !input kitchen_presence
+  min_kitchen_minutes: !input min_kitchen_minutes
+  breakfast_start: !input breakfast_start
+  breakfast_end: !input breakfast_end
+  lunch_start: !input lunch_start
+  lunch_end: !input lunch_end
+  dinner_start: !input dinner_start
+  dinner_end: !input dinner_end
+  last_meal_entity: !input last_meal_entity
+  min_gap_hours: !input min_gap_hours
+  use_meal_log: !input use_meal_log
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Kitchen occupied for minimum duration"
+    trigger: state
+    entity_id: !input kitchen_presence
+    from: "off"
+    to: "on"
+    for:
+      minutes: !input min_kitchen_minutes
+
+conditions:
+  - alias: "Within a meal window"
+    condition: template
+    value_template: >-
+      {% set h = now().hour %}
+      {{ (breakfast_start <= h < breakfast_end)
+         or (lunch_start <= h < lunch_end)
+         or (dinner_start <= h < dinner_end) }}
+
+  - alias: "Dedup — last meal was long enough ago"
+    condition: template
+    value_template: >-
+      {% set last = states(last_meal_entity) %}
+      {% if last in ['unknown', 'unavailable', 'None', ''] %}
+        true
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last, 0))
+           > (min_gap_hours * 3600) }}
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_meal_detection') | default('off') -%}
+      {%- if not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_t3_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Update last meal time"
+    action: input_datetime.set_datetime
+    target:
+      entity_id: !input last_meal_entity
+    data:
+      datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - alias: "Log to L2 via pyscript (optional)"
+    if:
+      - condition: template
+        value_template: "{{ use_meal_log }}"
+    then:
+      - continue_on_error: true
+        action: pyscript.meal_passive_log
+        response_variable: _meal_log_result

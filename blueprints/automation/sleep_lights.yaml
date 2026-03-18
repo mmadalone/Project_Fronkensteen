@@ -1,0 +1,238 @@
+blueprint:
+  name: "Sleep lights – turn off lights on sleep detection"
+  author: madalone
+  description: >
+    # Sleep lights – turn off lights on sleep detection
+
+    Turns off selected lights after sleep is detected. Waits a
+    configurable delay, re-checks that sleep is still detected,
+    then turns off the target lights. Time window prevents
+    accidental triggers outside nighttime hours.
+
+    Requires the sleep detection system
+    (input_boolean.ai_sleep_detected) or equivalent flag.
+
+    ### Recent changes
+    - **v1:** Initial blueprint — replaces package ai_sleep_lights.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/sleep_lights.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① SLEEP DETECTION
+    # ===========================================================================
+    sleep_detection:
+      name: "① Sleep detection"
+      icon: mdi:sleep
+      description: The sleep detected flag from the sleep detection system.
+      collapsed: false
+      input:
+        sleep_detected_entity:
+          name: Sleep detected entity
+          description: >
+            The input_boolean that signals sleep has been detected
+            (e.g. input_boolean.ai_sleep_detected).
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ② TARGETS
+    # ===========================================================================
+    light_targets:
+      name: "② Targets"
+      icon: mdi:lightbulb-group
+      description: Which lights and switches to turn off when sleep is detected.
+      collapsed: false
+      input:
+        lights_to_off:
+          name: Lights to turn off
+          description: >
+            Select specific lights, areas, or devices to turn off.
+            Use the area selector for whole-room control.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: light
+
+        switches_to_off:
+          name: Switches to turn off
+          description: >
+            Select specific switches to turn off at sleep time
+            (e.g. smart plugs, power strips, accent lighting on
+            switch entities).
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: switch
+
+    # ===========================================================================
+    # ③ TIME WINDOW
+    # ===========================================================================
+    time_window:
+      name: "③ Time window"
+      icon: mdi:clock-outline
+      description: >
+        Only trigger within this window. Handles cross-midnight
+        ranges (e.g. 22:00–08:00).
+      collapsed: true
+      input:
+        window_start:
+          name: Window start
+          description: >
+            Earliest time sleep lights can trigger.
+          default: "22:00:00"
+          selector:
+            time: {}
+
+        window_end:
+          name: Window end
+          description: >
+            Latest time sleep lights can trigger. Set after
+            window_start for cross-midnight ranges.
+          default: "08:00:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ④ DELAY & SAFETY
+    # ===========================================================================
+    delay_and_safety:
+      name: "④ Delay & safety"
+      icon: mdi:timer-sand
+      description: Delay before turning lights off and safety re-check.
+      collapsed: true
+      input:
+        delay_minutes:
+          name: Delay (minutes)
+          description: >
+            Minutes to wait after sleep detection before turning
+            lights off. Provides a buffer for false positives.
+          default: 15
+          selector:
+            number:
+              min: 1
+              max: 60
+              step: 5
+              unit_of_measurement: "minutes"
+
+    # ===========================================================================
+    # ⑤ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑤ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  sleep_detected_entity: !input sleep_detected_entity
+  delay_minutes: !input delay_minutes
+  window_start: !input window_start
+  window_end: !input window_end
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Sleep detected — flag turned on"
+    trigger: state
+    entity_id: !input sleep_detected_entity
+    from: "off"
+    to: "on"
+
+conditions:
+  - alias: "Within configured time window (cross-midnight safe)"
+    condition: template
+    value_template: >-
+      {% set start = today_at(window_start) %}
+      {% set end = today_at(window_end) %}
+      {% set n = now() %}
+      {% if start > end %}
+        {{ n >= start or n <= end }}
+      {% else %}
+        {{ start <= n <= end }}
+      {% endif %}
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_sleep_lights') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Wait configured delay"
+    delay:
+      minutes: "{{ delay_minutes }}"
+
+  - alias: "Re-check: still sleeping?"
+    condition: state
+    entity_id: !input sleep_detected_entity
+    state: "on"
+
+  - alias: "Turn off target lights"
+    action: light.turn_off
+    target: !input lights_to_off
+
+  - alias: "Turn off target switches"
+    action: switch.turn_off
+    target: !input switches_to_off
+    continue_on_error: true

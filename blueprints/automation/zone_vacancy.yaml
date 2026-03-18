@@ -1,0 +1,413 @@
+# =============================================================================
+# AI Auto-Off — Zone Vacancy Blueprint
+# =============================================================================
+# Per-zone vacancy detection: turns off lights and/or media when a presence
+# sensor reports "off" for a configurable delay. Each zone gets its own
+# automation instance created through the native HA UI.
+#
+# Replaces: pyscript/auto_off_engine.py (900-line dynamic zone engine)
+# =============================================================================
+
+blueprint:
+  name: "AI Auto-Off — Zone Vacancy"
+  description: >-
+    Turn off lights and/or media when a presence sensor (e.g. Aqara FP2)
+    reports "off" for a configurable delay. If the sensor goes back to "on"
+    during the delay, the trigger is automatically cancelled.
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/zone_vacancy.yaml
+
+  input:
+    presence_sensor:
+      name: Presence Sensor
+      description: Binary sensor that detects zone occupancy (e.g. Aqara FP2).
+      selector:
+        entity:
+          domain: binary_sensor
+
+    vacancy_delay:
+      name: Vacancy Delay
+      description: >-
+        How long the sensor must report "off" before turning things off.
+        If presence returns during this window, nothing happens.
+      default:
+        hours: 0
+        minutes: 15
+        seconds: 0
+      selector:
+        duration:
+          enable_day: false
+
+    master_switch:
+      name: Master Switch
+      description: Global on/off for all auto-off zones.
+      default:
+        entity_id: input_boolean.ai_auto_off_enabled
+      selector:
+        entity:
+          domain: input_boolean
+
+    lights_enabled:
+      name: Turn Off Lights
+      description: Whether to turn off lights when the zone is vacant.
+      default: true
+      selector:
+        boolean: {}
+
+    use_area_lights:
+      name: Use Area Lights
+      description: >-
+        Turn off all lights in the target area. If disabled, uses the
+        specific lights list below instead.
+      default: true
+      selector:
+        boolean: {}
+
+    target_area:
+      name: Target Area
+      description: The HA area this zone corresponds to.
+      selector:
+        area: {}
+
+    specific_lights:
+      name: Specific Lights (optional)
+      description: >-
+        Individual lights/switches to turn off. When "Use Area Lights" is
+        enabled, only switch.* entities from this list are turned off
+        (area light.turn_off handles the rest). When disabled, all
+        entities in this list are turned off.
+      default: []
+      selector:
+        entity:
+          domain:
+            - light
+            - switch
+          multiple: true
+
+    media_enabled:
+      name: Stop Media
+      description: Whether to stop media players when the zone is vacant.
+      default: true
+      selector:
+        boolean: {}
+
+    use_area_players:
+      name: Use Area Players
+      description: >-
+        Stop all media players in the target area. If disabled, uses the
+        specific players list below instead.
+      default: true
+      selector:
+        boolean: {}
+
+    specific_players:
+      name: Specific Players (optional)
+      description: >-
+        Individual media players to stop. Only used when "Use Area Players"
+        is disabled.
+      default: []
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+    exit_script:
+      name: Exit Script (optional)
+      description: >-
+        Optional script to run after lights/media are turned off
+        (e.g. set thermostat to away mode).
+      default: []
+      selector:
+        entity:
+          domain: script
+          multiple: false
+
+    schedule_timing:
+      name: "Schedule & timing"
+      icon: mdi:clock-outline
+      description: Configure when the automation is active.
+      collapsed: true
+      input:
+        start_time:
+          name: Active from
+          description: Start time of the daily active window.
+          default: "00:00:00"
+          selector:
+            time: {}
+
+        end_time:
+          name: Active until
+          description: >
+            End time of the daily window. Can be earlier than start time
+            to cross midnight (e.g. 23:00 → 02:00).
+          default: "23:59:59"
+          selector:
+            time: {}
+
+        run_days:
+          name: Run on these days
+          description: >
+            Days of the week this automation is allowed to run.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+    weekend_overrides:
+      name: "Weekend overrides"
+      icon: mdi:weather-sunny
+      description: >
+        Optional weekend-specific schedule overrides.
+      collapsed: true
+      input:
+        weekend_mode:
+          name: Weekend behavior
+          description: Choose what happens on weekend days.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled_on_weekends
+                - label: "Use weekend profile"
+                  value: use_weekend_profile
+
+        weekend_days:
+          name: Weekend days
+          description: Which days should be treated as weekend.
+          default:
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+        weekend_start_time:
+          name: Weekend active from
+          default: "00:00:00"
+          selector:
+            time: {}
+
+        weekend_end_time:
+          name: Weekend active until
+          default: "23:59:59"
+          selector:
+            time: {}
+
+mode: restart
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input presence_sensor
+    from: "on"
+    to: "off"
+    for: !input vacancy_delay
+
+conditions:
+  - condition: state
+    entity_id: !input master_switch
+    state: "on"
+
+  # ── Day-of-week gating ──────────────────────────────────────────────────
+  - condition: template
+    alias: "Allowed on this day"
+    value_template: >-
+      {% if weekend_blocked %}
+        false
+      {% elif effective_day_key in (run_days | default([])) %}
+        true
+      {% elif effective_day_key in (weekend_days | default([])) %}
+        true
+      {% else %}
+        false
+      {% endif %}
+
+  # ── Time window (supports cross-midnight) ───────────────────────────────
+  - condition: template
+    alias: "Within active time window"
+    value_template: >-
+      {% set start = today_at(effective_start_time) %}
+      {% set end = today_at(effective_end_time) %}
+      {% set now_ts = as_timestamp(now()) %}
+      {% set start_ts = as_timestamp(start) %}
+      {% set end_ts = as_timestamp(end) %}
+      {% if end_ts > start_ts %}
+        {{ now_ts >= start_ts and now_ts <= end_ts }}
+      {% else %}
+        {{ now_ts >= start_ts or now_ts <= end_ts }}
+      {% endif %}
+
+actions:
+  # ── Lights ──────────────────────────────────────────────────────────────
+  - alias: "Lights"
+    if:
+      - condition: template
+        value_template: "{{ lights_enabled }}"
+    then:
+      - alias: "Conditional check"
+        if:
+          - condition: template
+            value_template: "{{ use_area_lights }}"
+        then:
+          - alias: "Turn off area lights on zone vacancy"
+            action: light.turn_off
+            target:
+              area_id: !input target_area
+        else:
+          - alias: "Turn off specific lights on zone vacancy"
+            action: homeassistant.turn_off
+            target:
+              entity_id: !input specific_lights
+      - alias: "Check count condition"
+        if:
+          - condition: template
+            value_template: >-
+              {{ use_area_lights and specific_lights | select('match', 'switch\\.') | list | count > 0 }}
+        then:
+          - alias: "Turn off specific switches not covered by area light.turn_off"
+            action: homeassistant.turn_off
+            target:
+              entity_id: >-
+                {{ specific_lights | select('match', 'switch\\.') | list }}
+
+  # ── Media ───────────────────────────────────────────────────────────────
+  - alias: "Media"
+    if:
+      - condition: template
+        value_template: "{{ media_enabled }}"
+    then:
+      - alias: "Conditional check"
+        if:
+          - condition: template
+            value_template: "{{ use_area_players }}"
+        then:
+          - alias: "Stop area media on zone vacancy"
+            action: media_player.media_stop
+            target:
+              area_id: !input target_area
+        else:
+          - alias: "Stop specific media players on zone vacancy"
+            action: media_player.media_stop
+            target:
+              entity_id: !input specific_players
+
+  # ── Exit Script ─────────────────────────────────────────────────────────
+  - alias: "Exit Script"
+    if:
+      - condition: template
+        value_template: "{{ exit_script not in [[], '', none, 'none'] }}"
+    then:
+      - alias: "Run custom exit script on zone vacancy"
+        action: script.turn_on
+        target:
+          entity_id: !input exit_script
+
+variables:
+  lights_enabled: !input lights_enabled
+  use_area_lights: !input use_area_lights
+  media_enabled: !input media_enabled
+  use_area_players: !input use_area_players
+  specific_lights: !input specific_lights
+  exit_script: !input exit_script
+  # ── schedule ────────────────────────────────────────────────────────────
+  run_days: !input run_days
+  weekend_mode: !input weekend_mode
+  weekend_days: !input weekend_days
+
+  weekday_start_time: !input start_time
+  weekday_end_time: !input end_time
+
+  weekend_start_time: !input weekend_start_time
+  weekend_end_time: !input weekend_end_time
+
+  today_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {{ days[now().weekday()] }}
+
+  # Cross-midnight day shift using weekday schedule — breaks the
+  # dependency cycle so weekend profile doesn't hijack an active
+  # weekday cross-midnight session at midnight rollover.
+  tentative_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(weekday_start_time) %}
+    {% set end = today_at(weekday_end_time) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ today_key }}
+    {% endif %}
+
+  is_weekend: >-
+    {{ tentative_day_key in (weekend_days | default([])) }}
+
+  weekend_profile_active: >-
+    {{ is_weekend and (weekend_mode | default('same_as_weekdays')) == 'use_weekend_profile' }}
+
+  weekend_blocked: >-
+    {{ is_weekend and (weekend_mode | default('same_as_weekdays')) == 'disabled_on_weekends' }}
+
+  effective_start_time: >-
+    {% if weekend_profile_active %}
+      {{ weekend_start_time | default('00:00:00') }}
+    {% else %}
+      {{ weekday_start_time | default('00:00:00') }}
+    {% endif %}
+
+  effective_end_time: >-
+    {% if weekend_profile_active %}
+      {{ weekend_end_time | default('23:59:59') }}
+    {% else %}
+      {{ weekday_end_time | default('23:59:59') }}
+    {% endif %}
+
+  effective_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(effective_start_time) %}
+    {% set end = today_at(effective_end_time) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ tentative_day_key }}
+    {% endif %}

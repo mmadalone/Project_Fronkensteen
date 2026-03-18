@@ -1,0 +1,5 @@
+# ── I-34: Music Taste Extraction ─────────────────────────────────────────────
+# Kill switch for music taste logging + profile aggregation.
+# The taste profile itself lives on sensor.ai_music_taste_status (pyscript).
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)

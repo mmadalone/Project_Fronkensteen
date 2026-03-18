@@ -1,0 +1,1100 @@
+# Orphan voice_pe_* volume helpers removed 2026-03-04
+# Orphan voice_spotify_last_search_index removed 2026-03-14
+# Orphan voice_pe_living_room_quark, voice_pe_workshop_rick removed 2026-03-14
+# Orphan "volume before ducking" helpers (6) removed 2026-03-14 — superseded by duck_manager
+
+########################################
+# Bedtime negotiator (Global tuning knobs)
+########################################
+
+bedtime_debounce_seconds:
+  name: Bedtime debounce seconds
+  icon: mdi:timer-lock-outline
+  min: 0
+  max: 60
+  step: 1
+  mode: slider
+  unit_of_measurement: s
+
+bedtime_cooldown_minutes:
+  name: Bedtime cooldown minutes
+  icon: mdi:timer-sand
+  min: 0
+  max: 180
+  step: 5
+  mode: slider
+  unit_of_measurement: min
+
+bedtime_reply_timeout_seconds:
+  name: Bedtime reply timeout seconds
+  icon: mdi:timer-alert-outline
+  min: 10
+  max: 180
+  step: 5
+  mode: slider
+  unit_of_measurement: s
+
+bedtime_max_attempts:
+  name: Bedtime max attempts
+  icon: mdi:counter
+  min: 1
+  max: 10
+  step: 1
+  mode: box
+
+gn_last_run_epoch:
+  name: Goodnight Negotiator last run (epoch)
+  icon: mdi:clock-check-outline
+  min: 0
+  max: 9999999999
+  step: 1
+  mode: box
+
+gn_run_debounce_seconds:
+  name: Goodnight Negotiator debounce (seconds)
+  icon: mdi:timer-lock-outline
+  min: 0
+  max: 3600
+  step: 1
+  mode: box
+
+# Orphan home_assistant_voice_living_room_media_player_esp_vol_before_announce removed 2026-03-14
+
+
+# =============================================================================
+# Duck refcount — parallel burst guard
+# =============================================================================
+# Tracks active duck cycles across parallel notification/email runs.
+# Only the last run to finish restores volumes. Configure: min 0, max 20,
+# step 1, initial 0. Shared across Notification Follow-Me & Email Follow-Me.
+ai_handoff_restore_seconds:
+  name: "AI Handoff - Restore After (seconds)"
+  min: 0
+  max: 3600
+  step: 30
+  unit_of_measurement: s
+  mode: slider
+  icon: mdi:timer-outline
+
+
+# Orphan ai_tts_playback_timeout removed 2026-03-14
+
+duck_refcount:
+  name: Duck cycle refcount
+  icon: mdi:counter
+  initial: 0
+  min: 0
+  max: 20
+  step: 1
+  mode: box
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Pattern Prediction
+# ═══════════════════════════════════════════════════════════════════
+
+ai_away_pattern_lookback_days:
+  name: "AI Away Patterns - Lookback Days"
+  min: 7
+  max: 90
+  step: 1
+  mode: slider
+  unit_of_measurement: "days"
+  icon: mdi:calendar-range
+
+ai_away_pattern_min_samples:
+  name: "AI Away Patterns - Min Samples"
+  min: 3
+  max: 30
+  step: 1
+  mode: slider
+  icon: mdi:counter
+
+ai_away_travel_buffer_minutes:
+  name: "AI Away Patterns - Travel Buffer"
+  min: 10
+  max: 60
+  step: 5
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:car-clock
+
+# I-40a G14: WiFi flap debounce
+ai_away_flap_debounce_seconds:
+  name: "AI Away - WiFi Flap Debounce"
+  # How long device_tracker must stay 'not_home' before departure triggers.
+  # Prevents false departures from WiFi drops, router reboots, mesh roaming.
+  # Higher values = fewer false triggers but slower departure detection.
+  initial: 300
+  min: 60
+  max: 600
+  step: 30
+  mode: slider
+  unit_of_measurement: "s"
+  icon: mdi:wifi-alert
+
+# I-40a G8: Prediction update interval
+ai_away_prediction_update_minutes:
+  name: "AI Away - Prediction Update Interval"
+  # How often predictions re-run while someone is away.
+  # Lower = more responsive (prediction sharpens faster) but more HA load.
+  # Higher = less responsive but lighter on system.
+  initial: 15
+  min: 5
+  max: 60
+  step: 5
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:update
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+
+ai_conversation_continuity_window:
+  name: "AI Dispatcher - Continuity Window"
+  min: 1
+  max: 30
+  step: 1
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:timer-sand
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Duck Manager
+# ═══════════════════════════════════════════════════════════════════
+
+ai_duck_watchdog_timeout:
+  name: "Duck Watchdog Timeout (s)"
+  min: 5
+  max: 600
+  step: 5
+  mode: slider
+  icon: mdi:timer-alert
+
+# I-21: Pre-delay before first duck (ms)
+ai_duck_pre_delay_ms:
+  name: "Duck Pre-Delay (ms)"
+  min: 0
+  max: 2000
+  step: 100
+  initial: 0
+  mode: slider
+  unit_of_measurement: "ms"
+  icon: mdi:timer-sand
+
+ai_duck_default_volume:
+  name: "Duck Default Volume Fallback"
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.5
+  mode: slider
+  icon: mdi:volume-medium
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search & Memory Lifecycle
+# ═══════════════════════════════════════════════════════════════════
+
+# Vector dimensions. Changing this triggers a full reindex via the automation below.
+# 512 is the sweet spot for ~400 records: cheapest, fastest, minimal quality loss.
+ai_embedding_dimensions:
+  name: "AI Embedding - Dimensions"
+  min: 128
+  max: 1536
+  step: 128
+  initial: 512
+  mode: box
+  icon: mdi:vector-square
+
+# Max records to embed per nightly batch run.
+ai_embedding_batch_size:
+  name: "AI Embedding - Batch Size"
+  min: 10
+  max: 200
+  step: 10
+  initial: 50
+  mode: box
+  icon: mdi:package-variant
+
+# Default number of results for semantic search.
+ai_semantic_search_results:
+  name: "AI Semantic - Search Results"
+  min: 1
+  max: 20
+  step: 1
+  initial: 5
+  mode: box
+  icon: mdi:text-search
+
+# Minimum cosine similarity threshold (0.0–1.0).
+# Results below this are filtered out.
+ai_semantic_similarity_threshold:
+  name: "AI Semantic - Similarity Threshold"
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.7
+  mode: slider
+  icon: mdi:target
+
+# Blend weight for hybrid search (0 = FTS5 only, 100 = semantic only).
+# At 50, both FTS5 and semantic scores contribute equally.
+ai_semantic_blend_weight:
+  name: "AI Semantic - Blend Weight"
+  min: 0
+  max: 100
+  step: 5
+  initial: 50
+  mode: slider
+  unit_of_measurement: "%"
+  icon: mdi:scale-balance
+
+# ── Lifecycle monitoring (I-42 Phase 1) ──────────────────────────
+# Warning threshold for total L2 record count.
+ai_memory_record_limit:
+  name: "AI Memory - Record Limit"
+  min: 1000
+  max: 50000
+  step: 500
+  initial: 5000
+  mode: slider
+  unit_of_measurement: "records"
+  icon: mdi:database-alert
+
+# Warning threshold for DB file size.
+ai_memory_db_max_mb:
+  name: "AI Memory - DB Max Size"
+  min: 50
+  max: 500
+  step: 10
+  initial: 100
+  mode: slider
+  unit_of_measurement: "MB"
+  icon: mdi:harddisk
+
+# ── Auto-archive (I-42 Phase 2) ──────────────────────────────────
+# Archive down to this % of record_limit when threshold exceeded.
+ai_memory_archive_target_pct:
+  name: "AI Memory - Archive Target %"
+  min: 50
+  max: 95
+  step: 5
+  initial: 80
+  mode: slider
+  unit_of_measurement: "%"
+  icon: mdi:archive-arrow-down
+
+# Entries accessed within N days are protected from archiving.
+ai_memory_archive_recency_days:
+  name: "AI Memory - Archive Recency Days"
+  min: 7
+  max: 365
+  step: 1
+  initial: 30
+  mode: box
+  unit_of_measurement: "days"
+  icon: mdi:calendar-clock
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Agent Escalation System
+# ═══════════════════════════════════════════════════════════════════
+
+ai_escalation_probability:
+  name: "AI Escalation Probability (Global)"
+  min: 0
+  max: 100
+  step: 5
+  initial: 15
+  unit_of_measurement: "%"
+  icon: mdi:dice-multiple
+  mode: slider
+
+ai_escalation_cooldown_minutes:
+  name: "AI Escalation Cooldown"
+  min: 0
+  max: 120
+  step: 5
+  initial: 30
+  unit_of_measurement: "min"
+  icon: mdi:timer-sand
+
+# ── Per-type probability helpers (dashboard sliders) ──
+ai_escalation_prob_persona_switch:
+  name: "Escalation % — Persona Switch"
+  min: 0
+  max: 100
+  step: 5
+  initial: 10
+  unit_of_measurement: "%"
+  icon: mdi:account-switch
+  mode: slider
+
+ai_escalation_prob_play_media:
+  name: "Escalation % — Play Media"
+  min: 0
+  max: 100
+  step: 5
+  initial: 15
+  unit_of_measurement: "%"
+  icon: mdi:music-note
+  mode: slider
+
+ai_escalation_prob_light_flash:
+  name: "Escalation % — Light Flash"
+  min: 0
+  max: 100
+  step: 5
+  initial: 40
+  unit_of_measurement: "%"
+  icon: mdi:flash
+  mode: slider
+
+ai_escalation_prob_volume_boost:
+  name: "Escalation % — Volume Boost"
+  min: 0
+  max: 100
+  step: 5
+  initial: 30
+  unit_of_measurement: "%"
+  icon: mdi:volume-high
+  mode: slider
+
+ai_escalation_prob_send_notification:
+  name: "Escalation % — Send Notification"
+  min: 0
+  max: 100
+  step: 5
+  initial: 50
+  unit_of_measurement: "%"
+  icon: mdi:cellphone-message
+  mode: slider
+
+ai_escalation_prob_prompt_barrage:
+  name: "Escalation % — Prompt Barrage"
+  min: 0
+  max: 100
+  step: 5
+  initial: 25
+  unit_of_measurement: "%"
+  icon: mdi:message-bulleted
+  mode: slider
+
+ai_escalation_prob_run_script:
+  name: "Escalation % — Run Script"
+  min: 0
+  max: 100
+  step: 5
+  initial: 20
+  unit_of_measurement: "%"
+  icon: mdi:script-text-play
+  mode: slider
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_focus_guard — Anti-ADHD Focus Guards
+# ═══════════════════════════════════════════════════════════════════
+
+# Hours of continuous workshop presence before first time-check nudge.
+# Lower = more aggressive reminders. Default 2h is a balanced start.
+focus_guard_threshold_hours:
+  name: "Focus Guard - Threshold Hours"
+  min: 1
+  max: 4
+  step: 0.5
+  unit_of_measurement: "h"
+  icon: mdi:timer-alert
+  mode: slider
+
+# How long focus mode stays active before auto-expiring.
+# Prevents "I said focus mode 6 hours ago and forgot."
+focus_mode_max_hours:
+  name: "Focus Mode - Max Duration"
+  min: 0.5
+  max: 4
+  step: 0.5
+  unit_of_measurement: "h"
+  icon: mdi:timer-lock-outline
+  mode: slider
+
+# workshop_hours_today: REMOVED — replaced by sensor.workshop_hours_today
+# (history_stats platform, defined below). No manual accumulator needed.
+
+# Hours since last meal before first meal reminder nudge.
+# Lower = more aggressive reminders.
+ai_focus_meal_reminder_hours:
+  name: "Focus Guard - Meal Reminder Hours"
+  min: 2
+  max: 8
+  step: 0.5
+  unit_of_measurement: "h"
+  icon: mdi:food-apple-outline
+  mode: slider
+
+# Minimum minutes between same-type nudges.
+ai_focus_nudge_cooldown_minutes:
+  name: "Focus Guard - Nudge Cooldown"
+  min: 15
+  max: 120
+  step: 5
+  unit_of_measurement: "min"
+  icon: mdi:timer-pause
+  mode: slider
+
+# Partner must be home this many minutes before social nudge fires.
+ai_focus_social_nudge_minutes:
+  name: "Focus Guard - Social Nudge Delay"
+  min: 15
+  max: 120
+  step: 5
+  unit_of_measurement: "min"
+  icon: mdi:account-heart
+  mode: slider
+
+# Hours in same zone before break suggestion fires.
+ai_focus_break_suggest_hours:
+  name: "Focus Guard - Break Suggest Hours"
+  min: 1
+  max: 4
+  step: 0.5
+  unit_of_measurement: "h"
+  icon: mdi:coffee
+  mode: slider
+
+# Minutes before bedtime to start bedtime approach nudges.
+ai_focus_bedtime_approach_minutes:
+  name: "Focus Guard - Bedtime Approach"
+  min: 30
+  max: 120
+  step: 5
+  unit_of_measurement: "min"
+  icon: mdi:bed-clock
+  mode: slider
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_identity — Identity Confidence
+# ═══════════════════════════════════════════════════════════════════
+
+ai_wifi_stale_timeout:
+  name: "AI WiFi Stale Timeout"
+  icon: mdi:timer-alert-outline
+  min: 5
+  max: 60
+  step: 5
+  unit_of_measurement: "min"
+  initial: 20
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — LLM/TTS/STT Budget Tracking
+# ═══════════════════════════════════════════════════════════════════
+
+# Manual budget scale factor. 100 = normal day, 50 = half-budget.
+# Reserved for future blueprint throttling (not used in gate math yet).
+ai_llm_daily_budget:
+  name: "AI LLM - Daily Budget"
+  min: 0
+  max: 200
+  step: 1
+  mode: slider
+  unit_of_measurement: "%"
+  icon: mdi:cash-multiple
+
+# Running call counter — incremented by script.ai_llm_budget_increment,
+# reset to 0 at midnight by automation.ai_llm_budget_midnight_reset.
+ai_llm_calls_today:
+  name: "AI LLM - Calls Today"
+  min: 0
+  max: 999
+  step: 1
+  mode: box
+  icon: mdi:counter
+
+# The denominator for budget % calculation. Adjust via UI or automation.
+ai_llm_daily_limit:
+  name: "AI LLM - Daily Call Limit"
+  min: 10
+  max: 100000
+  step: 10
+  mode: box
+  icon: mdi:speedometer
+
+# Below this budget %, nudges and briefings skip agent-personality LLM calls.
+# Uses raw text + fallback TTS instead. Saves budget for essential calls.
+ai_budget_personality_threshold:
+  name: "AI LLM - Personality Threshold"
+  min: 5
+  max: 50
+  step: 5
+  unit_of_measurement: "%"
+  icon: mdi:drama-masks
+  mode: slider
+
+# I-33: Extended budget tracking
+ai_tts_daily_limit:
+  name: "AI TTS - Daily Call Limit"
+  min: 10
+  max: 5000
+  step: 10
+  mode: box
+  icon: mdi:message-text-clock
+
+ai_llm_tokens_today:
+  name: "AI LLM - Tokens Today"
+  min: 0
+  max: 999999
+  step: 1
+  mode: box
+  icon: mdi:code-braces
+
+ai_llm_daily_token_limit:
+  name: "AI LLM - Daily Token Limit"
+  min: 10000
+  max: 1000000
+  step: 10000
+  mode: box
+  icon: mdi:speedometer-slow
+
+ai_tts_chars_today:
+  name: "AI TTS - Characters Today (ElevenLabs)"
+  min: 0
+  max: 999999
+  step: 1
+  mode: box
+  icon: mdi:alphabetical
+
+ai_stt_calls_today:
+  name: "AI STT - Calls Today"
+  min: 0
+  max: 99999
+  step: 1
+  mode: box
+  unit_of_measurement: "calls"
+  icon: mdi:microphone
+
+ai_budget_daily_cost_limit:
+  name: "AI Budget - Daily Cost Limit (€)"
+  min: 0.50
+  max: 50
+  step: 0.50
+  mode: box
+  unit_of_measurement: "€"
+  icon: mdi:cash-lock
+
+# I-33: Per-service pricing helpers (user-configurable rates)
+ai_cost_per_1k_llm_tokens:
+  name: "AI Cost - per 1K LLM Tokens"
+  min: 0
+  max: 0.10
+  step: 0.001
+  initial: 0.001
+  mode: box
+  unit_of_measurement: "€"
+  icon: mdi:brain
+
+ai_cost_per_1k_tts_chars:
+  name: "AI Cost - per 1K TTS Characters"
+  min: 0
+  max: 1.00
+  step: 0.01
+  initial: 0.30
+  mode: box
+  unit_of_measurement: "€"
+  icon: mdi:account-voice
+
+ai_cost_per_stt_call:
+  name: "AI Cost - per STT Call"
+  min: 0
+  max: 0.50
+  step: 0.005
+  initial: 0.02
+  mode: box
+  unit_of_measurement: "€"
+  icon: mdi:microphone
+
+# I-46: ElevenLabs credit floor (TTS swaps to HA Cloud below this)
+ai_elevenlabs_credit_floor:
+  name: "ElevenLabs - Credit Floor"
+  min: 0
+  max: 100000
+  step: 1000
+  initial: 5000
+  mode: box
+  unit_of_measurement: "chars"
+  icon: mdi:account-voice
+
+# I-33 Phase 2: ElevenLabs credit cap (0 = use API value, >0 = override)
+ai_elevenlabs_credit_cap:
+  name: "ElevenLabs - Credit Cap (chars)"
+  min: 0
+  max: 10000000
+  step: 1000
+  initial: 0
+  mode: box
+  unit_of_measurement: "chars"
+  icon: mdi:account-voice
+
+# Rolling window for OpenRouter usage aggregation (budget_history table)
+ai_budget_rolling_months:
+  name: "AI Budget - Rolling Window (months)"
+  min: 1
+  max: 24
+  step: 1
+  mode: box
+  unit_of_measurement: "months"
+  icon: mdi:calendar-range
+
+# I-32: Snapshot of OpenRouter total_usage at midnight (for daily delta)
+ai_openrouter_usage_midnight:
+  name: "AI OpenRouter - Usage at Midnight"
+  min: 0
+  max: 99999
+  step: 0.0001
+  initial: 0
+  mode: box
+  unit_of_measurement: "$"
+  icon: mdi:router-wireless
+
+# ElevenLabs cumulative character_count at midnight (for daily delta)
+ai_elevenlabs_chars_midnight:
+  name: "ElevenLabs - Chars Used at Midnight"
+  min: 0
+  max: 10000000
+  step: 1
+  mode: box
+  unit_of_measurement: "chars"
+  icon: mdi:account-voice
+
+# Serper remaining credits at midnight (for daily delta)
+ai_serper_credits_midnight:
+  name: "Serper - Credits at Midnight"
+  min: 0
+  max: 999999
+  step: 1
+  mode: box
+  unit_of_measurement: "credits"
+  icon: mdi:web
+
+# Serper pricing — removed; now auto-calculated as template sensor
+# sensor.ai_cost_per_serper_credit = ($50 / 50 000) × USD→EUR rate
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+
+# Unread priority email count. Incremented on each priority email.
+# Reset by pyscript.email_clear_count or midnight cron.
+# Feeds into L1 hot context: "2 priority emails"
+ai_email_priority_count:
+  name: "AI Email Priority Count"
+  min: 0
+  max: 999
+  step: 1
+  mode: box
+  icon: mdi:email-multiple
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_notification_dedup — Notification Deduplication
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dedup_default_ttl:
+  name: AI Dedup Default TTL
+  min: 1
+  max: 720
+  step: 1
+  mode: box
+  unit_of_measurement: min
+  icon: mdi:timer-outline
+
+ai_dedup_blocked_count:
+  name: AI Dedup Blocked Count
+  min: 0
+  max: 999
+  step: 1
+  mode: box
+  icon: mdi:cancel
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_patterns — Presence Pattern Recognition
+# ═══════════════════════════════════════════════════════════════════
+
+# How many days of recorder history to query for pattern extraction.
+# More days = more data = better predictions, but slower extraction.
+# 30 days is a good balance; increase after system has been running longer.
+ai_presence_pattern_lookback_days:
+  name: "AI Presence - Lookback Days"
+  min: 7
+  max: 90
+  step: 1
+  mode: slider
+  unit_of_measurement: "days"
+  icon: mdi:calendar-range
+
+# Minimum number of transitions before a pattern is considered valid.
+# Below this threshold, predictions return "insufficient" confidence.
+# Lower = more aggressive predictions from less data.
+# Higher = more conservative, requires more history.
+ai_presence_pattern_min_samples:
+  name: "AI Presence - Min Samples"
+  min: 3
+  max: 50
+  step: 1
+  mode: slider
+  icon: mdi:counter
+
+# Maximum seconds between zone OFF and zone ON to count as a transition.
+# Larger = more lenient transition detection (catches slow walks).
+# Smaller = stricter (only rapid zone changes count).
+ai_presence_transition_window:
+  name: "AI Presence - Transition Window"
+  min: 60
+  max: 600
+  step: 30
+  unit_of_measurement: "s"
+  icon: mdi:timer-marker
+  mode: slider
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_identity — Per-Person Room Inference
+# ═══════════════════════════════════════════════════════════════════
+
+ai_presence_identity_transition_window:
+  name: "AI - Presence Identity Transition Window"
+  icon: mdi:timer-sand
+  min: 30
+  max: 300
+  step: 10
+  unit_of_measurement: "s"
+  mode: slider
+  initial: 120
+
+ai_presence_identity_confidence_floor:
+  name: "AI - Presence Identity Confidence Floor"
+  icon: mdi:gauge-low
+  min: 0
+  max: 50
+  step: 5
+  unit_of_measurement: "%"
+  mode: slider
+  initial: 20
+
+ai_presence_identity_departure_debounce:
+  name: "AI - Presence Identity Departure Debounce"
+  icon: mdi:clock-fast
+  min: 10
+  max: 120
+  step: 5
+  unit_of_measurement: "s"
+  mode: slider
+  initial: 60
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_predictive_schedule — Predictive Scheduling
+# ═══════════════════════════════════════════════════════════════════
+
+# Target sleep hours. Used by bedtime advisor to compute target sleep time.
+# sleep_time = wake_time - target_sleep_hours
+ai_target_sleep_hours:
+  name: "AI Target Sleep Hours"
+  min: 5
+  max: 10
+  step: 0.5
+  unit_of_measurement: "h"
+  icon: mdi:sleep
+
+# Morning preparation buffer. Minutes from waking up to being ready to
+# leave / start the first commitment of the day.
+# wake_time = first_event_time - morning_prep_buffer
+ai_morning_prep_buffer:
+  name: "AI Morning Prep Buffer"
+  min: 15
+  max: 90
+  step: 5
+  unit_of_measurement: "min"
+  icon: mdi:coffee-outline
+
+# I-29: Relaxed extension when no timed work event tomorrow
+ai_bedtime_relaxed_extension_minutes:
+  name: "AI Bedtime Relaxed Extension (minutes)"
+  min: 30
+  max: 180
+  step: 15
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:clock-plus-outline
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_privacy_gate — Privacy Gate Thresholds
+# ═══════════════════════════════════════════════════════════════════
+
+# Miquel thresholds (watches Jessica's confidence)
+ai_privacy_gate_miquel_t1_suppress_at:
+  name: "Privacy Threshold — Miquel T1 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 30
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_miquel_t1_reenable_at:
+  name: "Privacy Threshold — Miquel T1 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 20
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+ai_privacy_gate_miquel_t2_suppress_at:
+  name: "Privacy Threshold — Miquel T2 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 40
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_miquel_t2_reenable_at:
+  name: "Privacy Threshold — Miquel T2 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 30
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+ai_privacy_gate_miquel_t3_suppress_at:
+  name: "Privacy Threshold — Miquel T3 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 50
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_miquel_t3_reenable_at:
+  name: "Privacy Threshold — Miquel T3 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 40
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+
+# Jessica thresholds (watches Miquel's confidence)
+ai_privacy_gate_jessica_t1_suppress_at:
+  name: "Privacy Threshold — Jessica T1 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 30
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_jessica_t1_reenable_at:
+  name: "Privacy Threshold — Jessica T1 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 20
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+ai_privacy_gate_jessica_t2_suppress_at:
+  name: "Privacy Threshold — Jessica T2 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 40
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_jessica_t2_reenable_at:
+  name: "Privacy Threshold — Jessica T2 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 30
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+ai_privacy_gate_jessica_t3_suppress_at:
+  name: "Privacy Threshold — Jessica T3 Suppress"
+  min: 5
+  max: 70
+  step: 5
+  initial: 50
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-up-bold
+  mode: slider
+ai_privacy_gate_jessica_t3_reenable_at:
+  name: "Privacy Threshold — Jessica T3 Re-Enable"
+  min: 5
+  max: 70
+  step: 5
+  initial: 40
+  unit_of_measurement: "pts"
+  icon: mdi:arrow-down-bold
+  mode: slider
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_project_tracking — Project Awareness
+# ═══════════════════════════════════════════════════════════════════
+
+ai_project_hot_context_limit:
+  name: "AI Project Hot Context Limit"
+  initial: 5
+  min: 1
+  max: 15
+  step: 1
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep Detection
+# ═══════════════════════════════════════════════════════════════════
+
+ai_sleep_min_duration:
+  name: "AI Sleep Detection - Min Duration (minutes)"
+  min: 15
+  max: 180
+  step: 15
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:timer
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue & Cache
+# ═══════════════════════════════════════════════════════════════════
+
+ai_tts_cache_hits_today:
+  name: AI TTS Cache Hits Today
+  min: 0
+  max: 10000
+  step: 1
+  mode: box
+  icon: mdi:cached
+
+ai_tts_calls_today:
+  name: AI TTS Calls Today
+  min: 0
+  max: 10000
+  step: 1
+  mode: box
+  icon: mdi:message-processing
+
+# ── Ducking Controls (Dashboard V2.1) ──────────────────────────────────
+ai_tts_duck_volume:
+  name: "TTS Duck Volume Level"
+  min: 0
+  max: 1
+  step: 0.05
+  icon: mdi:volume-low
+  mode: slider
+ai_tts_announcement_volume:
+  name: "TTS Announcement Volume"
+  min: 0
+  max: 1
+  step: 0.05
+  icon: mdi:volume-high
+  mode: slider
+
+# ── Volume Restore Controls ────────────────────────────────────────────
+ai_tts_restore_fixed_delay:
+  name: "TTS Restore Fixed Delay (s)"
+  min: 0.5
+  max: 25
+  step: 0.5
+  icon: mdi:timer-sand
+  mode: slider
+ai_tts_restore_timeout:
+  name: "TTS Restore Dynamic Timeout (s)"
+  min: 5
+  max: 25
+  step: 1
+  icon: mdi:timer-alert
+  mode: slider
+ai_tts_restore_post_buffer:
+  name: "TTS Restore Post-Buffer (s)"
+  min: 0
+  max: 15
+  step: 0.5
+  initial: 5
+  icon: mdi:speaker-pause
+  mode: slider
+
+# ── Music Composition (I-10) ──────────────────────────────────────────
+ai_music_daily_generation_limit:
+  name: "AI Music - Daily API Generation Limit"
+  icon: mdi:music-box-multiple
+  min: 0
+  max: 50
+  step: 1
+  mode: box
+  initial: 10
+
+ai_music_generations_today:
+  name: "AI Music - API Generations Today"
+  icon: mdi:counter
+  min: 0
+  max: 999
+  step: 1
+  mode: box
+  initial: 0
+
+ai_music_cache_size_mb:
+  name: "AI Music - Cache Size Limit (MB)"
+  icon: mdi:database
+  min: 50
+  max: 1000
+  step: 50
+  mode: slider
+  initial: 200
+
+ai_cost_per_music_generation:
+  name: "AI Music - Cost per API Generation (€)"
+  icon: mdi:music-note-plus
+  min: 0
+  max: 1
+  step: 0.001
+  mode: box
+  initial: 0.02
+
+# ── Cache Eviction Controls (I-7) ─────────────────────────────────────
+ai_tts_cache_static_max_days:
+  name: "TTS Cache Static Max Age (days)"
+  min: 7
+  max: 365
+  step: 1
+  icon: mdi:archive-clock
+  mode: box
+
+ai_tts_cache_max_size_mb:
+  name: "TTS Cache Max Size (MB)"
+  min: 50
+  max: 2000
+  step: 50
+  icon: mdi:harddisk
+  mode: box
+
+ai_tts_cache_protect_hours:
+  name: "TTS Cache Protection Window (hours)"
+  min: 0.5
+  max: 24
+  step: 0.5
+  icon: mdi:shield-lock-outline
+  mode: box

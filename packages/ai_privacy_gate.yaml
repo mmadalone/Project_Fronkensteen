@@ -1,0 +1,140 @@
+# =============================================================================
+# AI Privacy Gate Package — Identity-Confidence Feature Gating
+# =============================================================================
+# Suppresses personal features when another household member is home.
+# Jessica's confidence gates Miquel's features; Miquel's gates Jessica's.
+#
+# 3 fixed tiers:
+#   T1 (Intimate)  — bedtime/wake features
+#   T2 (Personal)  — notifications, briefings, email
+#   T3 (Ambient)   — detection, summarization, sensors
+#
+# Hysteresis: suppress_at > reenable_at prevents flapping.
+# Per-feature override: auto / force_suppress / force_allow / off
+#
+# Blueprint: privacy_gate_hysteresis.yaml (6 instances: 3 tiers × 2 persons)
+# Template: sensor.ai_privacy_gate_status
+# Deployed: 2026-03-10
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_select: moved to helpers_input_select.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# ── TEMPLATE SENSOR ──────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      - name: "AI Privacy Gate Status"
+        unique_id: ai_privacy_gate_status
+        icon: mdi:shield-account
+        state: >-
+          {%- set features = {
+            'wake_up_guard': {'owner': 'miquel', 'tier': 't1'},
+            'calendar_alarm': {'owner': 'miquel', 'tier': 't1'},
+            'escalating_wakeup': {'owner': 'miquel', 'tier': 't1'},
+            'bedtime_routine': {'owner': 'miquel', 'tier': 't1'},
+            'bedtime_routine_plus': {'owner': 'miquel', 'tier': 't1'},
+            'bedtime_last_call': {'owner': 'miquel', 'tier': 't1'},
+            'email_follow_me': {'owner': 'miquel', 'tier': 't2'},
+            'notification_follow_me': {'owner': 'miquel', 'tier': 't2'},
+            'email_priority_filter': {'owner': 'miquel', 'tier': 't2'},
+            'proactive_briefing': {'owner': 'miquel', 'tier': 't2'},
+            'proactive_unified': {'owner': 'miquel', 'tier': 't2'},
+            'phone_charge_reminder': {'owner': 'miquel', 'tier': 't2'},
+            'bedtime_escalation': {'owner': 'miquel', 'tier': 't2'},
+            'calendar_pre_event': {'owner': 'miquel', 'tier': 't2'},
+            'llm_alarm': {'owner': 'miquel', 'tier': 't2'},
+            'voice_handoff': {'owner': 'miquel', 'tier': 't2'},
+            'meal_detection': {'owner': 'miquel', 'tier': 't3'},
+            'sleep_detection': {'owner': 'miquel', 'tier': 't3'},
+            'memory_todo_mirror': {'owner': 'miquel', 'tier': 't3'},
+            'interaction_summarizer': {'owner': 'miquel', 'tier': 't3'},
+            'proactive_llm_sensors': {'owner': 'miquel', 'tier': 't3'},
+            'dispatcher_profile': {'owner': 'miquel', 'tier': 'off'},
+            'sleep_lights': {'owner': 'miquel', 'tier': 'off'},
+            'media_tracking': {'owner': 'miquel', 'tier': 'off'},
+            'refcount_watchdog': {'owner': 'miquel', 'tier': 'off'},
+            'coming_home': {'owner': 'miquel', 'tier': 'off'}
+          } -%}
+          {%- set enabled = is_state('input_boolean.ai_privacy_gate_enabled', 'on') -%}
+          {%- set mode = states('input_select.ai_privacy_gate_mode') -%}
+          {%- set ns = namespace(suppressed=0) -%}
+          {%- for feat, meta in features.items() -%}
+            {%- set override = states('input_select.ai_privacy_gate_' ~ feat) -%}
+            {%- if not enabled or mode == 'force_allow_all' or override in ['force_allow', 'off'] or meta.tier == 'off' -%}
+              {# allowed #}
+            {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+              {%- set ns.suppressed = ns.suppressed + 1 -%}
+            {%- elif is_state('input_boolean.ai_privacy_gate_' ~ meta.owner ~ '_' ~ meta.tier ~ '_suppressed', 'on') -%}
+              {%- set ns.suppressed = ns.suppressed + 1 -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.suppressed }}
+        unit_of_measurement: "features"
+        attributes:
+          mode: >-
+            {{ states('input_select.ai_privacy_gate_mode') }}
+          miquel_t1: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_miquel_t1_suppressed', 'on') else 'allowed' }}
+          miquel_t2: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_miquel_t2_suppressed', 'on') else 'allowed' }}
+          miquel_t3: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_miquel_t3_suppressed', 'on') else 'allowed' }}
+          jessica_t1: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_jessica_t1_suppressed', 'on') else 'allowed' }}
+          jessica_t2: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_jessica_t2_suppressed', 'on') else 'allowed' }}
+          jessica_t3: >-
+            {{ 'suppressed' if is_state('input_boolean.ai_privacy_gate_jessica_t3_suppressed', 'on') else 'allowed' }}
+          jessica_confidence: >-
+            {{ states('sensor.identity_confidence_jessica') | int(0) }}
+          miquel_confidence: >-
+            {{ states('sensor.identity_confidence_miquel') | int(0) }}
+          features: >-
+            {%- set features = {
+              'wake_up_guard': {'owner': 'miquel', 'tier': 't1'},
+              'calendar_alarm': {'owner': 'miquel', 'tier': 't1'},
+              'escalating_wakeup': {'owner': 'miquel', 'tier': 't1'},
+              'bedtime_routine': {'owner': 'miquel', 'tier': 't1'},
+              'bedtime_routine_plus': {'owner': 'miquel', 'tier': 't1'},
+              'bedtime_last_call': {'owner': 'miquel', 'tier': 't1'},
+              'email_follow_me': {'owner': 'miquel', 'tier': 't2'},
+              'notification_follow_me': {'owner': 'miquel', 'tier': 't2'},
+              'email_priority_filter': {'owner': 'miquel', 'tier': 't2'},
+              'proactive_briefing': {'owner': 'miquel', 'tier': 't2'},
+              'proactive_unified': {'owner': 'miquel', 'tier': 't2'},
+              'phone_charge_reminder': {'owner': 'miquel', 'tier': 't2'},
+              'bedtime_escalation': {'owner': 'miquel', 'tier': 't2'},
+              'calendar_pre_event': {'owner': 'miquel', 'tier': 't2'},
+              'llm_alarm': {'owner': 'miquel', 'tier': 't2'},
+              'voice_handoff': {'owner': 'miquel', 'tier': 't2'},
+              'meal_detection': {'owner': 'miquel', 'tier': 't3'},
+              'sleep_detection': {'owner': 'miquel', 'tier': 't3'},
+              'memory_todo_mirror': {'owner': 'miquel', 'tier': 't3'},
+              'interaction_summarizer': {'owner': 'miquel', 'tier': 't3'},
+              'proactive_llm_sensors': {'owner': 'miquel', 'tier': 't3'},
+              'dispatcher_profile': {'owner': 'miquel', 'tier': 'off'},
+              'sleep_lights': {'owner': 'miquel', 'tier': 'off'},
+              'media_tracking': {'owner': 'miquel', 'tier': 'off'},
+              'refcount_watchdog': {'owner': 'miquel', 'tier': 'off'},
+              'coming_home': {'owner': 'miquel', 'tier': 'off'}
+            } -%}
+            {%- set enabled = is_state('input_boolean.ai_privacy_gate_enabled', 'on') -%}
+            {%- set mode = states('input_select.ai_privacy_gate_mode') -%}
+            {%- set ns = namespace(result={}) -%}
+            {%- for feat, meta in features.items() -%}
+              {%- set override = states('input_select.ai_privacy_gate_' ~ feat) -%}
+              {%- if not enabled or mode == 'force_allow_all' or override in ['force_allow', 'off'] or meta.tier == 'off' -%}
+                {%- set ns.result = dict(ns.result, **{feat: 'allowed'}) -%}
+              {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+                {%- set ns.result = dict(ns.result, **{feat: 'suppressed'}) -%}
+              {%- elif is_state('input_boolean.ai_privacy_gate_' ~ meta.owner ~ '_' ~ meta.tier ~ '_suppressed', 'on') -%}
+                {%- set ns.result = dict(ns.result, **{feat: 'suppressed'}) -%}
+              {%- else -%}
+                {%- set ns.result = dict(ns.result, **{feat: 'allowed'}) -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.result | tojson }}

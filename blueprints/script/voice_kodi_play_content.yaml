@@ -1,0 +1,341 @@
+blueprint:
+  name: "Voice — Kodi play content"
+  author: madalone
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_kodi_play_content.yaml
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_kodi_play_content-header.jpeg)
+
+    # Voice — Kodi play content
+
+    Universal Kodi content router. Accepts a content type and content
+    identifier, determines the correct playback method, and fires it.
+    Handles direct file playback (movies, episodes), plugin/favourite URIs
+    via JSON-RPC Player.Open, and TV show continuation with automatic
+    next-unwatched-episode resolution.
+
+    Designed as a tool script for LLM conversation agents (Extended OpenAI
+    Conversation function registration) but works from any automation,
+    script call, or dashboard button.
+
+    ### Recent changes
+
+    - **v2:** Audit remediation — removed `continue_on_error` from JSON-RPC
+    waits, replaced implicit `wait.trigger` guards with explicit
+    `wait.completed` checks, added `default:` branch for unknown
+    content_type routing
+
+    - **v1:** Initial blueprint — extracted from voice_play_bedtime_kodi script'
+  domain: script
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① TARGET
+    # ===========================================================================
+    target_settings:
+      name: "① Target"
+      icon: mdi:kodi
+      description: Kodi media player to control.
+      collapsed: false
+      input:
+        kodi_entity:
+          name: Kodi media player
+          description: >
+            The Kodi media_player entity this script targets for all
+            playback commands and JSON-RPC library lookups.
+          selector:
+            entity:
+              filter:
+                - domain: media_player
+                  integration: kodi
+
+    # ===========================================================================
+    # ② ADVANCED
+    # ===========================================================================
+    advanced_settings:
+      name: "② Advanced"
+      icon: mdi:cog
+      description: Timeout and error handling configuration.
+      collapsed: true
+      input:
+        jsonrpc_timeout:
+          name: JSON-RPC timeout (seconds)
+          description: >
+            How long to wait for Kodi JSON-RPC responses during TV show
+            continuation lookups (GetTVShows, GetEpisodes). Increase this
+            if your Kodi library is large or running on slow hardware.
+          default: 10
+          selector:
+            number:
+              min: 5
+              max: 60
+              unit_of_measurement: seconds
+
+        error_notify_entity:
+          name: Notification service (optional)
+          description: >
+            Optional notify entity for error messages (e.g.
+            notify.mobile_app_phone). When set, errors are sent as
+            notifications instead of logbook entries. Leave empty to
+            use logbook logging only.
+          default: ""
+          selector:
+            text: {}
+
+mode: parallel
+max_exceeded: silent
+
+fields:
+  content_id:
+    name: Content ID
+    description: >
+      Content path, file URI, plugin URI, or TV show title.
+      For movies/episodes: the full file path or URI.
+      For favourites: the plugin:// or special:// URI.
+      For tvshow_continue: the exact TV show title as it appears in
+      the Kodi library.
+    required: true
+    selector:
+      text: {}
+  content_type:
+    name: Content type
+    description: >
+      Routing type that determines the playback method.
+      movie/episode: direct file via media_player.play_media.
+      favourite: plugin/special URIs via JSON-RPC Player.Open.
+      tvshow_continue: resolves next unwatched episode then plays.
+    required: true
+    selector:
+      select:
+        options:
+          - movie
+          - episode
+          - favourite
+          - tvshow_continue
+  media_content_type:
+    name: Media content type override
+    description: >
+      Kodi media_content_type for direct file playback. Override when
+      playing non-video content (music, CHANNEL, DIRECTORY).
+    required: false
+    selector:
+      select:
+        options:
+          - video
+          - music
+          - CHANNEL
+          - DIRECTORY
+
+variables:
+  kodi_entity: !input kodi_entity
+  jsonrpc_timeout: !input jsonrpc_timeout
+  error_notify_entity: !input error_notify_entity
+  _content_type: "{{ content_type | default('movie') }}"
+  _content_id: "{{ content_id | default('') }}"
+  _media_content_type: "{{ media_content_type | default('video') }}"
+  log_name: "Kodi Play Content"
+
+sequence:
+  - alias: "Route content based on content_type"
+    choose:
+      # =================================================================
+      # MOVIE / EPISODE — direct file path via play_media
+      # =================================================================
+      - alias: "Play direct file — movie or episode with known file path"
+        conditions:
+          - condition: template
+            value_template: "{{ _content_type in ['movie', 'episode'] }}"
+        sequence:
+          - alias: "Play: direct file via media_player.play_media"
+            action: media_player.play_media
+            target:
+              entity_id: "{{ kodi_entity }}"
+            data:
+              media_content_id: "{{ _content_id }}"
+              media_content_type: "{{ _media_content_type }}"
+
+      # =================================================================
+      # FAVOURITE — plugin://, special://, smart playlists
+      # =================================================================
+      - alias: "Play favourite — URIs that play_media can't resolve"
+        conditions:
+          - condition: template
+            value_template: "{{ _content_type == 'favourite' }}"
+        sequence:
+          - alias: "Play: favourite via kodi.call_method Player.Open"
+            action: kodi.call_method
+            target:
+              entity_id: "{{ kodi_entity }}"
+            data:
+              method: Player.Open
+              item:
+                file: "{{ _content_id }}"
+
+      # =================================================================
+      # TV SHOW CONTINUE — resolve next unwatched episode, then play
+      # =================================================================
+      - alias: "Continue TV show — resolve next episode from show title"
+        conditions:
+          - condition: template
+            value_template: "{{ _content_type == 'tvshow_continue' }}"
+        sequence:
+          # --- Step 1: Look up tvshowid from title ---
+          - alias: "Continue: look up tvshowid by title"
+            action: kodi.call_method
+            target:
+              entity_id: "{{ kodi_entity }}"
+            data:
+              method: VideoLibrary.GetTVShows
+              filter:
+                field: title
+                operator: is
+                value: "{{ _content_id }}"
+              properties:
+                - title
+              limits:
+                start: 0
+                end: 1
+
+          - alias: "Continue: wait for tvshow lookup result"
+            wait_for_trigger:
+              - trigger: event
+                event_type: kodi_call_method_result
+                event_data:
+                  entity_id: "{{ kodi_entity }}"
+                  result_ok: true
+            timeout:
+              seconds: "{{ jsonrpc_timeout | int(10) }}"
+
+          - alias: "Continue: extract tvshowid from result"
+            variables:
+              resolved_tvshowid: >-
+                {% if wait.completed | default(false) %}
+                  {{ (wait.trigger.event.data.result.tvshows
+                      | default([{}]))[0].tvshowid | default(0) }}
+                {% else %}
+                  0
+                {% endif %}
+
+          # --- Step 2: Get first unwatched episode ---
+          - alias: "Continue: check tvshowid was resolved"
+            if:
+              - condition: template
+                value_template: "{{ resolved_tvshowid | int(0) > 0 }}"
+            then:
+              - alias: "Continue: get next unwatched episode for show"
+                action: kodi.call_method
+                target:
+                  entity_id: "{{ kodi_entity }}"
+                data:
+                  method: VideoLibrary.GetEpisodes
+                  tvshowid: "{{ resolved_tvshowid | int }}"
+                  filter:
+                    field: playcount
+                    operator: is
+                    value: "0"
+                  sort:
+                    method: episode
+                    order: ascending
+                  limits:
+                    start: 0
+                    end: 1
+                  properties:
+                    - title
+                    - season
+                    - episode
+                    - file
+                    - showtitle
+
+              - alias: "Continue: wait for episode lookup result"
+                wait_for_trigger:
+                  - trigger: event
+                    event_type: kodi_call_method_result
+                    event_data:
+                      entity_id: "{{ kodi_entity }}"
+                      result_ok: true
+                timeout:
+                  seconds: "{{ jsonrpc_timeout | int(10) }}"
+
+              - alias: "Continue: extract episode file path from result"
+                variables:
+                  resolved_episode_file: >-
+                    {% if wait.completed | default(false) %}
+                      {{ (wait.trigger.event.data.result.episodes
+                          | default([{}]))[0].file | default('') }}
+                    {% else %}
+                      
+                    {% endif %}
+
+              # --- Step 3: Play the resolved episode ---
+              - alias: "Continue: play resolved episode if file path found"
+                if:
+                  - condition: template
+                    value_template: "{{ resolved_episode_file | default('') | trim | length > 0 }}"
+                then:
+                  - alias: "Continue: play episode via Player.Open"
+                    action: kodi.call_method
+                    target:
+                      entity_id: "{{ kodi_entity }}"
+                    data:
+                      method: Player.Open
+                      item:
+                        file: "{{ resolved_episode_file }}"
+                else:
+                  # --- Error: no unwatched episode ---
+                  - alias: "Continue: no unwatched episode — report error"
+                    choose:
+                      - alias: "Error via notification service"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ error_notify_entity | default('') | length > 0 }}"
+                        sequence:
+                          - alias: "Send notification — no unwatched episode"
+                            action: "{{ error_notify_entity }}"
+                            data:
+                              title: "{{ log_name }}"
+                              message: >-
+                                No unwatched episode found for "{{ _content_id }}".
+                                All episodes may be watched.
+                    default:
+                      - alias: "Log warning — no unwatched episode"
+                        action: logbook.log
+                        data:
+                          name: "{{ log_name }}"
+                          message: >-
+                            No unwatched episode found for "{{ _content_id }}".
+                            All episodes may be watched.
+            else:
+              # --- Error: tvshowid not resolved ---
+              - alias: "Continue: tvshowid not resolved — report error"
+                choose:
+                  - alias: "Error via notification service"
+                    conditions:
+                      - condition: template
+                        value_template: "{{ error_notify_entity | default('') | length > 0 }}"
+                    sequence:
+                      - alias: "Send notification — show not found"
+                        action: "{{ error_notify_entity }}"
+                        data:
+                          title: "{{ log_name }}"
+                          message: >-
+                            Could not find TV show "{{ _content_id }}" in Kodi library.
+                default:
+                  - alias: "Log warning — show not found"
+                    action: logbook.log
+                    data:
+                      name: "{{ log_name }}"
+                      message: >-
+                        Could not find TV show "{{ _content_id }}" in Kodi library.
+
+    # =================================================================
+    # DEFAULT — unknown content_type
+    # =================================================================
+    default:
+      - alias: "Unknown content_type — log warning for trace visibility"
+        action: logbook.log
+        data:
+          name: "{{ log_name }}"
+          message: >-
+            Unknown content_type "{{ _content_type }}" for content_id
+            "{{ _content_id }}". Expected: movie, episode, favourite,
+            or tvshow_continue.

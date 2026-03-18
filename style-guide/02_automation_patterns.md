@@ -6,6 +6,113 @@ Section 5 — Error handling, modes, timeouts, triggers, GPS bounce, helpers, ar
 
 ## 5. AUTOMATION PATTERNS
 
+### 5.0 Blueprint-first — when to use what (MANDATORY gate)
+
+**Blueprints are the DEFAULT for all user-facing automation features.** Package automations are the EXCEPTION — reserved for infrastructure glue only. This is not a suggestion — run the §3.0 decision tree before writing any automation.
+
+**When to use a blueprint** (`blueprints/automation/madalone/`):
+- User-facing feature with configurable inputs
+- Reusable across zones, devices, people, or schedules
+- Trigger → conditions → actions pattern with any parameters a user might want to adjust
+- Creates an instance in `automations.yaml`
+
+**When to use a package automation** (`packages/ai_*.yaml`):
+- Startup housekeeping (initialize helpers on HA boot)
+- Midnight resets (clear daily counters, expire flags)
+- Pyscript coordination (internal state sync between modules)
+- Internal state management with NO user-facing inputs
+- Infrastructure glue that exists to support blueprints and pyscript, not to deliver features
+
+**When to use a raw automation in `automations.yaml`**:
+- **NEVER for new work.** Raw automations in `automations.yaml` are blueprint instances only (created from blueprints via the HA UI) or legacy automations not yet migrated. All new automation logic goes into blueprints or package infrastructure glue.
+
+> 📋 **QA Check BPG-1:** Every new automation must pass the §3.0 decision tree. See `09_qa_audit_checklist.md`. See also AP-52 in `06_anti_patterns_and_workflow.md`.
+
+**Current blueprint inventory** (`blueprints/automation/madalone/` — 62 blueprints, `blueprints/script/madalone/` — 32 scripts; **94 total**. Table below may lag — verify against filesystem):
+
+| Blueprint | What it does | Pyscript services consumed |
+|---|---|---|
+| `alexa_ma_volume_sync` | Alexa ↔ Music Assistant volume sync | — |
+| `alexa_presence_radio` | Presence-aware radio via Alexa + MA | — |
+| `alexa_presence_radio_stop` | Presence-aware radio stop | — |
+| `automation_trigger_mon` | Automation trigger monitor (multi) | — |
+| `bedtime_last_call` | Proactive last call announcement | agent_dispatch, agent_whisper, tts_queue_speak |
+| `bedtime_routine` | LLM-driven goodnight (audiobook) | agent_dispatch, agent_whisper, tts_queue_speak |
+| `bedtime_routine_plus` | LLM-driven goodnight (Kodi) | agent_dispatch, agent_whisper, tts_queue_speak |
+| `calendar_pre_event_reminder` | Calendar pre-event TTS reminder | agent_dispatch, dedup_announce, tts_queue_speak |
+| `coming_home` | AI welcome on arrival | agent_dispatch, agent_whisper |
+| `device_power_cycle` | Scheduled device reboot via smart plug | — |
+| `duck_refcount_watchdog` | Safety net for duck refcount system | — |
+| `email_follow_me` | Email notification follow-me routing | agent_dispatch, agent_whisper |
+| `email_priority_filter` | IMAP to pyscript priority pipeline | email_promote_process |
+| `embedding_batch` | Nightly batch embedding for L2 semantic search (I-2) | memory_embed_batch |
+| `escalating_wakeup_guard` | Escalating wake-up with inverted presence | agent_dispatch, agent_whisper, tts_queue_speak |
+| `interaction_summarizer` | Nightly interaction log compression (I-3) | summarize_interactions |
+| `memory_todo_mirror` | Bidirectional L2↔todo list sync (I-6) | memory_todo_sync |
+| `voice_handoff` | Voice-initiated agent switching per satellite (I-24) | agent_dispatch (Priority 0) |
+| `llm_alarm` | Wake-up alarm with LLM context | agent_dispatch, agent_whisper, tts_queue_speak |
+| `mass_llm_enhanced_assist_blueprint_en` | MA local LLM enhanced voice support | agent_dispatch |
+| `meal_detection` | Passive kitchen presence meal logging | meal_passive_log |
+| `music_assistant_follow_me_idle_off` | MA follow-me idle OFF + optional auto-ON | — |
+| `music_assistant_follow_me_multi_room_advanced` | MA multi-room follow-me with priority | — |
+| `notification_follow_me` | Notification follow-me via satellites | agent_dispatch, agent_whisper |
+| `phone_charge_reminder` | Persona-aware battery charge nudges | tts_queue_speak |
+| `proactive` | Presence-based proactive suggestions (v6) | agent_dispatch, agent_whisper, dedup_announce |
+| `proactive_bedtime_escalation` | Bedtime nags with inline routine | agent_dispatch, agent_whisper, dedup_announce, tts_queue_speak |
+| `proactive_briefing_morning` | Morning briefing (presence-triggered) | proactive_briefing_now |
+| `proactive_briefing_slot` | Scheduled briefing slot (afternoon/evening) | proactive_briefing_now |
+| `proactive_llm` | Presence-based suggestions (v6 – direct LLM) | agent_dispatch, agent_whisper |
+| `proactive_llm_sensors` | Presence-based suggestions (sensor variant) | agent_dispatch, agent_whisper |
+| `proactive_unified` | Unified proactive presence engine | agent_dispatch, agent_whisper, conversation_with_timeout, dedup_announce |
+| `sleep_detection` | Presence-based sleep lifecycle | sleep_detect_log |
+| `sleep_lights` | Turn off lights on sleep detection | — |
+| `smart-bathroom` | Occupancy-aware bathroom light control | — |
+| `sqlite_vec_recompile` | Post-HA-update vec0.so recompile (I-2a) | memory_vec_health_check, shell_command.recompile_vec0 |
+| `temp_hub` | Temperature-based cooling fan controller | — |
+| `ups_notify` | UPS power event notifications (NUT) | — |
+| `va_confirmation_dialog` | Voice assistant confirmation dialog | — |
+| `voice_active_media_controls` | Voice media controls (Kodi/MA/Spotify/Alexa) | — |
+| `voice_pe_duck_media_volumes` | Duck media volumes while Voice PE listening | — |
+| `voice_pe_restore_media_volumes` | Restore media volumes after Voice PE conversation | — |
+| `voice_pe_resume_media` | Resume media after Voice PE conversation | — |
+| `wake_up_guard_external_alarm` | Wake-up guard external alarm trigger | — |
+| `wake-up-guard` | Wake-up guard with snooze/stop + TTS + mobile | agent_dispatch, agent_whisper, tts_queue_speak |
+| `wakeup_guard_mobile_notify` | Wake-up guard mobile snooze/stop handler | — |
+| `zone_vacancy` | AI auto-off — per-zone vacancy detection | — |
+
+**Script blueprint inventory** (`blueprints/script/madalone/` — selected tool scripts):
+
+| Blueprint | What it does | Pyscript services consumed |
+|---|---|---|
+| `agent_randomizer` | Randomly select an agent from a list | — |
+| `announce_music_follow_me` | Announce music follow-me activation | tts_queue_speak |
+| `announce_music_follow_me_llm` | LLM-driven music follow-me announcement | agent_dispatch, tts_queue_speak |
+| `bedtime_media_play_wrapper` | Bedtime audiobook/media play wrapper | — |
+| `chime_tts_simple_announce` | Simple chime + TTS announcement | — |
+| `goodnight_negotiator_hybrid` | Hybrid goodnight negotiation flow | agent_dispatch, agent_whisper |
+| `goodnight_negotiator_llm_driven` | LLM-driven bedtime negotiation | agent_dispatch, agent_whisper |
+| `goodnight_routine_music_assistant` | Goodnight routine with MA music | agent_dispatch, tts_queue_speak |
+| `llm_voice_script` | Generic LLM voice script | agent_dispatch |
+| `notification_replay` | Replay missed notifications | tts_queue_speak |
+| `rickyellsplusalexa` | Rick yells + Alexa integration | tts_queue_speak |
+| `voice_kodi_play_content` | Voice-controlled Kodi playback | — |
+| `voice_media_pause` | Pause active media player | — |
+| `voice_memory_semantic_search` | Semantic (vector) memory search LLM tool (I-4) | memory_semantic_search |
+| `voice_confirm_device_toggle` | Voice confirmation dialog before device on/off | — |
+| `voice_wake_guard_tts_router` | TTS engine routing (ElevenLabs vs standard) | — |
+| `voice_wake_guard_cleanup` | Stop playback + satellite announce + volume restore + reset toggles | — |
+| `bedtime_instant` | Instant bedtime: TTS → stop TV → audiobook → lights off → goodnight | — |
+| `mobile_action_toggle` | Fire mobile_app action event + turn on input_boolean | — |
+| `device_power_cycle_script` | Manual on-demand power cycle (off → delay → on) | — |
+| `media_play_at_volume` | Set volume + play media on a player | — |
+| `voice_play_bedtime_audiobook` | Play bedtime audiobook via voice | — |
+| `voice_set_bedtime_countdown` | Set bedtime countdown timer | — |
+| `voice_shut_up` | Stop all TTS/media | tts_queue_stop |
+| `voice_stop_radio` | Stop MA radio playback | — |
+| `wakeup_chime` | Wake-up chime sequence | — |
+| `wakeup_music_alexa` | Wake-up music via Alexa | — |
+| `wakeup_music_ma` | Wake-up music via Music Assistant | — |
+
 ### 5.1 Error handling — timeouts (MANDATORY)
 Every `wait_for_trigger` MUST use `continue_on_timeout: true` with an explicit failure handler:
 
@@ -142,11 +249,35 @@ For actions that might fail but shouldn't kill the entire automation (notificati
 - Only use `continue_on_error` on genuinely non-critical steps. If the action is part of the core flow, let it fail loudly.
 - When using `continue_on_error`, consider adding a fallback or logging mechanism so failures don't go completely unnoticed.
 - **Never** blanket-apply `continue_on_error: true` to everything — that masks real bugs.
+- **Pyscript service calls — MANDATORY `continue_on_error: true`:** All `pyscript.*` service calls (`agent_dispatch`, `agent_whisper`, `tts_queue_speak`, `dedup_announce`, `conversation_with_timeout`) MUST include `continue_on_error: true`. The pyscript layer is infrastructure — if it's down or slow, the blueprint's core logic (triggers, conditions, flow control) must still execute. A failed dispatch should fall through to the fallback agent, not kill the automation. See §14.5.1 for the standard calling patterns.
 
 ### 5.3 Cleanup on failure
 If the automation turns on temporary switches, sets helpers, or creates any transient state:
 - Every failure path (timeout, error, unexpected condition) MUST clean up that state before stopping.
 - Consider a separate failsafe automation that cleans up after a maximum duration, as a safety net for crashes.
+
+```yaml
+# Failsafe cleanup — resets stale helpers if the main automation crashed
+automation:
+  - alias: "Failsafe – reset stale helpers after max duration"
+    description: "Safety net: turns off transient helpers if they've been on too long."
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.my_transient_flag
+        to: "on"
+        for:
+          minutes: 15   # Max expected duration — adjust per use case
+    actions:
+      - alias: "Force-reset transient flag"
+        action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.my_transient_flag
+      - alias: "Log the forced cleanup"
+        action: logbook.log
+        data:
+          name: "Failsafe Cleanup"
+          message: "Reset input_boolean.my_transient_flag — was on for 15+ minutes"
+```
 
 > 📋 **QA Check CQ-3:** Stateful operations need cleanup on all failure paths — restore mechanisms are mandatory. See `09_qa_audit_checklist.md`.
 
@@ -268,15 +399,49 @@ When an automation involves both waiting for conditions and preparing devices:
 2. THEN prepare devices (e.g., reset speakers)
 3. Don't prepare devices before confirming the trigger — it disrupts things unnecessarily if the trigger never fires.
 
+```yaml
+# ❌ WRONG — resets speaker before knowing if motion will fire
+- alias: "Reset speaker power"
+  action: switch.turn_off
+  target:
+    entity_id: switch.workshop_speaker_power
+- alias: "Wait for motion"
+  wait_for_trigger:
+    - trigger: state
+      entity_id: binary_sensor.entrance_motion
+      to: "on"
+  timeout: { minutes: 10 }
+
+# ✅ CORRECT — wait first, then prepare
+- alias: "Wait for motion"
+  wait_for_trigger:
+    - trigger: state
+      entity_id: binary_sensor.entrance_motion
+      to: "on"
+  timeout: { minutes: 10 }
+- alias: "Reset speaker power (motion confirmed)"
+  action: switch.turn_off
+  target:
+    entity_id: switch.workshop_speaker_power
+```
+
 ### 5.8 Debugging: stored traces
 During development of complex automations, increase the stored trace count beyond the default of 5:
 
 ```yaml
-trace:
-  stored_traces: 20
+automation:
+  - alias: "Coming Home — arrival greeting"
+    id: coming_home_arrival_greeting
+    trace:
+      stored_traces: 20    # Increase during dev; reduce to 5–10 for production
+    triggers:
+      - trigger: state
+        entity_id: person.miquel
+        to: home
+    # ... conditions, actions ...
 ```
 
-Add this at the automation level. This gives more history to debug intermittent issues. Consider reducing back to 5-10 for production once the automation is stable, to save resources.
+`trace:` goes at the top level of the automation (same level as `alias`, `triggers`, `actions`). This gives more history to debug intermittent issues. Consider reducing back to 5–10 for production once the automation is stable, to save resources.
 
 ### 5.9 Area, floor, and label targeting
 Since HA 2024.4+, actions support **area**, **floor**, **label**, and **device_id** targets directly. Prefer area/floor/label over explicit entity lists when controlling groups of devices — they automatically include new devices added to an area without updating the automation. Use `device_id` when you need to target all entities belonging to a specific device (e.g., a multi-sensor) without hardcoding individual entity IDs.
@@ -476,14 +641,17 @@ Automations get re-triggered, restarted, and re-run constantly — GPS bounces, 
     data: { message: "Welcome home!" }
 
   # ✅ Idempotent — only sends if we haven't already
-  - if:
+  - alias: "Send welcome notification only once"
+    if:
       - condition: state
         entity_id: input_boolean.welcome_sent
         state: "off"
     then:
-      - action: notify.mobile_app
+      - alias: "Send welcome notification"
+        action: notify.mobile_app
         data: { message: "Welcome home!" }
-      - action: input_boolean.turn_on
+      - alias: "Mark welcome as sent"
+        action: input_boolean.turn_on
         target: { entity_id: input_boolean.welcome_sent }
   ```
 - **For `restart` mode automations**, assume every action before a `wait_for_trigger` will execute again on re-trigger. Design accordingly.

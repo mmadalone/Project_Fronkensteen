@@ -196,8 +196,8 @@ wifi:
 # ── In /config/esphome/secrets.yaml ──
 wifi_ssid: "MyNetwork"
 wifi_password: "MyPassword123"
-api_key_workshop: "bIXrtK7IpcBb2pwrkg14Kto+CNogy21mi5xXqk599pY="
-api_key_living_room: "WdHg+kIxPeedWAG19kSAtqGMF7nK57PHZ07JImVHKZw="
+api_key_workshop: "YOUR_BASE64_ENCRYPTION_KEY_HERE"
+api_key_living_room: "YOUR_BASE64_ENCRYPTION_KEY_HERE"
 # ota_password: "supersecret"  # Legacy — only needed for pre-encryption setups
 ```
 
@@ -220,8 +220,8 @@ micro_wake_word:
   models:
     - id: hey_rick
       model: http://homeassistant.local:8123/local/microwake/hey_rick.json
-    - id: yo_rick
-      model: http://homeassistant.local:8123/local/microwake/yo_rick.json
+    - id: hey_quark
+      model: http://homeassistant.local:8123/local/microwake/hey_quark.json
   vad:                      # Voice Activity Detection — reduces false wake word triggers from non-speech sounds
 ```
 
@@ -242,7 +242,7 @@ ESPHome supports three formats for wake word model references:
 Use shorthand or GitHub format for official models. Use HTTP URLs only for custom/self-trained models hosted locally.
 
 **Rules:**
-- Every custom model MUST have a descriptive `id` matching the wake phrase: `hey_rick`, `yo_quark`, etc.
+- Every custom model MUST have a descriptive `id` matching the wake phrase: `hey_rick`, `hey_quark`, etc.
 - Model files are served from HA's `/config/www/microwake/` directory (accessible via `http://homeassistant.local:8123/local/microwake/`).
 - Keep wake word assignments **per-room/persona** — the Workshop satellite gets Rick's wake words, the Living Room gets Quark's. Don't dump every wake word on every device.
 - If adding wake words to a package-based device, you're extending the package's model list (see §6.3).
@@ -250,13 +250,13 @@ Use shorthand or GitHub format for official models. Use HTTP URLs only for custo
 - Comment the wake word section with the persona assignment:
 
 ```yaml
-# 🔽 Rick's wake words — Workshop satellite
+# 🔽 Device 1 wake words — Workshop satellite (Rick + Quark)
 micro_wake_word:
   models:
     - id: hey_rick
       model: http://homeassistant.local:8123/local/microwake/hey_rick.json
-    - id: yo_rick
-      model: http://homeassistant.local:8123/local/microwake/yo_rick.json
+    - id: hey_quark
+      model: http://homeassistant.local:8123/local/microwake/hey_quark.json
   vad:                      # Recommended — reduces false positives from ambient noise
 ```
 

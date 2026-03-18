@@ -1,0 +1,18 @@
+# =============================================================================
+# AI Auto-Off — Master Switches
+# =============================================================================
+# Global toggles for the auto-off zone vacancy system.
+# Per-zone config is handled by blueprint instances:
+#   blueprints/automation/ai_auto_off/zone_vacancy.yaml
+#
+# Provides:
+#   input_boolean.ai_auto_off_enabled         — master switch
+#   input_boolean.ai_auto_off_lights_enabled  — sub-switch (lights)
+#   input_boolean.ai_auto_off_media_enabled   — sub-switch (media)
+#
+# Dependencies:
+#   binary_sensor.fp2_presence_sensor_* (Aqara FP2)
+# Deployed: 2026-03-04
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)

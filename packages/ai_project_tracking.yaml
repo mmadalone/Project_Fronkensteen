@@ -1,0 +1,14 @@
+# =============================================================================
+# AI Project Tracking Package
+# =============================================================================
+# Helpers for project awareness — lets voice agents reference active projects.
+# Source of truth: /config/projects/*.md (YAML frontmatter + markdown body)
+# Engine: pyscript/project_promote.py (reads files, promotes to L2 + L1)
+# Deployed: 2026-03-11
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)

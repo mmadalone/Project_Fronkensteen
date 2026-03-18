@@ -1,0 +1,169 @@
+# =============================================================================
+# Privacy Gate Hysteresis — Confidence-Based Feature Gating
+# =============================================================================
+# Watches one person's identity confidence sensor and flips a gate boolean
+# when the score crosses configurable thresholds with hysteresis.
+#
+# Instantiate 6 times: 3 tiers × 2 persons.
+#   - Miquel T1/T2/T3: watch Jessica's confidence → suppress Miquel's features
+#   - Jessica T1/T2/T3: watch Miquel's confidence → suppress Jessica's features
+#
+# Deployed: 2026-03-10
+# =============================================================================
+
+blueprint:
+  name: "Privacy Gate — Hysteresis Controller"
+  author: madalone
+  description: >
+    Watches an identity confidence sensor and toggles a gate boolean when the
+    score crosses suppress/re-enable thresholds. Hysteresis gap prevents flapping.
+
+
+    Create one instance per person per tier (6 total).
+
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/privacy_gate_hysteresis.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    core:
+      name: "① Core Settings"
+      icon: mdi:shield-account
+      collapsed: false
+      description: >
+        Confidence sensor to watch, thresholds, and gate boolean to control.
+      input:
+        confidence_sensor:
+          name: Confidence sensor
+          description: >
+            The identity confidence sensor to monitor (the OTHER person's score).
+            E.g., sensor.identity_confidence_jessica for gating Miquel's features.
+          selector:
+            entity:
+              filter:
+                domain: sensor
+
+        suppress_threshold:
+          name: Suppress-at threshold helper
+          description: >
+            Input number helper for the suppress threshold (pts).
+            Gate turns ON when confidence rises above this value.
+          selector:
+            entity:
+              filter:
+                domain: input_number
+
+        reenable_threshold:
+          name: Re-enable-at threshold helper
+          description: >
+            Input number helper for the re-enable threshold (pts).
+            Gate turns OFF when confidence drops below this value.
+          selector:
+            entity:
+              filter:
+                domain: input_number
+
+        gate_boolean:
+          name: Gate boolean
+          description: >
+            The input_boolean this instance controls.
+            Turned ON when suppressed, OFF when re-enabled.
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+    safety:
+      name: "② Safety"
+      icon: mdi:shield-off
+      collapsed: true
+      description: >
+        Global kill switch. When OFF, gate boolean is turned OFF (features allowed).
+      input:
+        kill_switch:
+          name: Kill switch
+          description: >
+            Master toggle for the privacy gate system.
+            When OFF, this instance turns the gate boolean OFF and stops.
+          default:
+            entity_id: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+mode: restart
+
+variables:
+  v_sensor: !input confidence_sensor
+  v_suppress_helper: !input suppress_threshold
+  v_reenable_helper: !input reenable_threshold
+  v_gate: !input gate_boolean
+  v_kill: !input kill_switch
+
+triggers:
+  - alias: "Confidence sensor changed"
+    trigger: state
+    entity_id: !input confidence_sensor
+    id: confidence
+
+  - alias: "Suppress threshold changed"
+    trigger: state
+    entity_id: !input suppress_threshold
+    id: threshold
+
+  - alias: "Re-enable threshold changed"
+    trigger: state
+    entity_id: !input reenable_threshold
+    id: threshold
+
+  - alias: "Kill switch changed"
+    trigger: state
+    entity_id: !input kill_switch
+    id: kill_switch
+
+conditions: []
+
+actions:
+  # ── Kill switch OFF → force gate OFF (features allowed) ──
+  - alias: "Kill switch gate"
+    if:
+      - condition: template
+        value_template: "{{ not is_state(v_kill, 'on') }}"
+    then:
+      - alias: "Force gate OFF because kill switch is disabled"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input gate_boolean
+      - stop: "Kill switch is OFF — gate opened"
+
+  # ── Evaluate confidence against thresholds with hysteresis ──
+  - alias: "Hysteresis evaluation"
+    variables:
+      confidence: "{{ states(v_sensor) | int(0) }}"
+      suppress_at: "{{ states(v_suppress_helper) | int(30) }}"
+      reenable_at: "{{ states(v_reenable_helper) | int(20) }}"
+      currently_suppressed: "{{ is_state(v_gate, 'on') }}"
+
+  - alias: "Apply hysteresis logic"
+    choose:
+      - alias: "Suppress — confidence at or above suppress threshold"
+        conditions:
+          - condition: template
+            value_template: "{{ confidence >= suppress_at and not currently_suppressed }}"
+        sequence:
+          - alias: "Suppress features — confidence crossed suppress threshold"
+            action: input_boolean.turn_on
+            target:
+              entity_id: !input gate_boolean
+
+      - alias: "Re-enable — confidence below re-enable threshold"
+        conditions:
+          - condition: template
+            value_template: "{{ confidence < reenable_at and currently_suppressed }}"
+        sequence:
+          - alias: "Re-enable features — confidence dropped below threshold"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input gate_boolean

@@ -1,0 +1,132 @@
+# =============================================================================
+# Memory Auto-Archive Blueprint — I-42 Phase 2
+# =============================================================================
+# Triggered reactively (threshold exceeded event) or on schedule.
+# Moves coldest unprotected L2 entries to mem_archive cold storage.
+# Archive config (target_pct, recency_days, protection_tags) read from helpers.
+# =============================================================================
+
+blueprint:
+  name: "AI Memory - Auto Archive"
+  description: >-
+    Automatically archive cold L2 memory entries when thresholds are breached.
+    Triggered by ai_memory_threshold_exceeded event or a configurable schedule.
+    Reads archive_target_pct, recency_days, and protection_tags from helpers.
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/memory_auto_archive.yaml
+  author: madalone
+  input:
+    # ===========================================================================
+    # ① Control
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:archive-clock-outline
+      description: Enable/disable archiving and set the schedule.
+      collapsed: false
+      input:
+        enable_archive:
+          name: Enable Archive
+          description: Blueprint-level kill switch for archiving.
+          default: true
+          selector:
+            boolean:
+
+        archive_time:
+          name: Scheduled Archive Time
+          description: >-
+            Daily time to run the archive check (after housekeeping at 03:00).
+          default: "03:45:00"
+          selector:
+            time:
+
+    # ===========================================================================
+    # ② Options
+    # ===========================================================================
+    options:
+      name: "② Options"
+      icon: mdi:cog-outline
+      description: Notification and testing options.
+      collapsed: true
+      input:
+        notification_after_archive:
+          name: Notify After Archive
+          description: Send a persistent notification with archive stats.
+          default: true
+          selector:
+            boolean:
+
+        dry_run:
+          name: Dry Run
+          description: >-
+            Test mode — reports what would be archived without moving data.
+          default: false
+          selector:
+            boolean:
+
+variables:
+  v_enable: !input enable_archive
+  v_notify: !input notification_after_archive
+  v_dry_run: !input dry_run
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  # ── Reactive: fired by memory_health_check when breach detected ──
+  - trigger: event
+    event_type: ai_memory_threshold_exceeded
+    id: threshold_event
+
+  # ── Scheduled: daily check ──
+  - trigger: time
+    at: !input archive_time
+    id: scheduled
+
+conditions:
+  # Both the blueprint-level and helper-level toggles must be ON
+  - condition: template
+    value_template: "{{ v_enable }}"
+  - condition: state
+    entity_id: input_boolean.ai_memory_auto_archive
+    state: "on"
+
+actions:
+  # ── Step 1: For scheduled trigger, run health check to see if archiving needed ──
+  - alias: "Choose action path"
+    choose:
+      - conditions:
+          - condition: trigger
+            id: scheduled
+        sequence:
+          - alias: "Check if memory thresholds are breached"
+            action: pyscript.memory_health_check
+            response_variable: health_result
+          - condition: template
+            value_template: >-
+              {{ health_result.get('threshold_exceeded', false) }}
+    default: []
+
+  # ── Step 2: Run the archive ──
+  - alias: "Archive coldest unprotected L2 entries"
+    action: pyscript.memory_archive
+    data:
+      dry_run: "{{ v_dry_run }}"
+    response_variable: archive_result
+
+  # ── Step 3: Notify if enabled and entries were archived ──
+  - condition: template
+    value_template: >-
+      {{ v_notify and (archive_result.get('archived', 0) | int > 0) }}
+  - alias: "Notify with archive stats"
+    action: persistent_notification.create
+    data:
+      title: "AI Memory Auto-Archive"
+      message: >-
+        {% set r = archive_result %}
+        {% if r.get('dry_run', false) %}**DRY RUN** — no data moved.{% endif %}
+
+        Archived **{{ r.get('archived', 0) }}** entries.
+        Before: {{ r.get('before_count', '?') }} → After: {{ r.get('after_count', '?') }} (target: {{ r.get('target_count', '?') }}).
+        Protected (skipped): {{ r.get('protected_skipped', 0) }}.
+      notification_id: ai_memory_auto_archive

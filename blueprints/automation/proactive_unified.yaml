@@ -1,0 +1,1472 @@
+blueprint:
+  name: "Proactive – Unified presence engine"
+  author: madalone
+  description: '![Proactive Unified](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_llm_sensors-header.jpeg)
+
+    # Proactive – Unified presence engine
+
+    Consolidation of proactive.yaml (template), proactive_llm.yaml (LLM), and
+    proactive_llm_sensors.yaml (LLM + sensors + weekends) into a single
+    blueprint using the full voice infrastructure layer.
+
+    Supports two message modes: **template** (reads from input_text helpers)
+    and **llm** (generates via conversation agent). Budget gate automatically
+    forces template mode when LLM budget drops below a configurable floor.
+
+    ### Infrastructure integration
+
+    - **Agent dispatcher**: optional override for agent, voice, and persona
+    - **dedup_announce**: duplicate suppression + TTS delivery in one call
+    - **agent_whisper**: post-interaction context for the whisper network
+    - **Identity gate**: requires confidence >= 50 for any known user
+    - **Bedtime skip**: suppressed when bedtime_active is on
+
+    ### What changed vs proactive_llm_sensors
+
+    - context_entities input removed (ai_hot_context handles this)
+    - 3-way TTS choose block replaced by single dedup_announce call
+    - script.ai_update_self_awareness replaced by pyscript.agent_whisper
+    - Direct tts.speak calls replaced by dedup_announce (which calls tts_queue)
+    - Mode selector added (template | llm)
+    - Template mode path merged from proactive.yaml
+    - Budget gate and identity gate conditions added
+    - Bedtime skip condition added'
+  domain: automation
+  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/proactive_unified.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① PRESENCE & DETECTION
+    # ===========================================================================
+    presence_detection:
+      name: "① Presence & detection"
+      icon: mdi:motion-sensor
+      description: Configure how presence is detected and optional guards.
+      collapsed: false
+      input:
+        presence_sensors:
+          name: Presence sensors for this area
+          description: >
+            One or more binary sensors that indicate presence in this area
+            (e.g. FP2 room groups). The automation fires when ANY of these
+            transitions to ON.
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class: occupancy
+              multiple: true
+          default: []
+
+        min_presence_seconds:
+          name: Minimum presence duration (seconds)
+          description: >
+            If set above 0, the automation only speaks when presence has been
+            continuously detected for at least this long. Prevents quick
+            walk-by triggers.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 5
+              unit_of_measurement: seconds
+
+        block_if_media_playing:
+          name: Do not speak if media is playing
+          description: >
+            If enabled, the automation will not speak while the media player
+            below is actively playing. Avoids talking over music or podcasts.
+          default: false
+          selector:
+            boolean: {}
+
+        media_player:
+          name: Media player for media guard
+          description: >
+            Media player checked by the media-playing guard above. TTS
+            delivery is handled by dedup_announce via the tts_queue — this
+            player is NOT used for TTS output.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        area_name:
+          name: Area name
+          description: >
+            Friendly name of this area for mention in speech and dedup topic
+            keys. Pick from the menu or type a custom value.
+          default: Workshop
+          selector:
+            select:
+              options:
+                - Workshop
+                - Living room
+                - Bedroom
+                - Office
+                - Kitchen
+                - Bathroom
+              custom_value: true
+
+    # ===========================================================================
+    # ② MODE
+    # ===========================================================================
+    mode_selection:
+      name: "② Mode"
+      icon: mdi:swap-horizontal
+      description: >
+        Choose between template (reads from input_text helpers) and LLM
+        (generates via conversation agent). Budget gate forces template
+        mode when LLM budget drops below the configured floor.
+      collapsed: false
+      input:
+        proactive_mode:
+          name: Message generation mode
+          description: >
+            "template" reads messages from input_text helpers (③). "llm"
+            generates messages via conversation agent (④). When budget
+            drops below the configured floor and mode is llm, template
+            mode is forced automatically.
+          default: llm
+          selector:
+            select:
+              options:
+                - label: "Template — read from helpers"
+                  value: template
+                - label: "LLM — generate via conversation agent"
+                  value: llm
+
+        budget_floor:
+          name: Budget floor (%) — force template mode below this
+          description: >
+            When message mode is LLM, the budget gate forces a fallback
+            to template mode if the remaining LLM budget percentage drops
+            below this value. Set to 0 to disable the budget gate entirely.
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+        tts_output_volume:
+          name: TTS output volume (optional)
+          description: >-
+            Volume level (0.0–1.0) to set on the target speaker before
+            TTS. The speaker's original volume is saved beforehand and
+            restored after playback. Set to 0 to disable — the speaker
+            plays at whatever volume it is already at.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        tts_restore_delay:
+          name: TTS volume restore delay (seconds)
+          description: >-
+            Seconds to wait after TTS delivery before restoring the
+            speaker's original volume. Only applies when TTS output
+            volume is set above 0. Increase for longer announcements.
+          default: 8
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+              unit_of_measurement: seconds
+              mode: slider
+
+        tts_collision_mode:
+          name: TTS collision behavior
+          description: >
+            What happens when this automation tries to speak while another
+            TTS is already playing.
+            "dedup" — respect dedup, skip if topic was recently announced.
+            "queue" — queue behind current TTS, play when done.
+            "barge_in" — interrupt current TTS and play immediately.
+          default: queue
+          selector:
+            select:
+              options:
+                - label: "Respect dedup — skip if recently announced"
+                  value: dedup
+                - label: "Queue — wait for current TTS to finish"
+                  value: queue
+                - label: "Barge in — interrupt current TTS"
+                  value: barge_in
+
+    # ===========================================================================
+    # ③ TEMPLATE SETTINGS
+    # ===========================================================================
+    template_settings:
+      name: "③ Template settings"
+      icon: mdi:message-text-outline
+      description: >
+        Input text helpers storing time-of-day messages, plus optional
+        refresh. Only used when mode is template (or when LLM is forced
+        to template by budget gate). Also used as LLM fallback messages.
+      collapsed: true
+      input:
+        message_morning_helper:
+          name: Morning message input_text
+          description: >
+            input_text entity storing the MORNING message for this area.
+            Typically filled by an AI refresh automation.
+          default: {}
+          selector:
+            entity:
+              domain: input_text
+
+        message_afternoon_helper:
+          name: Afternoon message input_text
+          description: >
+            input_text entity storing the AFTERNOON message for this area.
+          default: {}
+          selector:
+            entity:
+              domain: input_text
+
+        message_evening_helper:
+          name: Evening message input_text
+          description: >
+            input_text entity storing the EVENING/NIGHT message for this
+            area. In bedtime mode this is always the one spoken.
+          default: {}
+          selector:
+            entity:
+              domain: input_text
+
+        refresh_after_run:
+          name: Refresh messages after each run
+          description: >
+            If enabled, presses the configured refresh button after
+            speaking so a separate AI automation can regenerate messages.
+            Only applies in template mode.
+          default: false
+          selector:
+            boolean: {}
+
+        refresh_button:
+          name: Refresh button to press
+          description: >
+            input_button that triggers the AI "Refresh messages"
+            automation for this area. Only pressed if refresh is enabled.
+          default: {}
+          selector:
+            entity:
+              domain: input_button
+
+    # ===========================================================================
+    # ④ LLM SETTINGS
+    # ===========================================================================
+    llm_settings:
+      name: "④ LLM settings"
+      icon: mdi:robot
+      description: >
+        Voice Assistant, prompts, and name resolution. Only used when
+        mode is llm. The Voice Assistant also serves as manual fallback
+        when the dispatcher is disabled.
+      collapsed: true
+      input:
+        user_names:
+          name: User names / nicknames (optional)
+          description: >
+            Comma-separated list of names or nicknames for the person.
+            One is picked randomly each time, adding variety.
+            Example: "Miquel, Miky, boss"
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+        fallback_names:
+          name: Fallback address terms (direct speech)
+          description: >
+            Comma-separated generic terms for addressing the person in
+            spoken TTS when no user name is set. One picked randomly.
+          default: "friend, hey there"
+          selector:
+            text:
+              multiline: false
+
+        llm_fallback_names:
+          name: Fallback reference terms (LLM prompts)
+          description: >
+            Comma-separated generic terms used in LLM prompt instructions
+            when no user name is set. 3rd-person references telling the AI
+            who it's talking to.
+          default: "the user"
+          selector:
+            text:
+              multiline: false
+
+        conversation_agent:
+          name: Voice Assistant (manual fallback)
+          description: >
+            Voice Assistant (Assist Pipeline) used when the dispatcher is
+            disabled. When dispatcher is enabled, the persona is selected
+            automatically from pipeline configuration.
+          default: "Rick"
+          selector:
+            text:
+
+        llm_prompt:
+          name: LLM prompt / style for proactive messages
+          description: >
+            Instructions for how the AI should talk when generating the
+            proactive presence-based line. Combined with area name, time
+            of day, and trigger type before being sent to the agent.
+          default: >
+            You are a smart home assistant. Reply with ONE short, playful
+            sentence you would say out loud to the user in this area right
+            now, maximum 220 characters and without quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        context_entities:
+          name: Extra context sensors/entities for the LLM
+          description: >
+            Optional. Sensors or other entities whose current states are
+            passed to the LLM as extra context (e.g. temperatures, UPS
+            status, media players, CPU temp, lights). Included as a simple
+            text list in the prompt.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # ===========================================================================
+    # ⑤ SCHEDULE & TIMING
+    # ===========================================================================
+    schedule_timing:
+      name: "⑤ Schedule & timing"
+      icon: mdi:clock-outline
+      description: Configure when the automation is active and cooldown behavior.
+      collapsed: true
+      input:
+        start_time:
+          name: Active from
+          description: Start time of the daily active window.
+          default: "08:00:00"
+          selector:
+            time: {}
+
+        end_time:
+          name: Active until
+          description: >
+            End time of the daily window. Can be earlier than start time
+            to cross midnight (e.g. 23:00 → 02:00).
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        run_days:
+          name: Run on these days
+          description: >
+            Days of the week this automation is allowed to run.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+        cooldown_minutes:
+          name: Cooldown / nag interval (minutes)
+          description: >
+            Minimum time between proactive messages. When "Keep nagging"
+            is enabled, this acts as the nag interval. Note: the repeat
+            timer ticks every 5 minutes, so effective intervals are
+            rounded up to the nearest 5-minute boundary.
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              unit_of_measurement: "min"
+
+        repeat_while_present:
+          name: Keep nagging while present
+          description: >
+            If enabled, keeps nagging at the cooldown interval as long as
+            at least one presence sensor is on within the active window.
+          default: false
+          selector:
+            boolean: {}
+
+        max_nags_per_session:
+          name: Max nags per presence session (0 = unlimited)
+          description: >
+            Only used when "Keep nagging" is enabled. Limits how many times
+            it can nag while presence stays on. Set to 0 for unlimited.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 48
+              step: 1
+
+    # ===========================================================================
+    # ⑥ WEEKEND OVERRIDES
+    # ===========================================================================
+    weekend_overrides:
+      name: "⑥ Weekend overrides"
+      icon: mdi:weather-sunny
+      description: >
+        Optional weekend-specific schedule, cooldown, and prompt overrides.
+      collapsed: true
+      input:
+        weekend_mode:
+          name: Weekend behavior
+          description: Choose what happens on weekend days.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled_on_weekends
+                - label: "Use weekend profile"
+                  value: use_weekend_profile
+
+        weekend_days:
+          name: Weekend days
+          description: Which days should be treated as weekend.
+          default:
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+        weekend_start_time:
+          name: Weekend active from
+          default: "08:00:00"
+          selector:
+            time: {}
+
+        weekend_end_time:
+          name: Weekend active until
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        weekend_cooldown_minutes:
+          name: Weekend cooldown / nag interval (minutes)
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              unit_of_measurement: "min"
+
+        weekend_llm_prompt_override:
+          name: Weekend LLM prompt override (optional)
+          description: >
+            Alternate prompt for weekend days when using the weekend
+            profile. If left blank, the normal prompt is used.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑦ BEDTIME QUESTION
+    # ===========================================================================
+    bedtime_question:
+      name: "⑦ Bedtime question"
+      icon: mdi:bed
+      description: >
+        Optional bedtime yes/no question via Assist Satellite after TTS.
+        If you answer YES, a bedtime script runs automatically.
+      collapsed: true
+      input:
+        enable_bedtime_question:
+          name: Ask if you want help going to bed
+          description: >
+            If enabled, after the proactive TTS message, a yes/no bedtime
+            question is asked on the selected Assist Satellite.
+          default: false
+          selector:
+            boolean: {}
+
+        bedtime_assist_satellite:
+          name: Assist Satellite for bedtime question
+          description: >
+            Assist Satellite (Voice Preview) entity that should ask the
+            bedtime question.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        bedtime_question_delay:
+          name: Delay between TTS and bedtime question (seconds)
+          description: >
+            How long to wait after TTS before asking the bedtime question.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: seconds
+              mode: slider
+              step: 1
+
+        bedtime_llm_prompt:
+          name: Bedtime LLM prompt / style
+          description: >
+            Instructions for how the AI should phrase the bedtime question.
+          default: >
+            You are a smart home assistant speaking to a user at bedtime.
+            Ask ONE short yes/no question to check if they want to go to
+            bed now or start their bedtime routine. Maximum 200 characters,
+            no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        bedtime_question_text:
+          name: Fallback bedtime question text
+          description: >
+            Fallback text if the LLM fails to generate a bedtime question.
+          default: "Do you want me to help you go to bed now?"
+          selector:
+            text:
+              multiline: true
+
+        bedtime_help_script:
+          name: Script to run when you say yes
+          description: >
+            Script called when the bedtime question is answered with YES.
+            Leave empty if not using this feature.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        weekend_bedtime_mode:
+          name: Weekend bedtime question
+          description: >
+            Optionally change bedtime behavior on weekend days when using
+            the weekend profile.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled
+                - label: "Use weekend bedtime prompt"
+                  value: use_weekend_bedtime_prompt
+
+        weekend_bedtime_llm_prompt_override:
+          name: Weekend bedtime LLM prompt override (optional)
+          description: >
+            Alternate bedtime question prompt for weekend days.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑧ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑧ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑨ MUSIC
+    # ===========================================================================
+    music:
+      name: "⑨ Music"
+      icon: mdi:music-note
+      description: >-
+        Pre-TTS stinger/chime via music composition. Resolved chime
+        path is passed to dedup_announce → tts_queue_speak chime_path.
+      collapsed: true
+      input:
+        enable_pre_tts_stinger:
+          name: Enable pre-TTS stinger
+          description: >-
+            When enabled, resolves a chime/stinger and passes it to
+            dedup_announce for pre-TTS playback.
+          default: false
+          selector:
+            boolean:
+
+        stinger_agent:
+          name: Stinger agent override
+          description: >-
+            Agent persona for library/compose lookups. Empty = use the
+            dispatched persona.
+          default: ""
+          selector:
+            text:
+
+        stinger_library_id_override:
+          name: Stinger library ID override
+          description: >-
+            Explicit music library ID. When set, skips auto-resolve
+            and compose — builds path directly.
+          default: ""
+          selector:
+            text:
+
+        compose_stinger_if_missing:
+          name: Compose if not in library
+          description: >-
+            When auto-resolve finds no matching chime, compose one
+            locally via FluidSynth. When off, uses fallback URL.
+          default: true
+          selector:
+            boolean:
+
+        stinger_fallback_media_url:
+          name: Stinger fallback media URL
+          description: >-
+            URL or path to a fallback chime file when library lookup
+            and compose both fail. Empty = no chime on failure.
+          default: ""
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑩ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑩ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+trace:
+  stored_traces: 15
+
+# =============================================================================
+# VARIABLES
+# =============================================================================
+variables:
+  # ── core ────────────────────────────────────────────────────────────────
+  proactive_mode: !input proactive_mode
+  budget_floor: !input budget_floor
+  presence_entities: !input presence_sensors
+  repeat_while_present: !input repeat_while_present
+  max_nags_per_session: !input max_nags_per_session
+  player_entity: !input media_player
+  v_pipeline_name: !input conversation_agent
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  tts_output_vol: !input tts_output_volume
+  tts_collision_mode: !input tts_collision_mode
+  restore_delay: !input tts_restore_delay
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  # ── I-10: Music stinger inputs ──
+  v_enable_stinger: !input enable_pre_tts_stinger
+  v_stinger_agent: !input stinger_agent
+  v_stinger_library_id: !input stinger_library_id_override
+  v_compose_if_missing: !input compose_stinger_if_missing
+  v_stinger_fallback_url: !input stinger_fallback_media_url
+
+  tts_priority: >-
+    {% if tts_collision_mode == 'barge_in' %}
+      1
+    {% elif tts_collision_mode == 'queue' %}
+      2
+    {% else %}
+      4
+    {% endif %}
+
+  # ── template settings ───────────────────────────────────────────────────
+  refresh_after_run: !input refresh_after_run
+  refresh_button: !input refresh_button
+  morning_entity: !input message_morning_helper
+  afternoon_entity: !input message_afternoon_helper
+  evening_entity: !input message_evening_helper
+
+  # ── name resolution ─────────────────────────────────────────────────────
+  user_names_raw: !input user_names
+  fallback_names_raw: !input fallback_names
+  llm_fallback_names_raw: !input llm_fallback_names
+
+  chosen_user_name: >-
+    {% set names = (user_names_raw | default('', true)).split(',')
+        | map('trim') | reject('eq', '') | list %}
+    {{ names | random if names | length > 0 else '' }}
+
+  chosen_direct_name: >-
+    {% set real = (chosen_user_name | default('', true)) | trim %}
+    {% if real %}
+      {{ real }}
+    {% else %}
+      {% set fb = (fallback_names_raw | default('friend', true)).split(',')
+          | map('trim') | reject('eq', '') | list %}
+      {{ fb | random if fb | length > 0 else 'friend' }}
+    {% endif %}
+
+  chosen_llm_name: >-
+    {% set real = (chosen_user_name | default('', true)) | trim %}
+    {% if real %}
+      {{ real }}
+    {% else %}
+      {% set fb = (llm_fallback_names_raw | default('the user', true)).split(',')
+          | map('trim') | reject('eq', '') | list %}
+      {{ fb | random if fb | length > 0 else 'the user' }}
+    {% endif %}
+
+  # ── schedule ────────────────────────────────────────────────────────────
+  run_days: !input run_days
+  weekend_mode: !input weekend_mode
+  weekend_days: !input weekend_days
+
+  weekday_start_time: !input start_time
+  weekday_end_time: !input end_time
+  weekday_cooldown_minutes: !input cooldown_minutes
+
+  weekend_start_time: !input weekend_start_time
+  weekend_end_time: !input weekend_end_time
+  weekend_cooldown_minutes: !input weekend_cooldown_minutes
+
+  llm_prompt_base: !input llm_prompt
+  weekend_llm_prompt_override: !input weekend_llm_prompt_override
+
+  today_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {{ days[now().weekday()] }}
+
+  # Cross-midnight day shift using weekday schedule — breaks the
+  # dependency cycle so weekend profile doesn't hijack an active
+  # weekday cross-midnight session at midnight rollover.
+  tentative_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(weekday_start_time) %}
+    {% set end = today_at(weekday_end_time) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ today_key }}
+    {% endif %}
+
+  is_weekend: >-
+    {{ tentative_day_key in (weekend_days | default([])) }}
+
+  weekend_profile_active: >-
+    {{ is_weekend and (weekend_mode | default('same_as_weekdays')) == 'use_weekend_profile' }}
+
+  weekend_blocked: >-
+    {{ is_weekend and (weekend_mode | default('same_as_weekdays')) == 'disabled_on_weekends' }}
+
+  effective_start_time: >-
+    {% if weekend_profile_active %}
+      {{ weekend_start_time | default('08:00:00') }}
+    {% else %}
+      {{ weekday_start_time | default('08:00:00') }}
+    {% endif %}
+
+  effective_end_time: >-
+    {% if weekend_profile_active %}
+      {{ weekend_end_time | default('23:00:00') }}
+    {% else %}
+      {{ weekday_end_time | default('23:00:00') }}
+    {% endif %}
+
+  effective_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(effective_start_time) %}
+    {% set end = today_at(effective_end_time) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ tentative_day_key }}
+    {% endif %}
+
+  cooldown: >-
+    {% if weekend_profile_active %}
+      {{ (weekend_cooldown_minutes | default(30)) | int }}
+    {% else %}
+      {{ (weekday_cooldown_minutes | default(30)) | int }}
+    {% endif %}
+
+  llm_prompt: >-
+    {% if weekend_profile_active and (weekend_llm_prompt_override | default('') | trim) %}
+      {{ weekend_llm_prompt_override }}
+    {% else %}
+      {{ llm_prompt_base }}
+    {% endif %}
+
+  # ── guards ──────────────────────────────────────────────────────────────
+  min_presence_seconds: !input min_presence_seconds
+  block_if_media_playing: !input block_if_media_playing
+
+  # ── context entities ───────────────────────────────────────────────────
+  context_entities: !input context_entities
+
+  sensor_context: >-
+    {% set entities = context_entities | default([]) %}
+    {% if entities | length == 0 %}
+      none
+    {% else %}
+      {% set expanded = expand(entities) %}
+      {%- for e in expanded %}
+      {% if e.domain == 'media_player' %}
+      - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.state == 'playing' %} — "{{ e.attributes.media_title | default('unknown track') }}"{% if e.attributes.media_artist | default('') %} by {{ e.attributes.media_artist }}{% endif %}{% if e.attributes.media_content_type | default('') %} [{{ e.attributes.media_content_type }}]{% endif %}{% endif %}
+      {% elif e.attributes.player_state is defined or e.attributes.media_category is defined %}
+      - {{ e.entity_id }} ({{ e.name }}): {{ e.state }} [{{ e.attributes.player_state | default('unknown') }}]{% if e.attributes.series_title | default('') %} — series: {{ e.attributes.series_title }}{% endif %}{% if e.attributes.season is not none and e.attributes.season is defined %}, season: {{ e.attributes.season }}{% endif %}{% if e.attributes.episode is not none and e.attributes.episode is defined %}, episode: {{ e.attributes.episode }}{% endif %}{% if e.attributes.pvr_programme | default('') %}, pvr: {{ e.attributes.pvr_programme }}{% endif %}{% if e.attributes.pvr_channel | default('') %}, channel: {{ e.attributes.pvr_channel }}{% endif %}{% if e.attributes.plot | default('') %}, plot: {{ e.attributes.plot }}{% endif %}
+      {% else %}
+      - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.attributes.unit_of_measurement | default('') %} {{ e.attributes.unit_of_measurement }}{% endif %}
+      {%- endif %}
+      {%- endfor %}
+    {% endif %}
+
+  # ── bedtime ─────────────────────────────────────────────────────────────
+  base_enable_bedtime_question: !input enable_bedtime_question
+  weekend_bedtime_mode: !input weekend_bedtime_mode
+  bedtime_assist_satellite: !input bedtime_assist_satellite
+  bedtime_question_text: !input bedtime_question_text
+  bedtime_help_script: !input bedtime_help_script
+  bedtime_question_delay: !input bedtime_question_delay
+
+  bedtime_llm_prompt_base: !input bedtime_llm_prompt
+  weekend_bedtime_llm_prompt_override: !input weekend_bedtime_llm_prompt_override
+
+  enable_bedtime_question: >-
+    {% if not base_enable_bedtime_question %}
+      false
+    {% elif weekend_profile_active and (weekend_bedtime_mode | default('same_as_weekdays')) == 'disabled' %}
+      false
+    {% else %}
+      true
+    {% endif %}
+
+  bedtime_llm_prompt: >-
+    {% if weekend_profile_active
+          and (weekend_bedtime_mode | default('same_as_weekdays')) == 'use_weekend_bedtime_prompt'
+          and (weekend_bedtime_llm_prompt_override | default('') | trim) %}
+      {{ weekend_bedtime_llm_prompt_override }}
+    {% else %}
+      {{ bedtime_llm_prompt_base }}
+    {% endif %}
+
+# =============================================================================
+# TRIGGERS
+# =============================================================================
+triggers:
+  - trigger: state
+    id: presence_on
+    entity_id: !input presence_sensors
+    from: "off"
+    to: "on"
+
+  - trigger: time_pattern
+    id: nag_tick
+    minutes: "/5"
+
+# =============================================================================
+# CONDITIONS
+# =============================================================================
+conditions:
+  # ── Bedtime skip — suppress when bedtime routine is active ──────────────
+  - condition: template
+    alias: "Not during active bedtime"
+    value_template: >-
+      {{ not is_state('input_boolean.bedtime_active', 'on') }}
+
+  # ── Identity gate — at least one known user with confidence >= 50 ───────
+  - condition: template
+    alias: "Identity confidence gate"
+    value_template: >-
+      {% set m = states('sensor.identity_confidence_miquel') %}
+      {% set j = states('sensor.identity_confidence_jessica') %}
+      {{ [m | int(0) if m not in ['unknown', 'unavailable'] else 0,
+          j | int(0) if j not in ['unknown', 'unavailable'] else 0] | max >= 50 }}
+
+  # ── Day-of-week gating ────────────────────────────────────────────────
+  - condition: template
+    alias: "Allowed on this day"
+    value_template: >-
+      {% if weekend_blocked %}
+        false
+      {% elif effective_day_key in (run_days | default([])) %}
+        true
+      {% elif effective_day_key in (weekend_days | default([])) %}
+        true
+      {% else %}
+        false
+      {% endif %}
+
+  # ── Time window (supports cross-midnight) ─────────────────────────────
+  - condition: template
+    alias: "Within active time window"
+    value_template: >-
+      {% set start = today_at(effective_start_time) %}
+      {% set end = today_at(effective_end_time) %}
+      {% set now_ts = as_timestamp(now()) %}
+      {% set start_ts = as_timestamp(start) %}
+      {% set end_ts = as_timestamp(end) %}
+      {% if end_ts > start_ts %}
+        {{ now_ts >= start_ts and now_ts <= end_ts }}
+      {% else %}
+        {{ now_ts >= start_ts or now_ts <= end_ts }}
+      {% endif %}
+
+  # ── Media guard ───────────────────────────────────────────────────────
+  - condition: template
+    alias: "Not speaking over active media"
+    value_template: >-
+      {% if not block_if_media_playing %}
+        true
+      {% else %}
+        {{ states(player_entity | default('')) | default('idle') not in ['playing', 'buffering'] }}
+      {% endif %}
+
+  # ── Minimum presence duration ─────────────────────────────────────────
+  - condition: template
+    alias: "Minimum presence duration met"
+    value_template: >-
+      {% set secs = (min_presence_seconds | default(0)) | int %}
+      {% if secs <= 0 %}
+        true
+      {% else %}
+        {% set on_sensors = expand(presence_entities) | selectattr('state', 'eq', 'on') | list %}
+        {% if on_sensors | length == 0 %}
+          false
+        {% else %}
+          {% set last_change = (on_sensors | map(attribute='last_changed') | min) %}
+          {{ (as_timestamp(now()) - as_timestamp(last_change)) >= secs }}
+        {% endif %}
+      {% endif %}
+
+  # ── Presence still active ─────────────────────────────────────────────
+  - condition: template
+    alias: "Presence still detected"
+    value_template: >-
+      {{ expand(presence_entities) | selectattr('state', 'eq', 'on') | list | length > 0 }}
+
+  # ── Repeat mode gate ──────────────────────────────────────────────────
+  - condition: template
+    alias: "Trigger allowed by repeat mode"
+    value_template: >-
+      {% if not repeat_while_present and trigger.id | default('') == 'nag_tick' %}
+        false
+      {% else %}
+        true
+      {% endif %}
+
+  # ── Cooldown + max nags ───────────────────────────────────────────────
+  - condition: template
+    alias: "Cooldown + max nags per session"
+    value_template: >-
+      {% set mins = (cooldown | default(30)) | int %}
+      {% set max_nags = (max_nags_per_session | default(0)) | int %}
+      {% set last = this.attributes.last_triggered | default(none) %}
+      {% set enough_time = last is none
+        or (as_timestamp(now()) - as_timestamp(last | default(as_datetime('2000-01-01'), true)))
+           >= (mins * 60 - 30) %}
+      {% if not enough_time %}
+        false
+      {% elif max_nags == 0 %}
+        true
+      {% else %}
+        {% set on_sensors = expand(presence_entities)
+          | selectattr('state', 'eq', 'on') | list %}
+        {% if on_sensors | length == 0 %}
+          true
+        {% else %}
+          {% set session_start = (on_sensors
+              | map(attribute='last_changed') | min) %}
+          {% set max_duration = max_nags * mins * 60 %}
+          {{ (as_timestamp(now()) - as_timestamp(session_start)) < max_duration }}
+        {% endif %}
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_proactive_unified') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+actions:
+
+  # ── 1. Budget gate — force template mode if budget low ──────────────────
+  - alias: "Budget gate — resolve effective mode"
+    variables:
+      budget_remaining: "{{ states('sensor.ai_llm_budget_remaining') | int(100) }}"
+      effective_mode: >-
+        {% if proactive_mode == 'llm' and budget_floor | int(0) > 0 and budget_remaining | int(100) < budget_floor | int(60) %}
+          template
+        {% else %}
+          {{ proactive_mode }}
+        {% endif %}
+
+  # ── 2. Agent selection — dispatcher > manual ────────────────────────────
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for proactive"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "proactive_presence"
+              intent_text: "proactive presence — {{ area_name }}"
+              skip_continuity: true
+            continue_on_error: true
+
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve manually selected pipeline to agent"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ── 3. Resolve local variables ──────────────────────────────────────────
+  - alias: "Resolve area and time-of-day variables"
+    variables:
+      area_name: !input area_name
+
+      tod_label: >-
+        {% if enable_bedtime_question %}
+          evening
+        {% else %}
+          {% set h = now().hour %}
+          {% if 5 <= h < 12 %}
+            morning
+          {% elif 12 <= h < 18 %}
+            afternoon
+          {% else %}
+            evening
+          {% endif %}
+        {% endif %}
+
+  # ── 3b. Build template fallback message (always, used by both paths) ────
+  - alias: "Build template fallback message from helpers"
+    variables:
+      template_message: >-
+        {% set me = morning_entity if morning_entity is string else '' %}
+        {% set ae = afternoon_entity if afternoon_entity is string else '' %}
+        {% set ee = evening_entity if evening_entity is string else '' %}
+        {% set morning = states(me) | default('', true) if me else '' %}
+        {% set afternoon = states(ae) | default('', true) if ae else '' %}
+        {% set evening = states(ee) | default('', true) if ee else '' %}
+        {% set name = chosen_direct_name %}
+        {% if tod_label == 'morning' %}
+          {% if morning in ['', 'unavailable', 'unknown'] %}
+            Good morning, {{ name }}. You're in the {{ area_name }}.
+          {% else %}
+            {{ morning }}
+          {% endif %}
+        {% elif tod_label == 'afternoon' %}
+          {% if afternoon in ['', 'unavailable', 'unknown'] %}
+            Hey {{ name }}, welcome back to the {{ area_name }}.
+          {% else %}
+            {{ afternoon }}
+          {% endif %}
+        {% else %}
+          {% if evening in ['', 'unavailable', 'unknown'] %}
+            Good {{ tod_label }}, {{ name }}. I'm here in the {{ area_name }}.
+          {% else %}
+            {{ evening }}
+          {% endif %}
+        {% endif %}
+
+  # ── 4. Generate message based on effective mode ─────────────────────────
+  - alias: "Generate proactive message"
+    choose:
+      - alias: "LLM mode — generate via conversation agent"
+        conditions:
+          - condition: template
+            value_template: "{{ effective_mode == 'llm' }}"
+        sequence:
+          - alias: "Call conversation agent for proactive message (60s timeout)"
+            continue_on_error: true
+            action: pyscript.conversation_with_timeout
+            data:
+              agent_id: "{{ dispatch_agent }}"
+              text: >-
+                {{ llm_prompt }}
+
+                context:
+                - extra_entities:
+                {{ sensor_context }}
+
+                task:
+                respond with ONE short, natural sentence you would say out loud to {{ chosen_llm_name }}
+                in this situation. maximum 220 characters. do not include quotation marks
+                or any surrounding formatting.
+              timeout_secs: 60
+            response_variable: ai_result
+
+          - alias: "Extract LLM response with template fallback"
+            variables:
+              proactive_message: >-
+                {% set resp = ai_result.response if ai_result is defined else none %}
+                {% if resp is not none
+                      and (resp.response_type | default('')) not in ['error']
+                      and resp.speech is defined
+                      and resp.speech.plain is defined
+                      and resp.speech.plain.speech is defined %}
+                  {% set txt = resp.speech.plain.speech | trim %}
+                  {{ txt if txt else template_message | trim }}
+                {% else %}
+                  {{ template_message | trim }}
+                {% endif %}
+
+    default:
+      - alias: "Template mode — use pre-built message"
+        variables:
+          proactive_message: "{{ template_message | trim }}"
+
+  # ── 4b. I-10: Resolve chime path (before TTS delivery) ─────────────────
+  - alias: "4b · I-10: Resolve pre-TTS chime path"
+    variables:
+      v_chime_path: ""
+  - alias: "4b · Chime resolution (when stinger enabled)"
+    if:
+      - condition: template
+        value_template: "{{ v_enable_stinger | bool(false) }}"
+    then:
+      - choose:
+          # Tier 1: Explicit library ID → build path
+          - alias: "Tier 1 — Explicit library ID"
+            conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | default('') | length > 0 }}"
+            sequence:
+              - variables:
+                  v_chime_path: "/local/music_cache/production/{{ v_stinger_library_id }}.mp3"
+
+          # Tier 2: Auto-resolve by agent + content type
+          - alias: "Tier 2 — Auto-resolve / compose"
+            conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | default('') | length == 0 }}"
+            sequence:
+              - action: pyscript.music_compose_get
+                response_variable: _chime_lookup
+                data:
+                  agent: "{{ v_stinger_agent if v_stinger_agent | default('') | length > 0 else dispatch_persona | default('rick') }}"
+                  content_type: "chime"
+                continue_on_error: true
+              - choose:
+                  - alias: "Library hit"
+                    conditions:
+                      - condition: template
+                        value_template: "{{ (_chime_lookup | default({})).get('status', '') == 'ok' }}"
+                    sequence:
+                      - variables:
+                          v_chime_path: "{{ (_chime_lookup.get('file_path', '') | replace('/config/www/', '/local/')) }}"
+                  - alias: "Not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (_chime_lookup | default({})).get('status', '') == 'not_found'
+                             and v_compose_if_missing | bool(true) }}
+                    sequence:
+                      - action: pyscript.music_compose_local
+                        response_variable: _local
+                        data:
+                          agent: "{{ v_stinger_agent if v_stinger_agent | default('') | length > 0 else dispatch_persona | default('rick') }}"
+                          content_type: "chime"
+                          duration_s: 2.0
+                        continue_on_error: true
+                      - if: "{{ (_local | default({})).get('status', '') == 'ok' }}"
+                        then:
+                          - variables:
+                              v_chime_path: "{{ (_local.get('file_path', '') | replace('/config/www/', '/local/')) }}"
+                default:
+                  # Tier 3: Fallback URL
+                  - if: "{{ v_stinger_fallback_url | default('') | length > 0 }}"
+                    then:
+                      - variables:
+                          v_chime_path: "{{ v_stinger_fallback_url }}"
+
+  # ── 5. Deliver via dedup_announce ───────────────────────────────────────
+  - alias: "Deliver via dedup_announce"
+    action: pyscript.dedup_announce
+    response_variable: _dedup_result
+    data:
+      topic: "proactive_{{ area_name | slugify }}_{{ trigger.id }}"
+      source: "proactive_unified"
+      text: "{{ proactive_message }}"
+      voice: "{{ dispatch_voice }}"
+      priority: "{{ tts_priority | int }}"
+      target_mode: presence
+      ttl_hours: "{{ ((cooldown | float - 1) / 60) | round(2) if cooldown | float > 1 else 0.01 }}"
+      volume_level: "{{ tts_output_vol | float(0) if tts_output_vol | float(0) > 0 else none }}"
+      restore_volume: "{{ tts_output_vol | float(0) > 0 }}"
+      volume_restore_delay: "{{ restore_delay | int(8) }}"
+      skip_dedup: "{{ tts_collision_mode != 'dedup' }}"
+      chime_path: "{{ v_chime_path | default('') }}"
+    continue_on_error: true
+
+  # ── 6. Bail if dedup suppressed the announcement ────────────────────────
+  - alias: "Bail if duplicate suppressed"
+    condition: template
+    value_template: >-
+      {{ (_dedup_result | default({})).get('announced', false) }}
+
+  # ── 7. Post-interaction whisper ─────────────────────────────────────────
+  - alias: "Post-interaction whisper"
+    action: pyscript.agent_whisper
+    response_variable: _whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "proactive presence — {{ area_name }} — {{ tod_label }}"
+      agent_response: "{{ proactive_message[:200] }}"
+      source: "automation"
+    continue_on_error: true
+
+  # ── 8. Refresh button (template mode only) ──────────────────────────────
+  - alias: "Press refresh button if template mode and enabled"
+    if:
+      - condition: template
+        value_template: >-
+          {{ effective_mode == 'template'
+             and refresh_after_run
+             and not enable_bedtime_question }}
+    then:
+      - alias: "Press the refresh messages button"
+        action: input_button.press
+        target:
+          entity_id: "{{ refresh_button if refresh_button is string else '' }}"
+        continue_on_error: true
+
+  # ── 9. Bedtime question flow ────────────────────────────────────────────
+  - alias: "Bedtime question flow (if enabled)"
+    if:
+      - condition: template
+        value_template: "{{ enable_bedtime_question }}"
+    then:
+      - alias: "Wait for TTS audio to finish"
+        delay:
+          seconds: "{{ (bedtime_question_delay | default(5)) | int }}"
+
+      - alias: "Generate bedtime question via LLM (60s timeout)"
+        continue_on_error: true
+        action: pyscript.conversation_with_timeout
+        data:
+          agent_id: "{{ dispatch_agent }}"
+          text: >-
+            {{ bedtime_llm_prompt }}
+
+            context:
+            - extra_entities:
+            {{ sensor_context }}
+
+            task:
+            respond with ONE short yes/no question to ask {{ chosen_llm_name }} about whether
+            they want to go to bed now or start their bedtime routine.
+            maximum 200 characters. do not include quotation marks.
+          timeout_secs: 60
+        response_variable: bedtime_llm_result
+
+      - alias: "Post-bedtime whisper"
+        action: pyscript.agent_whisper
+        response_variable: _whisper_bed
+        data:
+          agent_name: "{{ dispatch_persona }}"
+          user_query: "bedtime question — {{ area_name }}"
+          agent_response: "asked bedtime question"
+          source: "automation"
+        continue_on_error: true
+
+      - alias: "Extract bedtime question with fallback"
+        variables:
+          final_bedtime_question: >-
+            {% set resp = bedtime_llm_result.response if bedtime_llm_result is defined else none %}
+            {% if resp is not none
+                  and resp.speech is defined
+                  and resp.speech.plain is defined
+                  and resp.speech.plain.speech is defined %}
+              {% set txt = resp.speech.plain.speech | trim %}
+              {% if txt %}
+                {{ txt }}
+              {% else %}
+                {{ bedtime_question_text | default('Do you want me to help you go to bed now?') }}
+              {% endif %}
+            {% else %}
+              {{ bedtime_question_text | default('Do you want me to help you go to bed now?') }}
+            {% endif %}
+
+      - alias: "Ask bedtime yes/no on Assist Satellite"
+        continue_on_error: true
+        action: assist_satellite.ask_question
+        data:
+          entity_id: "{{ bedtime_assist_satellite | default('') }}"
+          question: "{{ final_bedtime_question }}"
+          answers:
+            - id: "yes"
+              sentences:
+                - "yes"
+                - "yeah"
+                - "sure"
+                - "ok"
+                - "okay"
+                - "please"
+            - id: "no"
+              sentences:
+                - "no"
+                - "no thanks"
+                - "not now"
+                - "cancel"
+        response_variable: bedtime_answer
+
+      - alias: "Run bedtime script if user said yes"
+        choose:
+          - alias: "User answered YES and script is configured"
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ bedtime_answer is defined
+                     and (bedtime_answer.id | default('')) == 'yes'
+                     and (bedtime_help_script | default('')) not in [none, ''] }}
+            sequence:
+              - alias: "Fire bedtime help script"
+                action: script.turn_on
+                target:
+                  entity_id: "{{ bedtime_help_script }}"

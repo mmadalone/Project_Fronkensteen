@@ -1,0 +1,13 @@
+# =============================================================================
+# AI Presence Identity — I-48 Per-Person Room Inference
+# =============================================================================
+# Helpers for the pyscript/presence_identity.py engine.
+# Output sensors (ai_location_miquel, ai_location_jessica) are created
+# dynamically by the pyscript module via state.set().
+#
+# Deployed: 2026-03-13
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)

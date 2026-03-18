@@ -1,0 +1,56 @@
+# =============================================================================
+# AI Embedding Package — I-2 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: integration-implementation-plan.md § "I-2: Semantic Search"
+# Provides:
+#   input_text.ai_task_instance          — ha_text_ai sensor entity for LLM calls
+#   input_text.ai_embedding_api_url      — API base URL (e.g. OpenRouter, OpenAI)
+#   input_text.ai_embedding_api_key      — API key (password mode)
+#   input_text.ai_embedding_model        — embedding model name
+#   input_number.ai_embedding_dimensions — vector dimensions (changing triggers reindex)
+#   input_datetime.ai_embedding_batch_time — nightly batch schedule
+#   input_number.ai_embedding_batch_size — records per batch run
+#   input_number.ai_semantic_search_results — default result count
+#   input_number.ai_semantic_similarity_threshold — minimum cosine similarity
+#   input_number.ai_semantic_blend_weight — FTS5/semantic blend (0=FTS5, 100=semantic)
+#   input_boolean.ai_embedding_reindex_needed — flag for full reindex
+#   input_number.ai_memory_record_limit  — lifecycle monitoring record threshold (I-42)
+#   input_number.ai_memory_db_max_mb     — lifecycle monitoring DB size threshold (I-42)
+#   input_boolean.ai_memory_auto_archive — auto-archive master toggle (I-42 Phase 2)
+#   input_number.ai_memory_archive_target_pct — archive down to this % (I-42 Phase 2)
+#   input_number.ai_memory_archive_recency_days — recency protection window (I-42 Phase 2)
+#   input_text.ai_memory_archive_protection_tags — protected tag list (I-42 Phase 2)
+#
+# Dependencies: pyscript/memory.py (semantic search services)
+# Deployed: 2026-03-05
+# =============================================================================
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# ── AUTOMATION ───────────────────────────────────────────────────────────────
+# Dimension-change detection: when ai_embedding_dimensions changes, flip
+# ai_embedding_reindex_needed ON so the next batch run rebuilds the vector table.
+# This is a package automation (infrastructure glue), not a blueprint.
+
+automation:
+  - id: ai_embedding_dimension_change
+    alias: "AI Embedding - Dimension Change Detection"
+    description: "Flip reindex flag when embedding dimensions change"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_number.ai_embedding_dimensions
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state not in ['unknown', 'unavailable']
+             and trigger.from_state.state != trigger.to_state.state }}
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ai_embedding_reindex_needed

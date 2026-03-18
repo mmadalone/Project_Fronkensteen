@@ -55,6 +55,13 @@ ma_players:
 
 > 📋 **QA Check CQ-9:** Actions targeting media players from blueprint inputs must include availability guards (`state != unavailable`) before use. See `09_qa_audit_checklist.md`.
 
+```yaml
+# Availability guard — place before any action targeting the player
+- alias: "Verify player is available"
+  condition: template
+  value_template: "{{ states(player) not in ['unavailable', 'unknown'] }}"
+```
+
 > **ESPHome player reliability caveat:** MA players backed by ESPHome devices (including Voice Preview Edition satellites) can exhibit playback reliability issues — dropped streams, delayed responses to play/pause commands, and occasional failure to resume after TTS interruption. These issues stem from the ESPHome media player component's limited buffering and network handling compared to native targets like Sonos, Chromecast, or DLNA receivers. For critical automations (alarms, announcements), build in retry logic or verify playback state after issuing commands. For music-follow-me patterns (§7.6), prefer non-ESPHome targets when available.
 
 > **Player provider landscape (MA 2.7+):** MA supports a wide range of player providers: Alexa (via Alexa Media Player), Sonos, Chromecast/Google Cast, DLNA, ESPHome, Snapcast, SLIMPROTO, and — as of 2.7 — AirPlay 2 and Sendspin. AirPlay 2 speakers (including HomePods) now appear as full MA player providers with multi-room sync support, though behavior varies by device — check MA docs for limitations. Sendspin is an open-source protocol by the Open Home Foundation for synchronized multi-room streaming with metadata (album art, visualizations). It works on Voice PE satellites (beta firmware), web browsers, Google Cast devices (experimental), and custom ESPHome hardware. For automations, Sendspin players are targeted the same way as any other MA player — no special service calls needed. When using Sendspin on Cast devices, a separate player entity (`PlayerName (Sendspin)`) appears alongside the standard Cast player — use the Sendspin entity for cross-protocol sync groups.
@@ -175,6 +182,25 @@ Beyond `music_assistant.play_media`, MA exposes several actions that are useful 
 | `music_assistant.search` | Search MA library and all providers programmatically | Building dynamic dashboards, voice search results |
 | `music_assistant.get_library` | Query the MA library with filters (type, limit, sort) | Random playlist generation, listing favorites |
 
+**Quick-reference YAML for the less common actions:**
+
+```yaml
+# Transfer queue — move playback from one player to another
+- alias: "Transfer music to kitchen"
+  action: music_assistant.transfer_queue
+  data:
+    source: media_player.ma_living_room
+    target: media_player.ma_kitchen
+
+# Get library items — query MA library with filters
+- alias: "Fetch 10 recent playlists"
+  action: music_assistant.get_library
+  data:
+    media_type: playlist
+    limit: 10
+  response_variable: library_results
+```
+
 > **`play_announcement` vs manual duck/restore:** If your use case is simply playing a notification sound or TTS URL over active music, `play_announcement` handles the volume ducking and restoration natively — no helpers, no flags, no race conditions. The manual duck/restore pattern in §7.4 is still needed for complex multi-step TTS flows (e.g., alarm sequences with snooze logic), but for simple one-shot announcements, prefer the MA-native action.
 
 ### 7.3 Stop vs Pause — when to use which
@@ -202,6 +228,8 @@ also_pause_instead_of_stop:
 ### 7.4 TTS interruption and resume (duck/restore pattern)
 When TTS needs to speak over active music, the automation must duck the music volume, speak, then restore. This is the single most common source of bugs in MA blueprints.
 
+> **Note:** If your voice stack uses the centralized pyscript `duck_manager` (§14.5 Pattern 8), new blueprints should delegate ducking to that infrastructure instead of reimplementing this pattern. The manual pattern below remains valid for understanding the mechanics and for legacy blueprints that pre-date the centralized infrastructure.
+
 **The ducking flag pattern:**
 
 Use a shared `input_boolean` (e.g., `input_boolean.voice_pe_ducking`) as a coordination flag. Set it ON before ducking, OFF after restoring. Other automations (like volume sync) check this flag and pause their behavior.
@@ -222,6 +250,13 @@ variables:
   tts_volume: !input tts_volume
 
 actions:
+  # 0) Log the ducking cycle for observability
+  - alias: "Log duck/restore start"
+    action: logbook.log
+    data:
+      name: "Duck/Restore"
+      message: "Ducking {{ player }} from {{ original_volume }} to {{ tts_volume }}"
+
   # 1) Set ducking flag — pauses volume sync and other watchers
   - alias: "Set ducking flag"
     action: input_boolean.turn_on
@@ -251,13 +286,15 @@ actions:
     delay:
       seconds: "{{ post_tts_delay | int(5) }}"
 
-  # 5) Restore volume
+  # 5) Restore volume — continue_on_error ensures the ducking flag
+  #    always gets cleared even if the player is unavailable.
   - alias: "Restore volume after TTS"
     action: media_player.volume_set
     target:
       entity_id: "{{ player }}"
     data:
       volume_level: "{{ original_volume }}"
+    continue_on_error: true
 
   # 6) Clear ducking flag
   - alias: "Clear ducking flag"
@@ -370,8 +407,8 @@ When MA plays through a platform speaker (e.g., Echo via Alexa Media Player), th
 
 **Architecture:** One automation handles bidirectional sync with:
 - Paired device lists (same-order indexing)
-- Tolerance threshold to prevent feedback loops from rounding differences
-- Cooldown delay to absorb rapid changes (holding the volume button)
+- Tolerance threshold to prevent feedback loops from rounding differences (recommended: 0.02–0.05, i.e., 2–5%)
+- Cooldown delay to absorb rapid changes, e.g., holding the volume button (recommended: 1–3 seconds)
 - Ducking flag check to skip sync during voice interactions
 - Optional direction restriction (Alexa→MA only, MA→Alexa only, or both)
 
@@ -384,12 +421,16 @@ triggers:
     entity_id: !input alexa_players
     attribute: volume_level
     id: alexa_vol_changed
+    for:
+      seconds: 1    # Debounce — waits for volume to settle (e.g., button hold)
 
   - alias: "MA speaker volume changed"
     trigger: state
     entity_id: !input ma_players
     attribute: volume_level
     id: ma_vol_changed
+    for:
+      seconds: 1
 ```
 
 **Pair resolution pattern** — maps the triggering entity to its partner via list index:
@@ -451,6 +492,26 @@ variables:
 - Offer `protect_active_playback` option to skip rooms already playing something.
 - Offer `stop_other_players` option to stop all other configured players before starting.
 
+```yaml
+# protect_active_playback — skip if target is already playing
+- alias: "Skip if target player is active"
+  condition: template
+  value_template: >-
+    {{ not (protect_active_playback
+            and states(target_player) == 'playing') }}
+
+# stop_other_players — stop all other configured players before starting
+- alias: "Stop other players if configured"
+  choose:
+    - conditions: "{{ stop_other_players }}"
+      sequence:
+        - alias: "Stop all players except target"
+          action: media_player.media_stop
+          target:
+            entity_id: >-
+              {{ player_list | reject('eq', target_player) | list }}
+```
+
 ### 7.7 Voice command → MA playback bridge (input_boolean pattern)
 Alexa can't call MA services directly. Bridge with an `input_boolean` exposed to Alexa:
 
@@ -466,6 +527,10 @@ If the boolean stays ON because a condition aborted the run, the next voice comm
 ```yaml
 actions:
   # 0) Reset trigger boolean IMMEDIATELY — before any condition can abort
+  #    ⚠️ When auto_off_flag is false, the boolean stays ON after triggering.
+  #    This means the automation won't re-trigger on the next voice command
+  #    until the user (or another automation) manually turns it OFF then ON.
+  #    Only disable auto-reset when you have an explicit OFF mechanism elsewhere.
   - alias: "Auto-reset trigger boolean"
     choose:
       - conditions:
@@ -594,7 +659,14 @@ script:
           album: "{{ album | default('') }}"
           radio_mode: "{{ radio_mode | default(false) }}"
           enqueue: replace
-      # 4. Additional actions hook (volume, scene, etc.)
+        continue_on_error: true
+      # 4. Log playback request for observability
+      - alias: "Log voice playback request"
+        action: logbook.log
+        data:
+          name: "Voice Play Music"
+          message: "{{ media_type }}: {{ media_id }} → {{ target_player }}"
+      # 5. Additional actions hook (volume, scene, etc.)
 ```
 
 **Key architectural decisions:**
@@ -683,6 +755,7 @@ script:
           media_type: "{{ media_type | default('') }}"
           limit: 5
         response_variable: search_results
+        continue_on_error: true
 
       # 2. Pick the best result (first match)
       - variables:
@@ -705,6 +778,7 @@ script:
                   media_id: "{{ best_match.name | default(query) }}"
                   media_type: "{{ best_match.media_type | default('track') }}"
                   enqueue: replace
+                continue_on_error: true
         default:
           - stop: "I couldn't find anything matching '{{ query }}' in Music Assistant."
             response_variable: result

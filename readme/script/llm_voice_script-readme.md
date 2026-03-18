@@ -1,111 +1,157 @@
-# LLM Script for Music Assistant voice requests
+# LLM Script for Music Assistant voice requests (modified)
 
-![LLM Voice Script header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_voice_script-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_voice_script-header.jpeg)
 
-Script blueprint that translates natural-language voice commands into Music Assistant playback actions. An LLM conversation agent parses the request, extracts structured parameters (media type, artist, album, track, target area/player), and this script routes them to `music_assistant.play_media` with proper targeting and shuffle control.
+![Image](https://github.com/music-assistant/voice-support/blob/main/assets/music-assistant.png?raw=true)
 
-> **⚠️ Modified version** of the official [Music Assistant LLM Voice Script](https://github.com/music-assistant/voice-support/blob/main/llm-script-blueprint/llm_voice_script.yaml) by [TheFes](https://github.com/TheFes). Local modifications include alias coverage, error handling, section naming conventions, min_version correction, and project-specific header image. The upstream blueprint is the canonical source — check there for updates.
-
-Designed to be exposed as a tool in Assist or Extended OpenAI Conversation agents. The LLM decides *what* to play and *where* — this script handles the *how*.
+Modified version of the [official Music Assistant LLM Voice Script](https://github.com/music-assistant/voice-support/blob/main/llm-script-blueprint/llm_voice_script.yaml) by TheFes. This script is exposed to Assist as a tool function, allowing voice assistants to play music via Music Assistant based on natural language requests. The LLM parses the voice command into structured fields (media_type, artist, album, media_id, area, shuffle) and the script handles target resolution, radio mode, and playback. Local modifications include alias coverage, error handling, section naming, min_version correction, and header image.
 
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│              llm_voice_script                              │
-│                                                          │
-│  Fields (from LLM):                                      │
-│    media_type, media_id, artist, album,                  │
-│    media_description, area, media_player, shuffle        │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ Step 1: Resolve target                             │  │
-│  │   media_player field → MA entity lookup            │  │
-│  │   area field → area_id                             │  │
-│  │   fallback → default_player input                  │  │
-│  │   none found → stop with error response            │  │
-│  └────────────────────────┬───────────────────────────┘  │
-│                           │                              │
-│  ┌────────────────────────▼───────────────────────────┐  │
-│  │ Step 2: Build action data                          │  │
-│  │   media_id → split on ";" for multi-track          │  │
-│  │   radio_mode → from play_continuously input        │  │
-│  │   strip "NA" sentinel values                       │  │
-│  └────────────────────────┬───────────────────────────┘  │
-│                           │                              │
-│  ┌────────────────────────▼───────────────────────────┐  │
-│  │ Step 3: music_assistant.play_media                 │  │
-│  └────────────────────────┬───────────────────────────┘  │
-│                           │                              │
-│  ┌────────────────────────▼───────────────────────────┐  │
-│  │ Step 4: media_player.shuffle_set                   │  │
-│  │   (continue_on_error — non-critical)               │  │
-│  └────────────────────────┬───────────────────────────┘  │
-│                           │                              │
-│  ┌────────────────────────▼───────────────────────────┐  │
-│  │ Step 5: User-defined additional actions             │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
+START (called by LLM with media_type, artist, album, media_id, area, etc.)
+  |
+  v
+[Initialize: resolve default_player, shuffle, player_data]
+  |
+  v
+[Resolve target_data: area_id + entity_id from LLM input]
+  |
+  v
+<Valid target found?>
+  |         |
+ YES        NO
+  |         |
+  |         v
+  |    [STOP: "No valid target"]
+  |
+  v
+[Build action_data: media_id, media_type, artist, album, radio_mode]
+  |
+  v
+[music_assistant.play_media with resolved target + action data]
+  |
+  v
+[media_player.shuffle_set on target]
+  |
+  v
+[Run user-defined additional actions]
+  |
+  v
+END
 ```
 
-## Key Design Decisions
+## Features
 
-### LLM prompt customization via inputs
+- Natural language music playback via LLM tool function
+- Supports track, album, artist, playlist, and radio media types
+- Smart target resolution: area, media player entity, or default player
+- Media player name-to-entity resolution (handles friendly names from LLM)
+- Radio mode control: Use player settings / Always / Never
+- Shuffle support based on voice request analysis
+- Multi-value media_id support (semicolon-separated track lists)
+- Customizable LLM prompts for all parameters
+- Additional post-playback actions hook
+- Parallel mode for concurrent requests
 
-All prompts sent to the LLM are exposed as text inputs in Section ② (collapsed by default). This means you can tune how the LLM interprets voice commands without editing the blueprint YAML — adjust the `media_type_prompt` to handle edge cases, refine `area_prompt` for your room naming conventions, etc. The defaults are solid for most setups.
+## Prerequisites
 
-### Target resolution: area → player → default
+- Home Assistant **2024.8.0** or newer
+- Music Assistant integration
+- A conversation agent / LLM that supports tool functions
+- Script must be **exposed to Assist** after creation
+- Script must have a **clear description** (see blueprint for example)
 
-The script resolves playback targets in priority order: if the LLM extracted a specific `media_player` entity, use that. If it extracted an `area`, use that. If neither, fall back to the `default_player` input. If *nothing* resolves, the script stops with an error response rather than playing to a random player.
+## Installation
 
-### Multi-track support via semicolon separator
+1. Copy `llm_voice_script.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings > Automations & Scenes > Scripts > Add > Use Blueprint**
+3. **Expose the script to Assist** (Settings > Voice Assistants > Expose entities)
+4. **Add a clear description** to the script so the LLM knows when to use it
 
-When the LLM returns multiple tracks (e.g., "play the best Queen songs"), it separates them with semicolons in `media_id`. The script splits on `;` and passes a list to Music Assistant, which queues them as a playlist.
+## Configuration
 
-### Radio mode from input, not hardcoded
+<details>
+<summary><strong>Section 1 -- Settings for Music Assistant playback</strong></summary>
 
-The `play_continuously` input maps to MA's `radio_mode` parameter: "Always" enables continuous playback, "Never" stops after the queue ends, and "Use player settings" defers to the MA player's "Don't stop the music" toggle. This avoids AP-31 (hardcoded radio_mode).
+| Input | Default | Description |
+|---|---|---|
+| `default_player` | _(empty)_ | Default MA player when area/player not specified in request |
+| `play_continuously` | `Use player settings` | Radio mode: Use player settings / Always / Never |
 
-### Shuffle as a first-class parameter
+</details>
 
-The LLM determines shuffle intent from the voice command (e.g., "shuffle music by Muse" → `shuffle: true`). The script applies it as a separate `media_player.shuffle_set` call after playback starts, with `continue_on_error: true` since shuffle failure shouldn't kill the whole script.
+<details>
+<summary><strong>Section 2 -- Prompt settings for the LLM</strong></summary>
 
-## Input Sections
+| Input | Default | Description |
+|---|---|---|
+| `media_type_prompt` | _(detailed prompt)_ | LLM prompt for media_type (track/album/artist/playlist/radio) |
+| `artist_prompt` | _(detailed prompt)_ | LLM prompt for artist extraction |
+| `album_prompt` | _(detailed prompt)_ | LLM prompt for album extraction |
+| `media_id_prompt` | _(detailed prompt)_ | LLM prompt for media_id extraction |
+| `media_description_prompt` | _(detailed prompt)_ | LLM prompt for media description |
+| `area_prompt` | _(detailed prompt)_ | LLM prompt for area resolution |
+| `media_player_prompt` | _(detailed prompt)_ | LLM prompt for media player resolution |
+| `shuffle_prompt` | _(detailed prompt)_ | LLM prompt for shuffle detection |
 
-| Section | Contents | Default state |
-|---------|----------|---------------|
-| ① Settings for Music Assistant playback | Default player, radio mode | Expanded |
-| ② Prompt settings for the LLM | All 8 LLM prompt templates | Collapsed |
-| ③ Additional actions | User-defined post-playback actions | Collapsed |
+</details>
 
-## Script Fields (populated by LLM)
+<details>
+<summary><strong>Section 3 -- Additional actions</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `actions` | `[]` | Additional actions to run after Music Assistant play_media |
+
+</details>
+
+### Script Fields (populated by LLM)
 
 | Field | Required | Description |
-|-------|----------|-------------|
-| `media_type` | ✅ | One of: track, album, artist, playlist, radio |
-| `media_id` | ✅ | Track/album/artist/playlist name(s), semicolon-separated for multiple |
-| `artist` | ✅ | Artist name, or empty string if unknown/multiple |
-| `album` | ✅ | Album name, or empty string if unknown/multiple |
-| `media_description` | ✅ | Natural language description of the media request |
-| `area` | ❌ | Target area(s) for playback |
-| `media_player` | ❌ | Specific MA media player entity(s) |
-| `shuffle` | ✅ | Whether to enable shuffle (true/false) |
+|---|---|---|
+| `media_type` | Yes | track / album / artist / playlist / radio |
+| `artist` | Yes | Artist name (empty string if unknown) |
+| `album` | Yes | Album name (empty string if unknown) |
+| `media_id` | Yes | Track/album/artist/playlist/radio name; semicolon-separated for multiple |
+| `media_description` | Yes | Human-readable description of the media request |
+| `area` | No | Area(s) for playback |
+| `media_player` | No | Specific MA media player entity_id(s) |
+| `shuffle` | Yes | Whether to enable shuffle (true/false) |
 
-## Example Script Description (for agent tool registration)
+### Available Variables for Additional Actions
 
-When exposing this script to a conversation agent, use a description like:
+| Variable | Description |
+|---|---|
+| `media_id` | General media description (semicolon-separated if multiple) |
+| `media_type` | track / album / artist / playlist / radio |
+| `artist` | Requested artist |
+| `album` | Requested album |
+| `media_description` | Description from voice request |
+| `area` | Area(s) for playback (may be undefined) |
+| `media_player` | MA media player(s) (may be undefined) |
+| `default_player` | Default player from setup or `none` |
+| `target_data` | Dict with `area_id` and `entity_id` keys |
+| `shuffle` | true / false |
 
-> This script is used to play music based on a voice request. The tool takes the following arguments: media_type, artist, album, media_id, radio_mode, area, shuffle. media_id, media_type, and shuffle are always required and must always be supplied as arguments to this tool. An area or Music Assistant media player can optionally be provided in the voice request as well.
+## Technical Notes
 
-## Dependencies
-
-- **Music Assistant** integration (required)
-- **LLM conversation agent** (required — provides the structured field values)
-- Home Assistant 2024.8.0+
+- **Mode:** `parallel` / `max_exceeded: silent`
+- **Error handling:** `continue_on_error: true` on shuffle_set action
+- **Target resolution priority:** area > media_player entity > default_player
+- **Player name resolution:** If LLM provides friendly names instead of entity_ids, the script resolves them via `integration_entities('music_assistant')` lookup
+- **NA filtering:** Uses `rejectattr('1', 'eq', 'NA')` to strip unused fields from action and target data
+- **Upstream:** Check the [original repository](https://github.com/music-assistant/voice-support) for upstream updates
 
 ## Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 20250526 | 2025-05-26 | Upstream version from TheFes |
-| local-1 | 2026-02-18 | Adopted: bumped min_version to 2024.8.0, fixed bare default on default_player, added continue_on_error to shuffle, added aliases to all action steps, added section numbering, header image, README |
+- **Current:** Modified version with alias coverage, error handling, section naming, min_version correction, header image
+- **Upstream:** See [TheFes/music-assistant voice-support](https://github.com/music-assistant/voice-support) for original changelog
+
+## Author
+
+**TheFes** (original) / **madalone** (modifications)
+
+## License
+
+See repository for license details.

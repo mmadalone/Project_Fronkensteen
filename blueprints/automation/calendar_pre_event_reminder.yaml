@@ -1,0 +1,266 @@
+blueprint:
+  name: "Calendar pre-event reminder – TTS announcement"
+  author: madalone
+  description: >
+    # Calendar pre-event reminder – TTS announcement
+
+    Announces upcoming calendar events before they start using a
+    calendar trigger with configurable offset. Uses dedup_announce
+    to prevent duplicate announcements from overlapping systems.
+    Gated by kill switch and presence.
+
+    ### Recent changes
+    - **v1:** Initial blueprint — replaces automation from ai_calendar_promotion.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/calendar_pre_event_reminder.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CALENDAR SOURCE
+    # ===========================================================================
+    calendar_source:
+      name: "① Calendar source"
+      icon: mdi:calendar
+      description: Calendar entity and reminder offset.
+      collapsed: false
+      input:
+        calendar_entity:
+          name: Calendar entity
+          description: >
+            The calendar entity to monitor for upcoming events
+            (e.g. calendar.miquel_angel_cano_gmail_com).
+          default: ""
+          selector:
+            entity:
+              domain: calendar
+
+        reminder_offset:
+          name: Reminder offset
+          description: >
+            How long before the event to fire the reminder.
+            Must be a negative duration string (e.g. "-0:15:00"
+            for 15 minutes before).
+          default: "-0:15:00"
+          selector:
+            select:
+              custom_value: true
+              options:
+                - label: "5 minutes before"
+                  value: "-0:05:00"
+                - label: "10 minutes before"
+                  value: "-0:10:00"
+                - label: "15 minutes before"
+                  value: "-0:15:00"
+                - label: "30 minutes before"
+                  value: "-0:30:00"
+                - label: "1 hour before"
+                  value: "-1:00:00"
+
+    # ===========================================================================
+    # ② PRESENCE GATE
+    # ===========================================================================
+    presence_gate:
+      name: "② Presence gate"
+      icon: mdi:home-account
+      description: Only announce when someone is home.
+      collapsed: true
+      input:
+        presence_entities:
+          name: Presence entities
+          description: >
+            Device trackers or person entities. At least one must
+            be "home" for the reminder to fire. Leave empty to
+            skip the presence check.
+          default: []
+          selector:
+            entity:
+              domain:
+                - device_tracker
+                - person
+              multiple: true
+
+    # ===========================================================================
+    # ③ TTS DELIVERY
+    # ===========================================================================
+    tts_delivery:
+      name: "③ TTS delivery"
+      icon: mdi:bullhorn
+      description: How the announcement is delivered.
+      collapsed: true
+      input:
+        use_dedup:
+          name: Use dedup_announce
+          description: >
+            When enabled, uses pyscript.dedup_announce to prevent
+            duplicate announcements.
+          default: true
+          selector:
+            boolean: {}
+
+        use_dispatcher:
+          name: Use agent dispatcher
+          description: >
+            When enabled, calls pyscript.agent_dispatch to get
+            the appropriate TTS engine for the current context.
+          default: true
+          selector:
+            boolean: {}
+
+        kill_switch:
+          name: Kill switch
+          description: >
+            Input boolean that enables/disables the reminder.
+            When OFF, reminders are suppressed.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ④ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "④ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  calendar_entity: !input calendar_entity
+  presence_entities: !input presence_entities
+  use_dedup: !input use_dedup
+  use_dispatcher: !input use_dispatcher
+  kill_switch: !input kill_switch
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Calendar event starting soon"
+    trigger: calendar
+    entity_id: !input calendar_entity
+    event: start
+    offset: !input reminder_offset
+
+conditions:
+  - alias: "Kill switch is ON"
+    condition: state
+    entity_id: !input kill_switch
+    state: "on"
+
+  - alias: "Someone is home (or no presence entities configured)"
+    condition: template
+    value_template: >-
+      {% if presence_entities | length == 0 %}
+        true
+      {% else %}
+        {{ presence_entities | select('is_state', 'home') | list | count > 0 }}
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_calendar_pre_event') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Get TTS engine from dispatcher (optional)"
+    if:
+      - condition: template
+        value_template: "{{ use_dispatcher }}"
+    then:
+      - alias: "Dispatch agent for calendar reminder TTS"
+        action: pyscript.agent_dispatch
+        response_variable: _dispatch
+        data:
+          wake_word: "calendar_reminder"
+          intent_text: "calendar event reminder"
+          skip_continuity: true
+
+  - alias: "Build announcement message"
+    variables:
+      _event_name: "{{ trigger.calendar_event.summary | default('Upcoming event') }}"
+      _tts_engine: >-
+        {{ _dispatch.tts_engine | default('tts.home_assistant_cloud')
+           if use_dispatcher else 'tts.home_assistant_cloud' }}
+
+  - alias: "Announce via dedup or direct TTS"
+    if:
+      - condition: template
+        value_template: "{{ use_dedup }}"
+    then:
+      - alias: "Deduplicate announcement to prevent repeat reminders"
+        action: pyscript.dedup_announce
+        response_variable: _dedup_result
+        data:
+          topic: "calendar_event_{{ _event_name | slugify }}"
+          source: "calendar_reminder"
+          text: >-
+            Hey, heads up — you've got {{ _event_name }} coming up soon.
+          voice: "{{ _tts_engine }}"
+          priority: 2
+          target_mode: "presence"
+    else:
+      - alias: "Announce event reminder via direct TTS"
+        continue_on_error: true
+        action: pyscript.tts_queue_speak
+        data:
+          text: >-
+            Hey, heads up — you've got {{ _event_name }} coming up soon.
+          priority: 2

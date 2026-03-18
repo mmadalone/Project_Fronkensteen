@@ -1,0 +1,503 @@
+# =============================================================================
+# AI Hot Context Package — Layer 1 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Layer 1 — Hot Context"
+# Provides: sensor.ai_hot_context — text block for all agent system prompts
+# Usage in agent prompts: {{ state_attr('sensor.ai_hot_context', 'context') }}
+# Deployed: 2026-02-28 | Updated: 2026-03-03 (Task 20 — Focus/meal line)
+# =============================================================================
+
+# ── STATIC USER PROFILE (Shared / Generic) ────────────────────────────────────
+# These original helpers are preserved for backward compatibility.
+# The template sensor now references the per-user _miquel variants below.
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_select: moved to helpers_input_select.yaml (C3 consolidation)
+
+# input_datetime: moved to helpers_input_datetime.yaml (C3 consolidation)
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# ── TEMPLATE SENSOR ───────────────────────────────────────────────────────────
+# sensor.ai_hot_context
+#   .state      = "ok"  (simple health flag)
+#   .attributes.context = full formatted text block (injected into LLM prompts)
+#
+# Per-user references: dynamically resolved from person.* entities (Task 22).
+# Active user = highest identity confidence among home persons.
+
+template:
+  - sensor:
+      # ── COMPONENT 1: TIME & IDENTITY ──────────────────────────────────────
+      - name: "AI Context — Time & Identity"
+        unique_id: ai_context_time_identity
+        icon: mdi:clock-outline
+        state: "ok"
+        attributes:
+          lines: |-
+            {%- set ns = namespace(lines=[]) -%}
+
+            {# ── Dynamic user selection (Task 22) ── #}
+            {%- set best = namespace(slug='', conf=0) -%}
+            {%- for p in states.person -%}
+              {%- set conf = states('sensor.identity_confidence_' ~ p.object_id) | int(0) -%}
+              {%- if conf > best.conf -%}
+                {%- set best.slug = p.object_id -%}
+                {%- set best.conf = conf -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- set user = best.slug if best.slug else (states.person | map(attribute='object_id') | first | default('unknown')) -%}
+            {%- set day_type = 'Work day' if is_state('input_boolean.ai_context_work_day_' ~ user, 'on') else 'Weekend/day off' -%}
+            {%- set tmrw_type = 'Work day' if is_state('input_boolean.ai_context_work_day_tomorrow', 'on') else 'Day off' -%}
+            {%- set ns.lines = ns.lines + ['Time: ' ~ now().strftime('%-I:%M %p') ~ ' (CET), ' ~ now().strftime('%A %-d %B %Y') ~ '. ' ~ day_type ~ '. Tomorrow: ' ~ tmrw_type ~ '.'] -%}
+
+            {# ── USER IDENTITY (dynamic from person.* entities) ── #}
+            {%- set u_name = states('input_text.ai_context_user_name_' ~ user) | default('User', true) -%}
+            {%- set u_lang = states('input_text.ai_context_user_languages_' ~ user) | default('English', true) -%}
+            {%- set ns.lines = ns.lines + ['User: ' ~ u_name ~ ' (speaks ' ~ u_lang ~ ').'] -%}
+            {%- set ns.lines = ns.lines + ['Household: ' ~ (states('input_text.ai_context_household') | default('Unknown', true)) ~ '.'] -%}
+
+            {{- ns.lines | join('\n') -}}
+
+      # ── COMPONENT 2: PRESENCE ─────────────────────────────────────────────
+      - name: "AI Context — Presence"
+        unique_id: ai_context_presence
+        icon: mdi:account-group
+        state: "ok"
+        attributes:
+          lines: |-
+            {%- set ns = namespace(lines=[]) -%}
+
+            {# ── PRESENCE + IDENTITY (I-48: per-person room inference) ── #}
+            {%- set pmap = [
+              ('Workshop', 'binary_sensor.fp2_presence_sensor_workshop'),
+              ('Living Room', 'binary_sensor.fp2_presence_sensor_living_room'),
+              ('Main Room', 'binary_sensor.fp2_presence_sensor_main_room'),
+              ('Kitchen', 'binary_sensor.fp2_presence_sensor_kitchen'),
+              ('Bathroom', 'binary_sensor.fp2_presence_sensor_bathroom'),
+              ('Shower', 'binary_sensor.fp2_presence_sensor_shower'),
+              ('Bed area', 'binary_sensor.fp2_presence_sensor_bed'),
+              ('Lobby', 'binary_sensor.fp2_presence_sensor_lobby')
+            ] -%}
+            {%- set pns = namespace(zones=[]) -%}
+            {%- for zone, entity in pmap -%}
+              {%- if is_state(entity, 'on') -%}{%- set pns.zones = pns.zones + [zone] -%}{%- endif -%}
+            {%- endfor -%}
+            {%- set id_enabled = is_state('input_boolean.ai_presence_identity_enabled', 'on') -%}
+            {%- set id_floor = states('input_number.ai_presence_identity_confidence_floor') | int(20) -%}
+            {# ── Per-person identity lines (Task 22: dynamic from person.* entities) ── #}
+            {%- set id_any = namespace(found=false) -%}
+            {%- if id_enabled -%}
+              {%- for p in states.person -%}
+                {%- set slug = p.object_id -%}
+                {%- set loc = states('sensor.ai_location_' ~ slug) -%}
+                {%- set conf = state_attr('sensor.ai_location_' ~ slug, 'confidence') | int(0) -%}
+                {%- set label = state_attr('sensor.ai_location_' ~ slug, 'confidence_label') | default('unknown', true) -%}
+                {%- set source = state_attr('sensor.ai_location_' ~ slug, 'source') | default('none', true) -%}
+                {%- set friendly = state_attr('sensor.ai_location_' ~ slug, 'zone_friendly') | default(loc, true) -%}
+                {%- if conf >= id_floor and loc not in ['unknown', 'unavailable', ''] -%}
+                  {%- set detail = friendly ~ ' (' ~ label ~ ' confidence' ~ (', pattern-based' if source in ['markov_prior', 'markov_tiebreak'] else '') ~ ').' -%}
+                  {%- set ns.lines = ns.lines + [p.name ~ ': ' ~ detail] -%}
+                  {%- set id_any.found = true -%}
+                {%- elif loc == 'away' -%}
+                  {%- set ns.lines = ns.lines + [p.name ~ ': Away.'] -%}
+                  {%- set id_any.found = true -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {%- if id_any.found -%}
+              {# Still show anonymous FP2 presence for untracked zones #}
+              {%- if pns.zones | length > 0 -%}
+                {%- set ns.lines = ns.lines + ['Presence: ' ~ pns.zones | join(', ') ~ '.'] -%}
+              {%- endif -%}
+            {%- else -%}
+              {# Fallback: anonymous presence + occupancy (identity disabled or below floor) #}
+              {%- if pns.zones | length > 0 -%}
+                {%- set ns.lines = ns.lines + ['Presence: ' ~ pns.zones | join(', ') ~ '.'] -%}
+              {%- else -%}
+                {%- set ns.lines = ns.lines + ['Presence: No presence detected.'] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {# ── OCCUPANCY (Task 22: dynamic from person.* entities) ── #}
+            {%- set occ = states('sensor.occupancy_mode') -%}
+            {%- if occ not in ['unavailable', 'unknown', 'none', ''] -%}
+              {%- if occ == 'dual' -%}
+                {%- set home_names = states.person | selectattr('state', 'eq', 'home') | map(attribute='name') | list -%}
+                {%- set occ_text = home_names | join(' and ') ~ ' are home' if home_names | length > 1 else 'Everyone is home' -%}
+              {%- elif occ == 'away' -%}
+                {%- set occ_text = 'Nobody is home' -%}
+              {%- elif occ == 'guest' -%}
+                {%- set occ_text = 'Guest mode active' -%}
+              {%- elif occ.startswith('solo_') -%}
+                {%- set solo_slug = occ[5:] -%}
+                {%- set solo_friendly = state_attr('person.' ~ solo_slug, 'friendly_name') | default(solo_slug | title, true) -%}
+                {%- set away_names = states.person | rejectattr('object_id', 'eq', solo_slug) | map(attribute='name') | list -%}
+                {%- set occ_text = solo_friendly ~ ' is home (' ~ away_names | join(', ') ~ ' away)' -%}
+              {%- else -%}
+                {%- set occ_text = occ -%}
+              {%- endif -%}
+              {%- set ns.lines = ns.lines + ['Occupancy: ' ~ occ_text ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── AWAY PREDICTION (I-54 — pyscript sensor with full attributes) ── #}
+            {%- if occ == 'away' or occ.startswith('solo_') -%}
+              {%- set preds = state_attr('sensor.ai_away_prediction', 'predictions') | default([], true) -%}
+              {%- for ap in preds -%}
+                {%- if ap.predicted_return_time | default('') -%}
+                  {%- if ap.range_low is defined and ap.range_high is defined and ap.range_low != ap.range_high -%}
+                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.range_low ~ '–' ~ ap.range_high ~ ').'] -%}
+                  {%- else -%}
+                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.confidence | default('low') ~ ').'] -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+
+            {{- ns.lines | join('\n') -}}
+
+      # ── COMPONENT 3: MEDIA ────────────────────────────────────────────────
+      - name: "AI Context — Media"
+        unique_id: ai_context_media
+        icon: mdi:music-box-multiple
+        state: "ok"
+        attributes:
+          lines: |-
+            {%- set ns = namespace(lines=[]) -%}
+
+            {# ── MEDIA (Music Assistant + primary players) ── #}
+            {%- set mplayers = [
+              'media_player.workshop_ma',
+              'media_player.bathroom_ma',
+              'media_player.workshop_sonos',
+              'media_player.bathroom_sonos',
+              'media_player.ha_voice_pe_workshop_rick_esp',
+              'media_player.ha_voice_pe_living_room_quark_esp',
+              'media_player.madteevee'
+            ] -%}
+            {%- set mns = namespace(playing=[]) -%}
+            {%- for p in mplayers -%}
+              {%- if is_state(p, 'playing') -%}
+                {%- set p_name = state_attr(p, 'friendly_name') | default(p, true) -%}
+                {%- if p == 'media_player.madteevee' and state_attr('sensor.madteevee_now_playing', 'player_state') == 'playing' -%}
+                  {%- set tv_cat = state_attr('sensor.madteevee_now_playing', 'media_category') | default('', true) -%}
+                  {%- set tv_title = state_attr('sensor.madteevee_now_playing', 'media_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_series = state_attr('sensor.madteevee_now_playing', 'series_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_season = state_attr('sensor.madteevee_now_playing', 'season') -%}
+                  {%- set tv_episode = state_attr('sensor.madteevee_now_playing', 'episode') -%}
+                  {%- set tv_plot = state_attr('sensor.madteevee_now_playing', 'plot') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_channel = state_attr('sensor.madteevee_now_playing', 'pvr_channel') | default('', true) -%}
+                  {%- set tv_parts = [p_name] -%}
+                  {%- if tv_series -%}
+                    {%- set tv_parts = tv_parts + [tv_series ~ ' S' ~ tv_season | string ~ 'E' ~ tv_episode | string] -%}
+                  {%- elif tv_title -%}
+                    {%- set tv_title = tv_title | regex_replace('\\.(mkv|avi|mp4|ts|m4v|mov|wmv|flv|webm)$', '') -%}
+                    {%- set tv_parts = tv_parts + [tv_title] -%}
+                  {%- endif -%}
+                  {%- if tv_channel -%}
+                    {%- set tv_parts = tv_parts + ['on ' ~ tv_channel] -%}
+                  {%- endif -%}
+                  {%- if tv_plot and tv_plot | length < 150 -%}
+                    {%- set tv_parts = tv_parts + ['(' ~ tv_plot ~ ')'] -%}
+                  {%- endif -%}
+                  {%- set mns.playing = mns.playing + [tv_parts | join(' — ')] -%}
+                {%- else -%}
+                  {%- set p_title = state_attr(p, 'media_title') | default('', true) | regex_replace('\\.(mkv|avi|mp4|ts|m4v|mov|wmv|flv|webm)$', '') -%}
+                  {%- set p_artist = state_attr(p, 'media_artist') | default('', true) -%}
+                  {%- if p_title and p_artist -%}
+                    {%- set mns.playing = mns.playing + [p_name ~ ' — ' ~ p_title ~ ' by ' ~ p_artist] -%}
+                  {%- elif p_title -%}
+                    {%- set mns.playing = mns.playing + [p_name ~ ' — ' ~ p_title] -%}
+                  {%- else -%}
+                    {%- set mns.playing = mns.playing + [p_name ~ ' — playing'] -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if mns.playing | length > 0 -%}
+              {%- set ns.lines = ns.lines + ['Media: ' ~ mns.playing | join('; ') ~ '.'] -%}
+            {%- else -%}
+              {%- set ns.lines = ns.lines + ['Media: Nothing playing.'] -%}
+            {%- endif -%}
+
+            {# ── MUSIC TASTE (I-34) ── #}
+            {%- set mtaste = state_attr('sensor.ai_music_taste_status', 'genre_summary') | default('', true) -%}
+            {%- if mtaste in ['', 'none', 'unknown', 'unavailable', 'None'] -%}
+              {%- set mtaste = state_attr('sensor.ai_music_taste_status', 'summary') | default('', true) -%}
+            {%- endif -%}
+            {%- if mtaste not in ['', 'none', 'unknown', 'unavailable', 'None'] -%}
+              {%- set ns.lines = ns.lines + ['Music taste: ' ~ mtaste] -%}
+            {%- endif -%}
+
+            {# ── MEDIA LIBRARY (Radarr/Sonarr) ── #}
+            {%- if is_state('input_boolean.ai_media_tracking_enabled', 'on') -%}
+              {%- set sonarr = states('input_text.ai_media_upcoming_sonarr') | default('', true) | regex_replace(' today\\.$', '.') -%}
+              {%- if sonarr not in ['', 'none', 'unknown', 'unavailable'] -%}
+                {%- set ns.lines = ns.lines + [sonarr] -%}
+              {%- endif -%}
+              {%- set radarr = states('input_text.ai_media_upcoming_radarr') | default('', true) -%}
+              {%- if radarr not in ['', 'none', 'unknown', 'unavailable'] -%}
+                {%- set ns.lines = ns.lines + [radarr] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {# ── Active music feedback session (I-56) ── #}
+            {%- set mfc = states('input_text.ai_music_feedback_context') -%}
+            {%- if mfc not in ['', 'unknown', 'unavailable', none] and '|' in mfc -%}
+              {%- set mf_file = mfc.split('|')[0] -%}
+              {%- set mf_key = mfc.split('|')[1] -%}
+              {%- set ns.lines = ns.lines + [
+                'MUSIC FEEDBACK: You composed "' ~ mf_file ~ '" and it just played. '
+                ~ 'Ask feedback. keep → music_library(action="promote", library_id="' ~ mf_key ~ '"), '
+                ~ 'change → compose_music with new prompt, '
+                ~ 'delete → music_library(action="delete", library_id="' ~ mf_key ~ '").'
+              ] -%}
+            {%- endif -%}
+
+            {{- ns.lines | join('\n') -}}
+
+      # ── COMPONENT 4: ENVIRONMENT ──────────────────────────────────────────
+      - name: "AI Context — Environment"
+        unique_id: ai_context_environment
+        icon: mdi:home-thermometer
+        state: "ok"
+        attributes:
+          lines: |-
+            {%- set ns = namespace(lines=[]) -%}
+
+            {# ── HOUSE MODE ── #}
+            {%- if is_state('input_boolean.bedtime_active', 'on') -%}
+              {%- set mode = 'Bedtime routine active.' -%}
+            {%- elif is_state('input_boolean.bedtime_global_lock', 'on') -%}
+              {%- set mode = 'Bedtime locked — good night mode.' -%}
+            {%- elif is_state('input_boolean.wake_up_snooze', 'on') -%}
+              {%- set mode = 'Wake-up snoozed.' -%}
+            {%- else -%}
+              {%- set mode = 'Normal.' -%}
+            {%- endif -%}
+            {%- set ns.lines = ns.lines + ['House mode: ' ~ mode] -%}
+
+            {# ── EXPERTISE ROUTING (I-45) ── #}
+            {%- set eroute = states('input_select.ai_expertise_routing_mode') -%}
+            {%- if eroute not in ['off', 'unavailable', 'unknown'] -%}
+              {%- set ns.lines = ns.lines + ['Expertise routing: ' ~ eroute ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── WEATHER (met.no via Forecast Home) ── #}
+            {%- set wmap = {
+              'clear-night': 'Clear', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional',
+              'fog': 'Foggy', 'hail': 'Hail', 'lightning': 'Thunderstorm',
+              'lightning-rainy': 'Thunderstorm/rain', 'partlycloudy': 'Partly cloudy',
+              'pouring': 'Pouring rain', 'rainy': 'Rainy', 'snowy': 'Snowy',
+              'snowy-rainy': 'Snow/rain', 'sunny': 'Sunny', 'windy': 'Windy',
+              'windy-variant': 'Windy'
+            } -%}
+            {%- set wstate = states('weather.forecast_home') -%}
+            {%- if wstate not in ['unavailable', 'unknown', 'none'] -%}
+              {%- set wcond = wmap.get(wstate, wstate | title) -%}
+              {%- set wtemp = state_attr('weather.forecast_home', 'temperature') | default('?', true) -%}
+              {%- set whum = state_attr('weather.forecast_home', 'humidity') | default('?', true) -%}
+              {%- set ns.lines = ns.lines + ['Weather: ' ~ wcond ~ ', ' ~ wtemp ~ '\u00b0C, humidity ' ~ whum ~ '%.'] -%}
+            {%- else -%}
+              {%- set ns.lines = ns.lines + ['Weather: Unavailable.'] -%}
+            {%- endif -%}
+
+            {# ── TOMORROW WEATHER ── #}
+            {%- set tw = states('input_text.ai_weather_tomorrow_summary') | default('', true) -%}
+            {%- if tw not in ['', 'none', 'unknown', 'unavailable'] -%}
+              {%- set ns.lines = ns.lines + ["Tomorrow's weather: " ~ tw] -%}
+            {%- endif -%}
+
+            {# ── NEXT ALARM (phone: madaringer) ── #}
+            {%- set alarm_ts = states('sensor.madaringer_next_alarm') -%}
+            {%- if alarm_ts not in ['unavailable', 'unknown', 'none', ''] -%}
+              {%- set alarm_dt = as_local(as_datetime(alarm_ts)) -%}
+              {%- set today_s = now().strftime('%Y-%m-%d') -%}
+              {%- set tomorrow_s = (now() + timedelta(days=1)).strftime('%Y-%m-%d') -%}
+              {%- if alarm_dt.strftime('%Y-%m-%d') == today_s -%}
+                {%- set alarm_lbl = 'today ' ~ alarm_dt.strftime('%-I:%M %p') -%}
+              {%- elif alarm_dt.strftime('%Y-%m-%d') == tomorrow_s -%}
+                {%- set alarm_lbl = 'tomorrow ' ~ alarm_dt.strftime('%-I:%M %p') -%}
+              {%- else -%}
+                {%- set alarm_lbl = alarm_dt.strftime('%A %-I:%M %p') -%}
+              {%- endif -%}
+              {%- set ns.lines = ns.lines + ['Next alarm: ' ~ alarm_lbl ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── SCHEDULE — Calendar + Email (Task 18c) ── #}
+            {%- set cal_raw = states('input_text.ai_calendar_today_summary') | default('', true) -%}
+            {%- set cal_stale = is_state('input_boolean.ai_calendar_stale', 'on') -%}
+            {%- set email_ct = states('input_number.ai_email_priority_count') | int(0) -%}
+            {%- set sns = namespace(parts=[]) -%}
+            {%- if cal_raw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
+              {%- set events = cal_raw.split(' | ') -%}
+              {%- set evns = namespace(found=false, label='', countdown='') -%}
+              {%- set now_ts = as_timestamp(now()) -%}
+              {%- set today_s = now().strftime('%Y-%m-%d') -%}
+              {%- for e in events -%}
+                {%- if not evns.found and e | length >= 6 and e[2:3] == ':' -%}
+                  {%- set evt_ts = as_timestamp(strptime(today_s ~ ' ' ~ e[:5], '%Y-%m-%d %H:%M'), 0) -%}
+                  {%- if evt_ts > now_ts -%}
+                    {%- set evns.found = true -%}
+                    {%- set evns.label = e[6:] ~ ' at ' ~ e[:5] -%}
+                    {%- set diff_m = ((evt_ts - now_ts) / 60) | int -%}
+                    {%- if diff_m >= 60 -%}
+                      {%- set evns.countdown = (diff_m // 60) ~ 'h ' ~ (diff_m % 60) ~ 'm' -%}
+                    {%- else -%}
+                      {%- set evns.countdown = diff_m ~ 'm' -%}
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if evns.found -%}
+                {%- set stale_pfx = '(Calendar may be outdated) ' if cal_stale else '' -%}
+                {%- set cal_line = stale_pfx ~ evns.label ~ ' (in ' ~ evns.countdown ~ ')' -%}
+                {%- if events | length > 1 -%}
+                  {%- set cal_line = cal_line ~ '. ' ~ events | length ~ ' events today' -%}
+                {%- endif -%}
+                {%- set sns.parts = sns.parts + [cal_line] -%}
+              {%- else -%}
+                {%- set stale_pfx = '(Calendar may be outdated) ' if cal_stale else '' -%}
+                {%- set sns.parts = sns.parts + [stale_pfx ~ 'No more events today'] -%}
+              {%- endif -%}
+              {%- set cal_tmrw = states('input_text.ai_calendar_tomorrow_summary') | default('', true) -%}
+              {%- if now().hour >= 20 and cal_tmrw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
+                {%- set first_tmrw = cal_tmrw.split(' | ')[0] -%}
+                {%- if first_tmrw | length >= 6 and first_tmrw[2:3] == ':' -%}
+                  {%- set sns.parts = sns.parts + ['Tomorrow: ' ~ first_tmrw[6:] ~ ' at ' ~ first_tmrw[:5]] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+            {%- if email_ct > 0 -%}
+              {%- set sns.parts = sns.parts + [email_ct ~ ' priority email' ~ ('s' if email_ct > 1 else '')] -%}
+            {%- endif -%}
+            {%- if sns.parts | length > 0 -%}
+              {%- set ns.lines = ns.lines + ['Schedule: ' ~ sns.parts | join('. ') ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── PROJECTS ── #}
+            {%- if is_state('input_boolean.ai_project_tracking_enabled', 'on') -%}
+              {%- set proj_line = states('input_text.ai_project_hot_context_line') | default('', true) -%}
+              {%- if proj_line not in ['', 'none', 'unknown', 'unavailable'] -%}
+                {%- set ns.lines = ns.lines + ['Projects: ' ~ proj_line] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {# ── FOCUS & WELLBEING (Task 20) ── #}
+            {%- set ws_hours = states('sensor.workshop_hours_today') | float(0) | round(1) -%}
+            {%- set focus_on = is_state('input_boolean.focus_mode', 'on') -%}
+            {%- set fns = namespace(parts=[]) -%}
+            {%- if ws_hours > 0 -%}
+              {%- set fns.parts = fns.parts + [ws_hours ~ 'h workshop today'] -%}
+            {%- endif -%}
+            {%- if focus_on -%}
+              {%- set fns.parts = fns.parts + ['focus mode ON'] -%}
+            {%- endif -%}
+            {%- set meal_state = states('input_datetime.last_meal_time') -%}
+            {%- if meal_state not in ['unknown', 'unavailable', 'None', ''] -%}
+              {%- set meal_diff = ((as_timestamp(now()) - as_timestamp(meal_state, 0)) / 3600) | round(1) -%}
+              {%- if meal_diff > 0 -%}
+                {%- set fns.parts = fns.parts + ['last meal ' ~ meal_diff ~ 'h ago'] -%}
+              {%- endif -%}
+            {%- endif -%}
+            {%- if fns.parts | length > 0 -%}
+              {%- set ns.lines = ns.lines + ['Focus: ' ~ fns.parts | join(', ') ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── PRIVACY GATE (Task 22: dynamic per-person suppression) ── #}
+            {%- if is_state('input_boolean.ai_privacy_gate_enabled', 'on')
+                and states('input_select.ai_privacy_gate_mode') == 'auto' -%}
+              {%- set pns = namespace(tiers=[], witnesses=[]) -%}
+              {%- for p in states.person -%}
+                {%- set slug = p.object_id -%}
+                {%- for tier in ['t1', 't2', 't3'] -%}
+                  {%- if is_state('input_boolean.ai_privacy_gate_' ~ slug ~ '_' ~ tier ~ '_suppressed', 'on') -%}
+                    {%- set pns.tiers = pns.tiers + [tier | upper] -%}
+                  {%- endif -%}
+                {%- endfor -%}
+                {# Track non-active persons who are home (the 'witness') #}
+                {%- if slug != user and p.state == 'home' -%}
+                  {%- set w_conf = states('sensor.identity_confidence_' ~ slug) | int(0) -%}
+                  {%- set pns.witnesses = pns.witnesses + [p.name ~ ' (' ~ w_conf ~ 'pts)'] -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if pns.tiers | length > 0 -%}
+                {%- set witness_text = pns.witnesses | join(', ') ~ ' home' if pns.witnesses else 'others present' -%}
+                {%- set ns.lines = ns.lines + ['Privacy: ' ~ pns.tiers | unique | join('+') ~ ' suppressed (' ~ witness_text ~ ').'] -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {# ── GUESTS ── #}
+            {%- if is_state('input_boolean.ai_context_guests_present', 'on') -%}
+              {%- set ns.lines = ns.lines + ['Guests present — adjust language and topics.'] -%}
+            {%- endif -%}
+
+            {# ── INTERVIEW MODE (I-36) ── #}
+            {%- if is_state('input_boolean.ai_interview_mode', 'on') -%}
+              {%- set ns.lines = ns.lines + ['INTERVIEW MODE ACTIVE — YOU LEAD THE CONVERSATION. Do NOT ask the user what they want to talk about. Instead, YOU pick the next category and ask a specific question. Work through these categories in order: identity (name, nickname, birthday), household (members, pet names), work (home/office/hybrid, hours, commute), schedule (weekday wake time, weekend wake time, bedtime, meal times, exercise), health (diet, allergies, caffeine cutoff), environment (preferred temperature, lighting style, volume levels, sleep sounds), media (music genres, streaming services, sports teams, podcasts, audiobooks, news sources), communication (how formal/casual, how verbose, humor level, notification threshold), privacy (any off-limits topics, comfort with proactive suggestions). Ask ONE question at a time — be specific (e.g. "What time do you usually wake up on weekdays?" not "Tell me about your schedule"). After each answer, immediately call save_user_preference with user, category, key, and value, then move to the next question. Keep your personality — be yourself, make it fun — but stay on task. When a category is done, say so and move to the next. If the user wants to skip a topic, respect it and move on.'] -%}
+            {%- endif -%}
+
+            {{- ns.lines | join('\n') -}}
+
+      # ── COMPONENT 5: MEMORY ───────────────────────────────────────────────
+      - name: "AI Context — Memory"
+        unique_id: ai_context_memory
+        icon: mdi:brain
+        state: "ok"
+        attributes:
+          lines: |-
+            {%- set ns = namespace(lines=[]) -%}
+
+            {# ── MEMORY CONTEXT (I-4) ── #}
+            {%- set mem_ctx = state_attr('sensor.ai_memory_context', 'context') | default('', true) -%}
+            {%- if mem_ctx %}
+            {%- set ns.lines = ns.lines + ['Memory context:\n' ~ mem_ctx] -%}
+            {%- endif -%}
+
+            {# ── LAST INTERACTION (self-awareness, Task 2) ── #}
+            {%- set agent_names = {
+              'rick': 'Rick', 'quark': 'Quark', 'kramer': 'Kramer',
+              'deadpool': 'Deadpool', 'portuondo': 'Dr. Portuondo',
+              'doctor_portuondo': 'Dr. Portuondo', 'homeassistant': 'Home Assistant'
+            } -%}
+            {%- set last_agent_raw = states('input_text.ai_last_agent_name') -%}
+            {%- set last_agent = agent_names.get(last_agent_raw, last_agent_raw | title) -%}
+            {%- set last_ts = state_attr('input_datetime.ai_last_interaction_time', 'timestamp') | float(0) -%}
+            {%- if last_agent_raw not in ['none', 'unknown', 'unavailable', ''] and last_ts > 0 -%}
+              {%- set minutes_ago = ((now().timestamp() - last_ts) / 60) | int -%}
+              {%- set last_topic = states('input_text.ai_last_interaction_topic') | default('', true) -%}
+              {%- set handoff_reason = states('input_text.ai_last_handoff_reason') -%}
+              {%- set handoff_source_raw = states('input_text.ai_last_handoff_source') -%}
+              {%- set handoff_source = agent_names.get(handoff_source_raw, handoff_source_raw | title) -%}
+              {%- set base_line = 'Last interaction: ' ~ last_agent ~ ', ' ~ minutes_ago ~ ' min ago' -%}
+              {%- if last_topic -%}
+                {%- set base_line = base_line ~ ', about ' ~ last_topic -%}
+              {%- endif -%}
+              {%- if handoff_reason not in ['none', 'unknown', 'unavailable', ''] and minutes_ago < 10 -%}
+                {%- if handoff_reason == 'expertise' -%}
+                  {%- set base_line = base_line ~ '. (Expertise handoff from ' ~ handoff_source ~ ')' -%}
+                {%- else -%}
+                  {%- set base_line = base_line ~ '. (User-requested handoff from ' ~ handoff_source ~ ')' -%}
+                {%- endif -%}
+              {%- endif -%}
+              {%- set ns.lines = ns.lines + [base_line ~ '.'] -%}
+            {%- endif -%}
+
+            {{- ns.lines | join('\n') -}}
+
+      # ── MAIN CONCATENATOR ─────────────────────────────────────────────────
+      - name: "AI Hot Context"
+        unique_id: ai_hot_context
+        icon: mdi:brain
+        state: "ok"
+        attributes:
+          context: |-
+            {%- set parts = [
+              state_attr('sensor.ai_context_time_identity', 'lines'),
+              state_attr('sensor.ai_context_presence', 'lines'),
+              state_attr('sensor.ai_context_media', 'lines'),
+              state_attr('sensor.ai_context_environment', 'lines'),
+              state_attr('sensor.ai_context_memory', 'lines')
+            ] -%}
+            {{- parts | reject('in', ['', none, 'None', 'unknown', 'unavailable']) | join('\n') -}}

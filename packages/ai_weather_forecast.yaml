@@ -1,0 +1,5 @@
+# ── I-47: Tomorrow Weather Forecast Helpers ──────────────────────────────────
+# Used by weather_forecast_promote.yaml blueprint.
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+

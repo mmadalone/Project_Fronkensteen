@@ -1,0 +1,60 @@
+blueprint:
+  name: "Mobile Action Toggle (helper script)"
+  description: |
+    ## Version 1.0
+
+    HELPER SCRIPT: Fire a mobile_app_notification_action event and turn on an
+    input_boolean. Used to bridge dashboard buttons with mobile notification
+    action handlers (e.g. alarm snooze/stop from dashboard).
+
+    Create one instance per action (e.g. snooze, stop).
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/mobile_action_toggle.yaml
+
+  input:
+    core:
+      name: "① Configuration"
+      icon: mdi:cellphone
+      collapsed: false
+      input:
+        event_action:
+          name: "Mobile app action"
+          description: "The action string to fire (e.g. GUARD_SNOOZE, GUARD_STOP)."
+          selector:
+            text: {}
+
+        event_source:
+          name: "Event source"
+          description: "Source identifier for the event."
+          default: "dashboard"
+          selector:
+            text: {}
+
+        toggle_entity:
+          name: "Toggle entity"
+          description: "The input_boolean to turn on."
+          selector:
+            entity:
+              domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+variables:
+  event_action: !input event_action
+  event_source: !input event_source
+  toggle_entity: !input toggle_entity
+
+sequence:
+  - alias: "Fire mobile_app_notification_action event"
+    event: mobile_app_notification_action
+    event_data:
+      action: "{{ event_action }}"
+      source: "{{ event_source }}"
+
+  - alias: "Turn on toggle"
+    action: input_boolean.turn_on
+    target:
+      entity_id: "{{ toggle_entity }}"

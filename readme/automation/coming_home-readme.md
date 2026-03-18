@@ -1,192 +1,168 @@
-# Coming Home – AI Welcome
+# Coming Home -- AI Welcome
 
-![Coming home header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/coming_home-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/coming_home-header.jpeg)
 
-An arrival automation that triggers when one or more persons come home, waits for physical entrance occupancy confirmation (GPS alone isn't reliable), optionally power-cycles speakers to clear stale connections, activates temporary helper switches, generates a personalized AI greeting via a conversation agent, then starts an interactive Assist conversation on Voice PE satellites. Supports multiple person entities and custom arrival names for multi-person households. Includes GPS-bounce cooldown, timeout handling on every wait, and guaranteed cleanup of temporary switches on all exit paths.
+Triggers when a person arrives home, waits for entrance occupancy to confirm physical presence (GPS alone is not reliable), resets speakers by power-cycling switches, activates temporary helper switches, generates an AI greeting via a conversation agent, then starts an Assist conversation on Voice PE satellites. Includes GPS-bounce cooldown, timeout handling on every wait, and guaranteed cleanup of temporary switches on all exit paths.
 
 ## How It Works
 
 ```
-Person state: not_home → home (GPS)
-                │
-                ▼
-┌───────────────────────────────┐
-│ GPS bounce cooldown            │──── Ran recently → skip
-│ (this.attributes.last_triggered│
-│  vs cooldown_seconds)          │
-└──────────────┬────────────────┘
+┌─────────────────────────────────────┐
+│  Person entity: not_home -> home    │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌───────────────────────────────┐
-│ Wait for entrance occupancy    │──── Timeout → abort
-│ (binary_sensor confirmation)   │     (likely GPS bounce)
-└──────────────┬────────────────┘
+┌─────────────────────────────────────┐
+│  Conditions:                        │
+│  ├─ GPS bounce cooldown             │
+│  └─ Privacy gate                    │
+└──────────────┬──────────────────────┘
                │
                ▼
-    Power-cycle reset switches
-    (OFF → delay → ON, optional)
+┌─────────────────────────────────────┐
+│  Clean up stale arrival switches    │
+│  (from interrupted mode:restart)    │
+└──────────────┬──────────────────────┘
                │
                ▼
-    Turn ON temporary switches
+┌─────────────────────────────────────┐
+│  Wait for entrance occupancy        │
+│  (skip if already triggered)        │
+│  └─ Timeout -> abort cleanly        │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌───────────────────────────────┐
-│ Wait for entrance to clear     │──── Timeout → cleanup + abort
-│ (person moved past the door)   │
-└──────────────┬────────────────┘
+┌─────────────────────────────────────┐
+│  Power-cycle speaker switches       │
+│  Turn on temporary switches         │
+│  Wait for entrance to clear         │
+│  └─ Timeout -> cleanup + abort      │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌───────────────────────────────┐
-│ conversation.process            │
-│ Generate AI greeting            │
-│ (with person_name context)      │
-│ Fallback on LLM failure         │
-└──────────────┬────────────────┘
-               │
-               ▼
-┌───────────────────────────────┐
-│ assist_satellite                │
-│ .start_conversation             │
-│ Speak greeting + listen for     │
-│ follow-up commands              │
-│ (extra_system_prompt provides   │
-│  arrival context to agent)      │
-└──────────────┬────────────────┘
-               │
-               ▼
-    Post-conversation delay
-               │
-               ▼
-    Turn OFF temporary switches
-    (guaranteed cleanup)
+┌─────────────────────────────────────┐
+│  Agent selection (dispatcher/manual)│
+│  Generate AI greeting               │
+│  Start Assist conversation on sats  │
+│  Whisper self-awareness update      │
+│  Log greeting for troubleshooting   │
+│  Post-conversation delay            │
+│  Clean up temporary switches        │
+└─────────────────────────────────────┘
 ```
-
-## Key Design Decisions
-
-### Dual Confirmation: GPS + Occupancy
-
-GPS zone transitions are notoriously unreliable — phones can report "home" while you're still parking, or bounce between home/not_home repeatedly. This blueprint requires both the GPS state change (trigger) and a physical occupancy sensor at the entrance (confirmation) before proceeding. If the entrance sensor doesn't fire within the timeout window, the automation aborts cleanly — no speakers reset, no greeting generated, no switches left dangling.
-
-### Multi-Person Name Resolution
-
-The `person_name` variable resolves through a three-tier priority chain. First, if the "Arrival names" text field has content, it splits by newline, trims whitespace, drops empty lines, and joins with "and" (e.g., "Miquel and Ana"). Second, if no custom names are set but person entities are configured, it pulls `friendly_name` from each entity and joins them with "and". Third, if neither is configured, it falls back to "someone." This means you can set person entities for trigger purposes but override the greeting names for a more personal touch.
-
-### Speaker Power-Cycle Reset (Optional)
-
-Before generating the greeting, the blueprint can optionally power-cycle configured switches (OFF → configurable delay → ON). This clears stale Bluetooth connections, audio routing issues, and "phantom paired" states that plague Sonos, Chromecast, and other networked speakers. If no reset switches are configured, this step is skipped entirely.
-
-### Guaranteed Temporary Switch Cleanup
-
-Temporary switches (helper booleans, relay flags) are turned ON at the start of the arrival flow and guaranteed to turn OFF on every exit path — including entrance timeout, entrance-clear timeout, and normal completion. There's no code path that leaves switches dangling.
-
-### Two-Phase Entrance Wait
-
-The automation waits twice for the entrance sensor: once for the person to arrive (sensor → ON), and once for them to move past the door (sensor → OFF). This prevents the greeting from firing while you're still standing in the doorway fumbling with keys.
 
 ## Features
 
-- **Multi-person trigger** — Select multiple person entities. The automation fires when any of them arrives home. Friendly names are joined with "and" in the greeting (e.g., "Miquel and Ana").
-- **Custom arrival names** — Multiline text field for custom names (one per line). When provided, these override person entity friendly names in the greeting. Useful for partners, guests, or anyone without a HA person entity.
-- **GPS bounce protection** — Cooldown timer using `this.attributes.last_triggered` prevents re-triggers from GPS bouncing. Configurable from 60s to 3600s (default 900s / 15 minutes).
-- **Physical presence confirmation** — Entrance occupancy sensor must trigger before the flow proceeds. GPS-only arrivals are filtered out.
-- **Speaker hardware reset (optional)** — Power-cycle switches clear stale audio connections before the greeting plays. Leave the switch list empty to skip this step entirely.
-- **Temporary switch lifecycle** — Helper switches activated during the flow, guaranteed cleanup on all exit paths.
-- **AI-generated greeting** — `conversation.process` generates a personalized welcome using `{{ person_name }}` which resolves to custom names (if provided), person entity friendly names joined with "and", or "someone" as a final fallback. Falls back to a static greeting if the LLM fails.
-- **Interactive Assist conversation** — `assist_satellite.start_conversation` speaks the greeting and opens a follow-up conversation on Voice PE satellites. The `extra_system_prompt` provides arrival context so the agent understands responses like "both" or "just the workshop."
-- **Multi-satellite support** — Target multiple Voice PE / Assist satellite entities for whole-house announcements.
-- **Timeout on every wait** — Both entrance waits have configurable timeouts with clean abort paths.
+- GPS state change triggers with entrance occupancy confirmation
+- GPS-bounce cooldown (configurable, default 900s)
+- Speaker power-cycle reset to clear stale Bluetooth/audio connections
+- Temporary switch activation with guaranteed cleanup on all exit paths (including timeouts and mode:restart)
+- AI-generated personalized greeting via conversation agent
+- Multi-person support with custom arrival names
+- Assist satellite conversation for follow-up interaction (lights, TV, music)
+- AI agent dispatcher or manual pipeline selection
+- Privacy gate with per-feature override (T1/T2/T3 tiers)
+- Self-awareness whisper after greeting
+- Logbook entry for troubleshooting silent satellite failures
+- Timeout handling on entrance wait and entrance-clear wait
 
 ## Prerequisites
 
-- **Home Assistant 2024.10.0+**
-- One or more **person entities** with GPS-based home/not_home tracking
-- An **occupancy binary_sensor** at the entrance (e.g., Aqara FP2 zone, PIR sensor)
-- A **conversation agent** (OpenAI, Ollama, Google AI, etc.)
-- One or more **Assist satellite** entities (Voice PE or compatible)
-
-**Optional:**
-- **Switches** for speaker power-cycle reset (e.g., smart plugs powering speakers)
-- **Helper switches** (`input_boolean` exposed as switches) for temporary flags
+- Home Assistant 2025.4.0+ (required for `assist_satellite.start_conversation`)
+- Person entities with GPS tracking
+- Binary sensor for entrance occupancy (Aqara FP2, PIR, etc.)
+- Assist satellites for voice interaction
+- pyscript services: `agent_dispatch`, `agent_whisper`
 
 ## Installation
 
-1. Copy `coming_home.yaml` into your blueprints directory:
-   ```
-   config/blueprints/automation/<your_namespace>/coming_home.yaml
-   ```
-   Or import via URL if hosted on GitHub.
-
-2. Create a new automation from the blueprint: **Settings → Automations → Create Automation → Use Blueprint**
-
-3. At minimum, configure the person entities, entrance sensor, conversation agent, and Assist satellites. Reset switches are optional.
+1. Copy `coming_home.yaml` to `config/blueprints/automation/madalone/`
+2. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
 
 ## Configuration
 
-### Top-Level
+<details>
+<summary><strong>Section 1 -- Detection & Triggers</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Persons** | — | Person entities whose arrival triggers the automation. Multiple persons supported — fires when any arrive. |
-| **Arrival names** | — | Custom names for the AI greeting (one per line). Overrides person entity friendly names when provided. |
+| Persons | `[]` | Person entities whose home/not_home transition triggers the flow. |
+| Arrival names | _(empty)_ | Custom names for the greeting (one per line). Overrides person friendly names. |
+| Entrance occupancy sensor | _(required)_ | Binary sensor confirming physical presence at the entrance. |
+| Entrance wait timeout | `0:02:00` | How long to wait for the entrance sensor before aborting. |
+| Cooldown | `900` s | Minimum seconds between runs to suppress GPS bounce. |
 
-### ① Detection & Triggers
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| **Entrance occupancy sensor** | (required) | Binary sensor confirming physical presence at the entrance |
-| **Entrance wait timeout** | 2 min | How long to wait for entrance sensor after GPS triggers |
-| **Cooldown (seconds)** | 900 | Minimum seconds between runs to suppress GPS bounce |
-
-### ② Device Preparation
+<details>
+<summary><strong>Section 2 -- Device Preparation</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Reset switches** | — | Switches to power-cycle for speaker reset. Leave empty to skip. |
-| **Reset delay** | 2 sec | Pause between OFF and ON during power-cycle |
-| **Temporary switches** | (required) | Switches activated during arrival flow, guaranteed cleanup |
+| Reset switches | `[]` | Switches to power-cycle (OFF -> delay -> ON) to reset speakers. |
+| Reset delay | `0:00:02` | Pause between turning switches off and on. |
+| Temporary switches | `[]` | Switches activated during the flow, guaranteed cleanup on exit. |
 
-### ③ AI Conversation
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| **Conversation agent** | (required) | LLM agent for greeting generation and follow-up |
-| **AI greeting prompt** | Snarky greeting asking about lights | Prompt sent to agent — use `{{ person_name }}` for the arriving person |
-| **Assist satellites** | (required) | Voice PE / satellite entities for the greeting and conversation |
-
-### ④ Cleanup & Timing
+<details>
+<summary><strong>Section 3 -- AI Conversation</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Post-conversation delay** | 1 min | Wait after starting the Assist conversation before turning off temporary switches |
+| Voice Assistant | `Rick` | Assist Pipeline for the greeting. Overridden by dispatcher. |
+| Use Dispatcher | `true` | Let the dispatcher select the persona dynamically. |
+| AI greeting prompt | _(default)_ | Prompt for the greeting. Supports `{{ person_name }}`. |
+| Assist satellites | `{}` | Voice PE satellites for the greeting and follow-up conversation. |
 
-## Exit Paths and Cleanup
+</details>
 
-| Exit Path | Temporary Switches | Volume/Speakers |
-|-----------|-------------------|-----------------|
-| GPS bounce (cooldown) | Never turned on | Not touched |
-| Entrance timeout (no physical arrival) | Never turned on | Not touched |
-| Entrance-clear timeout (stuck in doorway) | Turned OFF before abort | Already reset (if configured) |
-| Normal completion | Turned OFF after delay | Already reset (if configured) |
+<details>
+<summary><strong>Section 4 -- Cleanup & Timing</strong></summary>
 
-Every path that activates temporary switches also deactivates them. No dangling state.
+| Input | Default | Description |
+|-------|---------|-------------|
+| Post-conversation delay | `0:01:00` | How long to wait after starting conversation before switch cleanup. |
+
+</details>
+
+<details>
+<summary><strong>Section 5 -- Privacy</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Privacy gate tier | `off` | Privacy tier (off/T1/T2/T3). |
+| Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
+| Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
+| Privacy gate person | `miquel` | Person name for suppression lookups. |
+
+</details>
+
+<details>
+<summary><strong>Section 6 -- Infrastructure</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | AI agent dispatcher toggle. |
+
+</details>
 
 ## Technical Notes
 
-- Runs in `mode: restart` — a new arrival restarts any in-progress flow (handles the case where someone leaves and returns quickly).
-- `trigger_variables` resolves `cooldown_seconds` for use in the condition block (before action-level variables are available).
-- The cooldown uses `this.attributes.last_triggered` with a default of year 2000 to handle first-ever runs where the attribute doesn't exist yet.
-- `continue_on_error: true` on `conversation.process` and `assist_satellite.start_conversation` prevents LLM failures from blocking the flow.
-- The greeting fallback uses defensive `is defined` checks on the nested response structure (`ai_greeting.response.speech.plain.speech`).
-- The `person_name` variable resolves through a three-tier priority: custom names text field → person entity friendly names → "someone". Custom names are split by newline and joined with "and".
-- When multiple person entities are configured, the trigger fires on any of them transitioning to `home`. Each arrival is independent — if two persons arrive within the cooldown window, only the first triggers the flow.
-- The `extra_system_prompt` on `assist_satellite.start_conversation` feeds the greeting text back to the agent so it has full context for follow-up responses.
-- The AI greeting prompt is passed directly via `!input` (not a variable) — the `{{ person_name }}` template is resolved at render time from the action-level variable.
+- **Mode:** `restart` -- if a second person arrives while the first flow is running, the first run is cancelled and temporary switches may remain ON until the new run completes its cleanup
+- The first action cleans up stale temporary switches from previous interrupted runs
+- Entrance sensor checks use "already triggered" shortcuts to skip unnecessary waits
+- All switch operations use `continue_on_error: true`
+- Person name template uses `{%- -%}` whitespace control to prevent leading whitespace
+- If the conversation agent is not configured, the greeting generation step is skipped
+- If no satellites are configured, the `start_conversation` step is skipped
+- The greeting fallback includes a device choice prompt (workshop, living room, or both)
 
 ## Changelog
 
-- **v3:** Multi-person support — person selector accepts multiple entities, new multiline text field for custom arrival names (overrides entity friendly names, one per line). Reset switches now optional (empty list skips power-cycle step). Reset switches changed from target selector to entity selector for clean optional default.
-- **v2:** Full style guide compliance — collapsible sections, modern syntax, aliases, variable scope fix
-- **v1:** Initial version
+- **v4.8:** Fixed leading whitespace in `person_name`, added `choose` guards on `conversation.process` and `assist_satellite.start_conversation`
+- **v4.7:** Added "Required." to `entrance_sensor` and `conversation_agent` descriptions
+- **v4.6:** Bumped `min_version` to 2025.4.0 (`assist_satellite.start_conversation` requires it), added `source_url`
 
 ## Author
 

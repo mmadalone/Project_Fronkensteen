@@ -2,7 +2,7 @@
 
 Section 8 — Agent prompt structure, separation from blueprints, naming conventions.
 
-> **Scope:** This section covers conversation agents built on the **Extended OpenAI Conversation** integration. Patterns for prompt structure, tool/function exposure, PERMISSIONS tables, and multi-agent coordination are specific to how Extended OpenAI handles system prompts and custom functions. Native HA integrations (OpenAI Conversation, Anthropic, Google Gemini, Ollama) use the Assist API with Exposed Entities and have different scoping mechanisms — consult their respective docs.
+> **Scope:** This section covers conversation agent prompts and configuration. Agents are built on **Extended OpenAI Conversation** (HACS — execution backend providing LLM-powered conversation entities with function calling) and assigned to **HA Voice Assistant pipelines** (routing/config layer — Decision #49). The Assist Pipeline handles wake word → STT → agent → TTS routing; Extended OpenAI Conversation provides the conversation entities. Patterns for prompt structure, tool/function exposure, PERMISSIONS tables, and multi-agent coordination are specific to how Extended OpenAI handles system prompts and custom functions. Native HA integrations (OpenAI Conversation, Anthropic, Google Gemini, Ollama) use the Assist API with Exposed Entities and have different scoping mechanisms — consult their respective docs.
 
 ---
 
@@ -29,9 +29,44 @@ extra_system_prompt: >-
   and music as per your rules.
 ```
 
-**Two ways to invoke an agent with dynamic context:**
+**Three ways to invoke an agent with dynamic context:**
 
-1. **`conversation.process`** — the standard action for processing text input through a conversation agent. Used in automations and scripts when the flow doesn't need a voice satellite.
+1. **Dispatcher-first via `pyscript.agent_dispatch`** (PREFERRED) — the standard path in this setup. The dispatcher selects the agent, TTS voice, and persona based on a 6-level routing algorithm (name → wake word → continuity → keywords → era → random). Blueprints call `pyscript.agent_dispatch` first, then use the returned `dispatch_agent` in `conversation.process`. See §14.5.1 Pattern 1 for the full calling convention.
+
+```yaml
+# Step 1: Dispatcher selects agent + voice + persona
+- action: pyscript.agent_dispatch
+  response_variable: dispatch
+  data:
+    wake_word: "bedtime"
+    intent_text: "Starting bedtime routine"
+    skip_continuity: true
+  continue_on_error: true
+- variables:
+    dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+    dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+    dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+
+# Step 2: Use the selected agent for conversation
+- action: conversation.process
+  data:
+    agent_id: "{{ dispatch_agent }}"
+    text: "{{ prompt_text }}"
+    extra_system_prompt: >-
+      {{ person_name }} just arrived. Greet them and offer to set up
+      their lights and music.
+  response_variable: agent_response
+
+# Step 3: Log to whisper network
+- action: pyscript.agent_whisper
+  data:
+    agent_name: "{{ dispatch_persona }}"
+    user_query: "Arrival greeting"
+    agent_response: "{{ agent_response.response.speech.plain.speech | default('') | truncate(200) }}"
+  continue_on_error: true
+```
+
+2. **Direct `conversation.process`** (FALLBACK) — used when the pyscript layer is unavailable, or for simple setups without the orchestration layer. The agent is specified via `!input conversation_agent`.
 
 ```yaml
 - action: conversation.process
@@ -237,6 +272,21 @@ Pattern 3 is the most robust because confirmation isn't relying on LLM judgment 
 
 > **Forward-looking note:** HA's voice roadmap (Chapter 10) plans native "protected entities" that enforce verbal confirmation at the platform level. Until that ships, this prompt-level guardrail is the only defense. When HA adds native support, the confirm-first tier moves from prompt rules to entity configuration — but keep the prompt rules as defense-in-depth.
 
+**Time-based personality progressions (cadence formulas):**
+
+Persona prompts can include `now().hour` Jinja2 conditionals that shift personality across the day. These are placed in the PERSONALITY section and control what the LLM *generates* (text content, speech patterns, mood):
+
+```
+Your current drunk level: {% if now().hour < 9 %}severely hungover{% elif now().hour < 12 %}hungover but functional{% elif now().hour < 17 %}casually drinking{% elif now().hour < 21 %}noticeably drunk{% else %}completely hammered{% endif %}.
+```
+
+The cadence formula is a TEXT layer — it affects LLM output. A separate VOICE layer (via ElevenLabs Custom TTS voice profiles with per-call speed/stability parameters) can make the actual audio delivery match the personality state. See §14.8 for TTS voice profile routing.
+
+**Rules for cadence formulas:**
+- Keep the `now().hour` breakpoints consistent between the prompt formula and the TTS voice profile mapping.
+- Never exceed 250 words in any persona's response constraint — TTS has a hard character limit.
+- Tag placement instructions (`[burps]`, `[slurring]`, `[groaning]`) are text cues for the LLM, not SSML — ElevenLabs reads them as text or skips them.
+
 ### 8.3.1 Example prompt skeleton
 Here's a minimal but complete example following all four mandatory sections:
 
@@ -345,7 +395,7 @@ Since HA 2025.2, **Model Context Protocol (MCP)** servers provide a second, inte
 | Exposed scripts (§8.3.2) | Device control, HA service calls, anything needing HA entity targeting | Requires creating scripts in HA; tool descriptions live in YAML |
 | MCP servers | Information retrieval, external APIs, multi-step reasoning, to-do lists, calendar queries | Requires running a separate MCP server process; available since HA 2025.2 |
 
-These are **complementary, not competing** tool sources. A single conversation agent can use both exposed scripts AND MCP-provided tools simultaneously. The one-agent-per-persona rule (§8.4) limits the number of *agents*, not the number of tool sources per agent. A single `Rick - Extended` agent can have 5 exposed scripts AND 3 MCP servers feeding it tools.
+These are **complementary, not competing** tool sources. A single conversation agent can use both exposed scripts AND MCP-provided tools simultaneously. The two-variants-per-persona rule (§8.4) limits the number of *agents*, not the number of tool sources per agent. A single `rick_standard` agent can have 5 exposed scripts AND 3 MCP servers feeding it tools.
 
 **Security principle:** The same caution applies to MCP as to exposed scripts — only connect MCP servers you trust. Each MCP server extends what the LLM can *do*, and there's no sandbox. The PERMISSIONS section in the agent prompt is your compensating control for MCP tools, just as it is for exposed scripts.
 
@@ -362,35 +412,43 @@ These are **complementary, not competing** tool sources. A single conversation a
 > **HA as MCP server:** Conversely, HA can also act as an MCP *server*, exposing your home's entities and actions to external AI systems (Claude Desktop, ChatGPT, etc.). This is configured separately from the conversation agent stack and is not covered in this guide. See the [HA MCP integration docs](https://www.home-assistant.io/integrations/mcp_server/).
 
 ### 8.4 Agent naming convention
-Agent names follow the pattern: `<Persona> - <Integration>[ - <Variant>]`
+Agent entity IDs follow the pattern: `conversation.<persona>_<variant>`
 
-The `<Variant>` describes a **behavioral variant** of the persona (response style, verbosity, model). It does **not** describe a scenario or flow. Scenarios are handled by `extra_system_prompt` injection, not by creating separate agents (see §8.6).
+Two variants exist per persona:
+- **standard** — all non-bedtime interactions. Tools: execute_service(s), memory_tool, web_search, pause_media, shut_up, stop_radio
+- **bedtime** — sleep transition, audiobook, countdown. Tools: execute_service(s), memory_tool, web_search, audiobook, countdown, skip
 
-**Valid examples:**
-- `Rick - Extended` (general purpose, Extended OpenAI Conversation)
-- `Rick - Extended - Verbose` (detailed responses variant)
-- `Quark - Extended` (different persona, same integration)
-- `Rick - Extended - GPT4o` (specific model variant, if you run multiple)
-- `Rick - Ollama - Local` (different integration)
+**Current agents (8 total = 4 personas × 2 variants):**
+
+| Persona | Standard | Bedtime |
+|---------|----------|---------|
+| Rick Sanchez | `conversation.rick_standard` | `conversation.rick_bedtime` |
+| Quark | `conversation.quark_standard` | `conversation.quark_bedtime` |
+| Deadpool | `conversation.deadpool_standard` | `conversation.deadpool_bedtime` |
+| Kramer | `conversation.kramer_standard` | `conversation.kramer_bedtime` |
+
+**Why two variants, not one?** Bedtime has genuinely different tools (audiobook, countdown) and safety concerns (user is falling asleep). All other context differences (time of day, presence, media state) are handled by `sensor.ai_hot_context` injection — no separate agent needed.
+
+**Why not per-scenario agents?** Scenarios like "coming home" or "proactive announcement" inject their context via `extra_system_prompt` to the same standard agent. The per-scenario agent model (which would produce O(personas × scenarios) agents) was explicitly rejected in favor of L1 hot context injection. Only bedtime's different tool set justifies a separate variant.
+
+Each agent's system prompt is configured in the Extended OpenAI Conversation integration UI. The agent is assigned to an Assist Pipeline (Settings → Voice Assistants), which handles wake word → STT → agent → TTS routing.
 
 **Invalid — don't do this:**
-- ~~`Rick - Extended - Coming Home`~~ — "Coming Home" is a scenario, not a persona variant. The coming-home context should be injected via `extra_system_prompt` from the blueprint, using the same `Rick - Extended` agent.
-- ~~`Rick - Extended - Bedtime`~~ — Same problem. One Rick agent handles all scenarios.
-
-The `<Integration>` part identifies which conversation integration the agent uses (e.g., `Extended` for Extended OpenAI Conversation, `Ollama` for Ollama, `Google` for Google AI, etc.).
-
-**Why one agent per persona (not per scenario)?** This is a deliberate architectural choice to prevent agent explosion:
-
-- **Per-scenario agents scale as O(personas × scenarios).** Two personas (Rick, Quark) × four scenarios (arrival, bedtime, proactive, media control) = **8 agents**, each with its own copy of personality, permissions, and style rules. Add a third persona and you're at 12. Every personality tweak requires updating N copies. This is the configuration equivalent of copy-paste coding.
-- **Per-persona agents scale as O(personas).** Same setup = **2 agents**. Scenarios are context overlays injected via `extra_system_prompt` — a bedtime flow sends `"This is a bedtime conversation. The user wants to wind down."` to the same Rick agent that handles arrivals. Adding a new scenario costs zero new agents.
-- **Maintenance cost is the killer.** When you update Rick's PERMISSIONS table (add a new device, remove an old one), you update it in **one place** vs **four**. When you tune his STYLE rules, one edit vs four. Configuration drift between scenario variants is a real and miserable debugging experience.
-
-The only valid reason to create a variant agent (§8.4 naming: `Rick - Extended - Verbose`) is when you need a **behavioral variant** of the same persona — different model, different response length, different tool set. Never for scenarios.
+- ~~`Rick - Coming Home`~~ — "Coming Home" is a scenario. Inject via `extra_system_prompt`.
+- ~~Creating a separate agent per room~~ — Use `extra_system_prompt` to inject room context.
 
 ### 8.5 Multi-agent coordination
-When multiple agents exist (Rick for the workshop, Quark for the living room, etc.), they operate independently — each agent has its own system prompt, tools, and conversation history.
+When multiple agents exist (Rick, Quark, Deadpool, Kramer), they operate independently — each agent has its own system prompt, tools, and conversation history.
 
-**Current state:** HA does not natively support agent-to-agent handoff. Each blueprint invocation targets a single `conversation_agent` entity. There are two patterns for multi-agent behavior:
+**Current state:** This system uses a **pyscript orchestration layer** for inter-agent coordination:
+
+- **`agent_dispatcher.py`** — 6-level routing: explicit name → wake word → continuity → topic keywords → time-of-day era → random fallback. Reads from `assist_pipeline.pipelines` for persona discovery.
+- **`voice_handoff.yaml`** — Voice-initiated agent switching blueprint (I-24). LLM tool sets flag → blueprint switches satellite pipeline → greeting → mic reopen. Per-satellite, chainable. Supersedes the archived `agent_handoff.py`.
+- **`agent_whisper.py`** — Records interactions to L2 memory. Detects mood via keyword matching (zero LLM calls). Auto-updates dispatcher topic keywords from conversation content.
+
+These are documented in `voice_context_architecture.md`. The blueprint-level patterns below remain valid for understanding the coordination concepts and for setups that don't use pyscript orchestration.
+
+Each blueprint invocation targets a single `conversation_agent` entity. There are two patterns for multi-agent behavior at the blueprint level:
 
 #### Pattern A: Dispatcher agent (PREFERRED for Extended OpenAI Conversation)
 
@@ -438,6 +496,7 @@ script:
           # NOTE: no extra_system_prompt here — the specialist has its own static prompt.
           # Pass conversation_id if you need multi-turn context threading.
         response_variable: specialist_response
+        continue_on_error: true
       - stop: "{{ specialist_response.response.speech.plain.speech | default('No response from workshop agent.') }}"
         response_variable: result
 ```
@@ -479,6 +538,7 @@ When agents use different integrations (e.g., Extended OpenAI + Ollama) or when 
       data:
         agent_id: !input fallback_agent
         text: "{{ user_request }}"
+      continue_on_error: true
 ```
 
 > **⚠️ Fragility warning:** This pattern matches against free-form LLM output. LLMs don't reliably produce exact phrases. The template above checks for multiple common refusal patterns to improve reliability, but it will never be 100% accurate. Use Pattern A when possible.
@@ -487,6 +547,7 @@ When agents use different integrations (e.g., Extended OpenAI + Ollama) or when 
 - In Pattern A, the dispatcher knows specialists exist (it has to — they're its tools). Specialists should NOT know about each other or the dispatcher.
 - In Pattern B, no agent knows other agents exist. Handoff logic lives entirely in the blueprint.
 - Each agent's PERMISSIONS section must be independent — don't assume shared device access.
+- **Observability:** Multi-LLM-call flows are hard to debug from traces alone. Add `logbook.log` entries after each `conversation.process` call to record which agent was called and whether it succeeded. This makes the routing path visible in the logbook without digging through automation traces.
 - This is an area likely to evolve as HA's voice pipeline matures. Revisit when HA adds native multi-agent support.
 
 ### 8.6 Voice pipeline constraints on agent behavior
@@ -500,7 +561,7 @@ Conversation agents don't exist in a vacuum — when used with voice assistants,
 - `assist_satellite.start_conversation` uses the satellite's assigned pipeline — you cannot override the agent per-call. If your flow needs a different agent, either switch the pipeline first or use `conversation.process` with explicit `agent_id` and handle TTS output yourself.
 
 **Implications for agent design:**
-- **Don't create per-scenario agent instances** (e.g., `Rick - Extended - Coming Home` as a separate agent). Instead, use one agent per persona and inject scenario context via `extra_system_prompt`. The naming convention in §8.4 reflects personas and integration variants, not scenarios.
+- **Don't create per-scenario agent instances** (e.g., a separate "Coming Home" agent). Instead, use the persona's standard agent and inject scenario context via `extra_system_prompt`. Bedtime is the only variant that justifies a separate agent (different tool set) — see §8.4.
 - **TTS is not the agent's job.** The agent returns text; the pipeline's TTS engine converts it to speech. Don't include TTS-specific instructions (speed, pitch) in the agent prompt — those belong in the TTS engine or ESPHome config.
 - **The agent doesn't know which satellite it's on** unless you tell it via `extra_system_prompt`. If room-aware behavior matters ("dim the lights" should mean *this room's* lights), the blueprint must inject the satellite's location into the prompt.
 

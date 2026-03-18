@@ -1,100 +1,122 @@
-# Voice — Kodi play content
+# Voice -- Kodi play content
 
-![Voice Kodi Play Content header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_kodi_play_content-header.jpeg)
+![Voice -- Kodi play content](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_kodi_play_content-header.jpeg)
 
-Universal Kodi content router exposed as a reusable script blueprint. Accepts a content type and identifier, determines the correct Kodi playback method, and fires it. Handles direct file playback for movies and episodes, plugin/favourite URIs via JSON-RPC `Player.Open`, and TV show continuation with automatic next-unwatched-episode resolution via `VideoLibrary.GetTVShows` → `VideoLibrary.GetEpisodes` chaining.
-
-Designed primarily as a tool script for LLM conversation agents (Extended OpenAI Conversation function registration), but works from any automation, script call, or dashboard button.
-
-> **Origin:** Extracted from the raw `voice_play_bedtime_kodi` script used by the *Bedtime Routine Plus* automation. Generalized for reuse — no bedtime-specific logic remains.
+Universal Kodi content router. Accepts a content type and content identifier, determines the correct playback method, and fires it. Handles direct file playback (movies, episodes), plugin/favourite URIs via JSON-RPC `Player.Open`, and TV show continuation with automatic next-unwatched-episode resolution. Designed as a tool script for LLM conversation agents but works from any automation, script call, or dashboard button.
 
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  voice_kodi_play_content                     │
-│                                                             │
-│  Inputs: content_id, content_type, media_content_type       │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              Route on content_type                   │    │
-│  └──────┬──────────────┬──────────────┬────────────────┘    │
-│         │              │              │                      │
-│    movie/episode   favourite   tvshow_continue               │
-│         │              │              │                      │
-│         ▼              ▼              ▼                      │
-│  ┌────────────┐ ┌────────────┐ ┌──────────────────────┐    │
-│  │ play_media │ │ Player.Open│ │ Step 1: GetTVShows   │    │
-│  │ (direct    │ │ (plugin,   │ │   → resolve tvshowid │    │
-│  │  file path)│ │  special,  │ │                      │    │
-│  └────────────┘ │  smart     │ │ Step 2: GetEpisodes  │    │
-│                 │  playlist) │ │   → first unwatched  │    │
-│                 └────────────┘ │   → playcount == 0   │    │
-│                                │                      │    │
-│                                │ Step 3: Player.Open  │    │
-│                                │   → play resolved    │    │
-│                                │     episode file     │    │
-│                                └──────────────────────┘    │
-│                                                             │
-│  On failure: logbook.log or notify (configurable)           │
-└─────────────────────────────────────────────────────────────┘
+Start (content_id, content_type)
+  |
+  v
++---------------------------+
+| Route on content_type     |
++---------------------------+
+  |
+  +---------+---------+---------+------------------+
+  |         |         |         |                  |
+  v         v         v         v                  v
+movie    episode   favourite  tvshow_continue   unknown
+  |         |         |         |                  |
+  v         v         v         v                  v
++-------+ +-------+ +--------+ |              +--------+
+| play  | | play  | | Player | |              | Log    |
+| _media| | _media| | .Open  | |              | warning|
++-------+ +-------+ +--------+ |              +--------+
+                                |
+                     +----------+-----------+
+                     |                      |
+                     v                      v
+              +-------------+        +-------------+
+              | GetTVShows  |        | tvshowid    |
+              | by title    |        | not found   |
+              +-------------+        +-> error msg |
+                     |
+                     v
+              +-------------+
+              | GetEpisodes |
+              | unwatched   |
+              | sort asc    |
+              +-------------+
+                     |
+              +------+------+
+              |             |
+              v             v
+        +----------+  +-----------+
+        | Play via |  | No episode|
+        | Player   |  | found     |
+        | .Open    |  +-> error   |
+        +----------+  +-----------+
 ```
 
-## Key Design Decisions
+## Features
 
-### Three playback methods, one entry point
+- Four content type routes: movie, episode, favourite, tvshow_continue
+- Direct file playback via `media_player.play_media` for movies and episodes
+- Plugin/special URI playback via `kodi.call_method Player.Open` for favourites
+- TV show continuation: resolves show title to `tvshowid`, finds first unwatched episode, plays it
+- Configurable JSON-RPC timeout for large Kodi libraries
+- Optional notification service for error reporting (falls back to logbook logging)
+- Media content type override for non-video content (music, CHANNEL, DIRECTORY)
+- Explicit `wait.completed` checks on JSON-RPC responses
+- Default branch logs unknown content types for trace visibility
 
-Kodi's `media_player.play_media` can handle direct file paths but chokes on `plugin://` and `special://` URIs. Those need `kodi.call_method` with `Player.Open`. And continuing a TV show requires two sequential JSON-RPC lookups before you even have a file path to play. This blueprint hides all three behind a single `content_type` field — the caller doesn't need to know which Kodi API to use.
+## Prerequisites
 
-### JSON-RPC with defensive wait guards
+- Home Assistant 2024.10.0+
+- Kodi integration with a `media_player` entity
+- `kodi.call_method` service (for favourites and TV show continuation)
 
-The `tvshow_continue` path chains two `kodi.call_method` calls with `wait_for_trigger` on `kodi_call_method_result` events. Each wait has a configurable timeout (default 10 seconds) and `continue_on_error: true`. The response extraction uses full `is defined` guard chains — `wait.trigger`, `wait.trigger.event`, `wait.trigger.event.data` — to prevent silent failures if Kodi doesn't respond or returns an unexpected structure.
+## Installation
 
-### Configurable error reporting
+1. Copy `voice_kodi_play_content.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings -> Automations & Scenes -> Scripts -> Add -> Use Blueprint**
 
-Errors (show not found, no unwatched episodes) can route to either `logbook.log` (default, zero config) or a `notify` service entity for push notifications. The choice is made via the optional `error_notify_entity` blueprint input — leave it empty for logbook, set it for notifications.
+## Configuration
 
-### Agent-friendly field design
+<details><summary>① Target</summary>
 
-The `fields:` block exposes `content_id`, `content_type`, and `media_content_type` as tool parameters for LLM function registration. The field descriptions are written to guide an LLM in selecting the correct routing type based on the user's voice request.
+| Input | Default | Description |
+|-------|---------|-------------|
+| `kodi_entity` | _(required)_ | Kodi media_player entity for playback and JSON-RPC lookups |
 
-## Blueprint Inputs
+</details>
 
-| Section | Input | Default | Description |
-|---------|-------|---------|-------------|
-| ① Target | Kodi media player | *(required)* | Kodi media_player entity (filtered to Kodi integration) |
-| ② Advanced | JSON-RPC timeout | 10s | Wait timeout for TV show continuation lookups |
-| ② Advanced | Notification service | *(empty)* | Optional notify entity for error messages |
+<details><summary>② Advanced</summary>
 
-## Script Fields (passed at call time)
+| Input | Default | Description |
+|-------|---------|-------------|
+| `jsonrpc_timeout` | `10` | Seconds to wait for Kodi JSON-RPC responses |
+| `error_notify_entity` | `""` | Optional notify entity for errors (e.g. `notify.mobile_app_phone`). Empty = logbook only |
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `content_id` | Yes | File path, plugin URI, or TV show title |
-| `content_type` | Yes | `movie`, `episode`, `favourite`, or `tvshow_continue` |
-| `media_content_type` | No | Override: `video` (default), `music`, `CHANNEL`, `DIRECTORY` |
+</details>
 
-## Example Usage
+### Script Fields (passed at call time)
 
-### From an automation or script
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `content_id` | Yes | -- | Content path, file URI, plugin URI, or TV show title |
+| `content_type` | Yes | -- | Routing type: `movie`, `episode`, `favourite`, `tvshow_continue` |
+| `media_content_type` | No | `video` | Kodi media_content_type override for non-video content |
 
-```yaml
-- alias: "Play a favourite on Kodi"
-  action: script.turn_on
-  target:
-    entity_id: script.voice_kodi_play_content
-  data:
-    variables:
-      content_id: "plugin://plugin.video.netflix/play/81234567"
-      content_type: "favourite"
-```
+## Technical Notes
 
-### As an LLM agent tool (Extended OpenAI Conversation)
+- **Mode:** `parallel` / `max_exceeded: silent`
+- TV show continuation performs two sequential JSON-RPC calls (GetTVShows then GetEpisodes), each with a configurable timeout
+- The `wait_for_trigger` blocks listen for `kodi_call_method_result` events filtered by entity ID and `result_ok: true`
+- Episodes are sorted ascending by episode number, limited to 1 result (the next unwatched)
+- Error handling uses a `choose` block to route errors to either notification service or logbook based on configuration
 
-Register the script as a function with `content_id`, `content_type`, and optionally `media_content_type` as parameters. The agent selects the appropriate `content_type` based on the user's voice request and the Kodi library catalog injected via `extra_system_prompt`.
+## Changelog
 
-## Version History
+- **v2** -- Audit remediation: removed `continue_on_error` from JSON-RPC waits, replaced implicit `wait.trigger` guards with explicit `wait.completed` checks, added `default:` branch for unknown content_type
+- **v1** -- Initial blueprint, extracted from voice_play_bedtime_kodi script
 
-| Version | Date | Changes |
-|---------|------|---------|
-| v1 | 2026-02-14 | Initial blueprint — extracted from voice_play_bedtime_kodi script |
+## Author
+
+**madalone**
+
+## License
+
+See repository for license details.

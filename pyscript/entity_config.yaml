@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pyscript Entity Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# Central config for hardware-tied entity IDs used across pyscript modules.
+# Edit this file to reconfigure zones, trackers, calendars, etc.
+# Changes take effect on pyscript reload (no code edits needed).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# FP2 zone map: binary_sensor entity → zone name
+# Used by: presence_identity, presence_patterns, predictive_schedule,
+#          routine_fingerprint, sleep_config, focus_guard
+fp2_zones:
+  binary_sensor.fp2_presence_sensor_workshop: workshop
+  binary_sensor.fp2_presence_sensor_living_room: living_room
+  binary_sensor.fp2_presence_sensor_main_room: main_room
+  binary_sensor.fp2_presence_sensor_kitchen: kitchen
+  binary_sensor.fp2_presence_sensor_bed: bed
+  binary_sensor.fp2_presence_sensor_lobby: lobby
+  binary_sensor.fp2_presence_sensor_bathroom: bathroom
+  binary_sensor.fp2_presence_sensor_shower: shower
+
+# Satellite → zone map
+# Used by: presence_identity
+satellite_zones:
+  assist_satellite.home_assistant_voice_0905c5_assist_satellite: workshop
+  assist_satellite.home_assistant_voice_0a0109_assist_satellite: living_room
+
+# Agent persona → zone map
+# Used by: presence_identity
+agent_zones:
+  rick: workshop
+  quark: living_room
+
+# Calendar entities (order: main, holidays, birthdays)
+# Used by: calendar_promote
+calendars:
+  main: calendar.miquel_angel_cano_gmail_com
+  holidays: calendar.holidays_in_spain
+  birthdays: calendar.birthdays
+
+# Music Assistant media players
+# Used by: music_taste
+music_players:
+  - media_player.workshop_ma
+  - media_player.bathroom_ma
+
+# SpotifyPlus entity
+# Used by: music_taste
+spotifyplus_entity: media_player.spotifyplus_miquel_angel_madalone
+
+# IMAP sensor
+# Used by: email_promote
+imap_sensor: sensor.gmail_messages
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-person config overlay (Task 22)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Keys match person.* entity slugs. Only non-discoverable config goes here —
+# trackers, friendly_name, state are read from HA person.* entities at runtime.
+# Used by: shared_utils.discover_persons()
+persons:
+  miquel:
+    calendar: calendar.miquel_angel_cano_gmail_com
+    notify_service: notify.mobile_app_oppo_a60
+    spotify: media_player.spotifyplus_miquel_angel_madalone
+    imap_sensor: sensor.gmail_messages
+  jessica:
+    calendar: ""
+    notify_service: notify.mobile_app_oppo_a38
+    spotify: ""
+    imap_sensor: ""

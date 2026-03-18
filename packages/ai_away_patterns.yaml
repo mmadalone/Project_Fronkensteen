@@ -1,0 +1,155 @@
+# =============================================================================
+# AI Away Patterns Package — I-40 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: integration-implementation-plan.md § I-40
+# Provides:
+#   input_boolean.ai_away_patterns_enabled — kill switch (ON = active)
+#   input_number.ai_away_pattern_lookback_days — recorder query window
+#   input_number.ai_away_pattern_min_samples — minimum cycles for validity
+#   input_number.ai_away_travel_buffer_minutes — calendar fusion buffer
+#   input_number.ai_away_flap_debounce_seconds — WiFi flap debounce (G14)
+#   input_number.ai_away_prediction_update_minutes — periodic update interval (G8)
+#   sensor.ai_away_prediction — pyscript sensor with full attributes (I-54)
+#   input_text.ai_away_prediction_accuracy — rolling MAE (G12)
+#   input_datetime.ai_away_departed_{slug} — per-person departure timestamp (Task 22)
+#   sensor.ai_away_prediction — human-readable with range or "not_away"
+#   sensor.ai_away_duration — minutes since departure (live-updating)
+#   sensor.ai_away_pattern_status — created by pyscript (last op result)
+#
+# Services (pyscript):
+#   pyscript.away_extract_cycles — extract from recorder, build tables
+#   pyscript.away_predict_return — predict return time for absent person(s)
+#   pyscript.away_rebuild_patterns — full rebuild (delete + extract + store)
+#
+# State trigger (pyscript):
+#   device_tracker entities → log departure/arrival, update predictions
+#   Departure debounced via ai_away_flap_debounce_seconds (G14)
+#
+# Time trigger (pyscript):
+#   Daily rebuild at 04:15 AM
+#   Periodic prediction update while away (G8)
+#
+# Dependencies:
+#   pyscript/away_patterns.py
+#   pyscript/memory.py (L2 memory)
+#   packages/ai_identity.yaml (sensor.occupancy_mode)
+#   packages/ai_test_harness.yaml (test mode toggle)
+#
+# I-40a hardening: G1–G12, G14 (2026-03-12)
+# Deployed: 2026-03-12
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
+
+# I-54: sensor.ai_away_prediction is now created by pyscript state.set()
+# (no 255-char limit, full attributes). Template sensor removed.
+
+template:
+  - sensor:
+      - name: "AI Away Duration"
+        unique_id: ai_away_duration
+        icon: mdi:timer-outline
+        unit_of_measurement: "min"
+        state: >-
+          {# Task 22: dynamic away duration from person.* entities #}
+          {%- set occ = states('sensor.occupancy_mode') -%}
+          {%- if occ == 'away' -%}
+            {# All away — show longest duration across all persons #}
+            {%- set ns = namespace(max_dur=0) -%}
+            {%- for p in states.person -%}
+              {%- set dep = states('input_datetime.ai_away_departed_' ~ p.object_id) -%}
+              {%- if dep not in ['unknown', 'unavailable', ''] -%}
+                {%- set dur = ((as_timestamp(now()) - as_timestamp(dep, 0)) / 60) | int -%}
+                {%- if dur > ns.max_dur -%}{%- set ns.max_dur = dur -%}{%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.max_dur }}
+          {%- elif occ.startswith('solo_') -%}
+            {# Solo mode — show away duration for the person who is NOT home #}
+            {%- set home_slug = occ[5:] -%}
+            {%- set ns = namespace(dur=0) -%}
+            {%- for p in states.person -%}
+              {%- if p.object_id != home_slug -%}
+                {%- set dep = states('input_datetime.ai_away_departed_' ~ p.object_id) -%}
+                {%- if dep not in ['unknown', 'unavailable', ''] -%}
+                  {%- set ns.dur = ((as_timestamp(now()) - as_timestamp(dep, 0)) / 60) | int -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.dur }}
+          {%- else -%}0{%- endif -%}
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Away Patterns"
+# cards:
+#   - type: entities
+#     title: "Away Settings"
+#     entities:
+#       - entity: input_boolean.ai_away_patterns_enabled
+#         name: "Patterns Enabled"
+#       - entity: input_number.ai_away_pattern_lookback_days
+#         name: "Lookback Days"
+#       - entity: input_number.ai_away_pattern_min_samples
+#         name: "Min Samples"
+#       - entity: input_number.ai_away_travel_buffer_minutes
+#         name: "Travel Buffer"
+#       - entity: input_number.ai_away_flap_debounce_seconds
+#         name: "WiFi Debounce"
+#       - entity: input_number.ai_away_prediction_update_minutes
+#         name: "Update Interval"
+#
+#   - type: entities
+#     title: "Current Prediction"
+#     entities:
+#       - entity: sensor.ai_away_prediction
+#         name: "Return Prediction"
+#       - entity: sensor.ai_away_duration
+#         name: "Away Duration"
+#       # I-54: ai_away_prediction_raw removed — sensor.ai_away_prediction has full attributes
+#       - entity: input_text.ai_away_prediction_accuracy
+#         name: "Prediction Accuracy"
+#
+#   - type: entities
+#     title: "Departure Timestamps"
+#     entities:
+#       - entity: input_datetime.ai_away_departed_miquel
+#         name: "Miquel Departed"
+#       - entity: input_datetime.ai_away_departed_jessica
+#         name: "Jessica Departed"
+#
+#   - type: entities
+#     title: "Engine Status"
+#     entities:
+#       - entity: sensor.ai_away_pattern_status
+#         name: "Away Pattern Status"
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Extract"
+#         icon: mdi:database-search
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.away_extract_cycles
+#         icon_height: 40px
+#       - type: button
+#         name: "Rebuild"
+#         icon: mdi:database-refresh
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.away_rebuild_patterns
+#         icon_height: 40px
+# =============================================================================

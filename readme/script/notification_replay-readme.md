@@ -2,207 +2,198 @@
 
 ![Notification Replay header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/notification_replay-header.jpeg)
 
-On-demand replay of the last phone notification through the Follow-Me TTS pipeline.
-Reads the current notification sensor state, resolves your room via FP2 presence
-sensors, applies sender aliases, generates an LLM summary, and delivers TTS to
-the nearest voice satellite. No trigger, no cooldown, no filtering gates — just
-the replay pipeline, callable from a dashboard button, voice intent, or any
-automation.
-
-> **Companion blueprint:** [Notification Follow-Me](https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/notification_follow_me.yaml) — the full autonomous notification pipeline with triggers, cooldowns, quiet hours, DND, blocked contacts, and junk pattern filtering.
+On-demand replay of the last phone notification through the same pipeline as Notification Follow-Me -- minus the trigger, cooldown, and filtering gates. Resolves your current room via FP2 presence sensors, routes to the nearest voice satellite, and has a conversation agent summarize the message with full sender alias support. Call it from a dashboard button, a voice intent, or any automation.
 
 ## How It Works
 
 ```
-┌──────────────────────────────────┐
-│  Script invoked (button/voice/   │
-│  automation)                     │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  1. Read notification sensor     │
-│     attributes (sender, text,    │
-│     package, group status)       │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  1a. Gate: usable data?          │──── No ──▶ EXIT (silent)
-└──────────────┬───────────────────┘
-               │ Yes
-               ▼
-┌──────────────────────────────────┐
-│  2. Resolve sender alias         │
-│     (Key=Value map lookup)       │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  3. Detect media messages,       │
-│     truncate text to char cap    │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  4. Build sensor context for LLM │
-│     (optional extra entities)    │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  5. Resolve presence → satellite │
-│     (first occupied zone wins,   │
-│      fallback if none active)    │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  5a. Gate: satellite available?  │──── No ──▶ LOG WARNING + EXIT
-└──────────────┬───────────────────┘
-               │ Yes
-               ▼
-┌──────────────────────────────────┐
-│  6. Generate summary             │
-│  ┌─ Media + short_tts? ──▶ skip │
-│  │  LLM, use hardcoded line     │
-│  └─ Otherwise ──▶ conversation  │
-│     .process with full prompt    │
-│     + defensive fallback         │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  7. Build TTS payload            │
-│  7a. Snapshot + duck other       │
-│      playing media players       │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  8. Deliver TTS to satellite     │
-│  ┌─ ElevenLabs custom ──▶ voice │
-│  │  profile option               │
-│  └─ Standard ──▶ tts.speak      │
-│  8-wait. Poll satellite state    │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  8a. Restore ducked volumes      │
-│      Clear snapshot helper       │
-└──────────────┬───────────────────┘
-               ▼
-┌──────────────────────────────────┐
-│  9. Log successful replay        │
-└──────────────────────────────────┘
+Start
+  |
+  v
++------------------------+
+| Agent selection        |
+| (dispatcher > manual)  |
++------------------------+
+  |
+  v
++------------------------+     +-------------------+
+| Read notification      |---->| Gate: sensor has  |
+| sensor attributes      |     | usable data?      |
++------------------------+     +-------------------+
+                                  | yes
+                                  v
+                         +-------------------+
+                         | Resolve sender    |
+                         | alias             |
+                         +-------------------+
+                                  |
+                                  v
+                         +-------------------+
+                         | Detect media msgs |
+                         | + truncate text   |
+                         +-------------------+
+                                  |
+                                  v
+                         +-------------------+
+                         | Build sensor      |
+                         | context for LLM   |
+                         +-------------------+
+                                  |
+                                  v
++------------------------+     +-------------------+
+| Resolve presence       |---->| Gate: satellite   |
+| to target satellite    |     | available?        |
++------------------------+     +-------------------+
+                                  | yes
+                                  v
+                         +-------------------+
+                         | Claim follow-me   |
+                         | bypass (refcount) |
+                         +-------------------+
+                                  |
+                                  v
+                 +----------------+----------------+
+                 |                                 |
+          media + short_tts               LLM summary path
+                 |                                 |
+                 v                                 v
+        +----------------+              +-------------------+
+        | Hardcoded      |              | conversation      |
+        | announcement   |              | .process + whisper|
+        +----------------+              +-------------------+
+                 |                                 |
+                 +----------------+----------------+
+                                  |
+                                  v
+                         +-------------------+
+                         | TTS queue speak   |
+                         +-------------------+
+                                  |
+                                  v
+                         +-------------------+
+                         | Wait for playback |
+                         | + release bypass  |
+                         +-------------------+
+                                  |
+                                  v
+                         +-------------------+
+                         | Log successful    |
+                         | replay            |
+                         +-------------------+
 ```
-
-## Key Design Decisions
-
-### Full pipeline, no gates
-The entire Follow-Me delivery pipeline (presence routing, sender aliases, media
-detection, LLM summary, TTS with ducking) is preserved — but trigger, cooldown,
-blocked contacts, junk patterns, quiet hours, DND, and ringer mode gates are
-deliberately stripped. This is an on-demand tool, not an autonomous listener.
-
-### Parallel-array presence mapping
-Presence sensors and target satellites are paired by array index — same pattern
-as Notification Follow-Me. First occupied zone wins. This avoids the complexity
-of a mapping entity while keeping configuration straightforward.
-
-### Defensive LLM fallback
-If the conversation agent call fails or returns an incomplete response, a
-hardcoded fallback announcement fires instead of silent failure. The failure
-is logged as a warning for troubleshooting.
-
-### Duck volume snapshot persistence
-Ducked player volumes are written to an optional `input_text` helper as JSON.
-This prevents race conditions when multiple replays queue — the second run
-reads the original volumes from the helper rather than capturing
-already-ducked levels.
 
 ## Features
 
-- **Presence-aware routing** — automatically resolves your current room via FP2 binary sensors and routes TTS to the nearest voice satellite.
-- **Sender alias support** — maps raw notification sender names to friendly display names via comma-separated Key=Value pairs.
-- **LLM-powered summaries** — conversation agent generates natural-language paraphrases instead of reading messages verbatim.
-- **Media message detection** — recognizes photos, voice messages, videos, stickers, GIFs, documents, contacts, and locations with configurable behavior (short TTS or full LLM summary).
-- **Dual TTS engine support** — standard `tts.speak` or HACS ElevenLabs custom service with voice profile selection.
-- **Announce mode** — optional `announce: true` flag for TTS calls that duck current audio at the satellite level.
-- **Volume ducking** — temporarily lowers other playing media players during TTS, with configurable duck level and automatic volume restoration.
-- **Persistent volume snapshots** — optional `input_text` helper prevents race conditions across queued replays.
-- **Extra context entities** — pass additional sensor states to the LLM for contextually-aware summaries.
-- **Character cap** — configurable limit on message text sent to the LLM (50–2000 characters).
-- **Group chat context** — optionally includes group/direct message status in the LLM prompt.
-- **Comprehensive logging** — system log entries for successful replays, no-satellite warnings, LLM failures, and unknown TTS mode fallbacks.
+- Full Notification Follow-Me delivery pipeline without trigger, cooldown, or filtering gates
+- AI dispatcher integration with manual pipeline fallback
+- Presence-based satellite routing with configurable fallback
+- Sender alias map (Key=Value CSV) for friendly display names
+- Media message detection with short TTS or LLM summary options
+- User pet name context for the LLM (recognizes diminutives automatically)
+- Extra context entities passed to the LLM as environmental awareness
+- Group chat context toggle
+- Message character cap with truncation
+- TTS delivery via `pyscript.tts_queue_speak` with optional volume setting
+- Follow-me refcount bypass prevents re-routing during replay
+- Defensive fallback if LLM call fails
 
 ## Prerequisites
 
-- **Home Assistant** 2024.10.0 or later
-- **Android Companion App** with `last_notification` sensor enabled
-- **Conversation agent** (Extended OpenAI Conversation, Google Generative AI, or any agent supporting `conversation.process`)
-- **Presence sensors** — binary sensors for room occupancy (e.g., Aqara FP2 zones)
-- **Voice satellites** — media players capable of TTS playback (e.g., ESPHome Voice PE)
-- **Optional:** HACS ElevenLabs integration (for custom voice profiles)
-- **Optional:** `input_text` helper for persistent duck volume snapshots
+- Home Assistant 2024.10.0+
+- Android Companion App with `last_notification` sensor
+- `pyscript/agent_dispatcher.py` (agent dispatch)
+- `pyscript/tts_queue.py` (TTS queue)
+- `pyscript/agent_whisper.py` (whisper context)
+- FP2 presence sensors and voice satellites (for presence routing)
+- `input_boolean.ai_dispatcher_enabled` (dispatcher toggle)
+- Refcount bypass scripts (for follow-me bypass)
 
 ## Installation
 
-1. Copy `notification_replay.yaml` to your HA config: `blueprints/script/madalone/`
-2. Reload blueprints: **Developer Tools → YAML → Reload all YAML configuration**
-3. Create a new script from the blueprint: **Settings → Automations & Scenes → Scripts → Add Script → Use Blueprint**
-4. Configure inputs (at minimum: notification sensor, conversation agent, presence sensors, and target satellites)
-
-Or import directly:
-```
-https://github.com/mmadalone/HA-Master-Repo/blob/main/script/notification_replay.yaml
-```
+1. Copy `notification_replay.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings -> Automations & Scenes -> Scripts -> Add -> Use Blueprint**
 
 ## Configuration
 
-### ① Core Setup
+<details><summary>① Core setup</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Notification sensor | *(empty)* | Android Companion App `last_notification` sensor |
-| Conversation agent | *(empty)* | LLM agent for natural-language summaries |
-| LLM summarization prompt | *(built-in)* | Instructions for how the AI summarizes notifications |
-| Sender alias map | *(empty)* | Comma-separated `Key=Value` pairs (e.g., `Mare=Mum,Jessica=Love of my life`) |
-| Include group chat context | `false` | Pass group/direct message status to the LLM |
-| Extra context entities | *(none)* | Additional sensors passed to the LLM as environmental context |
-| Message character cap | `500` | Maximum characters of message text sent to the LLM (50–2000) |
-| Media message behavior | `short_tts` | `short_tts` = hardcoded line, no LLM call; `llm_summary` = full pipeline |
+| `notification_sensor` | _(required)_ | Android Companion App `last_notification` sensor |
+| `conversation_agent` | `Rick` | Assist Pipeline name (overridden when dispatcher is enabled) |
+| `use_dispatcher` | `true` | Use AI dispatcher for dynamic persona selection |
+| `notification_prompt` | _(summarize prompt)_ | LLM summarization instructions |
+| `sender_aliases` | `""` | Comma-separated Key=Value alias pairs (e.g. `Mare=Mum`) |
+| `include_group_context` | `false` | Include group/direct message status in LLM prompt |
+| `context_entities` | `[]` | Extra sensors/entities whose states are passed to the LLM |
+| `user_petnames` | `""` | Comma-separated pet names for the notification recipient |
+| `char_cap` | `500` | Maximum characters of message text sent to the LLM |
+| `media_message_behavior` | `short_tts` | Media message handling: `short_tts` or `llm_summary` |
 
-### ② Presence Routing
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| Presence sensors | *(none)* | Binary sensors for room occupancy, in priority order |
-| Target satellites | *(none)* | Media players paired 1:1 with presence sensors above |
-| Fallback satellite | *(empty)* | Satellite used when no presence sensor is active |
-
-### ③ TTS Configuration
+<details><summary>② Presence routing</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| TTS mode | `standard_tts_entity` | `standard_tts_entity` or `elevenlabs_custom_service` |
-| TTS entity | *(empty)* | TTS entity for `tts.speak` calls |
-| ElevenLabs voice profile | *(empty)* | Voice profile name/ID for ElevenLabs custom integration |
-| Use announce mode | `false` | Sends `announce: true` with TTS calls |
+| `presence_sensors` | `[]` | Binary sensors indicating room occupancy (priority order) |
+| `target_satellites` | `[]` | Media players paired with presence sensors (same order) |
+| `fallback_satellite` | `""` | Satellite to use when no presence is detected |
 
-### ④ Duck Other Players
+</details>
+
+<details><summary>③ TTS configuration</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Players eligible for ducking | *(none)* | Media players to volume-duck during TTS |
-| Duck volume level | `0.10` | Volume level (0.0–1.0) for ducked players |
-| Duck volume snapshot helper | *(empty)* | Optional `input_text` helper for persistent snapshots |
-| Max restore wait | `8` | Seconds to poll satellite state before restoring volumes (1–30) |
+| `tts_announce` | `false` | Use announce mode for TTS (ducks + resumes audio) |
+| `tts_output_volume` | `0.0` | Fixed volume for TTS playback. 0 = use current volume |
+
+</details>
+
+<details><summary>④ Duck other players (deprecated)</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `duck_player_list` | `[]` | **Deprecated v2.0.0** -- ignored, kept for backward compat |
+| `duck_volume` | `0.10` | **Deprecated v2.0.0** -- ignored, kept for backward compat |
+| `duck_snapshot_helper` | `""` | **Deprecated v2.0.0** -- ignored, kept for backward compat |
+| `restore_delay` | `8` | **Deprecated v2.0.0** -- ignored, kept for backward compat |
+
+</details>
+
+<details><summary>⑤ Follow-me bypass</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `bypass_follow_me` | `true` | Pause notification follow-me during replay |
+| `bypass_claim_script` | `script.refcount_bypass_claim` | Refcount claim script entity |
+| `bypass_release_script` | `script.refcount_bypass_release` | Refcount release script entity |
+
+</details>
+
+<details><summary>⑥ Infrastructure</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Boolean that enables the AI agent dispatcher |
+
+</details>
 
 ## Technical Notes
 
-- **Mode:** `single` — concurrent invocations are queued, not overlapping.
-- **LLM prompt injection defense:** Notification data passed to the conversation agent is sanitized (`<` → `‹`, `>` → `›`) and wrapped in explicit `BEGIN/END NOTIFICATION DATA` delimiters with an "untrusted user content" label.
-- **Template safety:** All `states()` and `state_attr()` calls use `| default()` guards with explicit fallback values.
-- **Error handling:** Critical-path actions (`conversation.process`, `tts.speak`) use `continue_on_error: true` with explicit fallback logic. Non-critical actions (logging, helper writes) use `continue_on_error: true` to prevent blocking the main pipeline.
-- **AP-08 acknowledged:** Sequence block exceeds the 200-line guideline (~544 lines including variables and comments). Flow is linear with numbered aliases and mirrors the Notification Follow-Me structure. Accepted as-is — refactoring into sub-scripts would add indirection without readability benefit.
+- **Mode:** `single`
+- The script reads the notification sensor's current state directly (no trigger) -- it replays whatever notification is current at call time
+- Deprecated section 4 inputs are declared but never read in the sequence -- HA silently ignores them, and removing them would break existing instances
+- TTS queue sets volume but does not restore it afterward -- VA satellites set their own volume on the next voice interaction
+- The follow-me bypass uses a refcount pattern so multiple concurrent callers cannot accidentally leave follow-me permanently disabled
 
 ## Changelog
 
-### v1.0
-- Initial release — full Follow-Me delivery pipeline (presence routing, sender aliases, media detection, LLM summary, TTS, duck/restore) without trigger, cooldown, blocked contacts, junk patterns, quiet hours, DND, or ringer mode gates.
+- **v2.0.0** -- TTS queue migration: replaced raw `tts.speak` + manual volume/ducking (~175 lines) with single `pyscript.tts_queue_speak` call. Section 4 duck inputs deprecated as no-ops.
+- **v1.2.0** -- Duck guard integration + follow-me bypass refcount
+- **v1.1.0** -- TTS output volume slider + user pet names
+- **v1.0** -- Initial release
 
 ## Author
 

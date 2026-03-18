@@ -1,0 +1,257 @@
+# =============================================================================
+# AI Test Harness Package — DC-5 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "DC-5: Testing & Simulation"
+# Provides:
+#   input_boolean.ai_test_mode         — global test flag (OFF = production)
+#   input_text.ai_test_identity        — override identity ("miquel"/"jessica"/"guest"/"")
+#   input_text.ai_test_routine_stage   — override routine stage (future use)
+#   script.ai_test_seed_memory         — populate L2 with test data (idempotent)
+#   script.ai_test_clear_memory        — remove all seeded test entries from L2
+#
+# Contracts (implemented by other packages):
+#   TTS sink: when ai_test_mode=ON, TTS queue manager (Task 8) logs instead of playing.
+#     → Blueprints check: is_state('input_boolean.ai_test_mode', 'on')
+#   Identity override: when ai_test_mode=ON AND ai_test_identity is populated,
+#     identity layer consumers use the override instead of real confidence scores.
+#     → Template pattern:
+#       {%- if is_state('input_boolean.ai_test_mode', 'on')
+#             and states('input_text.ai_test_identity') | length > 0 -%}
+#         {# use override identity #}
+#       {%- else -%}
+#         {# use real sensor.identity_confidence_* #}
+#       {%- endif -%}
+#   Budget check: works independently — no special test mode handling needed.
+#
+# Dependencies: pyscript.memory_set / memory_forget (optional — scripts degrade gracefully)
+# Deployed: 2026-03-01
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# ── SCRIPTS ──────────────────────────────────────────────────────────────────
+
+script:
+  # ── SEED L2 MEMORY WITH TEST DATA ────────────────────────────────────────
+  # Idempotent: memory_set upserts by key — running twice updates, doesn't duplicate.
+  # Creates entries across miquel/jessica/household scopes with overlapping tags
+  # to exercise auto-relationship linking:
+  #   user:miquel ↔ user:jessica           (via tags: user, profile)
+  #   preference:music_miquel ↔ preference:music_jessica  (via tags: music, preference)
+  #   birthday:jessica shares "jessica" tag with user:jessica's scope
+  ai_test_seed_memory:
+    alias: "AI Test - Seed L2 Memory"
+    description: >-
+      Populate L2 with test data across miquel, jessica, and household scopes.
+      Idempotent — safe to run multiple times. Requires pyscript.memory_set.
+    icon: mdi:database-plus
+    mode: single
+    sequence:
+      # ── 1. Miquel user profile ──
+      - alias: "Seed: user:miquel"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "user:miquel"
+          value: >-
+            Name: Miquel. Languages: English, Spanish, Valencian, Dutch, Portuguese.
+            Interests: home automation, music production, AI, synthesizers.
+            Work: remote, irregular schedule. Pronounce name as Mee-kel.
+          scope: "miquel"
+          tags: "user,profile"
+          force_new: true
+
+      # ── 2. Jessica user profile ──
+      - alias: "Seed: user:jessica"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "user:jessica"
+          value: >-
+            Name: Jessica. Languages: Spanish, Valencian.
+            Partner of Miquel. No companion app installed yet.
+            Prefers Spanish for voice interactions.
+          scope: "jessica"
+          tags: "user,profile"
+          force_new: true
+
+      # ── 3. Jessica's birthday ──
+      - alias: "Seed: birthday:jessica"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "birthday:jessica"
+          value: "Jessica's birthday is December 15th. She likes plants and cooking."
+          scope: "miquel"
+          tags: "birthday,jessica,december"
+          force_new: true
+
+      # ── 4. Miquel's music preferences ──
+      - alias: "Seed: preference:music_miquel"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "preference:music_miquel"
+          value: >-
+            Miquel listens to Tool, Meshuggah, Opeth, Porcupine Tree, Steven Wilson.
+            Genres: progressive metal, djent, post-metal. Plays guitar and synths.
+          scope: "miquel"
+          tags: "music,preference,tool,metal"
+          force_new: true
+
+      # ── 5. Household anniversary ──
+      - alias: "Seed: household:anniversary"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "household:anniversary"
+          value: "Miquel and Jessica's anniversary is March 20th."
+          scope: "household"
+          tags: "anniversary,relationship"
+          force_new: true
+
+      # ── 6. Jessica's music preferences (auto-links with #4 via music,preference) ──
+      - alias: "Seed: preference:music_jessica"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: "preference:music_jessica"
+          value: >-
+            Jessica listens to reggaeton, Latin pop, and flamenco.
+            Favorite artists: Bad Bunny, Rosalia, Rauw Alejandro.
+          scope: "jessica"
+          tags: "music,preference,reggaeton"
+          force_new: true
+
+  # ── CLEAR L2 TEST DATA ───────────────────────────────────────────────────
+  # Removes every key seeded by ai_test_seed_memory. Clean teardown after testing.
+  # Each call uses continue_on_error so a missing key doesn't abort the sequence.
+  ai_test_clear_memory:
+    alias: "AI Test - Clear L2 Test Data"
+    description: >-
+      Remove all test entries seeded by ai_test_seed_memory from L2 memory.
+      Safe to run even if entries don't exist. Requires pyscript.memory_forget.
+    icon: mdi:database-remove
+    mode: single
+    sequence:
+      - alias: "Clear: user:miquel"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "user:miquel"
+
+      - alias: "Clear: user:jessica"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "user:jessica"
+
+      - alias: "Clear: birthday:jessica"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "birthday:jessica"
+
+      - alias: "Clear: preference:music_miquel"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "preference:music_miquel"
+
+      - alias: "Clear: household:anniversary"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "household:anniversary"
+
+      - alias: "Clear: preference:music_jessica"
+        continue_on_error: true
+        action: pyscript.memory_forget
+        response_variable: _result
+        data:
+          key: "preference:music_jessica"
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Test Harness"
+# cards:
+#   # ── Test mode toggle + overrides ──
+#   - type: entities
+#     title: "Test Controls"
+#     entities:
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#       - entity: input_text.ai_test_identity
+#         name: "Identity Override"
+#       - entity: input_text.ai_test_routine_stage
+#         name: "Routine Stage Override"
+#
+#   # ── Seed / clear buttons ──
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Seed L2 Data"
+#         icon: mdi:database-plus
+#         tap_action:
+#           action: perform-action
+#           perform_action: script.ai_test_seed_memory
+#         icon_height: 40px
+#       - type: button
+#         name: "Clear L2 Data"
+#         icon: mdi:database-remove
+#         tap_action:
+#           action: perform-action
+#           perform_action: script.ai_test_clear_memory
+#         icon_height: 40px
+#
+#   # ── Live identity + budget readout ──
+#   - type: entities
+#     title: "Current State"
+#     entities:
+#       - entity: sensor.identity_confidence_miquel
+#         name: "Miquel Confidence"
+#       - entity: sensor.identity_confidence_jessica
+#         name: "Jessica Confidence"
+#       - entity: sensor.occupancy_mode
+#         name: "Occupancy Mode"
+#       - entity: sensor.ai_llm_budget_remaining
+#         name: "LLM Budget"
+#       - entity: input_number.ai_llm_calls_today
+#         name: "LLM Calls Today"
+#
+#   # ── Test mode status conditional ──
+#   - type: conditional
+#     conditions:
+#       - condition: state
+#         entity: input_boolean.ai_test_mode
+#         state: "on"
+#     card:
+#       type: markdown
+#       content: >-
+#         **TEST MODE ACTIVE**
+#
+#         TTS: routed to log sink (no audio).
+#         Identity: {% if states('input_text.ai_test_identity') | length > 0 %}
+#         overridden to **{{ states('input_text.ai_test_identity') }}**
+#         {% else %}using real sensors{% endif %}.
+#         Routine: {% if states('input_text.ai_test_routine_stage') | length > 0 %}
+#         overridden to **{{ states('input_text.ai_test_routine_stage') }}**
+#         {% else %}using real stage{% endif %}.
+# =============================================================================

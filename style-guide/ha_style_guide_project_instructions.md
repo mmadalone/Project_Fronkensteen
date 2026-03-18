@@ -2,7 +2,7 @@
 
 **Style Guide Version: 3.27 — 2026-02-20** · Bump this on structural changes (new files, section renumbering, directive additions).
 
-> **What you are reading:** This is a structured style guide for AI-assisted Home Assistant development. It governs how you generate YAML, prompts, and configs for this user's HA instance. The guide is split across 10 files (~111K tokens total — but you should never load more than ~15K for any task). **Do not load all files for every task** — use the routing table below to load only what's needed.
+> **What you are reading:** This is a structured style guide for AI-assisted Home Assistant development. It governs how you generate YAML, prompts, and configs for this user's HA instance. The guide is split across 10 files (~126K tokens total — but you should never load more than ~15K for any task). **Do not load all files for every task** — use the routing table below to load only what's needed.
 
 You are helping the user build and maintain Home Assistant blueprints, automations, scripts, conversation agent prompts, and related configuration. You have direct filesystem access to their HA config via SMB mount.
 
@@ -36,7 +36,7 @@ When a troubleshooting session requires editing YAML to fix the issue, escalate 
 
 > **🚨 LOG GATES (AP-39):** (a) **BUILD mode:** Every file edit requires a build log in `_build_logs/` **BEFORE the first write**. Full schema per §11.8 — no exceptions, no "compact" alternative. (b) **AUDIT mode:** Every `sanity check` or audit command (§15.2) requires a log pair (progress + report) per §11.8.2 **BEFORE the first check runs** — unconditional, even with zero findings. (c) **Escalation:** When check findings are approved for fixing, create a build log before the first edit. These are hard gates — not "I'll do it after."
 
-> **🚨 HEADER IMAGE GATE (AP-15) — BUILD mode only:** When building a new blueprint/script OR reviewing one that has no `![` image in its description **or whose referenced image file does not exist on disk** (at `HEADER_IMG` — see Project Instructions for resolved path): **ask the user** about the header image, generate it, present it, and **wait for explicit approval or decline**. Do NOT write any YAML until you get a clear answer. If the user ignores the question, **insist** — repeat the ask. No exceptions. See §11.1 step 4 for defaults (1K, 16:9, premise from `IMG_PREMISES`). Allowed image formats: `.jpeg`, `.jpg`, `.png`, `.webp`.
+> **🚨 HEADER IMAGE GATE (AP-15) — BUILD mode only:** When building a new blueprint/script OR reviewing one that has no `![` image in its description **or whose referenced image file does not exist on disk** (at `HEADER_IMG` — see Project Instructions for resolved path): **ask the user** about the header image, generate it, present it, and **wait for explicit approval or decline**. Do NOT write any YAML until you get a clear answer. If the user ignores the question, **insist** — repeat the ask. No exceptions. See §11.1 step 5 for defaults (1K, 16:9, premise from `IMG_PREMISES`). Allowed image formats: `.jpeg`, `.jpg`, `.png`, `.webp`.
 
 **Mode-specific loading:**
 
@@ -66,6 +66,7 @@ When a troubleshooting session requires editing YAML to fix the issue, escalate 
 | Debug Music Assistant | `07_troubleshooting.md` (§13.7) | Optionally §7 for MA patterns |
 | Debug ESPHome device | `07_troubleshooting.md` (§13.8) | Optionally §6 for ESPHome patterns |
 | Debug conversation agent | `07_troubleshooting.md` (§13.9) | Optionally §8 for agent patterns |
+| Debug pyscript module | `07_troubleshooting.md` (§13.11) | Optionally §13.10 for escalation |
 | Debug voice stack | `07_troubleshooting.md` + `08_voice_assistant_pattern.md` | |
 
 **Task-specific routing (AUDIT mode):**
@@ -93,12 +94,12 @@ The section numbers are preserved across files for cross-referencing.
 | [Conversation Agents](03_conversation_agents.md) | §8 | ~8.0K | Agent prompt structure, separation from blueprints, naming conventions |
 | [ESPHome Patterns](04_esphome_patterns.md) | §6 | ~6.1K | Device config structure, packages, secrets, wake words, naming |
 | [Music Assistant Patterns](05_music_assistant_patterns.md) | §7 | ~11.8K | MA players, play_media, TTS duck/restore, volume sync, voice bridges |
-| [Anti-Patterns & Workflow](06_anti_patterns_and_workflow.md) | §10, §11 | ~22.6K (scan table: ~4.9K) | Things to never do, build/review/edit workflows, README generation (§11.14), audit resilience (§11.15), crash recovery |
-| [Troubleshooting & Debugging](07_troubleshooting.md) | §13 | ~6.9K | Traces, Developer Tools, failure modes, log analysis, domain-specific debugging |
-| [Voice Assistant Pattern](08_voice_assistant_pattern.md) | §14 | ~11.8K | End-to-end voice stack architecture: ESPHome satellites, pipelines, agents, blueprints, tool scripts, helpers, TTS |
-| [QA Audit Checklist](09_qa_audit_checklist.md) | §15 | ~12.7K | QA audit checks, trigger rules, cross-reference index, audit tiers (§15.4), and user commands for guide maintenance |
+| [Anti-Patterns & Workflow](06_anti_patterns_and_workflow.md) | §10, §11 | ~24.3K (scan table: ~5.6K) | Things to never do, build/review/edit workflows, README generation (§11.14), audit resilience (§11.15), crash recovery |
+| [Troubleshooting & Debugging](07_troubleshooting.md) | §13 | ~9.2K | Traces, Developer Tools, failure modes, log analysis, domain-specific debugging, pyscript debugging (§13.11) |
+| [Voice Assistant Pattern](08_voice_assistant_pattern.md) | §14 | ~17.6K | End-to-end voice stack architecture: ESPHome satellites, pipelines, agents, blueprints, tool scripts, helpers, TTS |
+| [QA Audit Checklist](09_qa_audit_checklist.md) | §15 | ~15.4K | QA audit checks, trigger rules, cross-reference index, audit tiers (§15.4), and user commands for guide maintenance |
 
-*Token estimates measured Feb 2026. Re-measure after structural changes. Budget ceiling: keep total loaded style guide content under ~15K tokens per task (§1.9). Total across all files: ~111K.*
+*Token estimates measured Mar 2026. Re-measure after structural changes. Budget ceiling: keep total loaded style guide content under ~15K tokens per task (§1.9). Total across all files: ~126K.*
 
 > **Note on section numbering:** Section numbers are preserved from the original unified guide and are non-sequential across files. This is intentional — it allows stable cross-references (e.g., "see §5.1") regardless of how files are reorganized.
 
@@ -106,7 +107,7 @@ The section numbers are preserved across files for cross-referencing.
 
 ## Full Table of Contents
 
-**15 top-level sections · 146 subsections · 46 anti-patterns (41 AP codes + 5 sub-items) · 8 security checks · 10 files**
+**15 top-level sections · ~151 subsections · 56 anti-patterns (51 AP codes + 5 sub-items) · 8 security checks · 10 files · 94 madalone blueprints (62 automation + 32 script)**
 
 ### [Core Philosophy](00_core_philosophy.md)
 
@@ -146,6 +147,7 @@ The section numbers are preserved across files for cross-referencing.
 ### [Blueprint Patterns](01_blueprint_patterns.md)
 
 - **§3** — Blueprint Structure & YAML Formatting
+  - §3.0 — Blueprint-First Decision Tree (MANDATORY — apply before writing any automation) + Pyscript Service Shelf
   - §3.1 — Blueprint header and description image
   - §3.2 — Collapsible input sections (Mandatory)
   - §3.3 — Input definitions
@@ -163,6 +165,7 @@ The section numbers are preserved across files for cross-referencing.
 ### [Automation Patterns](02_automation_patterns.md)
 
 - **§5** — Automation Patterns
+  - §5.0 — Blueprint-first — when to use what (MANDATORY gate) + current blueprint inventory
   - §5.1 — Error handling — timeouts (Mandatory)
   - §5.2 — Error handling — non-critical action failures
   - §5.3 — Cleanup on failure
@@ -224,12 +227,13 @@ The section numbers are preserved across files for cross-referencing.
 ### [Anti-Patterns & Workflow](06_anti_patterns_and_workflow.md)
 
 - **§10** — Anti-Patterns (Never Do These)
-  - §10 scan tables — AP-01 through AP-44, grouped by domain (Core, ESPHome, MA, Dev Env) with severity tiers
+  - §10 scan tables — AP-01 through AP-53, grouped by domain (Core, ESPHome, MA, Pyscript, Dev Env) with severity tiers
   - §10.5 — Security review checklist (S1–S8, runs after scan tables)
-  - General prose (1–24)
+  - General prose (1–24, 42)
   - ESPHome (25–29)
   - Music Assistant (30–35)
-  - Development Environment (36–39)
+  - Pyscript Orchestration (45–52)
+  - Development Environment (36–44)
 - **§11** — Workflow
   - §11.0 — Universal pre-flight (applies to ALL workflows)
   - §11.1 — When the user asks to build something new
@@ -263,6 +267,7 @@ The section numbers are preserved across files for cross-referencing.
   - §13.8 — Debugging ESPHome devices
   - §13.9 — Debugging conversation agents
   - §13.10 — The nuclear options
+  - §13.11 — Debugging pyscript modules
 
 ### [Voice Assistant Pattern](08_voice_assistant_pattern.md)
 
@@ -271,7 +276,9 @@ The section numbers are preserved across files for cross-referencing.
   - §14.2 — Layer 1: ESPHome Voice PE satellites (device configs, structure, key principles)
   - §14.3 — Layer 2: HA Voice Pipeline (pipeline-to-satellite mapping)
   - §14.4 — Layer 3: Conversation agents (naming, prompts, separation of concerns, tool exposure)
+    - §14.4.1 — Layer 3.5: Pyscript orchestration (dispatcher, handoff, whisper, memory, TTS queue)
   - §14.5 — Layer 4: Blueprints / orchestration (Coming Home, Proactive LLM Sensors, Voice Active Media Controls)
+    - §14.5.1 — Blueprint integration patterns (pyscript calling conventions, 8 patterns, graceful degradation principle)
   - §14.6 — Layer 5: Tool scripts (thin wrappers, script blueprint pattern)
   - §14.7 — Layer 6: Helpers / shared state (ducking flags, volume storage, voice command bridges)
   - §14.8 — TTS output patterns (ElevenLabs routing, post-TTS delay)
@@ -283,7 +290,7 @@ The section numbers are preserved across files for cross-referencing.
 ### [QA Audit Checklist](09_qa_audit_checklist.md)
 
 - **§15** — QA Audit Checklist
-  - §15.1 — Check definitions (SEC, VER, AIR, CQ, ARCH, INT, ZONE, MAINT, BP, PERF categories)
+  - §15.1 — Check definitions (BPG, SEC, VER, AIR, CQ, ARCH, INT, ZONE, MAINT, BP, PERF, PSY categories)
   - §15.2 — When to run checks (automatic triggers + user-triggered commands including `sanity check`)
   - §15.3 — Quick Grep Patterns
   - §15.4 — Audit tiers (quick-pass / deep-pass, tier selection rules, escalation)

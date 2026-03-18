@@ -1,0 +1,147 @@
+# =============================================================================
+# AI Routine Tracker Package — Task 16 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Routine Fingerprinting"
+#   and "Prediction Engine Build Path"
+#
+# Provides:
+#   input_text.ai_routine_stage — current routine position (e.g.,
+#     "evening_weekday_living_room_bed:step_3_of_4" or "none")
+#   input_text.ai_routine_deviation — last deviation description (e.g.,
+#     "expected:bathroom actual:living_room" or "none")
+#   input_text.ai_routine_eta_raw — JSON for ETA template sensor
+#   input_boolean.ai_routine_tracking_enabled — kill switch (ON = active)
+#   input_boolean.ai_bedtime_predicted — set ON when a bed-ending routine
+#     starts; arms bedtime automations for instant response
+#   sensor.ai_routine_eta — estimated minutes to routine completion
+#   sensor.ai_routine_tracker_status — created by pyscript (last op result)
+#
+# Services (pyscript):
+#   pyscript.routine_extract_fingerprints — build routine fingerprints
+#     from Task 15 frequency tables
+#   pyscript.routine_track_position — match transition against fingerprints,
+#     update routine stage + ETA, detect deviations
+#
+# State trigger (pyscript):
+#   FP2 binary sensors → detect transitions → position tracking
+#
+# Time trigger (pyscript):
+#   Daily fingerprint refresh at 04:15 AM
+#
+# CREEP FACTOR GATE (hard design constraint):
+#   Predictions are INVISIBLE. They arm automations, they NEVER announce
+#   routine positions to the user. "Heading to bed soon?" is OK.
+#   "I see you're in step 3 of your bedtime routine" is NOT.
+#
+# Dependencies:
+#   pyscript/routine_fingerprint.py
+#   pyscript/presence_patterns.py (Task 15 frequency tables)
+#   pyscript/memory.py (L2 memory)
+#   packages/ai_test_harness.yaml (test mode toggle)
+#
+# Deployed: 2026-03-02
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      # Estimated minutes remaining in the current routine. Shows 0 when
+      # not tracking a routine. Computed from avg step dwell times of the
+      # matched fingerprint.
+      - name: "AI Routine ETA"
+        unique_id: ai_routine_eta
+        icon: mdi:timer-sand
+        unit_of_measurement: "min"
+        state: >-
+          {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+          {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+            {{ (raw | from_json).eta_minutes | default(0) | round(0) | int }}
+          {%- else -%}
+            0
+          {%- endif -%}
+        attributes:
+          fingerprint_id: >-
+            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).fingerprint_id | default('none') }}
+            {%- else -%}
+              none
+            {%- endif -%}
+          step: >-
+            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).step | default(0) }}
+            {%- else -%}
+              0
+            {%- endif -%}
+          total: >-
+            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).total | default(0) }}
+            {%- else -%}
+              0
+            {%- endif -%}
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Routine Tracker"
+# cards:
+#   # ── Controls ──
+#   - type: entities
+#     title: "Routine Settings"
+#     entities:
+#       - entity: input_boolean.ai_routine_tracking_enabled
+#         name: "Tracking Enabled"
+#       - entity: input_boolean.ai_bedtime_predicted
+#         name: "Bedtime Predicted"
+#
+#   # ── Current Routine ──
+#   - type: entities
+#     title: "Current Routine"
+#     entities:
+#       - entity: input_text.ai_routine_stage
+#         name: "Routine Stage"
+#       - entity: sensor.ai_routine_eta
+#         name: "ETA to Completion"
+#       - entity: input_text.ai_routine_deviation
+#         name: "Last Deviation"
+#
+#   # ── Status ──
+#   - type: entities
+#     title: "Engine Status"
+#     entities:
+#       - entity: sensor.ai_routine_tracker_status
+#         name: "Tracker Status"
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#
+#   # ── Manual trigger buttons ──
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Extract Fingerprints"
+#         icon: mdi:fingerprint
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.routine_extract_fingerprints
+#         icon_height: 40px
+#       - type: button
+#         name: "Track Position"
+#         icon: mdi:map-marker-radius
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.routine_track_position
+#           perform_action_data:
+#             from_zone: "kitchen"
+#             to_zone: "bathroom"
+#         icon_height: 40px
+# =============================================================================

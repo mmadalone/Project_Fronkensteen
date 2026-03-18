@@ -1,75 +1,74 @@
-# Wake-up music – Alexa
+# Wake-up Music -- Alexa
 
 ![Wake-up music Alexa header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_music_alexa-header.jpeg)
 
-A script blueprint that plays wake-up music on an Alexa device using the `alexa_devices` integration's text command interface. Sends two sequential commands: one to set volume, one to start a song or playlist — exactly as if you spoke them to the device.
+Plays wake-up music on an Alexa device using `alexa_devices.send_text_command`. Sends two text commands in sequence: one to set volume, one to start a song or playlist. Simple and effective -- no Music Assistant or Spotify integration required, just the Alexa Devices integration.
 
 ## How It Works
 
 ```
-┌──────────────────────────────────┐
-│  Script triggered (manual/auto)  │
-└──────────────┬───────────────────┘
-               │
-               ▼
-┌──────────────────────────────────┐
-│  Send volume text command        │
-│  e.g. "set volume to 10"        │
-└──────────────┬───────────────────┘
-               │
-               ▼
-┌──────────────────────────────────┐
-│  Send song/playlist text command │
-│  e.g. "play Mark on the bus by   │
-│        the Beastie Boys"         │
-└──────────────────────────────────┘
+Called from wake-up automation
+            |
+            v
+  ┌─────────────────────────────────┐
+  │ Send volume command to Alexa    │
+  │ e.g. "set volume to 10"        │
+  │ (continue_on_error: true)       │
+  └───────────┬─────────────────────┘
+              |
+              v
+  ┌─────────────────────────────────┐
+  │ Send song/playlist command      │
+  │ e.g. "play Mark on the bus      │
+  │  by the Beastie Boys"           │
+  │ (continue_on_error: true)       │
+  └─────────────────────────────────┘
 ```
-
-## Key Design Decisions
-
-### Text commands over media_player actions
-
-The `alexa_devices` integration provides `send_text_command` which accepts free-form text — the same as speaking to Alexa. This approach was chosen over `media_player.play_media` because it lets you leverage Alexa's natural language parsing for music resolution, and the integration does not expose entity-based targeting for this action (`device_id` is required).
-
-### Free-text selectors
-
-Volume and song inputs use free-text selectors rather than constrained inputs. This is intentional — Alexa text commands are natural language strings, and constraining them to dropdowns or sliders would limit the flexibility that makes this approach useful.
 
 ## Features
 
-- **Volume-first sequencing** — sets volume before playback starts, avoiding a jarring blast at full volume.
-- **Free-form commands** — any text command Alexa understands works as input, not just music.
-- **Single mode** — prevents overlapping runs if triggered rapidly.
+- Controls Alexa via natural language text commands -- same as voice but programmatic
+- Configurable volume and song/playlist commands
+- Both steps use `continue_on_error: true` for resilience
+- Works with any Alexa/Echo device supported by the Alexa Devices integration
 
 ## Prerequisites
 
-- Home Assistant 2024.8.0+
-- **Alexa Devices** integration (`alexa_devices`) installed and configured with at least one device.
+- Home Assistant **2024.10.0** or later
+- **Alexa Devices** (`alexa_devices`) integration installed and configured
+- At least one Alexa/Echo device registered
 
 ## Installation
 
-Copy `wakeup_music_alexa.yaml` to your `config/blueprints/script/madalone/` directory, or import via the blueprint URL.
+1. Copy `wakeup_music_alexa.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings -> Automations & Scenes -> Scripts -> Add -> Use Blueprint**
 
 ## Configuration
 
-### ① Alexa Device & Commands
+<details>
+<summary><strong>① Alexa Device & Commands</strong></summary>
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| Alexa device | *(required)* | The Echo / Alexa device to control (device selector filtered to `alexa_devices` integration). |
-| Volume command | `"set volume to 10"` | Text command sent to set volume before playback. |
-| Song / playlist command | `"play Mark on the bus by the Beastie Boys"` | Text command sent to start music. |
+|---|---|---|
+| `alexa_device` | _(none)_ | Alexa / Echo device to control (device selector filtered to `alexa_devices` integration) |
+| `volume_command` | `set volume to 10` | Text command sent to set volume before playback |
+| `song_command` | `play Mark on the bus by the Beastie Boys` | Text command sent to start music |
+
+</details>
 
 ## Technical Notes
 
-- **Mode:** `single` — prevents overlapping runs.
-- **device_id targeting:** The `alexa_devices.send_text_command` action requires `device_id` directly in the data payload. This is an integration constraint, not a style guide violation (AP-03 does not apply).
-- **No error handling:** The two text commands fire sequentially with no delay or error checking between them. If the volume command fails, the song command still fires. For most wake-up scenarios this is acceptable — if you need retry logic, wrap this script in an automation with error handling.
+- **Mode:** `single`
+- **Version:** 2.1
+- Uses `alexa_devices.send_text_command` -- sends plain-English commands to the Alexa device, the same way you'd speak to it
+- Both steps have `continue_on_error: true` -- if the volume command fails, the song command still fires
+- Volume is set via text command (e.g. "set volume to 10") rather than `media_player.volume_set` because Alexa Devices uses its own command interface
 
 ## Changelog
 
-- **v2 (2026-02-16):** Modernised syntax (`action:` keyword), added aliases to all steps, collapsible input section, header image, `author`/`source_url`/`min_version` metadata.
-- **v1:** Initial version using `service:` keyword, flat inputs, no metadata.
+- **v2.1** -- Audit remediation: bumped `min_version` to 2024.10.0, added `version` metadata, `continue_on_error` on both steps, `default` on device input for collapsible section
+- **v2** -- Modernized syntax (`action:`), added aliases, collapsible input section, header image, metadata fields, `min_version`
+- **v1** -- Initial version
 
 ## Author
 

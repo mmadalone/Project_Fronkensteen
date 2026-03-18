@@ -1,0 +1,28 @@
+# =============================================================================
+# AI TTS Queue — Helper Entities (Task 8 / DC-3, DC-10, DC-11)
+# =============================================================================
+# Kill switch, default speaker, daily counters, cache hit rate sensor.
+# Midnight counter reset handled by tts_queue.py (tts_queue_daily_housekeeping).
+# DO NOT add input_boolean.ai_test_mode — already in ai_test_harness.yaml
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+template:
+  - sensor:
+      - name: AI TTS Cache Hit Rate
+        unique_id: ai_tts_cache_hit_rate
+        unit_of_measurement: "%"
+        icon: mdi:chart-arc
+        state: >-
+          {% set hits = states('input_number.ai_tts_cache_hits_today') | float(0) %}
+          {% set calls = states('input_number.ai_tts_calls_today') | float(0) %}
+          {% if calls > 0 %}
+            {{ [[(hits / calls * 100) | round(0) | int, 0] | max, 100] | min }}
+          {% else %}
+            0
+          {% endif %}

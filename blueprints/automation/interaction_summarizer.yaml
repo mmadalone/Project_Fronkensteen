@@ -1,0 +1,258 @@
+# =============================================================================
+# Interaction Summarizer (v1.0.0)
+# =============================================================================
+# Scheduled job that compresses whisper interaction logs into per-agent
+# summaries using a cheap LLM call. Part of I-3: L2 interaction
+# summarization.
+#
+# Calls pyscript.summarize_interactions, which:
+#   - Searches L2 for unsummarized interaction entries
+#   - Groups by agent persona
+#   - Compresses each group via LLM into a 2-3 sentence summary
+#   - Stores summary with configurable long TTL
+#   - Tags/deletes source entries per retention mode
+#
+# Summaries auto-embed on the next embedding_batch run (I-2).
+# Cost: ~$0.001/run at gpt-4o-mini. Budget-gated at standard tier.
+# =============================================================================
+
+blueprint:
+  name: "Interaction Summarizer (v1.0.0)"
+  author: madalone
+  description: >
+    # Interaction Summarizer
+
+
+    Scheduled job that compresses whisper interaction logs into per-agent
+    summaries. Uses a cheap LLM call to distill N raw interaction entries
+    into a compact 2-3 sentence digest per voice assistant persona.
+
+
+    **How it works:** At the scheduled time, searches L2 memory for
+    interaction log entries older than the lookback window, groups them
+    by agent persona, and compresses each group via LLM. Summaries are
+    stored as new L2 entries with a long TTL (default 30 days). Source
+    entries are handled per the retention mode setting.
+
+
+    **Retention modes:**
+
+    - `summary_and_tag` (default): Tag source entries as "summarized",
+      let their natural 2-day TTL expire. Auditable, zero risk.
+
+    - `summary_only`: Delete source entries immediately after summarizing.
+
+    - `both`: Tag as "archived" and extend TTL to match summary lifetime.
+
+
+    **Budget safety:** Uses the standard LLM budget tier by default.
+    If budget drops below 30%, summarization pauses gracefully.
+
+
+    **I-2 integration:** Summaries auto-embed on the next nightly
+    embedding batch run — no special wiring needed.
+
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/interaction_summarizer.yaml
+
+  input:
+    # ===========================================================================
+    # ① Schedule & Control
+    # ===========================================================================
+    schedule_control:
+      name: "① Schedule & Control"
+      icon: mdi:clock-check-outline
+      description: When the batch runs and how to disable it.
+      collapsed: false
+      input:
+        batch_time:
+          name: Batch Time
+          description: >-
+            Time entity that controls when the batch runs.
+            Recommendation: 03:00 (30 min before embedding batch at 03:30).
+          default:
+            entity_id: input_datetime.ai_summarizer_batch_time
+          selector:
+            entity:
+              domain: input_datetime
+
+        kill_switch:
+          name: Kill Switch
+          description: >-
+            Boolean to disable summarization without removing the automation.
+            ON = summarization disabled.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ② Summarization Tuning
+    # ===========================================================================
+    tuning:
+      name: "② Summarization Tuning"
+      icon: mdi:tune-variant
+      description: Controls how interactions are selected, batched, and retained.
+      collapsed: true
+      input:
+        lookback_hours:
+          name: Lookback Hours
+          description: >-
+            Only summarize interactions older than this many hours.
+            Must be less than the interaction TTL (48h).
+            Default: 36 (entries between 36-48h old).
+          default: 36
+          selector:
+            number:
+              min: 12
+              max: 47
+              step: 1
+              mode: slider
+
+        min_interactions:
+          name: Min Interactions per Agent
+          description: >-
+            Skip agents with fewer unsummarized interactions than this.
+            Prevents wasting an LLM call on a single sentence.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 20
+              step: 1
+              mode: box
+
+        max_interactions:
+          name: Max Interactions per Batch
+          description: >-
+            Total cap on interactions processed per run.
+            Budget safeguard — limits LLM calls per batch.
+          default: 50
+          selector:
+            number:
+              min: 10
+              max: 200
+              step: 10
+              mode: slider
+
+        retention_mode:
+          name: Retention Mode
+          description: >-
+            How to handle source entries after summarizing.
+            summary_and_tag: tag as summarized, let 2-day TTL expire.
+            summary_only: delete sources immediately.
+            both: tag as archived, extend TTL to match summary.
+          default: "summary_and_tag"
+          selector:
+            select:
+              options:
+                - label: "Summarize & Tag (let TTL expire)"
+                  value: "summary_and_tag"
+                - label: "Summary Only (delete sources)"
+                  value: "summary_only"
+                - label: "Both (archive sources)"
+                  value: "both"
+
+        summary_expiry_days:
+          name: Summary Expiry (days)
+          description: >-
+            How long summary entries persist in L2 memory.
+          default: 30
+          selector:
+            number:
+              min: 7
+              max: 365
+              step: 1
+              mode: box
+
+    # ===========================================================================
+    # ③ Privacy & Infrastructure
+    # ===========================================================================
+    privacy_infrastructure:
+      name: "③ Privacy & Infrastructure"
+      icon: mdi:shield-lock-outline
+      description: Privacy gate configuration for tier-based suppression.
+      collapsed: true
+      input:
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  kill_switch: !input kill_switch
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+triggers:
+  - trigger: time
+    at: !input batch_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set ks = kill_switch | default('') %}
+      {% if ks and states(ks) == 'on' %}
+        false
+      {% else %}
+        true
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_interaction_summarizer') | default('off') -%}
+      {%- if not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_t3_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Run interaction summarization batch"
+    continue_on_error: true
+    action: pyscript.summarize_interactions
+    response_variable: result
+    data:
+      lookback_hours: !input lookback_hours
+      min_interactions: !input min_interactions
+      max_interactions: !input max_interactions
+      retention_mode: !input retention_mode
+      summary_expiry_days: !input summary_expiry_days
+
+  - alias: "Log summarization result"
+    action: system_log.write
+    data:
+      message: >-
+        Interaction summarizer: summaries={{ result.summaries_created | default(0) }},
+        processed={{ result.entries_processed | default(0) }},
+        skipped={{ result.entries_skipped | default(0) }},
+        llm_calls={{ result.llm_calls | default(0) }},
+        tokens={{ result.total_tokens | default(0) }},
+        agents={{ result.agents_summarized | default([]) | join(', ') }}
+      level: info
+      logger: agent_whisper.summarizer
+
+mode: single

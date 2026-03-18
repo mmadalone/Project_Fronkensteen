@@ -1,0 +1,736 @@
+# Orphan voice_spotify_last_search removed 2026-03-14
+# Orphan dynamic_media_id removed 2026-03-14
+
+########################################
+# Goodnight Negotiator — last state
+########################################
+
+gn_last_opening_line:
+  name: Goodnight Negotiator last opening line
+  icon: mdi:message-text-clock-outline
+  max: 255
+
+gn_last_question:
+  name: Goodnight Negotiator last question
+  icon: mdi:chat-question-outline
+  max: 255
+
+gn_last_reply:
+  name: Goodnight Negotiator last reply
+  icon: mdi:chat-outline
+  max: 255
+
+########################################
+# Quark Goodnight / Bedtime routine helpers
+########################################
+
+# Pre / Post
+quark_goodnight_pre_line:
+  name: Quark goodnight pre-announcement
+  icon: mdi:weather-night
+  max: 255
+  mode: text
+
+quark_gn_post:
+  name: Quark goodnight post-announcement
+  icon: mdi:weather-night
+  max: 255
+  mode: text
+
+# Stage 1 – Devices
+quark_gn_devices_question:
+  name: Quark GN devices question
+  icon: mdi:power-plug-outline
+  max: 255
+  mode: text
+
+quark_gn_devices_yes:
+  name: Quark GN devices YES line
+  icon: mdi:check-circle-outline
+  max: 255
+  mode: text
+
+quark_gn_devices_no:
+  name: Quark GN devices NO line
+  icon: mdi:close-circle-outline
+  max: 255
+  mode: text
+
+# Stage 2 – TV / IR devices
+quark_gn_ir_question:
+  name: Quark GN TV question
+  icon: mdi:television
+  max: 255
+  mode: text
+
+quark_gn_ir_yes:
+  name: Quark GN TV YES line
+  icon: mdi:check-circle-outline
+  max: 255
+  mode: text
+
+quark_gn_ir_no:
+  name: Quark GN TV NO line
+  icon: mdi:close-circle-outline
+  max: 255
+  mode: text
+
+# Stage 3 – Music / bedtime story
+quark_gn_music_intro_question:
+  name: Quark GN music intro question
+  icon: mdi:music-note
+  max: 255
+  mode: text
+
+quark_gn_music_yes:
+  name: Quark GN music YES line
+  icon: mdi:check-circle-outline
+  max: 255
+  mode: text
+
+quark_gn_music_no:
+  name: Quark GN music NO line
+  icon: mdi:close-circle-outline
+  max: 255
+  mode: text
+
+quark_gn_music_secondary_question:
+  name: Quark GN secondary music question
+  icon: mdi:music-note-plus
+  max: 255
+  mode: text
+
+# Orphan notification_follow_me_loop_owner removed 2026-03-14 — superseded by I-45b refcount
+# Orphan notification_duck_snapshot removed 2026-03-14 — superseded by duck_manager
+# Orphan notification_satellite_volume_snapshot removed 2026-03-14 — superseded by duck_manager
+
+########################################
+# Voice Session (I-56)
+########################################
+
+ai_voice_session_pending:
+  name: "AI Voice Session Pending"
+  icon: mdi:microphone-message
+  max: 255
+  initial: ""
+
+ai_music_feedback_context:
+  name: "AI Music Feedback Context"
+  icon: mdi:music-note-eighth
+  max: 255
+  initial: ""
+
+########################################
+# Voice Handoff (I-24 / I-45)
+########################################
+
+ai_handoff_pending:
+  name: AI Handoff - Pending
+  icon: mdi:account-clock
+  max: 255
+  mode: text
+
+ai_handoff_persona_aliases:
+  name: AI Handoff - Persona Aliases
+  icon: mdi:account
+  max: 255
+  mode: text
+
+########################################
+# Notification Follow-Me
+########################################
+
+notification_follow_me_bypass_log:
+  name: "Notification Follow-Me - Bypass Owner Log"
+  icon: mdi:text-box-outline
+  max: 255
+  mode: text
+
+notification_follow_me_ledger:
+  name: Notification Follow-Me Ledger
+  icon: mdi:format-list-bulleted
+  max: 255
+  mode: text
+
+notification_follow_me_duck_snapshot:
+  name: Notification Follow-Me Duck Snapshot
+  icon: mdi:volume-variant-off
+  max: 255
+  mode: text
+
+notification_follow_me_duck_snapshot_rick:
+  name: Notification Follow-Me - Duck Snapshot - Rick
+  icon: mdi:duck
+  max: 255
+  mode: text
+
+notification_follow_me_duck_snapshot_quark:
+  name: Notification Follow-Me - Duck Snapshot - Quark
+  icon: mdi:duck
+  max: 255
+  mode: text
+
+notification_last_announced_sender_name_rick:
+  name: Notification Last Announced Sender Name - Rick
+  icon: mdi:account-alert
+  max: 255
+  mode: text
+
+notification_last_announced_sender_name_quark:
+  name: Notification Last Announced Sender Name - Quark
+  icon: mdi:account-alert-outline
+  max: 255
+  mode: text
+
+notification_follow_me_reminder_loop_owner:
+  name: Notification Follow-me - Reminder loop owner
+  icon: mdi:archive-arrow-down
+  max: 255
+  mode: text
+
+########################################
+# Email Follow-Me
+########################################
+
+email_last_announce_sender:
+  name: Email Last Announce Sender
+  icon: mdi:account-arrow-right
+  max: 255
+  mode: text
+
+
+email_follow_me_dedup_uids:
+  name: Email Follow-Me Dedup UIDs
+  icon: mdi:email-check-outline
+  max: 255
+  mode: text
+
+email_follow_me_last_subject:
+  name: Email Follow-Me Last Subject
+  icon: mdi:email-outline
+  max: 255
+  mode: text
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Pattern Prediction
+# ═══════════════════════════════════════════════════════════════════
+
+# I-54: ai_away_prediction_raw removed — replaced by pyscript sensor.ai_away_prediction
+# (state.set with attributes, no 255-char limit, L2 persistence)
+
+# I-40a G12: Accuracy tracking
+ai_away_prediction_accuracy:
+  name: "AI Away Prediction Accuracy"
+  initial: ""
+  max: 255
+  icon: mdi:chart-line
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_calendar_promotion — Calendar Promotion
+# ═══════════════════════════════════════════════════════════════════
+
+# ISO timestamp of last successful sync. Agents and dashboards can check
+# freshness of calendar data.
+ai_calendar_last_sync:
+  name: "AI Calendar Last Sync"
+  initial: ""
+  max: 30
+  icon: mdi:clock-check-outline
+
+# Today's events — compact format for quick L1 access without L2 query.
+# Example: "10:00 Dentist | 14:00 Team standup | 18:00 Dinner"
+ai_calendar_today_summary:
+  name: "AI Calendar Today Summary"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-today
+
+# Tomorrow's events — same format, used by bedtime advisor and evening
+# briefing automations.
+ai_calendar_tomorrow_summary:
+  name: "AI Calendar Tomorrow Summary"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-arrow-right
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Hot Context (Layer 1)
+# ═══════════════════════════════════════════════════════════════════
+
+# ── STATIC USER PROFILE (Shared / Generic) ──
+# These original helpers are preserved for backward compatibility.
+# The template sensor now references the per-user _miquel variants below.
+
+ai_context_user_name:
+  name: "AI Context - User Name"
+  initial: "Miquel"
+  max: 50
+ai_context_user_name_spoken:
+  name: "AI Context - User Name (TTS pronunciation)"
+  initial: "Mee-kel"
+  max: 50
+ai_context_user_languages:
+  name: "AI Context - User Languages"
+  initial: "English, Spanish, Valencian, Dutch, Portuguese"
+  max: 200
+ai_context_household:
+  name: "AI Context - Household Members"
+  initial: "Miquel, Jessica (partner)"
+  max: 200
+ai_context_pets:
+  name: "AI Context - Pets"
+  initial: "none"
+  max: 100
+
+# ── Per-User Profile (Miquel) ──
+ai_context_user_name_miquel:
+  name: "AI Context - User Name (Miquel)"
+  initial: "Miquel"
+  max: 50
+ai_context_user_name_spoken_miquel:
+  name: "AI Context - User Name Spoken (Miquel)"
+  initial: "Mee-kel"
+  max: 50
+ai_context_user_languages_miquel:
+  name: "AI Context - User Languages (Miquel)"
+  initial: "English, Spanish, Valencian, Dutch, Portuguese"
+  max: 200
+
+# ── Per-User Profile (Jessica) ──
+ai_context_user_name_jessica:
+  name: "AI Context - User Name (Jessica)"
+  initial: "Jessica"
+  max: 50
+ai_context_user_name_spoken_jessica:
+  name: "AI Context - User Name Spoken (Jessica)"
+  initial: "Jessica"
+  max: 50
+ai_context_user_languages_jessica:
+  name: "AI Context - User Languages (Jessica)"
+  initial: "Spanish, Valencian"
+  max: 200
+
+# I-27: Work calendar keywords for auto-detection
+ai_work_calendar_keywords:
+  name: "AI Context - Work Calendar Keywords"
+  initial: "standup,sprint,meeting,client,1:1,work,office,scrum,daily"
+  max: 255
+  icon: mdi:briefcase-search
+
+# ── SELF-AWARENESS (Task 2) ──
+ai_last_agent_name:
+  name: "AI - Last Agent Name"
+  initial: "none"
+  max: 50
+ai_last_agent_entity:
+  name: "AI - Last Agent Entity ID"
+  initial: "none"
+  max: 100
+ai_last_interaction_topic:
+  name: "AI - Last Interaction Topic"
+  initial: ""
+  max: 200
+ai_last_handoff_reason:
+  name: "AI - Last Handoff Reason"
+  initial: "none"
+  max: 50
+ai_last_handoff_source:
+  name: "AI - Last Handoff Source"
+  initial: "none"
+  max: 50
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dispatcher_fixed_agent:
+  name: "AI Dispatcher - Fixed Agent"
+  max: 20
+  icon: mdi:account-lock
+ai_dispatcher_agent_pool:
+  name: "AI Dispatcher - Agent Pool"
+  max: 255
+  icon: mdi:account-group
+ai_keyword_add:
+  name: "Keyword to Add"
+  max: 50
+  icon: mdi:tag-plus
+ai_keyword_remove:
+  name: "Keyword to Remove"
+  max: 50
+  icon: mdi:tag-minus
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Unified Volume Ducking
+# ═══════════════════════════════════════════════════════════════════
+
+ai_duck_group:
+  name: "Duck Group (CSV, short IDs)"
+  max: 255
+  icon: mdi:volume-minus
+
+ai_duck_announcement_players:
+  name: "Announcement Players (CSV, short IDs)"
+  max: 255
+  icon: mdi:bullhorn
+
+ai_duck_satellites:
+  name: "Duck Satellites (CSV)"
+  max: 255
+  icon: mdi:microphone
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+
+# Comma-separated trusted senders and domains.
+# Full emails: "mom@gmail.com, boss@work.com"
+# Domains: "amazon.com, paypal.com" (matches any sender from that domain)
+# Domain suffix: "amazon.com" also matches "email.amazon.com"
+ai_email_known_contacts:
+  name: "AI Email Known Contacts"
+  initial: ""
+  max: 255
+  icon: mdi:account-group
+
+# Comma-separated custom priority keywords (checked against subject).
+# Added to the built-in list: shipping, delivery, appointment, urgent,
+# invoice, confirmation, password reset, security alert, payment, receipt.
+ai_email_priority_keywords:
+  name: "AI Email Priority Keywords"
+  initial: ""
+  max: 255
+  icon: mdi:tag-text
+
+# Comma-separated senders/domains to BLOCK in blacklist mode.
+# Same format as known contacts: "spam@example.com, newsletter.com"
+# Seeded from existing email_follow_me blueprint blocked list.
+ai_email_blocked_senders:
+  name: "AI Email Blocked Senders"
+  initial: "bingo@patreon.com, no-reply@revolut.com"
+  max: 255
+  icon: mdi:account-cancel
+
+# Comma-separated keywords to BLOCK in blacklist mode.
+# If any keyword appears in the subject, email is filtered out.
+# Seeded from existing email_follow_me blueprint keyword_list.
+ai_email_blocked_keywords:
+  name: "AI Email Blocked Keywords"
+  initial: "continua con la configuración de tu cuenta, vacantes nuevas que coinciden"
+  max: 255
+  icon: mdi:tag-off
+
+# Last priority email subject — quick reference for dashboards and agents.
+ai_email_last_priority:
+  name: "AI Email Last Priority"
+  initial: ""
+  max: 255
+  icon: mdi:email-open
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search & Memory
+# ═══════════════════════════════════════════════════════════════════
+
+# ha_text_ai sensor entity used for LLM task calls (chat completions).
+# Set to the entity_id of your preferred ha_text_ai instance.
+ai_task_instance:
+  name: "AI Task - ha_text_ai Instance"
+  initial: "sensor.ha_text_ai_deepseek_chat"
+  icon: mdi:robot-outline
+  max: 255
+
+# OpenAI API key for direct embedding calls (not routed through ha_text_ai).
+# Mode: password — value hidden in UI.
+ai_embedding_api_url:
+  name: "AI Embedding - API URL"
+  initial: "https://openrouter.ai/api/v1"
+  icon: mdi:api
+  max: 255
+
+ai_embedding_api_key:
+  name: "AI Embedding - API Key"
+  initial: !secret openrouter_api_key
+  mode: password
+  icon: mdi:key-variant
+  max: 255
+
+# Embedding model name. text-embedding-3-small is cheapest and sufficient.
+ai_embedding_model:
+  name: "AI Embedding - Model"
+  initial: "text-embedding-3-small"
+  icon: mdi:cube-outline
+  max: 100
+
+# ── Auto-archive (I-42 Phase 2) ──
+# Space-separated list of tags that protect entries from archiving.
+ai_memory_archive_protection_tags:
+  name: "AI Memory - Archive Protection Tags"
+  initial: "important remember pinned permanent"
+  icon: mdi:shield-lock
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Agent Escalation System
+# ═══════════════════════════════════════════════════════════════════
+
+ai_escalation_last_outcome:
+  name: "AI Escalation Last Outcome"
+  max: 255
+  initial: ""
+  icon: mdi:history
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — LLM/TTS/STT Budget & Fallback
+# ═══════════════════════════════════════════════════════════════════
+
+ai_budget_fallback_agent:
+  name: "AI Budget - Fallback Conversation Agent"
+  initial: "homeassistant"
+  icon: mdi:robot-off-outline
+  max: 255
+
+ai_budget_saved_pipelines:
+  name: "AI Budget - Saved Pipelines (JSON)"
+  initial: "{}"
+  icon: mdi:content-save
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_media_tracking — Radarr/Sonarr Integration
+# ═══════════════════════════════════════════════════════════════════
+
+ai_media_upcoming_summary:
+  name: "AI media upcoming summary"
+  icon: mdi:calendar-star
+  max: 255
+ai_media_upcoming_sonarr:
+  name: "AI media upcoming — Sonarr"
+  icon: mdi:television-classic
+  max: 255
+ai_media_upcoming_radarr:
+  name: "AI media upcoming — Radarr"
+  icon: mdi:movie-open
+  max: 255
+ai_media_recent_downloads:
+  name: "AI media recent downloads"
+  icon: mdi:download-circle
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_patterns — Presence Pattern Recognition
+# ═══════════════════════════════════════════════════════════════════
+
+# Raw JSON prediction data, updated by pyscript on every zone transition.
+# Format: {"zone": "bed", "probability": 67, "confidence": "high", "sample_count": 70}
+# Empty string = no prediction available.
+# Template sensor below parses this into human-readable state.
+ai_predicted_next_zone_raw:
+  name: "AI Predicted Next Zone (Raw JSON)"
+  initial: ""
+  max: 255
+  icon: mdi:crystal-ball
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_predictive_schedule — Predictive Scheduling
+# ═══════════════════════════════════════════════════════════════════
+
+# I-28: Per-day-of-week wake time overrides (JSON)
+# Format: {"thursday":"09:30","sunday":"10:00"}
+# Overrides weekday/weekend defaults for specific days.
+ai_schedule_day_overrides:
+  name: "AI Schedule - Day Overrides (JSON)"
+  initial: "{}"
+  max: 255
+  icon: mdi:calendar-week
+
+# Current bedtime recommendation text. Updated by the bedtime advisor
+# every 30 minutes (20:00-02:00) and on demand.
+# Example: "Start winding down in about 45 minutes for 7 hours of sleep."
+ai_bedtime_recommendation:
+  name: "AI Bedtime Recommendation"
+  initial: ""
+  max: 255
+  icon: mdi:bed-clock
+
+# Raw JSON for the confidence template sensor. Updated alongside
+# the recommendation by the bedtime advisor.
+# Format: {"calendar":true,"fingerprint":true,"presence":true}
+ai_schedule_sources_raw:
+  name: "AI Schedule Sources (Raw JSON)"
+  initial: ""
+  max: 255
+  icon: mdi:database-check
+
+# Mock calendar event for test mode. Only used when ai_test_mode is ON.
+# Formats accepted:
+#   "Team standup at 09:00"    — summary + time
+#   "09:00"                    — time only
+#   {"summary":"Standup","hour":9,"minute":0}  — JSON
+ai_test_calendar_event:
+  name: "AI Test - Calendar Event Override"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-clock
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_project_tracking — Project Awareness
+# ═══════════════════════════════════════════════════════════════════
+
+ai_project_last_sync:
+  name: "AI Project Last Sync"
+  initial: ""
+  max: 30
+ai_active_projects_summary:
+  name: "AI Active Projects Summary"
+  initial: ""
+  max: 255
+ai_project_hot_context_line:
+  name: "AI Project Hot Context Line"
+  initial: ""
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Proactive Briefing
+# ═══════════════════════════════════════════════════════════════════
+
+# Last briefing summary. Updated after each delivery for logging and
+# dashboard display. Truncated to 250 chars.
+ai_last_briefing_summary:
+  name: "AI Briefing - Last Summary"
+  initial: ""
+  max: 255
+  icon: mdi:text-box-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_routine_tracker — Routine Fingerprinting
+# ═══════════════════════════════════════════════════════════════════
+
+# Current routine position. Updated by pyscript on every zone transition.
+# Format: "{fingerprint_id}:step_{N}_of_{M}" or "none"
+# Example: "evening_weekday_living_room_bed:step_3_of_4"
+# Resets to "none" on restart (pyscript rebuilds from live transitions).
+ai_routine_stage:
+  name: "AI Routine Stage"
+  initial: "none"
+  max: 255
+  icon: mdi:routes
+
+# Last deviation description. Set when the user breaks from a known routine.
+# Format: "expected:{zone} actual:{zone}" or "none"
+# Stays until overwritten by next deviation or manually cleared.
+ai_routine_deviation:
+  name: "AI Routine Deviation"
+  initial: "none"
+  max: 255
+  icon: mdi:alert-decagram
+
+# Raw JSON for the ETA template sensor. Updated by pyscript alongside stage.
+# Format: {"eta_minutes": 12.0, "fingerprint_id": "...", "step": 3, "total": 4}
+# Empty string when not in a routine.
+ai_routine_eta_raw:
+  name: "AI Routine ETA (Raw JSON)"
+  initial: ""
+  max: 255
+  icon: mdi:timer-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_self_awareness — Agent Self-Awareness
+# ═══════════════════════════════════════════════════════════════════
+
+ai_last_satellite:
+  name: "AI - Last Active Satellite"
+  max: 100
+  icon: mdi:microphone
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_test_harness — Testing & Simulation
+# ═══════════════════════════════════════════════════════════════════
+
+# Identity override. Only active when ai_test_mode is ON.
+# Valid values: "miquel", "jessica", "guest", "" (empty = use real identity).
+# Allows testing Jessica's automations without her phone/presence.
+ai_test_identity:
+  name: "AI Test - Identity Override"
+  initial: ""
+  max: 20
+  icon: mdi:account-switch
+
+# Routine stage override. Only active when ai_test_mode is ON.
+# Valid values: "morning", "bedtime", "work", "evening", "" (empty = real stage).
+# For future prediction engine testing.
+ai_test_routine_stage:
+  name: "AI Test - Routine Stage Override"
+  initial: ""
+  max: 30
+  icon: mdi:clock-fast
+
+# Memory browser search query. Used by the AI dashboard Memory view.
+# User types a search term, presses Search -> pyscript.memory_browse runs.
+ai_memory_search_query:
+  name: "AI Memory Search Query"
+  initial: ""
+  max: 200
+  icon: mdi:database-search
+
+# ── Memory Editor Helpers (Dashboard V2.1) ──
+ai_memory_edit_key:
+  name: "Memory Edit - Key"
+  initial: ""
+  max: 200
+  icon: mdi:key-variant
+ai_memory_edit_value:
+  name: "Memory Edit - Value"
+  initial: ""
+  max: 255
+  icon: mdi:text-box-outline
+ai_memory_edit_tags:
+  name: "Memory Edit - Tags"
+  initial: ""
+  max: 200
+  icon: mdi:tag-multiple
+ai_memory_edit_scope:
+  name: "Memory Edit - Scope"
+  initial: "household"
+  max: 50
+  icon: mdi:account-group
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue Manager
+# ═══════════════════════════════════════════════════════════════════
+
+ai_default_speaker:
+  name: AI Default Speaker
+  max: 100
+  icon: mdi:speaker
+
+# Zone scan priority (CSV). When multiple FP2 zones detect presence,
+# the first zone in this list wins. Edit to match your preferred areas.
+ai_tts_zone_priority:
+  name: AI TTS Zone Priority
+  max: 255
+  icon: mdi:sort-numeric-ascending
+
+# Satellite entity IDs to monitor during dynamic volume restore (CSV).
+ai_tts_restore_satellites:
+  name: "TTS Restore Monitor Satellites"
+  max: 255
+  icon: mdi:satellite-uplink
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_user_interview — User Preference Interview
+# ═══════════════════════════════════════════════════════════════════
+
+ai_interview_progress:
+  name: "AI Interview Progress"
+  initial: "{}"
+  max: 255
+  icon: mdi:progress-check
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_weather_forecast — Tomorrow Weather
+# ═══════════════════════════════════════════════════════════════════
+
+ai_weather_tomorrow_summary:
+  name: "AI weather tomorrow summary"
+  icon: mdi:weather-partly-cloudy
+  max: 255

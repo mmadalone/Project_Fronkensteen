@@ -1,0 +1,4107 @@
+blueprint:
+  name: "Proactive Bedtime Escalation (v1.7) — Presence-based nags with inline bedtime routine"
+  author: madalone
+  description: '![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_bedtime_escalation-header.jpeg)
+
+    # Proactive Bedtime Escalation
+
+    Unified presence-based escalation blueprint with inline bedtime routine.
+    Combines the proactive LLM nag layer with a multi-stage escalation engine
+    that culminates in an autonomous bedtime routine — audiobook (Music Assistant)
+    or Kodi playback.
+
+    Presence in a configured area triggers LLM-generated spoken messages. Each
+    successive nag within a session advances the escalation stage, adjusting
+    tone and assertiveness via stage-specific prompts. At the final stage (or
+    when the user says "yes" to the bedtime question), the inline bedtime
+    routine fires automatically — stopping the TV, killing lights, playing
+    media, running the countdown, and handling bathroom occupancy.
+
+    ### Key features
+
+    - 18 configurable input sections (①–⑪, ⑬–⑲), 25 prompts, zero hardcoded strings
+
+    - Helper-tracked escalation with configurable cooldown curves
+
+    - Media mode selector: audiobook (Music Assistant) or Kodi
+
+    - Kill switch, conflict guard, and test mode
+
+    - Optional voice memory integration for bedtime history
+
+    - Independent weekend overrides for proactive and bedtime layers
+
+    ### Recent changes
+
+    - **v1.6:** Shared bedtime routine refactor (E-02) — autonomous and
+      scheduled paths now fall through to a single shared bedtime routine
+      instead of maintaining duplicate action sequences. Main router default
+      branch exits via stop: to prevent unintended fallthrough. No functional
+      change — same actions, same order, deduplicated structure.
+
+    - **v1.5:** Bed presence sensor (⑲) — optional binary_sensor that confirms
+      user is in bed, bypassing escalation and running bedtime routine directly.
+      Configurable settling TTS, countdown override (0 = skip), and bathroom
+      guard bypass. Stale mutex safety net clears crashed routines. Removed ⑫
+      Kodi library pre-fetch (freeform/both modes eliminated, curated+preset only).
+
+    - **v1.4:** Hybrid escalation prompt gap-fill — stages without explicit
+      prompt overlays now get auto-generated behavioural directives based on
+      escalation progress (4-band curve: casual → frustrated → blunt → final).
+      Fixes dead-air stages when stage_count exceeds the 6 explicit prompt
+      slots, and eliminates robotic fallback to base LLM prompt mid-escalation.
+
+    - **v1.3:** Fix max_nags "0 = unlimited" contract — template now treats
+      0 as unlimited instead of "zero nags allowed" (always-exhausted gate).
+      Add default branch to main router choose block for testability — manual
+      runs now log a diagnostic message instead of silently exiting.
+      Fix LLM prompt assembly — stage_prompt_overlay was replacing the base
+      llm_prompt (format/length/persona constraints) instead of augmenting it,
+      causing the LLM to narrate raw entity states without character limits.
+
+    - **v1.2:** Fix string-vs-boolean truthiness bug — add `| bool` to five
+      condition gates (kill_switch_on, bedtime_already_active, media_is_playing,
+      nags_exhausted, session_active) that rendered as strings via `>-` scalars,
+      causing all conditions to always block. Fix forward-reference error —
+      `default_countdown_val` was defined after `countdown_minutes` which
+      referenced it, causing `UndefinedError` at trigger time and preventing
+      the automation from ever executing.
+
+    - **v1.1:** Audit fixes — add explicit `mode: single` / `max_exceeded: silent`
+      (AP-42), fix compound boolean in scheduled_bedtime day gate (always-false
+      condition), add dedicated `bedtime_weekday_scheduled_time` input
+
+    - **v1.0:** Initial unified release — merges proactive_llm_sensors v7.6,
+      bedtime_routine v4.2.1, and bedtime_routine_plus into a single file
+      with multi-stage escalation engine
+
+    [Full changelog →](https://github.com/mmadalone/HA-Master-Repo)'
+  domain: automation
+  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/proactive_bedtime_escalation.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① PRESENCE & DETECTION
+    # ===========================================================================
+    presence_detection:
+      name: "① Presence & detection"
+      icon: mdi:motion-sensor
+      description: Configure how presence is detected and optional guards.
+      collapsed: false
+      input:
+        presence_sensors:
+          name: Presence sensors for this area
+          description: >
+            One or more binary sensors that indicate presence in this area
+            (e.g. FP2 room groups). The automation fires when ANY of these
+            transitions to ON. Used for both proactive nags and escalation
+            stage tracking.
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class: occupancy
+              multiple: true
+          default: []
+
+        min_presence_seconds:
+          name: Minimum presence duration (seconds)
+          description: >
+            If above 0, the automation only speaks when presence has been
+            continuously detected for at least this long. Prevents quick
+            walk-by triggers.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 5
+              unit_of_measurement: seconds
+
+        block_if_media_playing:
+          name: Do not speak if media is playing
+          description: >
+            If enabled, the automation will not speak while the selected
+            media player is actively playing. Avoids talking over music,
+            podcasts, or TV audio. Does NOT block escalation stage
+            advancement — only TTS output.
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ② TTS & SPEAKER
+    # ===========================================================================
+    tts_speaker:
+      name: "② TTS & speaker"
+      icon: mdi:speaker-message
+      description: Configure which speaker and TTS integration to use for proactive messages.
+      collapsed: true
+      input:
+        media_player:
+          name: Speaker / media player
+          description: >
+            Media player for proactive TTS in this area. Can be a Voice PE
+            speaker, Sonos, etc. This is the PROACTIVE speaker — bedtime
+            routine may use different devices configured in ⑩ Devices.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        area_name:
+          name: Area name (for the message)
+          description: >
+            Friendly name of this area for mention in speech. Used in
+            fallback messages and LLM context. Pick from menu or type custom.
+          default: Living room
+          selector:
+            select:
+              options:
+                - Workshop
+                - Living room
+                - Bedroom
+                - Office
+                - Kitchen
+                - Bathroom
+              custom_value: true
+
+        proactive_tts_volume:
+          name: Proactive TTS volume
+          description: >
+            Volume level for the proactive speaker before TTS delivery
+            (0.0 to 1.0). Set to 0 to skip volume adjustment.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ===========================================================================
+    # ③ AI CONVERSATION
+    # ===========================================================================
+    ai_conversation:
+      name: "③ AI conversation"
+      icon: mdi:robot
+      description: >
+        Conversation agent, user identity, and base prompts shared by both
+        the proactive layer and the bedtime routine.
+      collapsed: true
+      input:
+        user_names:
+          name: User names / nicknames (optional)
+          description: >
+            Comma-separated list of names or nicknames. One is picked randomly
+            each run, adding variety. Leave empty to use fallback terms.
+            Example: "Miquel, Miky, boss"
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+        fallback_names:
+          name: Fallback address terms (direct speech)
+          description: >
+            Comma-separated generic terms for direct TTS speech when no user
+            name is set. Example: "friend, hey there, mate"
+          default: "friend, hey there"
+          selector:
+            text:
+              multiline: false
+
+        llm_fallback_names:
+          name: Fallback reference terms (LLM prompts)
+          description: >
+            Comma-separated 3rd-person terms for LLM prompt instructions
+            when no user name is set. Example: "the user, the person"
+          default: "the user"
+          selector:
+            text:
+              multiline: false
+
+        conversation_agent:
+          name: Voice Assistant (proactive)
+          description: >
+            Assist Pipeline for proactive messages and escalation. The pipeline
+            bundles agent + TTS engine + voice, so no separate TTS inputs are
+            needed.
+          default: Rick
+          selector:
+            text:
+
+        bedtime_conversation_agent:
+          name: Voice Assistant (bedtime routine)
+          description: >
+            Assist Pipeline for the bedtime routine flow. Can be the same
+            pipeline as proactive or a different one with bedtime-specific
+            tools.
+          default: "Rick - Bedtime"
+          selector:
+            text:
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selections above). When disabled, the
+            Voice Assistants you selected above are used directly.
+          default: true
+          selector:
+            boolean:
+
+        assist_satellites:
+          name: Assist satellites (bedtime)
+          description: >
+            Voice PE / Assist satellite entities for bedtime conversations
+            (audiobook selection, countdown negotiation). Not used for
+            proactive TTS — those go to the speaker in ②.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: assist_satellite
+
+        llm_prompt:
+          name: LLM prompt — proactive messages
+          description: >
+            Instructions for how the AI generates proactive presence-based
+            messages. Combined with area, time, trigger type, escalation
+            stage, and sensor context before being sent to the conversation
+            agent. Stage-specific prompt overrides (⑦) append to this.
+          default: >
+            You are a smart home assistant. Reply with ONE short, playful
+            sentence you would say out loud to the user in this area right
+            now, maximum 220 characters and without quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        context_entities:
+          name: Extra context sensors/entities for the LLM
+          description: >
+            Sensors or entities whose current states are passed to the LLM
+            as extra context (e.g. temperatures, media players, lights).
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # ===========================================================================
+    # ④ SCHEDULE & TIMING
+    # ===========================================================================
+    schedule_timing:
+      name: "④ Schedule & timing"
+      icon: mdi:clock-outline
+      description: >
+        Configure when the proactive layer is active, cooldown between
+        messages, and nag behavior.
+      collapsed: true
+      input:
+        start_time:
+          name: Active from
+          description: >
+            Start time of the daily window where the proactive layer fires.
+          default: "08:00:00"
+          selector:
+            time: {}
+
+        end_time:
+          name: Active until
+          description: >
+            End time of the daily window. Can be earlier than start time
+            to cross midnight (e.g. 23:00 → 02:00).
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        bedtime_weekday_scheduled_time:
+          name: Weekday bedtime trigger time
+          description: >
+            Time for the direct weekday bedtime trigger (the "scheduled_bedtime"
+            event). Separate from the proactive window start above. The weekend
+            equivalent is in section ⑰.
+          default: "22:00:00"
+          selector:
+            time: {}
+
+        run_days:
+          name: Run on these days
+          description: >
+            Days of the week the proactive layer is allowed to run.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+        cooldown_minutes:
+          name: Cooldown / nag interval (minutes)
+          description: >
+            Base interval between proactive messages. When escalation is
+            enabled (⑦), the cooldown curve may modify this per stage.
+            Note: the repeat timer ticks every 5 minutes, so effective
+            intervals are rounded up to the nearest 5-minute boundary.
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              unit_of_measurement: "min"
+
+        repeat_while_present:
+          name: Keep nagging while present
+          description: >
+            If enabled, keeps nagging at the cooldown interval as long as
+            presence is detected within the active time window. Required
+            for escalation to advance stages — if disabled, escalation
+            cannot progress beyond stage 1.
+          default: false
+          selector:
+            boolean: {}
+
+        max_nags_per_session:
+          name: Max nags per presence session (0 = unlimited)
+          description: >
+            Limits nags while presence stays on. Set to 0 for unlimited.
+            When escalation is enabled, this is superseded by the stage
+            count in ⑦ — set to 0 to let escalation control the limit.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 48
+              step: 1
+
+    # ===========================================================================
+    # ⑤ WEEKEND OVERRIDES — PROACTIVE LAYER
+    # ===========================================================================
+    weekend_overrides_proactive:
+      name: "⑤ Weekend overrides — proactive layer"
+      icon: mdi:weather-sunny
+      description: >
+        Optional weekend-specific schedule, cooldown, and prompt overrides
+        for the proactive nag layer. Independent from bedtime weekend
+        overrides in ⑰.
+      collapsed: true
+      input:
+        weekend_mode:
+          name: Weekend behavior
+          description: >
+            Choose what happens on "weekend" days for the proactive layer.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled_on_weekends
+                - label: "Use weekend profile"
+                  value: use_weekend_profile
+
+        weekend_days:
+          name: Weekend days
+          description: >
+            Which days count as "weekend" for the proactive layer. Uses
+            cross-midnight attribution — a session at 01:00 Sunday counts
+            as Saturday night.
+          default:
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+        weekend_start_time:
+          name: Weekend active from
+          description: >
+            Start time for weekend days when using the weekend profile.
+          default: "10:00:00"
+          selector:
+            time: {}
+
+        weekend_end_time:
+          name: Weekend active until
+          description: >
+            End time for weekend days when using the weekend profile.
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        weekend_cooldown_minutes:
+          name: Weekend cooldown / nag interval (minutes)
+          description: >
+            Cooldown for weekend days. Note: the repeat timer ticks every
+            5 minutes, so effective intervals are rounded up.
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              unit_of_measurement: "min"
+
+        weekend_llm_prompt_override:
+          name: Weekend LLM prompt override (optional)
+          description: >
+            Alternate proactive prompt on weekend days. If blank, the
+            normal prompt from ③ is used.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑥ BEDTIME QUESTION
+    # ===========================================================================
+    bedtime_question:
+      name: "⑥ Bedtime question"
+      icon: mdi:bed
+      description: >
+        Optional bedtime yes/no question via Assist Satellite. When escalation
+        is enabled (⑦), the question appears at the configured stage. When
+        escalation is disabled, it fires after each proactive TTS (like the
+        original proactive_llm_sensors behavior).
+      collapsed: true
+      input:
+        enable_bedtime_question:
+          name: Ask if you want help going to bed
+          description: >
+            If enabled, a bedtime yes/no question is asked on the satellite
+            after TTS. In escalation mode, this starts at the stage configured
+            in ⑦ Escalation Settings.
+          default: false
+          selector:
+            boolean: {}
+
+        bedtime_assist_satellite:
+          name: Assist Satellite for bedtime question
+          description: >
+            Voice PE / Assist Satellite that asks the bedtime yes/no.
+            Typically the satellite in the same room as the media player.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        bedtime_question_delay:
+          name: Delay between TTS and question (seconds)
+          description: >
+            Wait after proactive TTS before asking the bedtime question.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: seconds
+              mode: slider
+              step: 1
+
+        bedtime_llm_prompt:
+          name: Bedtime question LLM prompt
+          description: >
+            Instructions for how the AI phrases the bedtime question.
+            Receives the current escalation stage and sensor context.
+          default: >
+            You are a smart home assistant speaking to a user at bedtime.
+            Ask ONE short yes/no question to check if they want to go to
+            bed now. Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        bedtime_question_fallback:
+          name: Fallback bedtime question text
+          description: >
+            Fallback if the LLM fails. Write the full question — user name
+            is NOT auto-inserted.
+          default: "Do you want me to help you go to bed now?"
+          selector:
+            text:
+              multiline: true
+
+        weekend_bedtime_mode:
+          name: Weekend bedtime question behavior
+          description: >
+            Optionally change bedtime question behavior on weekend days.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled
+                - label: "Use weekend bedtime prompt"
+                  value: use_weekend_bedtime_prompt
+
+        weekend_bedtime_llm_prompt_override:
+          name: Weekend bedtime question prompt override
+          description: >
+            Alternate bedtime question prompt for weekend days. If blank,
+            the normal prompt is used.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑦ ESCALATION SETTINGS
+    # ===========================================================================
+    escalation_settings:
+      name: "⑦ Escalation settings"
+      icon: mdi:stairs
+      description: >
+        Multi-stage escalation engine. Successive nags within a presence
+        session advance the escalation stage. Each stage can have its own
+        prompt overlay, and at the final stage the bedtime routine fires
+        autonomously. Requires "Keep nagging while present" (④) to be
+        enabled for stages to advance.
+      collapsed: true
+      input:
+        enable_escalation:
+          name: Enable escalation
+          description: >
+            Enable multi-stage escalation. If disabled, the automation
+            behaves like the original proactive_llm_sensors — flat nags
+            with optional bedtime question.
+          default: false
+          selector:
+            boolean: {}
+
+        escalation_stage_count:
+          name: Number of escalation stages
+          description: >
+            Total stages before autonomous bedtime execution. Stage 0 is
+            idle (no presence session). Stage 1 is the first nag. The
+            final stage triggers the bedtime routine automatically.
+          default: 4
+          selector:
+            number:
+              min: 2
+              max: 8
+              step: 1
+
+        escalation_stage_helper:
+          name: Stage counter helper (input_number)
+          description: >
+            An input_number helper that tracks the current escalation stage.
+            Create one with min=0, max=8, step=1. The blueprint reads and
+            writes this helper to persist stage across automation runs.
+          default: ""
+          selector:
+            entity:
+              domain: input_number
+
+        escalation_session_helper:
+          name: Session timestamp helper (input_datetime)
+          description: >
+            An input_datetime helper that stores the escalation session
+            start time. Used for absence gap tolerance — if the user
+            leaves and returns within the gap, the session resumes at
+            the current stage instead of resetting.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+
+        cooldown_curve:
+          name: Cooldown curve
+          description: >
+            How the interval between stages changes as escalation progresses.
+            Fixed uses the base cooldown for all stages. Accelerating halves
+            the interval each stage (min 5 min). Custom uses the comma-
+            separated list below.
+          default: fixed
+          selector:
+            select:
+              options:
+                - label: "Fixed — same interval every stage"
+                  value: fixed
+                - label: "Accelerating — halves each stage (min 5 min)"
+                  value: accelerating
+                - label: "Custom — use stage intervals list"
+                  value: custom
+
+        custom_stage_intervals:
+          name: Custom stage intervals (minutes, comma-separated)
+          description: >
+            Per-stage cooldown intervals in minutes, one per stage. Example
+            for 4 stages: "30,20,10,5". If fewer values than stages, the
+            last value repeats. Only used when cooldown curve is "custom".
+          default: "30,20,15,10"
+          selector:
+            text:
+              multiline: false
+
+        absence_gap_minutes:
+          name: Absence gap tolerance (minutes)
+          description: >
+            If the user leaves and returns within this many minutes, the
+            escalation session resumes at the current stage instead of
+            resetting. Set to 0 to always reset on departure.
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 120
+              step: 5
+              unit_of_measurement: "min"
+
+        no_response_behavior:
+          name: '"No" answer behavior'
+          description: >
+            What happens when the user answers "no" to the bedtime question.
+            Reset drops back to stage 0 — the session starts over. Advance
+            moves to the next stage — more assertive next time.
+          default: advance
+          selector:
+            select:
+              options:
+                - label: "Reset to stage 0 (session restarts)"
+                  value: reset
+                - label: "Advance to next stage (more insistent)"
+                  value: advance
+
+        bedtime_question_start_stage:
+          name: Start asking bedtime question at stage
+          description: >
+            Escalation stage at which the bedtime yes/no question starts
+            appearing. Set to 1 to ask from the first nag. Set to 2+ to
+            let early nags be informational only (no question). The
+            bedtime question must be enabled in ⑥.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 8
+              step: 1
+
+        stage_1_prompt_overlay:
+          name: Stage 1 prompt overlay (gentle)
+          description: >
+            Appended to the base proactive prompt (③) at stage 1. Sets the
+            tone for the first nag — usually gentle and informational.
+          default: >
+            This is the first mention. Be casual and friendly — just a
+            gentle observation, no pressure about bedtime yet.
+          selector:
+            text:
+              multiline: true
+
+        stage_2_prompt_overlay:
+          name: Stage 2 prompt overlay (nudge)
+          description: >
+            Appended at stage 2. A bit more pointed — mention that it's
+            getting late.
+          default: >
+            This is the second time you're mentioning this. Be a bit more
+            pointed — note that it's getting late and maybe hint at bedtime.
+          selector:
+            text:
+              multiline: true
+
+        stage_3_prompt_overlay:
+          name: Stage 3 prompt overlay (insistent)
+          description: >
+            Appended at stage 3. More assertive — clearly suggest bedtime.
+          default: >
+            Third reminder. Be clearly insistent — directly tell them they
+            should be heading to bed soon. Still respectful but firm.
+          selector:
+            text:
+              multiline: true
+
+        stage_4_prompt_overlay:
+          name: Stage 4 prompt overlay (final warning)
+          description: >
+            Appended at the final stage. This is the last warning before
+            autonomous bedtime execution. Make it clear.
+          default: >
+            FINAL WARNING. This is your last chance before I take matters
+            into my own hands and start the bedtime routine automatically.
+            Be dramatic about it.
+          selector:
+            text:
+              multiline: true
+
+        stage_5_prompt_overlay:
+          name: Stage 5 prompt overlay (optional)
+          description: >
+            Only used if stage count is 5+. Leave empty to reuse stage 4.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        stage_6_prompt_overlay:
+          name: Stage 6 prompt overlay (optional)
+          description: >
+            Only used if stage count is 6+. Leave empty to reuse previous.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        autonomous_execution_prompt:
+          name: Autonomous execution announcement prompt
+          description: >
+            Prompt for the TTS announcement when bedtime fires autonomously
+            (user didn't say "yes" — escalation reached final stage).
+            Should clearly state that bedtime is happening NOW.
+          default: >
+            Announce that you've decided to start the bedtime routine
+            because the user ignored all warnings. Be firm but not mean.
+            One sentence, maximum 200 characters.
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑧ KILL SWITCH & GUARDS
+    # ===========================================================================
+    kill_switch:
+      name: "⑧ Kill switch & guards"
+      icon: mdi:shield-alert
+      description: >
+        Safety controls. The kill switch stops all proactive and bedtime
+        actions. The conflict guard prevents overlap with standalone
+        bedtime blueprints.
+      collapsed: true
+      input:
+        kill_switch_entity:
+          name: Kill switch (input_boolean)
+          description: >
+            An input_boolean that acts as a master kill switch. When OFF,
+            all proactive nags, escalation, and bedtime actions are
+            suppressed. Checked before each major action block. Leave
+            empty to disable the kill switch (always active).
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        conflict_guard_entity:
+          name: Bedtime active mutex (input_boolean)
+          description: >
+            An input_boolean set to ON while a bedtime routine is running
+            (either from this blueprint or a standalone one). This blueprint
+            checks it before starting its own bedtime flow — if already ON,
+            the bedtime routine is skipped (another instance is running).
+            The blueprint sets it ON when it starts bedtime and OFF on
+            cleanup. Leave empty to disable conflict guarding.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ⑨ TEST MODE & NOTIFICATIONS
+    # ===========================================================================
+    test_mode:
+      name: "⑨ Test mode & notifications"
+      icon: mdi:flask
+      description: >
+        Test mode compresses cooldowns and skips device actions (TV, lights,
+        media) — only TTS and logbook entries fire. Notifications alert you
+        when the bedtime routine fires autonomously.
+      collapsed: true
+      input:
+        enable_test_mode:
+          name: Enable test mode
+          description: >
+            When enabled: cooldowns compressed to 1 minute, device actions
+            skipped (no TV off, no lights off, no media control), only TTS
+            speech and logbook entries fire. Stage advancement works normally.
+            Use this to test escalation flow without disrupting your environment.
+          default: false
+          selector:
+            boolean: {}
+
+        test_mode_cooldown_seconds:
+          name: Test mode cooldown (seconds)
+          description: >
+            Compressed cooldown interval in test mode. Replaces the normal
+            cooldown to speed up escalation testing.
+          default: 60
+          selector:
+            number:
+              min: 10
+              max: 300
+              step: 10
+              unit_of_measurement: seconds
+
+        notify_on_autonomous:
+          name: Notify on autonomous bedtime execution
+          description: >
+            Send a notification when the bedtime routine fires autonomously
+            (escalation reached final stage without user consent). Useful
+            for logging and awareness.
+          default: false
+          selector:
+            boolean: {}
+
+        notify_entity:
+          name: Notification entity
+          description: >
+            The notify service entity to send autonomous execution alerts to.
+            E.g. notify.mobile_app_phone, notify.persistent_notification.
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+        notify_message:
+          name: Notification message
+          description: >
+            Message sent when bedtime fires autonomously. Available template
+            variables: {{ stage }}, {{ area_name }}, {{ now() }}.
+          default: >
+            Bedtime routine started automatically after {{ stage }} escalation
+            stages in {{ area_name }}. No user consent received.
+          selector:
+            text:
+              multiline: true
+
+        autonomous_media_mode:
+          name: Autonomous execution media mode
+          description: >
+            How media playback works when bedtime fires autonomously
+            (no conversation to ask what to play). "Respect configured mode"
+            uses whatever is set in ⑪/⑬ — but conversational modes will
+            fail without a user to talk to. "Force preset" always uses
+            preset mode regardless of configuration. "Conversation with
+            preset fallback" attempts a satellite conversation but falls
+            back to preset if no response within timeout.
+          default: conversation_with_preset_fallback
+          selector:
+            select:
+              options:
+                - label: "Respect configured mode (may fail if conversational)"
+                  value: respect_configured_mode
+                - label: "Force preset (always direct play)"
+                  value: force_preset
+                - label: "Conversation with preset fallback (recommended)"
+                  value: conversation_with_preset_fallback
+
+        autonomous_conversation_timeout:
+          name: Autonomous conversation timeout (seconds)
+          description: >
+            How long to wait for a user response during autonomous bedtime
+            conversation before falling back to preset. Only used when
+            autonomous media mode is "conversation with preset fallback".
+          default: 30
+          selector:
+            number:
+              min: 10
+              max: 120
+              unit_of_measurement: seconds
+
+    # ===========================================================================
+    # ⑩ DEVICES
+    # ===========================================================================
+    devices:
+      name: "⑩ Devices"
+      icon: mdi:television-off
+      description: >
+        TV, lights, and speakers involved in the bedtime shutdown. These
+        are only used during the bedtime routine phase — not during
+        proactive nags.
+      collapsed: true
+      input:
+        bedtime_media_target:
+          name: Bedtime media target
+          description: >
+            Which media system to use for bedtime content.
+            Audiobook = Music Assistant, Kodi = bedtime TV content,
+            None = skip media playback entirely.
+          default: audiobook
+          selector:
+            select:
+              options:
+                - label: "Audiobook (Music Assistant)"
+                  value: audiobook
+                - label: "Kodi (bedtime TV content)"
+                  value: kodi
+                - label: "None (no media)"
+                  value: "none"
+
+        tv_entity:
+          name: TV media player (optional)
+          description: >
+            The TV to turn off via media_player.turn_off (CEC/software).
+            Leave empty if your TV is IR-only or if using Kodi mode
+            (Kodi keeps the TV on).
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tv_off_script:
+          name: TV off script (optional)
+          description: >
+            Script for complex TV shutdown — IR sequences, multi-step
+            power-off, hardware-specific logic. Leave empty if not needed.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        tv_ir_remote:
+          name: IR remote entity (optional)
+          description: >
+            Remote entity (e.g. Broadlink) for direct IR power-off.
+          default: ""
+          selector:
+            entity:
+              domain: remote
+
+        tv_ir_command:
+          name: IR power-off command
+          description: >
+            Command string for remote.send_command (e.g. "Power").
+          default: "Power"
+          selector:
+            text: {}
+
+        tv_ir_device:
+          name: IR device name
+          description: >
+            Learned device name in your Broadlink/SmartIR remote.
+          default: ""
+          selector:
+            text: {}
+
+        lights_off_target:
+          name: Lights to turn off
+          description: >
+            Lights or switches killed during bedtime. The living room lamp
+            (below) is excluded — it stays on during the countdown.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain:
+                  - light
+                  - switch
+
+        living_room_lamp:
+          name: Living room lamp
+          description: >
+            The lamp that stays on during countdown and turns off last,
+            after the bathroom guard clears.
+          default: ""
+          selector:
+            entity:
+              domain:
+                - light
+                - switch
+
+        reset_switches:
+          name: Speaker reset switches (optional)
+          description: >
+            Switches to power-cycle before bedtime TTS. Leave empty if
+            speakers don't need a reset.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: switch
+
+        reset_switch_delay:
+          name: Speaker reset delay
+          description: >
+            Duration between power off and on for reset switches.
+          default: "0:00:02"
+          selector:
+            duration: {}
+
+        media_players_stop:
+          name: Media players to pause/stop (optional)
+          description: >
+            Additional media players to pause before lights-off. The TV
+            is handled separately. In preset mode, pause is attempted
+            first with fallback to stop.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: media_player
+
+        bathroom_sensor:
+          name: Bathroom occupancy sensor (optional)
+          description: >
+            Binary sensor for bathroom occupancy. If configured, the
+            countdown waits for this to clear before turning off the lamp.
+            Leave empty to skip the bathroom guard.
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        bathroom_max_timeout:
+          name: Bathroom guard max timeout
+          description: >
+            Maximum time to wait for the bathroom sensor to clear.
+            After this, lamp turns off regardless.
+          default: "0:15:00"
+          selector:
+            duration: {}
+
+        bathroom_grace_period:
+          name: Bathroom grace period
+          description: >
+            Extra delay after the bathroom sensor clears, to account
+            for transit back to bed.
+          default: "0:01:30"
+          selector:
+            duration: {}
+
+        countdown_helper:
+          name: Countdown helper (input_number)
+          description: >
+            input_number entity for the negotiated countdown value.
+            The LLM writes to this; the routine reads from it.
+            Falls back to default_countdown_minutes if empty or unavailable.
+          default: ""
+          selector:
+            entity:
+              domain: input_number
+
+        post_tts_delay:
+          name: Post-TTS buffer (seconds)
+          description: >
+            Seconds to wait after TTS playback completes. Prevents the
+            next action from clipping the end of the spoken message.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 15
+              unit_of_measurement: seconds
+
+        tv_sleep_timer_minutes:
+          name: TV sleep timer (Kodi mode, minutes)
+          description: >
+            When Kodi is the media target, set a TV sleep timer after
+            the countdown completes. 0 = no sleep timer.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 120
+              unit_of_measurement: minutes
+
+    # ===========================================================================
+    # ⑪ AUDIOBOOK (MUSIC ASSISTANT)
+    # ===========================================================================
+    audiobook:
+      name: "⑪ Audiobook (Music Assistant)"
+      icon: mdi:book-open-page-variant
+      description: >
+        Audiobook playback via Music Assistant. Used when media target is
+        "audiobook". Conversational modes use an LLM satellite conversation
+        for selection. Preset plays a configured URI directly.
+      collapsed: true
+      input:
+        audiobook_player:
+          name: Music Assistant player (bedroom)
+          description: >
+            The MA player for audiobook playback.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - integration: music_assistant
+                  domain:
+                    - media_player
+
+        audiobook_mode:
+          name: Audiobook selection mode
+          description: >
+            How audiobook playback works. Curated/freeform/both use LLM
+            conversations. Preset plays a fixed URI — no conversation.
+          default: both
+          selector:
+            select:
+              options:
+                - label: "Curated list only"
+                  value: curated
+                - label: "Freeform (LLM picks via Music Assistant)"
+                  value: freeform
+                - label: "Both (curated first, freeform fallback)"
+                  value: both
+                - label: "Preset (fixed URI, no conversation)"
+                  value: preset
+
+        curated_audiobooks:
+          name: Curated audiobook list
+          description: >
+            Comma-separated audiobook titles. The LLM presents these as
+            options. Only used in curated/both modes.
+          default: "The Hitchhiker's Guide to the Galaxy, Dune, The Hobbit"
+          selector:
+            text:
+              multiline: true
+
+        audiobook_preset_uri:
+          name: Preset audiobook URI
+          description: >
+            Music Assistant content ID for preset mode. Can be a library
+            URI, playlist name, album name, or any string MA can resolve.
+          default: ""
+          selector:
+            text: {}
+
+        audiobook_media_type:
+          name: Audiobook media type
+          description: >
+            How Music Assistant resolves the audiobook.
+          default: auto
+          selector:
+            select:
+              options:
+                - label: "Auto (let MA decide)"
+                  value: auto
+                - label: "Audiobook"
+                  value: audiobook
+                - label: "Album"
+                  value: album
+                - label: "Playlist"
+                  value: playlist
+                - label: "Track"
+                  value: track
+
+        audiobook_volume:
+          name: Audiobook playback volume
+          description: >
+            Volume for audiobook playback (0.0 to 1.0).
+          default: 0.25
+          selector:
+            number:
+              min: 0.05
+              max: 1.0
+              step: 0.05
+
+        bedtime_prompt:
+          name: Bedtime announcement prompt
+          description: >
+            Prompt sent to the bedtime conversation agent to generate the
+            bedtime announcement. Available: {{ countdown_minutes }}.
+          default: >
+            It's bedtime. Lights out in {{ countdown_minutes }} minutes.
+            Announce this and ask if the user wants more time.
+            Keep it short — max 2 sentences.
+          selector:
+            text:
+              multiline: true
+
+        goodnight_prompt:
+          name: Goodnight prompt (conversational modes)
+          description: >
+            Prompt for the final goodnight in curated/freeform/both modes.
+            Not used in preset mode — use ⑯ Final Goodnight TTS instead.
+          default: >
+            Say goodnight. Be warm but brief — one or two sentences max.
+          selector:
+            text:
+              multiline: true
+
+        default_countdown_minutes:
+          name: Default countdown (minutes)
+          description: >
+            Minutes before lamp turns off. In conversational modes the LLM
+            can negotiate. In preset mode this is fixed.
+          default: 4
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: minutes
+
+        enable_countdown_negotiation:
+          name: Enable countdown negotiation
+          description: >
+            Allow the LLM to negotiate extra time. Ignored in preset mode.
+          default: true
+          selector:
+            boolean: {}
+
+        enable_audiobook_offer:
+          name: Enable audiobook offer
+          description: >
+            Let the LLM offer a bedtime audiobook. If disabled, skips to
+            goodnight. Ignored in preset mode (audiobook always plays).
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑬ KODI PLAYBACK
+    # ===========================================================================
+    kodi_playback:
+      name: "⑬ Kodi playback"
+      icon: mdi:kodi
+      description: >
+        Kodi entity, volume, content mode, and curated/preset content.
+        Used when media target is "kodi". The TV stays ON in Kodi mode.
+      collapsed: true
+      input:
+        kodi_entity:
+          name: Kodi media player
+          description: >
+            The Kodi media_player entity. Stays playing during bedtime —
+            the TV is NOT turned off in Kodi mode.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        kodi_volume_target:
+          name: Kodi volume target
+          description: >
+            Volume to set Kodi to at bedtime (0.0 to 1.0).
+          default: 0.15
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+
+        bedtime_media_mode:
+          name: Kodi content selection mode
+          description: >
+            How bedtime content is selected on Kodi. Curated uses a
+            voice conversation to let the user pick from a named list.
+            Preset plays a fixed URI directly without conversation.
+          default: curated
+          selector:
+            select:
+              options:
+                - label: "Curated list (voice conversation)"
+                  value: curated
+                - label: "Preset (fixed content, no conversation)"
+                  value: preset
+
+        kodi_curated_content:
+          name: Curated content list
+          description: >
+            Name=ContentID pairs, one per line. Name shown to user;
+            ContentID passed to Kodi. Supports file paths, special://
+            URIs, and plugin:// URIs.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        kodi_preset_content:
+          name: Preset content ID
+          description: >
+            Content path/URI for preset mode. Played directly without
+            conversation.
+          default: ""
+          selector:
+            text: {}
+
+        kodi_media_content_type:
+          name: Kodi media content type
+          description: >
+            How Kodi interprets the content ID.
+          default: DIRECTORY
+          selector:
+            select:
+              options:
+                - label: "Directory (playlists, folders)"
+                  value: DIRECTORY
+                - label: "Video (direct file)"
+                  value: video
+                - label: "Channel (PVR)"
+                  value: CHANNEL
+                - label: "Music"
+                  value: music
+
+        kodi_tts_player:
+          name: TTS audio player (Kodi mode)
+          description: >
+            Media player for TTS during Kodi bedtime — typically a bedroom
+            speaker, NOT the TV. Keeps TTS separate from video playback.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        bedtime_media_post_play_delay:
+          name: Post-play delay (seconds)
+          description: >
+            Wait after play_media before reading Kodi state.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 15
+              unit_of_measurement: seconds
+
+        media_conversation_settle_delay:
+          name: Media conversation settle delay (seconds)
+          description: >
+            Wait after satellite conversation ends before continuing.
+            Gives time for LLM tool calls to fire Kodi playback.
+          default: 30
+          selector:
+            number:
+              min: 10
+              max: 120
+              unit_of_measurement: seconds
+
+    # ===========================================================================
+    # ⑭ SLEEPY TV DETECTION
+    # ===========================================================================
+    sleepytv:
+      name: "⑭ Sleepy TV detection"
+      icon: mdi:sleep
+      description: >
+        Detect if bedtime content is already playing on Kodi. If detected,
+        skip content switching — just lower volume and proceed.
+      collapsed: true
+      input:
+        sleepytv_detection_method:
+          name: Detection method
+          description: >
+            How to detect if bedtime content is already playing.
+          default: media_title_contains
+          selector:
+            select:
+              options:
+                - label: "Media title contains match string"
+                  value: media_title_contains
+                - label: "Content ID matches preset"
+                  value: media_content_id_matches
+                - label: "Playing + title contains match string"
+                  value: state_playing_and_title
+                - label: "PVR channel matches (REST sensor)"
+                  value: pvr_channel_matches
+
+        sleepytv_match_string:
+          name: Match string
+          description: >
+            String to match against Kodi media_title (or content_id).
+            Leave empty to disable sleepy TV detection.
+          default: ""
+          selector:
+            text: {}
+
+        sleepytv_pvr_sensor:
+          name: PVR channel sensor
+          description: >
+            REST sensor for PVR channel name. Only used with
+            "PVR channel matches" detection method.
+          default: sensor.madteevee_pvr_channel
+          selector:
+            entity:
+              domain: sensor
+
+    # ===========================================================================
+    # ⑮ SETTLING-IN TTS
+    # ===========================================================================
+    settling_tts:
+      name: "⑮ Settling-in TTS"
+      icon: mdi:weather-night
+      description: >
+        Optional contextual TTS after media starts playing. The LLM
+        receives sensor states and generates a brief settling-in message.
+        Separate prompts/sensors for audiobook and Kodi modes.
+      collapsed: true
+      input:
+        enable_settling_tts:
+          name: Enable settling-in TTS
+          description: >
+            Deliver a short contextual announcement after bedtime media
+            starts playing (audiobook or Kodi).
+          default: false
+          selector:
+            boolean: {}
+
+        settling_prompt_audiobook:
+          name: Settling-in prompt (audiobook)
+          description: >
+            Prompt for the settling-in message when audiobook is playing.
+            Sensor states are injected automatically.
+          default: >
+            The user is settling in for bed. The audiobook is already
+            playing. Give a very brief, warm observation based on the
+            sensor data provided. One sentence max. Don't mention
+            the audiobook.
+          selector:
+            text:
+              multiline: true
+
+        settling_sensors_audiobook:
+          name: Settling-in sensors (audiobook)
+          description: >
+            Entities whose state is injected into the LLM prompt for
+            audiobook settling-in context. E.g. outdoor temperature,
+            bedroom humidity, weather condition.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+        settling_prompt_kodi:
+          name: Settling-in prompt (Kodi)
+          description: >
+            Prompt for the settling-in message when Kodi content is
+            playing. Sensor states are injected automatically.
+          default: >
+            The user is settling in with bedtime TV content. Give a
+            very brief, warm observation based on the sensor data.
+            One sentence max. Don't mention what's playing.
+          selector:
+            text:
+              multiline: true
+
+        settling_sensors_kodi:
+          name: Settling-in sensors (Kodi)
+          description: >
+            Entities for Kodi settling-in context. Can differ from
+            audiobook sensors — e.g. include Kodi now-playing info.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # ===========================================================================
+    # ⑯ FINAL GOODNIGHT TTS
+    # ===========================================================================
+    goodnight_context_tts:
+      name: "⑯ Final goodnight TTS"
+      icon: mdi:moon-waning-crescent
+      description: >
+        Optional contextual goodnight after the bathroom guard clears.
+        The LLM receives sensor states and generates a final goodnight.
+        Separate prompts/sensors for audiobook and Kodi modes. In
+        conversational modes the simpler goodnight prompt from ⑪ is
+        used instead.
+      collapsed: true
+      input:
+        enable_goodnight_tts:
+          name: Enable final goodnight TTS
+          description: >
+            Deliver a contextual goodnight after the bathroom guard
+            clears. Primarily for preset modes — conversational modes
+            use the simpler goodnight prompt.
+          default: false
+          selector:
+            boolean: {}
+
+        goodnight_context_prompt_audiobook:
+          name: Goodnight prompt (audiobook)
+          description: >
+            Prompt for the final goodnight when audiobook was playing.
+            Sensor states are injected automatically. Fires right before
+            the lamp turns off.
+          default: >
+            The user is about to sleep. Lights are going off. Say
+            goodnight with a brief, warm message informed by the
+            sensor data. One or two sentences max.
+          selector:
+            text:
+              multiline: true
+
+        goodnight_sensors_audiobook:
+          name: Goodnight sensors (audiobook)
+          description: >
+            Entities for audiobook goodnight context. Can differ from
+            settling-in sensors — e.g. include tomorrow's weather,
+            alarm time.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+        goodnight_context_prompt_kodi:
+          name: Goodnight prompt (Kodi)
+          description: >
+            Prompt for the final goodnight when Kodi content was playing.
+          default: >
+            The user is about to sleep. TV content has finished. Say
+            goodnight with a brief, warm message informed by the
+            sensor data. One or two sentences max.
+          selector:
+            text:
+              multiline: true
+
+        goodnight_sensors_kodi:
+          name: Goodnight sensors (Kodi)
+          description: >
+            Entities for Kodi goodnight context.
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # ===========================================================================
+    # ⑰ WEEKEND OVERRIDES — BEDTIME LAYER
+    # ===========================================================================
+    weekend_bedtime:
+      name: "⑰ Weekend overrides — bedtime layer"
+      icon: mdi:weather-sunny
+      description: >
+        Weekend-specific bedtime schedule. Independent from the proactive
+        weekend overrides in ⑤ — this controls WHEN the bedtime routine
+        fires on weekends. Uses the same weekend_days definition from ⑤.
+      collapsed: true
+      input:
+        bedtime_weekend_mode:
+          name: Weekend bedtime behavior
+          description: >
+            What happens to the bedtime schedule on weekend days.
+            Uses the same weekend day definitions from ⑤.
+          default: same_as_weekdays
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: same_as_weekdays
+                - label: "Disabled on weekends"
+                  value: disabled_on_weekends
+                - label: "Use weekend bedtime schedule"
+                  value: use_weekend_profile
+
+        bedtime_weekend_scheduled_time:
+          name: Weekend bedtime time
+          description: >
+            Separate bedtime trigger for weekend nights. E.g. 01:00 for
+            late weekend nights. Only used when Weekend bedtime behavior
+            is "Use weekend bedtime schedule".
+          default: "01:00:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ⑱ MEMORY & HISTORY
+    # ===========================================================================
+    memory_integration:
+      name: "⑱ Memory & history"
+      icon: mdi:brain
+      description: >
+        Optional integration with voice_memory_tool for bedtime history
+        tracking. Stores bedtime timestamps and retrieves compliance
+        history for LLM context injection.
+      collapsed: true
+      input:
+        enable_memory_tool:
+          name: Enable memory tool integration
+          description: >
+            Store bedtime.actual timestamps and inject bedtime history
+            into LLM context. Requires script.voice_memory_tool to be
+            configured and operational.
+          default: false
+          selector:
+            boolean: {}
+
+        memory_tool_entity:
+          name: Memory tool script entity
+          description: >
+            The voice_memory_tool script entity. Used for both storing
+            bedtime timestamps and retrieving compliance history.
+          default: script.voice_memory_tool
+          selector:
+            entity:
+              domain: script
+
+        memory_store_key:
+          name: Memory store key
+          description: >
+            Key used to store bedtime timestamps. The value stored is
+            the ISO timestamp of when bedtime actually started.
+          default: "bedtime.actual"
+          selector:
+            text: {}
+
+        memory_history_search_tags:
+          name: History search tags
+          description: >
+            Space-separated tags for searching bedtime history. Used
+            to retrieve recent bedtime records for LLM context.
+          default: "bedtime sleep routine"
+          selector:
+            text: {}
+
+        memory_history_inject_prompt:
+          name: History injection prompt
+          description: >
+            Prompt template for injecting bedtime history into LLM
+            context. Available: {{ bedtime_history }}.
+          default: >
+            Recent bedtime history for context: {{ bedtime_history }}.
+            Use this to personalize your approach — note patterns,
+            late nights, or consistency.
+          selector:
+            text:
+              multiline: true
+
+        memory_scope:
+          name: Memory scope
+          description: >
+            Scope for stored bedtime records.
+          default: user
+          selector:
+            select:
+              options:
+                - label: "User (personal)"
+                  value: user
+                - label: "Household (shared)"
+                  value: household
+
+        memory_expiration_days:
+          name: Memory expiration (days)
+          description: >
+            How many days bedtime records are retained. 0 = forever.
+          default: 90
+          selector:
+            number:
+              min: 0
+              max: 365
+              unit_of_measurement: days
+
+    # ===========================================================================
+    # ⑲ BED PRESENCE SENSOR
+    # ===========================================================================
+    bed_presence:
+      name: "⑲ Bed presence sensor"
+      icon: mdi:bed
+      description: >
+        Early exit ramp — when the bed occupancy sensor reports occupied
+        for a configurable duration, escalation stops and the bedtime
+        routine runs immediately. Also serves as a mutex safety net:
+        if a previous routine crashed and left the conflict guard on,
+        the bed sensor branch clears it and proceeds cleanly.
+      collapsed: true
+      input:
+        bed_presence_sensor:
+          name: Bed presence sensor
+          description: >
+            A binary_sensor that reports ON when the bed is occupied.
+            Leave empty to disable this feature entirely. When
+            configured, bed occupancy for the specified duration
+            bypasses all escalation and runs bedtime directly.
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        bed_presence_minutes:
+          name: Bed presence confirmation (minutes)
+          description: >
+            How long the bed sensor must report ON before triggering
+            bedtime. Acts as a settling filter — prevents false
+            triggers from sitting on the bed briefly.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 60
+              unit_of_measurement: minutes
+
+        bed_confirm_countdown_minutes:
+          name: Bed sensor countdown (minutes)
+          description: >
+            Minutes to keep the lamp on after bed sensor triggers
+            bedtime. Set to 0 to skip the countdown entirely — lamp
+            turns off right after goodnight TTS. Useful as a short
+            buffer while media starts playing.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: minutes
+
+        bed_confirm_settling_tts:
+          name: Settling TTS on bed confirmation
+          description: >
+            When enabled, the bed sensor path speaks a settling-in
+            announcement instead of the full bedtime TTS. Tone is
+            gentler — "I see you're already in bed, getting things
+            set up for you."
+          default: true
+          selector:
+            boolean: {}
+
+        bed_confirm_prompt:
+          name: Bed confirmation LLM prompt
+          description: >
+            LLM prompt for the settling-in announcement when the bed
+            sensor triggers bedtime. Only used when settling TTS is
+            enabled above. The AI generates a short, gentle message
+            acknowledging the user is already in bed.
+          default: >
+            The user has just gotten into bed on their own — no nagging
+            was needed. Generate a short, warm settling-in message.
+            Acknowledge they're in bed, let them know you're setting
+            things up (lights, media, etc). Keep it brief and gentle.
+            Do not ask questions — this is informational only.
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑳ PRIVACY
+    # ===========================================================================
+    ducking_infrastructure:
+      name: "⑳ Ducking infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    privacy:
+      name: "㉑ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Variables
+# ═══════════════════════════════════════════════════════════════════════════
+variables:
+  # -------------------------------------------------------------------------
+  # Privacy
+  # -------------------------------------------------------------------------
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+
+  # -------------------------------------------------------------------------
+  # Proactive layer inputs (①–④)
+  # -------------------------------------------------------------------------
+  presence_sensors_val: !input presence_sensors
+  min_presence_seconds_val: !input min_presence_seconds
+  block_if_media_val: !input block_if_media_playing
+
+  media_player_val: !input media_player
+  proactive_tts_volume_val: !input proactive_tts_volume
+  area_name_val: !input area_name
+
+  user_names_val: !input user_names
+  fallback_names_val: !input fallback_names
+  llm_fallback_names_val: !input llm_fallback_names
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_proactive_pipeline_name: !input conversation_agent
+  v_bedtime_pipeline_name: !input bedtime_conversation_agent
+  assist_satellites_val: !input assist_satellites
+  llm_prompt_val: !input llm_prompt
+  context_entities_val: !input context_entities
+
+  start_time_val: !input start_time
+  end_time_val: !input end_time
+  run_days_val: !input run_days
+  cooldown_minutes_val: !input cooldown_minutes
+  repeat_while_present_val: !input repeat_while_present
+  max_nags_val: !input max_nags_per_session
+
+  # -------------------------------------------------------------------------
+  # Weekend overrides — proactive (⑤)
+  # -------------------------------------------------------------------------
+  proactive_weekend_mode: !input weekend_mode
+  weekend_days_val: !input weekend_days
+  weekend_start_time_val: !input weekend_start_time
+  weekend_end_time_val: !input weekend_end_time
+  weekend_cooldown_val: !input weekend_cooldown_minutes
+  weekend_llm_prompt_val: !input weekend_llm_prompt_override
+
+  # -------------------------------------------------------------------------
+  # Bedtime question (⑥)
+  # -------------------------------------------------------------------------
+  enable_bedtime_question_val: !input enable_bedtime_question
+  bedtime_satellite_val: !input bedtime_assist_satellite
+  bedtime_question_delay_val: !input bedtime_question_delay
+  bedtime_question_prompt_val: !input bedtime_llm_prompt
+  bedtime_question_fallback_val: !input bedtime_question_fallback
+  bedtime_weekend_mode_question: !input weekend_bedtime_mode
+  weekend_bedtime_llm_prompt_val: !input weekend_bedtime_llm_prompt_override
+
+  # -------------------------------------------------------------------------
+  # Escalation (⑦)
+  # -------------------------------------------------------------------------
+  enable_escalation_val: !input enable_escalation
+  stage_count_val: !input escalation_stage_count
+  escalation_stage_entity: !input escalation_stage_helper
+  escalation_session_entity: !input escalation_session_helper
+  cooldown_curve_val: !input cooldown_curve
+  custom_stage_intervals_val: !input custom_stage_intervals
+  absence_gap_minutes_val: !input absence_gap_minutes
+  no_response_behavior_val: !input no_response_behavior
+  bedtime_question_start_stage_val: !input bedtime_question_start_stage
+  stage_1_prompt_val: !input stage_1_prompt_overlay
+  stage_2_prompt_val: !input stage_2_prompt_overlay
+  stage_3_prompt_val: !input stage_3_prompt_overlay
+  stage_4_prompt_val: !input stage_4_prompt_overlay
+  stage_5_prompt_val: !input stage_5_prompt_overlay
+  stage_6_prompt_val: !input stage_6_prompt_overlay
+  autonomous_execution_prompt_val: !input autonomous_execution_prompt
+
+  # -------------------------------------------------------------------------
+  # Kill switch & guards (⑧)
+  # -------------------------------------------------------------------------
+  kill_switch_entity_val: !input kill_switch_entity
+  conflict_guard_entity_val: !input conflict_guard_entity
+
+  # -------------------------------------------------------------------------
+  # Test mode & notifications (⑨)
+  # -------------------------------------------------------------------------
+  test_mode_val: !input enable_test_mode
+  test_cooldown_seconds_val: !input test_mode_cooldown_seconds
+  notify_on_autonomous_val: !input notify_on_autonomous
+  notify_entity_val: !input notify_entity
+  notify_message_val: !input notify_message
+  autonomous_media_mode_val: !input autonomous_media_mode
+  autonomous_timeout_val: !input autonomous_conversation_timeout
+
+  # -------------------------------------------------------------------------
+  # Devices (⑩)
+  # -------------------------------------------------------------------------
+  bedtime_media_target_val: !input bedtime_media_target
+  is_kodi_target: "{{ bedtime_media_target_val == 'kodi' }}"
+  is_audiobook_target: "{{ bedtime_media_target_val == 'audiobook' }}"
+  is_no_media_target: "{{ bedtime_media_target_val == 'none' }}"
+  tv_entity_val: !input tv_entity
+  tv_off_script_val: !input tv_off_script
+  tv_ir_remote_val: !input tv_ir_remote
+  tv_ir_command_val: !input tv_ir_command
+  tv_ir_device_val: !input tv_ir_device
+  lights_off_target_val: !input lights_off_target
+  living_room_lamp_val: !input living_room_lamp
+  reset_switches_val: !input reset_switches
+  reset_switch_delay_val: !input reset_switch_delay
+  media_players_stop_val: !input media_players_stop
+  bathroom_sensor_val: !input bathroom_sensor
+  bathroom_max_timeout_val: !input bathroom_max_timeout
+  bathroom_grace_val: !input bathroom_grace_period
+  countdown_helper_val: !input countdown_helper
+  post_tts_delay_val: !input post_tts_delay
+  tv_sleep_timer_val: !input tv_sleep_timer_minutes
+  default_countdown_val: !input default_countdown_minutes
+
+  # --- Effective countdown (reads helper, falls back to default) ---
+  countdown_minutes: >-
+    {% if countdown_helper_val | default('') | length > 0 %}
+      {{ states(countdown_helper_val) | int(default_countdown_val | int(4)) }}
+    {% else %}
+      {{ default_countdown_val | int(4) }}
+    {% endif %}
+
+  # -------------------------------------------------------------------------
+  # Audiobook — Music Assistant (⑪)
+  # -------------------------------------------------------------------------
+  audiobook_player_val: !input audiobook_player
+  audiobook_mode_val: !input audiobook_mode
+  curated_audiobooks_val: !input curated_audiobooks
+  audiobook_preset_uri_val: !input audiobook_preset_uri
+  audiobook_media_type_val: !input audiobook_media_type
+  audiobook_volume_val: !input audiobook_volume
+  bedtime_prompt_val: !input bedtime_prompt
+  goodnight_prompt_val: !input goodnight_prompt
+  enable_negotiation_val: !input enable_countdown_negotiation
+  enable_audiobook_offer_val: !input enable_audiobook_offer
+
+  # -------------------------------------------------------------------------
+  # Kodi playback (⑬)
+  # -------------------------------------------------------------------------
+  kodi_entity_val: !input kodi_entity
+  kodi_volume_val: !input kodi_volume_target
+  bedtime_media_mode_val: !input bedtime_media_mode
+  kodi_curated_val: !input kodi_curated_content
+  kodi_preset_val: !input kodi_preset_content
+  kodi_content_type_val: !input kodi_media_content_type
+  kodi_tts_player_val: !input kodi_tts_player
+  kodi_post_play_delay_val: !input bedtime_media_post_play_delay
+  media_settle_delay_val: !input media_conversation_settle_delay
+
+  # -------------------------------------------------------------------------
+  # Sleepy TV detection (⑭)
+  # -------------------------------------------------------------------------
+  sleepytv_method_val: !input sleepytv_detection_method
+  sleepytv_match_val: !input sleepytv_match_string
+  sleepytv_pvr_sensor_val: !input sleepytv_pvr_sensor
+
+  # -------------------------------------------------------------------------
+  # Settling-in TTS (⑮)
+  # -------------------------------------------------------------------------
+  enable_settling_val: !input enable_settling_tts
+  settling_prompt_audiobook_val: !input settling_prompt_audiobook
+  settling_sensors_audiobook_val: !input settling_sensors_audiobook
+  settling_prompt_kodi_val: !input settling_prompt_kodi
+  settling_sensors_kodi_val: !input settling_sensors_kodi
+
+  # -------------------------------------------------------------------------
+  # Final goodnight TTS (⑯)
+  # -------------------------------------------------------------------------
+  enable_goodnight_val: !input enable_goodnight_tts
+  goodnight_prompt_audiobook_val: !input goodnight_context_prompt_audiobook
+  goodnight_sensors_audiobook_val: !input goodnight_sensors_audiobook
+  goodnight_prompt_kodi_val: !input goodnight_context_prompt_kodi
+  goodnight_sensors_kodi_val: !input goodnight_sensors_kodi
+
+  # -------------------------------------------------------------------------
+  # Weekend overrides — bedtime (⑰)
+  # -------------------------------------------------------------------------
+  bedtime_weekend_mode_val: !input bedtime_weekend_mode
+  bedtime_weekend_time_val: !input bedtime_weekend_scheduled_time
+
+  # -------------------------------------------------------------------------
+  # Memory & history (⑱)
+  # -------------------------------------------------------------------------
+  enable_memory_val: !input enable_memory_tool
+  memory_tool_entity_val: !input memory_tool_entity
+  memory_store_key_val: !input memory_store_key
+  memory_search_tags_val: !input memory_history_search_tags
+  memory_inject_prompt_val: !input memory_history_inject_prompt
+  memory_scope_val: !input memory_scope
+  memory_expiration_val: !input memory_expiration_days
+
+  # -------------------------------------------------------------------------
+  # Bed presence sensor (⑲)
+  # -------------------------------------------------------------------------
+  bed_sensor_val: !input bed_presence_sensor
+  bed_presence_minutes_val: !input bed_presence_minutes
+  bed_countdown_val: !input bed_confirm_countdown_minutes
+  bed_settling_tts_val: !input bed_confirm_settling_tts
+  bed_confirm_prompt_val: !input bed_confirm_prompt
+
+  # =========================================================================
+  # Derived variables — computed at automation run time
+  # =========================================================================
+
+  # --- Day-of-week + cross-midnight attribution ---
+  today_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {{ days[now().weekday()] }}
+
+  effective_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set noon = today_at('12:00:00') %}
+    {% if as_timestamp(today_at(start_time_val | default('20:00:00'))) >= as_timestamp(noon) %}
+      {{ days[now().weekday()] }}
+    {% else %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% endif %}
+
+  is_weekend: >-
+    {{ effective_day_key in (weekend_days_val | default([])) }}
+
+  # --- Proactive weekend profile ---
+  proactive_weekend_active: >-
+    {{ is_weekend and (proactive_weekend_mode | default('same_as_weekdays')) == 'use_weekend_profile' }}
+
+  proactive_weekend_blocked: >-
+    {{ is_weekend and (proactive_weekend_mode | default('same_as_weekdays')) == 'disabled_on_weekends' }}
+
+  # --- Bedtime weekend profile ---
+  bedtime_weekend_active: >-
+    {{ is_weekend and (bedtime_weekend_mode_val | default('same_as_weekdays')) == 'use_weekend_profile' }}
+
+  bedtime_weekend_blocked: >-
+    {{ is_weekend and (bedtime_weekend_mode_val | default('same_as_weekdays')) == 'disabled_on_weekends' }}
+
+  # --- Effective proactive schedule (respects weekend overrides) ---
+  effective_start_time: >-
+    {{ weekend_start_time_val if proactive_weekend_active else start_time_val }}
+
+  effective_end_time: >-
+    {{ weekend_end_time_val if proactive_weekend_active else end_time_val }}
+
+  effective_cooldown: >-
+    {{ weekend_cooldown_val if proactive_weekend_active else cooldown_minutes_val }}
+
+  effective_llm_prompt: >-
+    {% if proactive_weekend_active and weekend_llm_prompt_val | default('') | length > 0 %}
+      {{ weekend_llm_prompt_val }}
+    {% else %}
+      {{ llm_prompt_val }}
+    {% endif %}
+
+  # --- Name selection (random pick from comma list, with fallbacks) ---
+  chosen_name: >-
+    {% set names = user_names_val | default('') %}
+    {% set fallback = fallback_names_val | default('friend') %}
+    {% set pool = names if names | trim | length > 0 else fallback %}
+    {% set items = pool.split(',') | map('trim') | select() | list %}
+    {{ items | random if items | length > 0 else 'friend' }}
+
+  llm_user_reference: >-
+    {% set names = user_names_val | default('') %}
+    {% set fallback = llm_fallback_names_val | default('the user') %}
+    {% set pool = names if names | trim | length > 0 else fallback %}
+    {% set items = pool.split(',') | map('trim') | select() | list %}
+    {{ items | random if items | length > 0 else 'the user' }}
+
+  # --- Effective bedtime question prompt (respects weekend override) ---
+  effective_bedtime_question_prompt: >-
+    {% if is_weekend | bool
+       and (bedtime_weekend_mode_question | default('same_as_weekdays')) == 'use_weekend_bedtime_prompt'
+       and weekend_bedtime_llm_prompt_val | default('') | trim | length > 0 %}
+      {{ weekend_bedtime_llm_prompt_val }}
+    {% else %}
+      {{ bedtime_question_prompt_val }}
+    {% endif %}
+
+  # --- Escalation state ---
+  current_stage: >-
+    {{ states(escalation_stage_entity) | int(0) }}
+
+  session_start: >-
+    {{ states(escalation_session_entity) | default('') }}
+
+  session_active: >-
+    {{ session_start | length > 0 and current_stage > 0 }}
+
+  # --- Escalation cooldown for current stage ---
+  stage_cooldown_minutes: >-
+    {% set base = effective_cooldown | int(20) %}
+    {% set stage = current_stage | int(0) %}
+    {% set curve = cooldown_curve_val | default('fixed') %}
+    {% if test_mode_val | default(false) %}
+      {{ (test_cooldown_seconds_val | int(60)) / 60 }}
+    {% elif curve == 'fixed' %}
+      {{ base }}
+    {% elif curve == 'accelerating' %}
+      {% set halved = (base / (2 ** (stage - 1))) | int %}
+      {{ [halved, 5] | max }}
+    {% elif curve == 'custom' %}
+      {% set intervals = custom_stage_intervals_val | default('') %}
+      {% set parts = intervals.split(',') | map('trim') | map('int', default=base) | list %}
+      {% if stage > 0 and stage <= parts | length %}
+        {{ parts[stage - 1] }}
+      {% else %}
+        {{ base }}
+      {% endif %}
+    {% else %}
+      {{ base }}
+    {% endif %}
+
+  # --- Stage prompt overlay (selects prompt for current escalation stage) ---
+  # Hybrid: explicit prompts (1-6) are anchors; uncovered stages get
+  # auto-generated behavioural directives based on escalation progress.
+  stage_prompt_overlay: >-
+    {% set stage = current_stage | int(0) %}
+    {% set total = stage_count_val | int(4) %}
+    {% set prompts = {
+      1: stage_1_prompt_val | default(''),
+      2: stage_2_prompt_val | default(''),
+      3: stage_3_prompt_val | default(''),
+      4: stage_4_prompt_val | default(''),
+      5: stage_5_prompt_val | default(''),
+      6: stage_6_prompt_val | default('')
+    } %}
+    {% set overlay = prompts.get(stage, '') | default('') %}
+    {% if overlay | length > 0 %}
+      {{ overlay }}
+    {% elif stage > 0 and total > 0 %}
+      {% set progress = (stage / total * 100) | int %}
+      {% if progress <= 35 %}
+        This is an early, low-pressure mention. Be casual and lighthearted — just an observation about the time, no urgency. You've only brought this up {{ stage }} time{{ 's' if stage > 1 }}.
+      {% elif progress <= 65 %}
+        You've brought this up {{ stage }} times now and been ignored every time. Your patience is wearing thin. Be noticeably frustrated — drop the charm, be direct, and make it clear you're not joking around anymore.
+      {% elif progress <= 85 %}
+        This is attempt {{ stage }} of {{ total }}. You are nearly out of patience. Be blunt and serious — no humour, no softening. Tell them exactly what's about to happen in plain language: they go to bed, or you handle it for them.
+      {% else %}
+        This is your absolute last warning — attempt {{ stage }} of {{ total }}. After this, you're done talking and taking over. Be dramatic, be final, be unmistakable. No technical jargon — just make it crystal clear the conversation is over.
+      {% endif %}
+    {% else %}
+      {{ effective_llm_prompt }}
+    {% endif %}
+
+  # --- Should trigger bedtime question at this stage? ---
+  should_ask_bedtime: >-
+    {{ enable_bedtime_question_val | default(false) | bool
+       and enable_escalation_val | default(false) | bool
+       and current_stage | int(0) >= bedtime_question_start_stage_val | int(3) }}
+
+  # --- Is this the final escalation stage (autonomous execution)? ---
+  is_autonomous_stage: >-
+    {{ enable_escalation_val | default(false) | bool
+       and current_stage | int(0) >= stage_count_val | int(4) }}
+
+  # --- Kill switch check ---
+  kill_switch_on: >-
+    {% if kill_switch_entity_val | default('') | length > 0 %}
+      {{ states(kill_switch_entity_val) | default('off') == 'on' }}
+    {% else %}
+      false
+    {% endif %}
+
+  # --- Conflict guard check ---
+  bedtime_already_active: >-
+    {% if conflict_guard_entity_val | default('') | length > 0 %}
+      {{ states(conflict_guard_entity_val) | default('off') == 'on' }}
+    {% else %}
+      false
+    {% endif %}
+
+  # --- Presence gate (proactive layer) ---
+  presence_gate_passed: >-
+    {% set sensors = presence_sensors_val | default([]) %}
+    {% if sensors | length == 0 %}
+      false
+    {% else %}
+      {% set ns = namespace(any_on=false) %}
+      {% for sensor in sensors %}
+        {% set s = states(sensor) | default('unavailable') %}
+        {% if s == 'on' %}
+          {% if min_presence_seconds_val | int(0) == 0 %}
+            {% set ns.any_on = true %}
+          {% else %}
+            {% set changed = states[sensor].last_changed | default(none) %}
+            {% if changed is none %}
+              {% set ns.any_on = true %}
+            {% elif (now() - changed).total_seconds() >= min_presence_seconds_val | int(0) %}
+              {% set ns.any_on = true %}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.any_on }}
+    {% endif %}
+
+  # --- Media guard ---
+  media_is_playing: >-
+    {% if block_if_media_val | default(false) | bool
+       and media_player_val | default('') | length > 0 %}
+      {{ states(media_player_val) | default('idle') == 'playing' }}
+    {% else %}
+      false
+    {% endif %}
+
+  # --- Time window check ---
+  in_time_window: >-
+    {% set t_start = today_at(effective_start_time) %}
+    {% set t_end = today_at(effective_end_time) %}
+    {% set t_now = now() %}
+    {% if as_timestamp(t_end) > as_timestamp(t_start) %}
+      {{ as_timestamp(t_start) <= as_timestamp(t_now) <= as_timestamp(t_end) }}
+    {% else %}
+      {{ as_timestamp(t_now) >= as_timestamp(t_start) or as_timestamp(t_now) <= as_timestamp(t_end) }}
+    {% endif %}
+
+  # --- Nag count tracking (session-based) ---
+  nag_count: >-
+    {{ current_stage | int(0) }}
+
+  nags_exhausted: >-
+    {{ max_nags_val | int(0) > 0 and nag_count | int(0) >= max_nags_val | int(10) }}
+
+  # --- Sleepy TV detection ---
+  is_sleepy_tv: >-
+    {% set method = sleepytv_method_val | default('media_title_contains') %}
+    {% set match = sleepytv_match_val | default('') %}
+    {% if match | length == 0 %}
+      false
+    {% elif method == 'media_title_contains' %}
+      {{ match | lower in (state_attr(kodi_entity_val, 'media_title') | default('') | lower) }}
+    {% elif method == 'media_content_id_matches' %}
+      {{ match | lower in (state_attr(kodi_entity_val, 'media_content_id') | default('') | lower) }}
+    {% elif method == 'state_playing_and_title' %}
+      {{ states(kodi_entity_val) | default('idle') == 'playing'
+         and match | lower in (state_attr(kodi_entity_val, 'media_title') | default('') | lower) }}
+    {% elif method == 'pvr_channel_matches' %}
+      {{ match | lower in (states(sleepytv_pvr_sensor_val) | default('') | lower) }}
+    {% else %}
+      false
+    {% endif %}
+
+  # --- Kodi now-playing context string for LLM injection ---
+  kodi_now_playing: >-
+    {% set series = state_attr(kodi_entity_val, 'media_series_title') | default('') %}
+    {% set title = state_attr(kodi_entity_val, 'media_title') | default('nothing') %}
+    {% set season = state_attr(kodi_entity_val, 'media_season') | default('') %}
+    {% set episode = state_attr(kodi_entity_val, 'media_episode') | default('') %}
+    {% set content_type = state_attr(kodi_entity_val, 'media_content_type') | default('unknown') %}
+    {% set plot = state_attr(sleepytv_pvr_sensor_val, 'plot') | default('') %}
+    {% if series %}
+      {{ series }}{% if season %} S{{ season }}{% endif %}{% if episode %}E{{ episode }}{% endif %} "{{ title }}"{% if plot %} — {{ plot[:500] }}{% endif %}
+    {% else %}
+      {{ title }} ({{ content_type }}){% if plot %} — {{ plot[:500] }}{% endif %}
+    {% endif %}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Triggers
+# ═══════════════════════════════════════════════════════════════════════════
+triggers:
+  - alias: "Presence detected — starts or resumes proactive session"
+    trigger: state
+    entity_id: !input presence_sensors
+    to: "on"
+    id: presence_on
+
+  - alias: "Nag tick — repeat/escalation check every 5 minutes"
+    trigger: time_pattern
+    minutes: "/5"
+    id: nag_tick
+
+  - alias: "Scheduled bedtime — direct routine trigger"
+    trigger: time
+    at: !input bedtime_weekday_scheduled_time
+    id: scheduled_bedtime
+
+  - alias: "Weekend scheduled bedtime — direct routine trigger"
+    trigger: time
+    at: !input bedtime_weekend_scheduled_time
+    id: scheduled_bedtime_weekend
+
+  - alias: "Bed occupied — confirmed early bedtime"
+    trigger: state
+    entity_id: !input bed_presence_sensor
+    to: "on"
+    for:
+      minutes: !input bed_presence_minutes
+    id: bed_confirmed
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Conditions
+# ═══════════════════════════════════════════════════════════════════════════
+conditions:
+  # Kill switch — hard stop for all triggers
+  - condition: template
+    alias: "Kill switch is not engaged"
+    value_template: "{{ not (kill_switch_on | bool) }}"
+
+  # Day-of-week gate — route by trigger type
+  - condition: template
+    alias: "Allowed to run today (day gate + weekend routing)"
+    value_template: >
+      {% set tid = trigger.id | default('') %}
+      {% if tid == 'scheduled_bedtime' %}
+        {# Weekday bedtime — skip if weekend profile is active #}
+        {{ not (bedtime_weekend_active | bool) and effective_day_key in (run_days_val | default([])) }}
+      {% elif tid == 'scheduled_bedtime_weekend' %}
+        {# Weekend bedtime — only if weekend profile active #}
+        {{ bedtime_weekend_active }}
+      {% elif tid == 'bed_confirmed' %}
+        {# Bed sensor — always passes (physical presence overrides schedule) #}
+        {{ bed_sensor_val | default('') | length > 0 }}
+      {% elif tid in ['presence_on', 'nag_tick'] %}
+        {# Proactive triggers — check proactive weekend gate #}
+        {% if proactive_weekend_blocked | bool %}
+          false
+        {% else %}
+          {{ effective_day_key in (run_days_val | default([])) }}
+        {% endif %}
+      {% else %}
+        true
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_bedtime_escalation') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Actions
+# ═══════════════════════════════════════════════════════════════════════════
+actions:
+  # =========================================================================
+  # AGENT SELECTION — dispatcher > manual
+  # =========================================================================
+  - alias: "Agent selection — dispatcher > manual (dual-agent)"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for bedtime escalation"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "bedtime"
+              skip_continuity: true
+            continue_on_error: true
+          - alias: "Set dispatch persona and 6 more variables"
+            variables:
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+              dispatch_proactive_agent: "{{ 'conversation.' ~ dispatch_persona ~ '_standard' }}"
+              dispatch_bedtime_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_proactive_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_proactive_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_bedtime_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_bedtime_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+    default:
+      - alias: "Resolve proactive pipeline to agent"
+        action: pyscript.agent_dispatch
+        response_variable: proactive_resolve
+        data:
+          pipeline_name: "{{ v_proactive_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Resolve bedtime pipeline to agent"
+        action: pyscript.agent_dispatch
+        response_variable: bedtime_resolve
+        data:
+          pipeline_name: "{{ v_bedtime_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch persona and 6 more variables"
+        variables:
+          dispatch_persona: "{{ (proactive_resolve | default({})).get('persona', 'rick') }}"
+          dispatch_proactive_agent: "{{ (proactive_resolve | default({})).get('agent', '') }}"
+          dispatch_bedtime_agent: "{{ (bedtime_resolve | default({})).get('agent', '') }}"
+          dispatch_proactive_voice: "{{ (proactive_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_proactive_tts_voice: "{{ (proactive_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_bedtime_voice: "{{ (bedtime_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_bedtime_tts_voice: "{{ (bedtime_resolve | default({})).get('tts_voice', '') }}"
+
+  # =========================================================================
+  # MAIN ROUTER — trigger-based branching
+  # =========================================================================
+  - alias: "Main router — proactive vs direct bedtime"
+    choose:
+      # =====================================================================
+      # PROACTIVE LAYER — presence_on / nag_tick triggers
+      # =====================================================================
+      - alias: "Proactive layer — presence-triggered LLM nags + escalation"
+        conditions:
+          - condition: trigger
+            id:
+              - presence_on
+              - nag_tick
+        sequence:
+          # --- Gate checks (proactive) ---
+          - alias: "Gate: conflict guard — abort if bedtime already running"
+            condition: template
+            value_template: "{{ not (bedtime_already_active | bool) }}"
+
+          - alias: "Gate: presence confirmed"
+            condition: template
+            value_template: "{{ presence_gate_passed | bool(true) }}"
+
+          - alias: "Gate: media not playing (if blocking enabled)"
+            condition: template
+            value_template: "{{ not (media_is_playing | bool) }}"
+
+          - alias: "Gate: within time window"
+            condition: template
+            value_template: "{{ in_time_window | bool(false) }}"
+
+          - alias: "Gate: nags not exhausted"
+            condition: template
+            value_template: "{{ not (nags_exhausted | bool) }}"
+
+          # --- Session management ---
+          - alias: "Session management — start new or validate existing"
+            choose:
+              - alias: "No active session — initialize"
+                conditions:
+                  - condition: template
+                    value_template: "{{ not (session_active | bool) }}"
+                sequence:
+                  - alias: "Set session start timestamp"
+                    action: input_datetime.set_datetime
+                    target:
+                      entity_id: !input escalation_session_helper
+                    data:
+                      datetime: "{{ now().isoformat() }}"
+
+                  - alias: "Reset stage to 0"
+                    action: input_number.set_value
+                    target:
+                      entity_id: !input escalation_stage_helper
+                    data:
+                      value: 0
+
+                  - alias: "Log session start"
+                    action: logbook.log
+                    data:
+                      name: "Proactive Escalation"
+                      message: "New session started. Presence detected."
+
+              - alias: "Session exists — check absence gap"
+                conditions:
+                  - condition: template
+                    value_template: "{{ session_active }}"
+                  - condition: trigger
+                    id: presence_on
+                sequence:
+                  - alias: "Check if absence gap exceeded — reset if so"
+                    choose:
+                      - alias: "Absence gap exceeded — reset session"
+                        conditions:
+                          - condition: template
+                            value_template: >
+                              {% set gap = absence_gap_minutes_val | int(30) %}
+                              {% set last_nag = as_timestamp(session_start) | default(0) %}
+                              {% set elapsed = (as_timestamp(now()) - last_nag) / 60 %}
+                              {{ elapsed > gap and gap > 0 }}
+                        sequence:
+                          - alias: "Reset stage to 0 — gap exceeded"
+                            action: input_number.set_value
+                            target:
+                              entity_id: !input escalation_stage_helper
+                            data:
+                              value: 0
+
+                          - alias: "Update session timestamp"
+                            action: input_datetime.set_datetime
+                            target:
+                              entity_id: !input escalation_session_helper
+                            data:
+                              datetime: "{{ now().isoformat() }}"
+
+                          - alias: "Log gap reset"
+                            action: logbook.log
+                            data:
+                              name: "Proactive Escalation"
+                              message: >-
+                                Session reset — absence gap exceeded
+                                ({{ absence_gap_minutes_val }} min).
+                                Restarting from stage 0.
+
+          # --- Cooldown check ---
+          - alias: "Gate: cooldown has elapsed since last nag"
+            condition: template
+            value_template: >
+              {% set last = as_timestamp(session_start) | default(0) %}
+              {% set cd = stage_cooldown_minutes | float(20) %}
+              {% set elapsed = (as_timestamp(now()) - last) / 60 %}
+              {{ elapsed >= cd or current_stage | int(0) == 0 }}
+
+          # --- Repeat-while-present gate ---
+          - alias: "Gate: repeat mode or first nag"
+            condition: template
+            value_template: >
+              {{ current_stage | int(0) == 0
+                 or repeat_while_present_val | default(true) | bool }}
+
+          # --- Advance escalation stage ---
+          - alias: "Advance escalation stage"
+            continue_on_error: true
+            action: input_number.set_value
+            target:
+              entity_id: !input escalation_stage_helper
+            data:
+              value: "{{ (current_stage | int(0)) + 1 }}"
+
+          - alias: "Update session timestamp for cooldown tracking"
+            continue_on_error: true
+            action: input_datetime.set_datetime
+            target:
+              entity_id: !input escalation_session_helper
+            data:
+              datetime: "{{ now().isoformat() }}"
+
+          - alias: "Log stage advancement"
+            action: logbook.log
+            data:
+              name: "Proactive Escalation"
+              message: >-
+                Stage {{ (current_stage | int(0)) + 1 }} of
+                {{ stage_count_val | int(4) }}.
+                Cooldown: {{ stage_cooldown_minutes }} min
+                ({{ cooldown_curve_val | default('fixed') }}).
+
+          # --- Check if this is autonomous execution stage ---
+          - alias: "Autonomous execution check — final stage triggers bedtime"
+            choose:
+              - alias: "Final escalation stage reached — autonomous bedtime"
+                conditions:
+                  - condition: template
+                    value_template: >
+                      {{ enable_escalation_val | default(false) | bool
+                         and (current_stage | int(0) + 1) >= stage_count_val | int(4) }}
+                sequence:
+                  - alias: "Log autonomous execution"
+                    action: logbook.log
+                    data:
+                      name: "Proactive Escalation"
+                      message: >-
+                        AUTONOMOUS EXECUTION — final stage reached.
+                        Initiating bedtime routine without user consent.
+
+                  # --- Notify on autonomous execution ---
+                  - alias: "Send notification if configured"
+                    choose:
+                      - alias: "Notification enabled"
+                        conditions:
+                          - condition: template
+                            value_template: >
+                              {{ notify_on_autonomous_val | default(false) | bool
+                                 and notify_entity_val | default('') | length > 0 }}
+                        sequence:
+                          - alias: "Send autonomous execution notification"
+                            action: notify.send_message
+                            target:
+                              entity_id: "{{ notify_entity_val }}"
+                            data:
+                              message: "{{ notify_message_val | default('Bedtime routine started automatically — escalation limit reached.') }}"
+                            continue_on_error: true
+
+                  # --- Activate conflict guard before bedtime ---
+                  - alias: "Activate conflict guard (autonomous)"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
+                        sequence:
+                          - alias: "Activate conflict guard for bedtime"
+                            action: homeassistant.turn_on
+                            target:
+                              entity_id: "{{ conflict_guard_entity_val }}"
+                            continue_on_error: true
+
+                  # --- Autonomous bedtime TTS announcement ---
+                  - alias: "Autonomous bedtime TTS (test or full)"
+                    choose:
+                      - alias: "Test mode — abbreviated announcement"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ test_mode_val | default(false) | bool }}"
+                        sequence:
+                          - alias: "Test mode: log autonomous bedtime"
+                            action: logbook.log
+                            data:
+                              name: "Proactive Escalation [TEST]"
+                              message: >-
+                                TEST MODE: Autonomous bedtime triggered.
+                                Media mode: {{ autonomous_media_mode_val }}.
+                                Falling through to shared bedtime routine.
+
+                          - alias: "TTS — test mode autonomous bedtime"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              text: >-
+                                Test mode. Autonomous bedtime triggered
+                                at stage {{ current_stage | int(0) + 1 }}.
+                              voice: "{{ dispatch_proactive_tts_voice }}"
+                              target: "{{ media_player_val }}"
+                              target_mode: explicit
+                              priority: 1
+                            continue_on_error: true
+                    default:
+                      - alias: "Generate autonomous bedtime announcement"
+                        continue_on_error: true
+                        action: conversation.process
+                        response_variable: auto_bedtime_response
+                        data:
+                          agent_id: "{{ dispatch_bedtime_agent }}"
+                          text: "{{ autonomous_execution_prompt_val }}"
+
+                      - alias: "TTS — autonomous bedtime announcement"
+                        action: pyscript.tts_queue_speak
+                        data:
+                          text: >-
+                            {% if auto_bedtime_response is defined
+                               and auto_bedtime_response.response is defined
+                               and auto_bedtime_response.response.response_type | default('') != 'error'
+                               and auto_bedtime_response.response.speech is defined %}
+                              {{ auto_bedtime_response.response.speech.plain.speech
+                                 | default("Alright, that's it. Bedtime. No more negotiations.") }}
+                            {% else %}
+                              Alright, that's it. Bedtime. No more negotiations.
+                            {% endif %}
+                          voice: "{{ dispatch_proactive_tts_voice }}"
+                          target: "{{ media_player_val }}"
+                          target_mode: explicit
+                          priority: 1
+                        continue_on_error: true
+
+                      - alias: "Whisper — update self-awareness"
+                        action: pyscript.agent_whisper
+                        data:
+                          agent_name: "{{ dispatch_persona }}"
+                          user_query: "Autonomous bedtime triggered — escalation exhausted"
+                          source: "automation"
+                        continue_on_error: true
+
+                      - alias: "Post-TTS delay"
+                        delay:
+                          seconds: 5
+
+                  # Autonomous path: falls through main router choose
+                  # into the shared bedtime routine below.
+
+            default:
+
+              # --- NOT autonomous stage — normal proactive nag ---
+
+              # --- Build context from entities ---
+              - alias: "Build context entity snapshot"
+                variables:
+                  context_snapshot: >-
+                    {% set entities = context_entities_val | default([]) %}
+                    {% set inactive_media = ['idle', 'off', 'standby', 'unavailable'] %}
+                    {% set ns = namespace(lines=[]) %}
+                    {% for entity in entities %}
+                      {% set s = states(entity) | default('unavailable') %}
+                      {% set is_mp = entity.startswith('media_player.') %}
+                      {% if is_mp and s in inactive_media %}
+                        {# skip inactive media players entirely #}
+                      {% elif is_mp and s in ['playing', 'paused'] %}
+                        {% set title = state_attr(entity, 'media_title') | default('', true) %}
+                        {% set artist = state_attr(entity, 'media_artist') | default('', true) %}
+                        {% set album = state_attr(entity, 'media_album_name') | default('', true) %}
+                        {% set ctype = state_attr(entity, 'media_content_type') | default('', true) %}
+                        {% set detail = title %}
+                        {% if artist %}{% set detail = '"' ~ title ~ '" by ' ~ artist %}{% endif %}
+                        {% if album %}{% set detail = detail ~ ' (album: ' ~ album ~ ')' %}{% endif %}
+                        {% if ctype %}{% set detail = detail ~ ' [' ~ ctype ~ ']' %}{% endif %}
+                        {% set ns.lines = ns.lines + [entity ~ ': ' ~ s ~ ' — program/show title: ' ~ detail] %}
+                      {% elif state_attr(entity, 'player_state') is not none %}
+                        {% set ps = state_attr(entity, 'player_state') | default('unknown') %}
+                        {% set st = state_attr(entity, 'series_title') | default('') %}
+                        {% set sn = state_attr(entity, 'season') | default('') %}
+                        {% set ep = state_attr(entity, 'episode') | default('') %}
+                        {% set pvr = state_attr(entity, 'pvr_programme') | default('') %}
+                        {% set ch = state_attr(entity, 'pvr_channel') | default('') %}
+                        {% set pl = state_attr(entity, 'plot') | default('') %}
+                        {% set detail = ps %}
+                        {% if st %}{% set detail = detail ~ ' — series: ' ~ st %}{% endif %}
+                        {% if sn %}{% set detail = detail ~ ', season: ' ~ sn %}{% endif %}
+                        {% if ep %}{% set detail = detail ~ ', episode: ' ~ ep %}{% endif %}
+                        {% if pvr %}{% set detail = detail ~ ', pvr: ' ~ pvr %}{% endif %}
+                        {% if ch %}{% set detail = detail ~ ', channel: ' ~ ch %}{% endif %}
+                        {% if pl %}{% set detail = detail ~ ', plot: ' ~ pl %}{% endif %}
+                        {% set ns.lines = ns.lines + [entity ~ ': ' ~ detail] %}
+                      {% else %}
+                        {% set ns.lines = ns.lines + [entity ~ ': ' ~ s] %}
+                      {% endif %}
+                    {% endfor %}
+                    {{ ns.lines | join('\n') }}
+
+              # --- Memory history retrieval (⑱) ---
+              - alias: "Retrieve bedtime history from memory tool"
+                variables:
+                  bedtime_history_context: ""
+              - alias: "Query memory tool for bedtime history"
+                choose:
+                  - alias: "Memory tool enabled and entity configured"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ enable_memory_val | bool(false)
+                             and memory_tool_entity_val | default('') | length > 0 }}
+                    sequence:
+                      - alias: "Search bedtime history via conversation agent"
+                        continue_on_error: true
+                        action: conversation.process
+                        response_variable: memory_history_response
+                        data:
+                          agent_id: "{{ dispatch_bedtime_agent }}"
+                          text: >-
+                            Use the memory tool to search for recent entries with tags:
+                            {{ memory_search_tags_val | default('bedtime sleep routine') }}.
+                            Return ONLY the raw data — dates and times. No commentary.
+                            If no entries found, say "no history".
+
+                      - alias: "Extract memory history with fallback"
+                        variables:
+                          bedtime_history_context: >-
+                            {% if memory_history_response is defined
+                               and memory_history_response.response is defined
+                               and memory_history_response.response.response_type | default('') != 'error'
+                               and memory_history_response.response.speech is defined %}
+                              {{ memory_inject_prompt_val | default('Recent bedtime history:') }}
+                              {{ memory_history_response.response.speech.plain.speech | default('no history') }}
+                            {% else %}
+                            {% endif %}
+
+              # --- Budget gate — standard tier for nags ---
+              - alias: "Budget gate — standard tier for nags"
+                condition: template
+                value_template: >-
+                  {{ states('sensor.ai_llm_budget_remaining') | int(100) >= 30 }}
+
+              # --- Generate LLM proactive message ---
+              - alias: "Generate proactive LLM message"
+                continue_on_error: true
+                action: conversation.process
+                response_variable: proactive_response
+                data:
+                  agent_id: "{{ dispatch_proactive_agent }}"
+                  text: >-
+                    {{ effective_llm_prompt }}
+                    {% if stage_prompt_overlay | default('') | trim != effective_llm_prompt | trim %}
+                    Tone: {{ stage_prompt_overlay }}
+                    {% endif %}
+                    ---
+                    Context:
+                    User(s): {{ llm_user_reference | default('the user') }}
+                    Stage: {{ (current_stage | int(0)) + 1 }} of {{ stage_count_val | int(4) }}
+                    Do not reference stage numbers, internal metadata, or escalation status in your speech.
+                    {% if is_sleepy_tv | default(false) | bool %}
+                    Note: User is already watching designated bedtime/wind-down content. Acknowledge they are winding down — soften your tone accordingly.
+                    {% endif %}
+                    {{ context_snapshot }}
+                    {% if bedtime_history_context | default('') | trim | length > 0 %}
+                    ---
+                    {{ bedtime_history_context }}
+                    {% endif %}
+
+              - alias: "Extract proactive message with fallback"
+                variables:
+                  proactive_message: >-
+                    {% if proactive_response is defined
+                       and proactive_response.response is defined
+                       and proactive_response.response.response_type | default('') != 'error'
+                       and proactive_response.response.speech is defined %}
+                      {{ proactive_response.response.speech.plain.speech
+                         | default("Hey, you're still here. Don't you have somewhere to be?") }}
+                    {% else %}
+                      Hey, you're still here. Don't you have somewhere to be?
+                    {% endif %}
+
+              # --- TTS delivery (proactive message) ---
+              - alias: "Set proactive TTS volume"
+                choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ proactive_tts_volume_val | default(0) | float(0) > 0
+                             and media_player_val | default('') | length > 0 }}
+                    sequence:
+                      - alias: "Set media player volume for bedtime"
+                        action: media_player.volume_set
+                        target:
+                          entity_id: "{{ media_player_val }}"
+                        data:
+                          volume_level: "{{ proactive_tts_volume_val | float(0.5) }}"
+                        continue_on_error: true
+                      - alias: "Update duck snapshot after bedtime TTS volume set"
+                        if:
+                          - condition: template
+                            value_template: >-
+                              {{ is_state(v_duck_guard, 'on')
+                                 and is_state(v_ducking_flag, 'on') }}
+                        then:
+                          - alias: "Sync duck snapshot with new volume"
+                            action: pyscript.duck_manager_update_snapshot
+                            data:
+                              entity_id: "{{ media_player_val }}"
+                              volume_level: "{{ proactive_tts_volume_val | float(0.5) }}"
+                            continue_on_error: true
+
+              - alias: "Deliver proactive nag via dedup"
+                action: pyscript.dedup_announce
+                response_variable: _dedup_nag
+                data:
+                  topic: "bedtime_nag_{{ area_name_val | default('unknown') | slugify }}"
+                  source: "proactive_bedtime_escalation"
+                  text: "{{ proactive_message }}"
+                  voice: "{{ dispatch_proactive_voice }}"
+                  priority: 3
+                  target_mode: presence
+                  ttl_hours: "{{ ((effective_cooldown | float - 1) / 60) | round(2) }}"
+                  volume_level: "{{ proactive_tts_volume_val | float(0) if proactive_tts_volume_val | float(0) > 0 else none }}"
+                continue_on_error: true
+
+              - alias: "Whisper — update self-awareness"
+                action: pyscript.agent_whisper
+                data:
+                  agent_name: "{{ dispatch_persona }}"
+                  user_query: "Proactive nag delivered — stage {{ (current_stage | int(0)) + 1 }}"
+                  source: "automation"
+                continue_on_error: true
+
+              - alias: "Post-TTS delay"
+                delay:
+                  seconds: 5
+
+              # --- Bedtime question (at configurable stage) ---
+              - alias: "Bedtime question — ask if user wants bedtime routine"
+                choose:
+                  - alias: "Stage triggers bedtime question"
+                    conditions:
+                      - condition: template
+                        value_template: "{{ should_ask_bedtime }}"
+                    sequence:
+                      - alias: "Delay before bedtime question"
+                        delay:
+                          seconds: "{{ bedtime_question_delay_val | int(5) }}"
+
+                      - alias: "Start bedtime question conversation"
+                        choose:
+                          - alias: "Use satellite conversation for bedtime question"
+                            conditions:
+                              - condition: template
+                                value_template: >
+                                  {{ bedtime_satellite_val | default('') | length > 0 }}
+                            sequence:
+                              - alias: "Start satellite bedtime question"
+                                action: assist_satellite.start_conversation
+                                target:
+                                  entity_id: "{{ bedtime_satellite_val }}"
+                                data:
+                                  start_message: "{{ effective_bedtime_question_prompt }}"
+                                  extra_system_prompt: >-
+                                    The user has been present for a while. Ask if they
+                                    want to start bedtime. If yes, respond with exactly
+                                    "BEDTIME_ACCEPTED". If no, respond with "BEDTIME_DECLINED".
+                                    Keep it conversational.
+                                response_variable: bedtime_q_response
+                                continue_on_error: true
+                        default:
+                          - alias: "Fallback: one-shot TTS bedtime question"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              voice: "{{ dispatch_proactive_tts_voice }}"
+                              target: "{{ media_player_val }}"
+                              text: "{{ bedtime_question_fallback_val | default('Ready for bed?') }}"
+                            continue_on_error: true
+
+                      - alias: "Log bedtime question asked"
+                        action: logbook.log
+                        data:
+                          name: "Proactive Escalation"
+                          message: >-
+                            Bedtime question asked at stage
+                            {{ current_stage | int(0) + 1 }}.
+              - alias: "Stop: Nag complete"
+                stop: "Nag complete"
+
+      # =====================================================================
+      # BEDTIME EXECUTION — scheduled trigger or bed sensor confirmation
+      # Handles: scheduled_bedtime, scheduled_bedtime_weekend, bed_confirmed
+      # =====================================================================
+      - alias: "Bedtime execution — scheduled or bed-confirmed"
+        conditions:
+          - condition: trigger
+            id:
+              - scheduled_bedtime
+              - scheduled_bedtime_weekend
+              - bed_confirmed
+        sequence:
+          # --- Bed sensor: stale mutex safety net (⑲) ---
+          - alias: "Bed sensor — stale mutex cleanup"
+            choose:
+              - alias: "Bed confirmed + conflict guard is stale"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ trigger.id == 'bed_confirmed'
+                         and conflict_guard_entity_val | default('') | length > 0
+                         and states(conflict_guard_entity_val) | default('off') == 'on' }}
+                sequence:
+                  - alias: "Log stale mutex detected"
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: >-
+                        ⚠️ Bed sensor detected stale mutex ({{ conflict_guard_entity_val }}).
+                        Previous routine may have crashed. Clearing and proceeding.
+                    continue_on_error: true
+                  - alias: "Clear stale mutex"
+                    action: input_boolean.turn_off
+                    target:
+                      entity_id: "{{ conflict_guard_entity_val }}"
+                    continue_on_error: true
+
+          # --- Entry log (bed sensor vs scheduled) ---
+          - alias: "Log bedtime trigger"
+            action: logbook.log
+            data:
+              name: "Bedtime Routine"
+              message: >-
+                {% if trigger.id == 'bed_confirmed' %}
+                  Bed sensor confirmed ({{ bed_sensor_val }}) after
+                  {{ bed_presence_minutes_val }} min. Bypassing escalation,
+                  running bedtime routine directly.
+                {% else %}
+                  Direct bedtime triggered ({{ trigger.id }}).
+                  Starting bedtime routine.
+                {% endif %}
+
+          # --- Conflict guard activation ---
+          - alias: "Activate conflict guard — bedtime_active mutex"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Activate conflict guard for final stage"
+                    action: homeassistant.turn_on
+                    target:
+                      entity_id: "{{ conflict_guard_entity_val }}"
+                    continue_on_error: true
+
+          # --- Initialize countdown ---
+          - alias: "Initialize countdown helper"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ escalation_stage_entity | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Update escalation stage counter"
+                    action: input_number.set_value
+                    target:
+                      entity_id: "{{ escalation_stage_entity }}"
+                    data:
+                      value: 0
+            continue_on_error: true
+
+          # --- Speaker reset ---
+          - alias: "Reset speakers (power-cycle)"
+            choose:
+              - alias: "Reset switches configured"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ reset_switches_val is mapping
+                         and (reset_switches_val.get('entity_id', []) | length > 0
+                              or reset_switches_val.get('area_id', []) | length > 0
+                              or reset_switches_val.get('label_id', []) | length > 0) }}
+                sequence:
+                  - alias: "Bounce-reset switches off then on"
+                    action: switch.turn_off
+                    target: !input reset_switches
+                  - delay: !input reset_switch_delay
+                  - alias: "Re-enable switches after bounce delay"
+                    action: switch.turn_on
+                    target: !input reset_switches
+                  - delay:
+                      seconds: 3
+
+          # --- LLM bedtime announcement (⑲ bed sensor routing) ---
+          - alias: "Bedtime announcement — route by trigger"
+            choose:
+              # --- Bed confirmed: settling TTS or skip ---
+              - alias: "Bed confirmed — settling or silent"
+                conditions:
+                  - condition: template
+                    value_template: "{{ trigger.id == 'bed_confirmed' }}"
+                sequence:
+                  - alias: "Settling TTS gate"
+                    choose:
+                      - alias: "Settling TTS enabled — generate gentle message"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ bed_settling_tts_val | default(true) | bool }}"
+                        sequence:
+                          - alias: "Generate bed-confirmed settling announcement"
+                            continue_on_error: true
+                            action: conversation.process
+                            response_variable: bed_settle_announce
+                            data:
+                              agent_id: "{{ dispatch_bedtime_agent }}"
+                              text: "{{ bed_confirm_prompt_val }}"
+
+                          - alias: "Extract settling message"
+                            variables:
+                              bedtime_tts_message: >-
+                                {% if bed_settle_announce is defined
+                                   and bed_settle_announce.response is defined
+                                   and bed_settle_announce.response.response_type | default('') != 'error'
+                                   and bed_settle_announce.response.speech is defined %}
+                                  {{ bed_settle_announce.response.speech.plain.speech
+                                     | default("I see you're already in bed. Let me get things set up for you.") }}
+                                {% else %}
+                                  I see you're already in bed. Let me get things set up for you.
+                                {% endif %}
+
+                          - alias: "Whisper context — bed-confirmed settling"
+                            action: pyscript.agent_whisper
+                            data:
+                              agent_name: "{{ dispatch_persona }}"
+                              user_query: "Bed-confirmed settling announcement delivered"
+                              source: "automation"
+                            continue_on_error: true
+
+                          - alias: "Deliver settling TTS"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              voice: "{{ dispatch_bedtime_tts_voice }}"
+                              target: "{{ media_player_val }}"
+                              text: "{{ bedtime_tts_message }}"
+                              priority: 2
+                            continue_on_error: true
+
+                          - alias: "Wait configured seconds"
+                            delay:
+                              seconds: "{{ post_tts_delay_val | int(3) }}"
+                    default:
+                      - alias: "Settling TTS disabled — skip announcement"
+                        action: logbook.log
+                        data:
+                          name: "Bedtime Routine"
+                          message: "Bed sensor settling TTS disabled — skipping announcement."
+                        continue_on_error: true
+
+            default:
+              # --- Normal bedtime triggers: full LLM announcement ---
+              - alias: "Generate bedtime announcement"
+                continue_on_error: true
+                action: conversation.process
+                response_variable: bedtime_announce
+                data:
+                  agent_id: "{{ dispatch_bedtime_agent }}"
+                  text: >-
+                    {% if enable_negotiation_val | default(true) | bool %}
+                      {{ bedtime_prompt_val }}
+                    {% else %}
+                      {{ bedtime_prompt_val | regex_replace('[Aa]sk if the user wants more time\.?\s*', '') | regex_replace('[Oo]ffer more time\.?\s*', '') }}
+                      Do not ask if the user wants more time or offer negotiation.
+                    {% endif %}
+
+              - alias: "Extract bedtime message"
+                variables:
+                  bedtime_tts_message: >-
+                    {% if bedtime_announce is defined
+                       and bedtime_announce.response is defined
+                       and bedtime_announce.response.response_type | default('') != 'error'
+                       and bedtime_announce.response.speech is defined %}
+                      {{ bedtime_announce.response.speech.plain.speech
+                         | default("Time for bed. Lights out in " ~ default_countdown_val ~ " minutes.") }}
+                    {% else %}
+                      Time for bed. Lights out in {{ default_countdown_val }} minutes.
+                    {% endif %}
+
+              - alias: "Whisper context — bedtime announcement"
+                action: pyscript.agent_whisper
+                data:
+                  agent_name: "{{ dispatch_persona }}"
+                  user_query: "Bedtime announcement delivered"
+                  source: "automation"
+                continue_on_error: true
+
+              - alias: "Deliver bedtime announcement TTS"
+                action: pyscript.tts_queue_speak
+                data:
+                  voice: "{{ dispatch_bedtime_tts_voice }}"
+                  target: "{{ media_player_val }}"
+                  text: "{{ bedtime_tts_message }}"
+                  priority: 1
+                continue_on_error: true
+
+              - alias: "Wait 5 seconds"
+                delay:
+                  seconds: 5
+
+    # =====================================================================
+    # DEFAULT — no trigger matched (manual run or unknown trigger)
+    # =====================================================================
+    default:
+      - alias: "No trigger matched — log and exit"
+        continue_on_error: true
+        action: logbook.log
+        data:
+          name: "Proactive Escalation"
+          message: >-
+            ⚠️ Main router: no trigger matched (trigger.id={{ trigger.id | default('null') }}).
+            Manual runs are not supported — automation requires a real trigger
+            (presence_on, nag_tick, scheduled_bedtime, scheduled_bedtime_weekend, or bed_confirmed).
+      - alias: "Stop: No trigger matched"
+        stop: "No trigger matched"
+
+
+  # =========================================================================
+  # SHARED BEDTIME ROUTINE — reached via fallthrough from proactive or
+  # scheduled branches (default branch exits via stop: before this point)
+  # =========================================================================
+  # --- TV shutdown stack (skip if Kodi target) ---
+  - alias: "TV shutdown stack (skip if Kodi target)"
+    choose:
+      - alias: "Kodi is bedtime target — keep TV on"
+        conditions:
+          - condition: template
+            value_template: "{{ is_kodi_target }}"
+        sequence: []
+    default:
+      - alias: "TV off — CEC/software"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ tv_entity_val | default('') | length > 0 }}"
+            sequence:
+              - alias: "Turn off TV via CEC/software"
+                action: media_player.turn_off
+                target:
+                  entity_id: "{{ tv_entity_val }}"
+                continue_on_error: true
+      - alias: "TV off — script"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ tv_off_script_val | default('') | length > 0 }}"
+            sequence:
+              - alias: "Turn off TV via custom script"
+                action: script.turn_on
+                target:
+                  entity_id: "{{ tv_off_script_val }}"
+                continue_on_error: true
+      - alias: "TV off — IR remote"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ tv_ir_remote_val | default('') | length > 0 }}"
+            sequence:
+              - alias: "Send IR power-off via remote during bedtime"
+                action: remote.send_command
+                target:
+                  entity_id: "{{ tv_ir_remote_val }}"
+                data:
+                  command: "{{ tv_ir_command_val | default('Power') }}"
+                  device: "{{ tv_ir_device_val | default('') }}"
+                continue_on_error: true
+
+  # --- Lights off (except lamp) ---
+  - alias: "Lights off (except lamp)"
+    action: homeassistant.turn_off
+    target: !input lights_off_target
+    continue_on_error: true
+
+  # --- Stop additional media players ---
+  - alias: "Stop additional media players"
+    action: media_player.media_stop
+    target: !input media_players_stop
+    continue_on_error: true
+
+  - alias: "Log device shutdown complete"
+    action: logbook.log
+    data:
+      name: "Bedtime Routine"
+      message: >-
+        Devices shut down. Lamp stays on for countdown.
+        Media target: {{ bedtime_media_target_val }}.
+
+  # =================================================================
+  # BEDTIME MEDIA BRANCH — two-axis: target × method
+  # =================================================================
+  - alias: "Bedtime media branch"
+    choose:
+      # ─────────────────────────────────────────────────────────────
+      # TARGET: AUDIOBOOK (Music Assistant)
+      # ─────────────────────────────────────────────────────────────
+      - alias: "Target: audiobook"
+        conditions:
+          - condition: template
+            value_template: "{{ is_audiobook_target }}"
+        sequence:
+          - alias: "Audiobook method branch"
+            choose:
+              # --- Audiobook: preset mode ---
+              - alias: "Audiobook: preset (fixed URI)"
+                conditions:
+                  - condition: template
+                    value_template: "{{ audiobook_mode_val == 'preset' }}"
+                sequence:
+                  - alias: "Set audiobook volume"
+                    action: media_player.volume_set
+                    target:
+                      entity_id: "{{ audiobook_player_val }}"
+                    data:
+                      volume_level: "{{ audiobook_volume_val | float(0.25) }}"
+                    continue_on_error: true
+                  - alias: "Update duck snapshot after audiobook volume set"
+                    if:
+                      - condition: template
+                        value_template: >-
+                          {{ is_state(v_duck_guard, 'on')
+                             and is_state(v_ducking_flag, 'on') }}
+                    then:
+                      - alias: "Sync duck snapshot with new volume"
+                        action: pyscript.duck_manager_update_snapshot
+                        data:
+                          entity_id: "{{ audiobook_player_val }}"
+                          volume_level: "{{ audiobook_volume_val | float(0.25) }}"
+                        continue_on_error: true
+
+                  - alias: "Play preset audiobook via MA"
+                    action: music_assistant.play_media
+                    target:
+                      entity_id: "{{ audiobook_player_val }}"
+                    data:
+                      media_id: "{{ audiobook_preset_uri_val }}"
+                      media_type: "{{ audiobook_media_type_val | default('auto') }}"
+                      enqueue: replace
+                    continue_on_error: true
+
+                  - alias: "Buffer after audiobook play"
+                    delay:
+                      seconds: "{{ kodi_post_play_delay_val | int(3) }}"
+
+                  - alias: "Log preset audiobook started"
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: >-
+                        Preset audiobook started: {{ audiobook_preset_uri_val }}.
+
+            # --- Audiobook: conversational modes (curated/freeform/both) ---
+            default:
+              - alias: "Audiobook conversational — start satellite"
+                choose:
+                  - alias: "Audiobook offer enabled"
+                    conditions:
+                      - condition: template
+                        value_template: "{{ enable_audiobook_offer_val | default(true) | bool }}"
+                    sequence:
+                      - alias: "Build audiobook selection prompt"
+                        variables:
+                          audiobook_offer_prompt: >-
+                            {% if audiobook_mode_val == 'curated' %}
+                              Offer these audiobooks: {{ curated_audiobooks_val }}.
+                              Let the user pick one.
+                            {% elif audiobook_mode_val == 'freeform' %}
+                              Suggest a bedtime audiobook from your knowledge.
+                              Something calming and suitable for sleep.
+                            {% else %}
+                              Offer these audiobooks: {{ curated_audiobooks_val }}.
+                              If the user wants something else, suggest alternatives.
+                            {% endif %}
+
+                      - alias: "Start audiobook satellite conversation"
+                        action: assist_satellite.start_conversation
+                        target:
+                          entity_id: >-
+                            {% set eid = assist_satellites_val.entity_id | default([]) %}
+                            {% if eid is string %}{{ eid }}{% else %}{{ eid | first | default('') }}{% endif %}
+                        data:
+                          start_message: "{{ audiobook_offer_prompt }}"
+                          extra_system_prompt: >-
+                            You are helping choose a bedtime audiobook.
+                            {{ audiobook_offer_prompt }}
+                            Use the play_bedtime_audiobook tool to start playback.
+                        response_variable: audiobook_conversation
+                        continue_on_error: true
+
+                      - alias: "Post-conversation settle delay"
+                        delay:
+                          seconds: "{{ media_settle_delay_val | int(5) }}"
+
+                      - alias: "Ensure audiobook volume after conversation"
+                        action: media_player.volume_set
+                        target:
+                          entity_id: "{{ audiobook_player_val }}"
+                        data:
+                          volume_level: "{{ audiobook_volume_val | float(0.25) }}"
+                        continue_on_error: true
+                      - alias: "Update duck snapshot after audiobook volume ensure"
+                        if:
+                          - condition: template
+                            value_template: >-
+                              {{ is_state(v_duck_guard, 'on')
+                                 and is_state(v_ducking_flag, 'on') }}
+                        then:
+                          - alias: "Sync duck snapshot with new volume"
+                            action: pyscript.duck_manager_update_snapshot
+                            data:
+                              entity_id: "{{ audiobook_player_val }}"
+                              volume_level: "{{ audiobook_volume_val | float(0.25) }}"
+                            continue_on_error: true
+
+                      - alias: "Log audiobook conversation complete"
+                        action: logbook.log
+                        data:
+                          name: "Bedtime Routine"
+                          message: "Audiobook conversation complete. Playback started."
+
+                default:
+                  - alias: "Audiobook offer disabled — skip media"
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: "Audiobook offer disabled. Skipping media playback."
+
+      # ─────────────────────────────────────────────────────────────
+      # TARGET: KODI
+      # ─────────────────────────────────────────────────────────────
+      - alias: "Target: Kodi"
+        conditions:
+          - condition: template
+            value_template: "{{ is_kodi_target }}"
+        sequence:
+          # --- Sleepy TV check ---
+          - alias: "Check if bedtime content already playing (sleepy TV)"
+            variables:
+              sleepy_tv_active: "{{ is_sleepy_tv | default(false) | bool }}"
+
+          - alias: "Kodi method branch"
+            choose:
+              # --- Kodi: preset mode ---
+              - alias: "Kodi: preset (fixed content)"
+                conditions:
+                  - condition: template
+                    value_template: "{{ bedtime_media_mode_val == 'preset' }}"
+                sequence:
+                  - alias: "Kodi preset — handle sleepy TV"
+                    choose:
+                      - alias: "Sleepy TV already playing — adjust volume only"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ sleepy_tv_active }}"
+                        sequence:
+                          - alias: "Set Kodi volume (sleepy TV already on)"
+                            action: media_player.volume_set
+                            target:
+                              entity_id: "{{ kodi_entity_val }}"
+                            data:
+                              volume_level: "{{ kodi_volume_val | float(0.15) }}"
+                            continue_on_error: true
+                          - alias: "Update duck snapshot after Kodi volume set (sleepy TV)"
+                            if:
+                              - condition: template
+                                value_template: >-
+                                  {{ is_state(v_duck_guard, 'on')
+                                     and is_state(v_ducking_flag, 'on') }}
+                            then:
+                              - alias: "Sync duck snapshot with Kodi volume"
+                                action: pyscript.duck_manager_update_snapshot
+                                data:
+                                  entity_id: "{{ kodi_entity_val }}"
+                                  volume_level: "{{ kodi_volume_val | float(0.15) }}"
+                                continue_on_error: true
+
+                          - alias: "Log sleepy TV detected"
+                            action: logbook.log
+                            data:
+                              name: "Bedtime Routine"
+                              message: >-
+                                Sleepy TV already playing. Volume adjusted,
+                                skipping content switch.
+
+                    default:
+                      - alias: "Set Kodi volume"
+                        action: media_player.volume_set
+                        target:
+                          entity_id: "{{ kodi_entity_val }}"
+                        data:
+                          volume_level: "{{ kodi_volume_val | float(0.15) }}"
+                        continue_on_error: true
+                      - alias: "Update duck snapshot after Kodi volume set"
+                        if:
+                          - condition: template
+                            value_template: >-
+                              {{ is_state(v_duck_guard, 'on')
+                                 and is_state(v_ducking_flag, 'on') }}
+                        then:
+                          - alias: "Sync duck snapshot with Kodi volume"
+                            action: pyscript.duck_manager_update_snapshot
+                            data:
+                              entity_id: "{{ kodi_entity_val }}"
+                              volume_level: "{{ kodi_volume_val | float(0.15) }}"
+                            continue_on_error: true
+
+                      - alias: "Play preset Kodi content"
+                        action: media_player.play_media
+                        target:
+                          entity_id: "{{ kodi_entity_val }}"
+                        data:
+                          media_content_id: "{{ kodi_preset_val }}"
+                          media_content_type: "{{ kodi_content_type_val | default('video') }}"
+                        continue_on_error: true
+
+                      - alias: "Buffer after Kodi play"
+                        delay:
+                          seconds: "{{ kodi_post_play_delay_val | int(3) }}"
+
+                      - alias: "Log preset Kodi started"
+                        action: logbook.log
+                        data:
+                          name: "Bedtime Routine"
+                          message: >-
+                            Preset Kodi content started: {{ kodi_preset_val }}.
+
+            # --- Kodi: curated conversation ---
+            default:
+              - alias: "Build curated media selection prompt"
+                variables:
+                  media_prompt: >-
+                    Ask if they want bedtime content on the TV. Offer ONLY
+                    the curated options below. If they decline, say okay.
+                    If they pick one, call the play_bedtime_kodi function
+                    with content_type "favourite" and the content_id from
+                    the list. If they want none, that's fine.
+
+              - alias: "Pause before media conversation"
+                delay:
+                  seconds: 3
+
+              - alias: "Start media selection conversation — agent uses tool script for playback"
+                continue_on_error: true
+                action: assist_satellite.start_conversation
+                target:
+                  entity_id: >-
+                    {% set eid = assist_satellites_val.entity_id | default([]) %}
+                    {% if eid is string %}{{ eid }}{% else %}{{ eid | first | default('') }}{% endif %}
+                data:
+                  preannounce: true
+                  start_message: >-
+                    Want something on the TV for bedtime? I've got your
+                    usual options ready.
+                  extra_system_prompt: >-
+                    {{ media_prompt }}
+
+                    Kodi entity: {{ kodi_entity_val }}
+                    Kodi is currently playing: {{ kodi_now_playing }}.
+
+                    === CURATED CONTENT ===
+                    {{ kodi_curated_val | default('No curated content configured.') }}
+
+              - alias: "Post-conversation settle delay"
+                delay:
+                  seconds: "{{ media_settle_delay_val | int(30) }}"
+
+              - alias: "Log media conversation completed"
+                continue_on_error: true
+                action: logbook.log
+                data:
+                  name: "Bedtime Routine"
+                  message: >-
+                    Kodi media conversation settled. Now playing: {{ kodi_now_playing }}.
+
+
+    # --- No media target — skip playback entirely ---
+    default:
+      - alias: "No media target configured — skip playback"
+        action: logbook.log
+        data:
+          name: "Bedtime Routine"
+          message: "Media target is 'none'. Skipping media playback."
+        continue_on_error: true
+
+  # =================================================================
+  # SETTLING-IN TTS — optional contextual announcement
+  # =================================================================
+  - alias: "Settling-in TTS — optional contextual announcement after content starts"
+    choose:
+      - alias: "Settling-in TTS is enabled"
+        conditions:
+          - condition: template
+            value_template: "{{ enable_settling_val | bool(false) }}"
+        sequence:
+          - alias: "Select settling prompt and sensors based on media target"
+            variables:
+              settling_prompt_active: >-
+                {% if is_kodi_target | bool %}
+                  {{ settling_prompt_kodi_val | default('') }}
+                {% else %}
+                  {{ settling_prompt_audiobook_val | default('') }}
+                {% endif %}
+              settling_sensors_active: >-
+                {% if is_kodi_target | bool %}
+                  {{ settling_sensors_kodi_val | default([]) }}
+                {% else %}
+                  {{ settling_sensors_audiobook_val | default([]) }}
+                {% endif %}
+
+          - alias: "Build sensor context string for settling-in prompt"
+            variables:
+              settling_sensor_context: >-
+                {% set ns = namespace(lines=[]) %}
+                {% for eid in settling_sensors_active | default([]) %}
+                  {% set ns.lines = ns.lines + [eid ~ ': ' ~ (states(eid) | default('unknown'))] %}
+                {% endfor %}
+                {{ ns.lines | join('\n') }}
+
+          - alias: "Generate settling-in message via conversation agent"
+            continue_on_error: true
+            action: conversation.process
+            response_variable: settling_response
+            data:
+              agent_id: "{{ dispatch_bedtime_agent }}"
+              text: >-
+                {{ settling_prompt_active }}
+
+                {% if is_kodi_target | bool %}
+                Kodi is currently playing: {{ kodi_now_playing }}.
+                {% endif %}
+
+                Current sensor readings:
+                {{ settling_sensor_context }}
+
+          - alias: "Extract settling-in message with defensive fallback"
+            variables:
+              settling_message: >-
+                {% if settling_response is defined
+                   and settling_response.response is defined
+                   and settling_response.response.response_type | default('') != 'error'
+                   and settling_response.response.speech is defined %}
+                  {{ settling_response.response.speech.plain.speech | default('') }}
+                {% else %}
+                {% endif %}
+
+          - alias: "Whisper context — settling-in"
+            action: pyscript.agent_whisper
+            data:
+              agent_name: "{{ dispatch_persona }}"
+              user_query: "Settling-in message delivered"
+              source: "automation"
+            continue_on_error: true
+
+          - alias: "Deliver settling-in TTS if agent produced a message"
+            choose:
+              - alias: "Agent returned a non-empty settling message"
+                conditions:
+                  - condition: template
+                    value_template: "{{ settling_message | default('') | trim | length > 0 }}"
+                sequence:
+                  - alias: "Speak settling-in message via TTS"
+                    action: pyscript.tts_queue_speak
+                    data:
+                      voice: "{{ dispatch_bedtime_tts_voice }}"
+                      target: "{{ media_player_val }}"
+                      text: "{{ settling_message }}"
+                      priority: 2
+                    continue_on_error: true
+
+                  - alias: "Post-TTS buffer for settling-in"
+                    delay:
+                      seconds: "{{ post_tts_delay_val | int(5) }}"
+
+  # =================================================================
+  # GOODNIGHT + COUNTDOWN
+  # =================================================================
+  - alias: "Re-read countdown helper — agent may have negotiated a different value"
+    variables:
+      final_countdown: >-
+        {% if countdown_helper_val | default('') | length > 0 %}
+          {{ states(countdown_helper_val) | int(default_countdown_val | int(4)) }}
+        {% else %}
+          {{ default_countdown_val | int(4) }}
+        {% endif %}
+
+  - alias: "Generate goodnight message via conversation agent"
+    continue_on_error: true
+    action: conversation.process
+    response_variable: goodnight_response
+    data:
+      agent_id: "{{ dispatch_bedtime_agent }}"
+      text: "{{ goodnight_prompt_val | default('Say goodnight. Be warm but brief — one or two sentences max.') }}"
+
+  - alias: "Extract goodnight message with defensive fallback"
+    variables:
+      goodnight_message: >-
+        {% if goodnight_response is defined
+           and goodnight_response.response is defined
+           and goodnight_response.response.response_type | default('') != 'error'
+           and goodnight_response.response.speech is defined %}
+          {{ goodnight_response.response.speech.plain.speech
+             | default("Goodnight. Sleep well.") }}
+        {% else %}
+          Goodnight. Sleep well.
+        {% endif %}
+
+  - alias: "Whisper context — goodnight"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "Goodnight message delivered"
+      source: "automation"
+    continue_on_error: true
+
+  - alias: "Deliver goodnight TTS if enabled and message exists"
+    choose:
+      - alias: "Goodnight TTS is enabled and message is non-empty"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ enable_goodnight_val | bool(false)
+                 and goodnight_message | default('') | trim | length > 0 }}
+        sequence:
+          - alias: "Speak goodnight message via TTS"
+            action: pyscript.tts_queue_speak
+            data:
+              voice: "{{ dispatch_bedtime_tts_voice }}"
+              target: "{{ media_player_val }}"
+              text: "{{ goodnight_message }}"
+              priority: 2
+            continue_on_error: true
+
+          - alias: "Post-TTS buffer for goodnight"
+            delay:
+              seconds: "{{ post_tts_delay_val | int(5) }}"
+
+  - alias: "Log goodnight delivered — countdown begins"
+    continue_on_error: true
+    action: logbook.log
+    data:
+      name: "Bedtime Routine"
+      message: >-
+        Goodnight delivered. Countdown: {{ final_countdown }} minutes.
+        Media target: {{ bedtime_media_target_val }}.
+
+  # =================================================================
+  # COUNTDOWN TIMER
+  # =================================================================
+  - alias: "Countdown delay — lamp stays on"
+    choose:
+      - alias: "Bed confirmed — configurable short/no countdown"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'bed_confirmed' }}"
+        sequence:
+          - alias: "Choose action path"
+            choose:
+              - alias: "Bed countdown > 0 — short delay"
+                conditions:
+                  - condition: template
+                    value_template: "{{ bed_countdown_val | int(0) > 0 }}"
+                sequence:
+                  - alias: "Bed sensor countdown"
+                    delay:
+                      minutes: "{{ bed_countdown_val | int(0) }}"
+                  - alias: "Log bed sensor countdown"
+                    continue_on_error: true
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: >-
+                        Bed sensor countdown complete ({{ bed_countdown_val }} min).
+            default:
+              - alias: "Bed countdown = 0 — skip delay, lamp off immediately"
+                continue_on_error: true
+                action: logbook.log
+                data:
+                  name: "Bedtime Routine"
+                  message: "Bed sensor countdown set to 0 — skipping delay."
+      - alias: "Test mode — compressed countdown (10 seconds)"
+        conditions:
+          - condition: template
+            value_template: "{{ test_mode_val | default(false) | bool }}"
+        sequence:
+          - alias: "Test mode compressed countdown"
+            delay:
+              seconds: 10
+          - alias: "Log test mode countdown"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine [TEST]"
+              message: >-
+                TEST MODE: Countdown compressed to 10s
+                (would be {{ final_countdown | int(4) }} min).
+    default:
+      - alias: "Normal countdown"
+        delay:
+          minutes: "{{ final_countdown | int(4) }}"
+
+  # =================================================================
+  # BATHROOM GUARD — pause lamp-off if bathroom occupied
+  # =================================================================
+  - alias: "Bathroom guard — pause if occupied"
+    choose:
+      - alias: "Bed confirmed — skip bathroom guard (user already in bed)"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'bed_confirmed' }}"
+        sequence:
+          - alias: "Log bathroom guard skipped (bed sensor)"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine"
+              message: "Bathroom guard skipped — bed sensor confirmed, user already in bed."
+      - alias: "Test mode — skip bathroom guard"
+        conditions:
+          - condition: template
+            value_template: "{{ test_mode_val | default(false) | bool }}"
+        sequence:
+          - alias: "Test mode: log bathroom guard skipped"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine [TEST]"
+              message: "TEST MODE: Bathroom guard skipped."
+      - alias: "Bathroom sensor is configured"
+        conditions:
+          - condition: template
+            value_template: "{{ bathroom_sensor_val | default('') | length > 0 }}"
+        sequence:
+          - alias: "Check if bathroom is currently occupied"
+            choose:
+              - alias: "Bathroom is occupied — wait for clear + grace"
+                conditions:
+                  - condition: template
+                    value_template: "{{ states(bathroom_sensor_val) | default('off') in ['on', 'detected', 'home'] }}"
+                sequence:
+                  - alias: "Log bathroom guard activated"
+                    continue_on_error: true
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: >-
+                        Bathroom occupied — pausing lamp-off.
+                        Sensor: {{ bathroom_sensor_val }}.
+                        Max timeout: {{ bathroom_max_timeout_val | int(15) }} min.
+
+                  - alias: "Wait for bathroom to clear (with timeout)"
+                    wait_for_trigger:
+                      - trigger: state
+                        entity_id: !input bathroom_sensor
+                        to:
+                          - "off"
+                          - "not_detected"
+                          - "not_home"
+                    timeout:
+                      minutes: "{{ bathroom_max_timeout_val | int(15) }}"
+                    continue_on_error: true
+
+                  - alias: "Bathroom grace period"
+                    delay:
+                      seconds: "{{ bathroom_grace_val | int(60) }}"
+
+                  - alias: "Log bathroom guard released"
+                    continue_on_error: true
+                    action: logbook.log
+                    data:
+                      name: "Bedtime Routine"
+                      message: >-
+                        Bathroom cleared (or timeout hit).
+                        Proceeding to lamp off.
+
+  # =================================================================
+  # LAMP OFF
+  # =================================================================
+  - alias: "Turn off living room lamp"
+    choose:
+      - alias: "Test mode — skip lamp off"
+        conditions:
+          - condition: template
+            value_template: "{{ test_mode_val | default(false) | bool }}"
+        sequence:
+          - alias: "Test mode: log lamp off skipped"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine [TEST]"
+              message: >-
+                TEST MODE: Would turn off lamp
+                {{ living_room_lamp_val | default('not configured') }}.
+                Skipping.
+      - alias: "Lamp entity is configured"
+        conditions:
+          - condition: template
+            value_template: "{{ living_room_lamp_val | default('') | length > 0 }}"
+        sequence:
+          - alias: "Turn off living room lamp for bedtime"
+            action: homeassistant.turn_off
+            target:
+              entity_id: "{{ living_room_lamp_val }}"
+            continue_on_error: true
+
+          - alias: "Log lamp off"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine"
+              message: "Lamp off: {{ living_room_lamp_val }}."
+
+  # =================================================================
+  # TV SLEEP TIMER (Kodi mode only)
+  # =================================================================
+  - alias: "TV sleep timer — Kodi mode"
+    choose:
+      - alias: "Test mode — skip TV sleep timer"
+        conditions:
+          - condition: template
+            value_template: "{{ test_mode_val | default(false) | bool }}"
+        sequence:
+          - alias: "Test mode: log TV sleep timer skipped"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine [TEST]"
+              message: >-
+                TEST MODE: Would set TV sleep timer for
+                {{ tv_sleep_timer_val | int(0) }} min. Skipping.
+      - alias: "Kodi target + sleep timer configured"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ is_kodi_target
+                 and tv_sleep_timer_val | int(0) > 0 }}
+        sequence:
+          - alias: "Log TV sleep timer started"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine"
+              message: >-
+                TV sleep timer set: {{ tv_sleep_timer_val }} minutes.
+
+          - alias: "Wait for sleep timer duration"
+            delay:
+              minutes: "{{ tv_sleep_timer_val | int(0) }}"
+
+          - alias: "TV off — CEC/software after sleep timer"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ tv_entity_val | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Turn off TV via CEC after sleep timer"
+                    action: media_player.turn_off
+                    target:
+                      entity_id: "{{ tv_entity_val }}"
+                    continue_on_error: true
+          - alias: "TV off — script after sleep timer"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ tv_off_script_val | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Run TV-off script after sleep timer"
+                    action: script.turn_on
+                    target:
+                      entity_id: "{{ tv_off_script_val }}"
+                    continue_on_error: true
+
+          - alias: "TV off — IR remote after sleep timer"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ tv_ir_remote_val | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Send IR power-off after sleep timer"
+                    action: remote.send_command
+                    target:
+                      entity_id: "{{ tv_ir_remote_val }}"
+                    data:
+                      command: "{{ tv_ir_command_val | default('Power') }}"
+                      device: "{{ tv_ir_device_val | default('') }}"
+                    continue_on_error: true
+
+          - alias: "Stop Kodi playback after sleep timer"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ kodi_entity_val | default('') | length > 0 }}"
+                sequence:
+                  - alias: "Stop Kodi player after sleep timer"
+                    action: kodi.call_method
+                    target:
+                      entity_id: "{{ kodi_entity_val }}"
+                    data:
+                      method: Player.Stop
+                      playerid: 1
+                    continue_on_error: true
+
+          - alias: "Log TV sleep timer shutdown complete"
+            continue_on_error: true
+            action: logbook.log
+            data:
+              name: "Bedtime Routine"
+              message: "TV sleep timer expired. TV and Kodi stopped."
+
+  # =================================================================
+  # MEMORY TOOL — store bedtime timestamp (⑱)
+  # =================================================================
+  - alias: "Memory tool — store bedtime.actual timestamp"
+    choose:
+      - alias: "Memory tool is enabled and entity configured"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ enable_memory_val | bool(false)
+                 and memory_tool_entity_val | default('') | length > 0 }}
+        sequence:
+          - alias: "Store bedtime.actual via voice_memory_tool"
+            continue_on_error: true
+            action: conversation.process
+            data:
+              agent_id: "{{ dispatch_bedtime_agent }}"
+              text: >-
+                Use the memory tool to store this fact:
+                Key: {{ memory_store_key_val | default('bedtime.actual') }}
+                Value: {{ now().strftime('%Y-%m-%d %H:%M') }}
+                Scope: {{ memory_scope_val | default('user') }}
+                Tags: {{ memory_search_tags_val | default('bedtime, sleep, routine') }}
+                {% if memory_expiration_val | default(0) | int > 0 %}
+                Expiration: {{ memory_expiration_val }} days
+                {% endif %}
+                Do not speak — just store the memory silently.
+
+  # =================================================================
+  # CLEANUP — reset state, release guards, log completion
+  # =================================================================
+  - alias: "Reset temporary switches"
+    choose:
+      - alias: "Reset switches target is configured"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ reset_switches_val is mapping
+                 and (reset_switches_val.get('entity_id', []) | length > 0
+                      or reset_switches_val.get('area_id', []) | length > 0
+                      or reset_switches_val.get('label_id', []) | length > 0) }}
+        sequence:
+          - alias: "Turn off temporary reset switches during cleanup"
+            action: homeassistant.turn_off
+            target: !input reset_switches
+            continue_on_error: true
+
+  - alias: "Release conflict guard"
+    choose:
+      - alias: "Conflict guard entity is configured"
+        conditions:
+          - condition: template
+            value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
+        sequence:
+          - alias: "Deactivate conflict guard after bedtime routine"
+            action: input_boolean.turn_off
+            target:
+              entity_id: "{{ conflict_guard_entity_val }}"
+            continue_on_error: true
+
+  - alias: "Reset escalation stage to 0 (idle)"
+    continue_on_error: true
+    action: input_number.set_value
+    target:
+      entity_id: !input escalation_stage_helper
+    data:
+      value: 0
+
+  - alias: "Clear escalation session timestamp"
+    continue_on_error: true
+    action: input_datetime.set_datetime
+    target:
+      entity_id: !input escalation_session_helper
+    data:
+      datetime: "1970-01-01 00:00:00"
+
+  - alias: "Notify — bedtime routine completed"
+    choose:
+      - alias: "Notification entity is configured"
+        conditions:
+          - condition: template
+            value_template: "{{ notify_entity_val | default('') | length > 0 }}"
+        sequence:
+          - alias: "Send bedtime completion notification"
+            action: notify.send_message
+            target:
+              entity_id: "{{ notify_entity_val }}"
+            data:
+              message: >-
+                🛏️ Bedtime routine completed at {{ now().strftime('%H:%M') }}.
+                Media: {{ bedtime_media_target_val }}.
+                Countdown: {{ final_countdown | default(countdown_minutes) }} min.
+                {% if test_mode_val | default(false) | bool %}[TEST MODE]{% endif %}
+            continue_on_error: true
+
+  - alias: "Log bedtime routine completed"
+    continue_on_error: true
+    action: logbook.log
+    data:
+      name: "Bedtime Routine"
+      message: >-
+        ✅ Bedtime routine completed at {{ now().strftime('%H:%M') }}.
+        Media: {{ bedtime_media_target_val }}.
+        Countdown used: {{ final_countdown | default(countdown_minutes) }} min.
+        Kill switch: {{ kill_switch_entity_val | default('not configured') }}.
+        Test mode: {{ test_mode_val | default(false) }}.
+
+mode: single
+max_exceeded: silent

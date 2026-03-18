@@ -1,123 +1,118 @@
-# Bedtime Media Play Wrapper — Music Assistant
+# Bedtime Media Play Wrapper -- Music Assistant
 
 ![Bedtime Media Play Wrapper header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_media_play_wrapper-header.jpeg)
 
-Wrapper script blueprint for playing bedtime media (especially audiobooks) via Music Assistant. Designed to be called by a parent bedtime automation that passes in its selected MA player, so playback always targets the correct room. Supports optional pre-playback volume setting, shuffle, and queue control.
+Wrapper script to play bedtime media (especially audiobooks) via Music Assistant. Always targets the passed-in MA media_player, so bedtime blueprints can pass their selected player directly. Supports optional volume, shuffle, and enqueue control with duck guard integration.
 
 ## How It Works
 
 ```
-┌─────────────────────────────────────┐
-│  Bedtime automation calls script    │
-│  with player, media_id, options     │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│  Set local variables from inputs    │
-│  Build action_data & target_data    │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-        ┌──────┴──────┐
-        │ Volume set? │
-        └──────┬──────┘
-          yes/ \no
-          ▼     ▼
-  ┌────────┐  (skip)
-  │ Set vol│
-  └───┬────┘
-      │◄────────┘
-      ▼
-┌─────────────────────────────────────┐
-│  music_assistant.play_media         │
-│  (media_id, media_type, enqueue)    │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-        ┌──────┴──────┐
-        │  Shuffle?   │
-        └──────┬──────┘
-          yes/ \no
-          ▼     ▼
-  ┌────────┐  (skip)
-  │Shuffle │
-  │  on    │
-  └────────┘
+START
+  |
+  v
+[Resolve inputs: player, media_id, media_type, enqueue, volume, shuffle]
+  |
+  v
+<Volume provided?>
+  |         |
+ YES        NO
+  |         |
+  v         |
+[Set volume on player]
+  |         |
+  v         |
+<Duck guard active?>
+  |    |    |
+  YES  NO   |
+  |    |    |
+  v    |    |
+[Sync duck snapshot]
+  |    |    |
+  +----+----+
+       |
+       v
+[Play media via music_assistant.play_media]
+       |
+       v
+<Shuffle enabled?>
+  |         |
+ YES        NO
+  |         |
+  v         |
+[Enable shuffle on player]
+  |         |
+  +----+----+
+       |
+       v
+END
 ```
-
-## Key Design Decisions
-
-### Why a wrapper script?
-
-The bedtime automation handles orchestration — triggers, conditions, LLM conversation, duck/restore. It shouldn't also contain the details of how to call Music Assistant's `play_media`. This wrapper isolates playback mechanics so the parent automation stays clean and the play logic is reusable across different bedtime flows.
-
-### Dynamic dict construction
-
-Rather than hardcoding `data:` fields, the script builds `action_data` and `target_data` as Jinja2 dicts in the variables block. This keeps the action steps clean and makes it easy to extend with additional fields later without restructuring the action calls.
-
-### Volume sentinel pattern
-
-The `volume` input uses `default: []` (empty list) as a sentinel for "no value provided." HA's number selector has no native "unset" state, so an empty list distinguishes "user didn't touch this" from "user set it to 0.0." The conditional checks `_volume not in [[], none, '']` to catch all unset variants.
-
-### Conditional shuffle
-
-The shuffle step only fires when `_shuffle` is true. This avoids unnecessary `media_player.shuffle_set` calls when the user doesn't want shuffle — consistent with how the volume step already works conditionally.
 
 ## Features
 
-- **Targeted playback** — always uses `music_assistant.play_media` on the passed-in player, never a hardcoded entity
-- **Optional volume control** — set volume before playback or leave the player's current level untouched
-- **Queue management** — replace the queue or append via the enqueue input
-- **Media type flexibility** — supports audiobook, podcast, radio, track, album, artist, and playlist
-- **Conditional shuffle** — enables shuffle only when explicitly requested
-- **Queued mode** — supports up to 10 queued executions without blocking
+- Clean wrapper for Music Assistant `play_media` action
+- Supports audiobook, podcast, radio, track, album, artist, playlist media types
+- Optional volume set before playback (skip by leaving empty)
+- Optional shuffle toggle after playback starts
+- Enqueue mode: `replace` (start fresh) or `add` (append to queue)
+- Duck guard snapshot sync when volume is changed during active ducking
+- Queued mode supports up to 10 concurrent calls
 
 ## Prerequisites
 
-- **Home Assistant:** 2024.10.0 or later
-- **Music Assistant integration** installed and configured with at least one media player entity
-- A parent automation or script that passes the target player entity
+- Home Assistant **2024.10.0** or newer
+- Music Assistant integration
+- Duck guard system (optional: `input_boolean.ducking_flag`, `input_boolean.ai_duck_guard_enabled`)
 
 ## Installation
 
-Copy `bedtime_media_play_wrapper.yaml` to your HA config at:
-
-```
-config/blueprints/script/madalone/bedtime_media_play_wrapper.yaml
-```
-
-Or import via the blueprint import URL if hosted on GitHub.
+1. Copy `bedtime_media_play_wrapper.yaml` to `config/blueprints/script/madalone/`
+2. Create script: **Settings > Automations & Scenes > Scripts > Add > Use Blueprint**
 
 ## Configuration
 
-### ① Playback
+<details>
+<summary><strong>Section 1 -- Playback</strong></summary>
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| Target player | *(required)* | The MA media_player entity passed by the parent automation |
-| Media type | `audiobook` | Content type — audiobook, podcast, radio, track, album, artist, playlist |
-| Media ID | *(required)* | Name (e.g. "Bedtime Stories for Cynics") or URI (e.g. `library://audiobook/86`) |
-| Enqueue | `replace` | `replace` starts fresh; `add` appends to queue |
+|---|---|---|
+| `media_player` | _(empty)_ | Target Music Assistant media_player entity |
+| `media_type` | `audiobook` | Media type: audiobook, podcast, radio, track, album, artist, playlist |
+| `media_id` | _(empty)_ | Media ID: name or URI (e.g. `library://audiobook/86`) |
+| `enqueue` | `replace` | Replace starts fresh; Add appends to queue |
 
-### ② Volume & Behavior
+</details>
+
+<details>
+<summary><strong>Section 2 -- Volume & Behavior</strong></summary>
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| Volume | *(unset)* | 0.0–1.0 — applied before playback. Leave empty to keep current volume |
-| Shuffle | `false` | Enable shuffle on the target player after playback starts |
+|---|---|---|
+| `volume` | _(empty)_ | Playback volume (0.0-1.0). Leave empty to keep current |
+| `shuffle` | `false` | Enable shuffle on target player after playback starts |
+
+</details>
+
+<details>
+<summary><strong>Section 3 -- Infrastructure</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `ducking_flag` | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
+
+</details>
 
 ## Technical Notes
 
-- **Mode:** `queued` with `max: 10` — allows multiple calls to stack without dropping requests. Useful when the parent automation triggers rapid sequential plays.
-- **Template safety:** Volume and shuffle inputs use `| default()` guards to handle edge cases where inputs resolve to `none`.
-- **No timeout handling needed:** This is a fire-and-forget wrapper — it issues service calls and exits. The parent automation owns any timeout/cleanup logic.
-- **MA-specific:** Uses `music_assistant.play_media` (not the generic `media_player.play_media`) to access MA's queue features and media resolution.
+- **Mode:** `queued` / `max: 10`
+- **Error handling:** `continue_on_error: true` on volume set, duck snapshot sync, and shuffle set
+- **Volume sentinel:** Empty list `[]` is used as the "no volume" sentinel since number selectors have no native "unset" state
+- **Duck guard:** Snapshot is synced only when both `duck_guard_enabled` and `ducking_flag` are ON
 
 ## Changelog
 
-- **v2:** Restructured header, collapsible inputs, conditional shuffle, aliases on all steps
-- **v1:** Initial version — basic MA play_media wrapper with volume control
+- **v2:** Restructured header, collapsible inputs, conditional shuffle, aliases
+- **v1:** Initial version -- basic MA play_media wrapper with volume control
 
 ## Author
 

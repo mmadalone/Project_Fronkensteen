@@ -98,7 +98,7 @@ Test any template expression live against your current HA state:
 
 ```jinja2
 {# Paste this in the Template editor to debug #}
-Entity state: {{ states('sensor.temperature') }}
+Entity state: {{ states('sensor.temperature') | default('unknown') }}
 As float: {{ states('sensor.temperature') | float(0) }}
 Attribute: {{ state_attr('light.workshop', 'brightness') | default('no brightness attr') }}
 Last triggered: {{ states.automation.coming_home.attributes.last_triggered | default('never') }}
@@ -380,7 +380,9 @@ Diagnosis checklist:
 **"Volume doesn't restore after TTS"**
 
 Diagnosis checklist:
-1. Is the ducking flag (`input_boolean.voice_pe_ducking`) stuck ON? Check its state — if it's stuck, the volume restore step probably errored or the automation was killed mid-duck.
+1. Is the ducking system stuck? Two mechanisms exist:
+   - **Legacy blueprints:** Check `input_boolean.voice_pe_ducking` — if stuck ON, the volume restore step errored or the automation was killed mid-duck.
+   - **Pyscript orchestration:** Check `duck_manager.py` reference count via `ai_duck_*` helper states. The duck manager uses reference counting — if the count is > 0 after all TTS has finished, a caller didn't release its duck. See §13.11 "Duck manager stuck" for recovery.
 2. Is the `post_tts_delay` long enough? ElevenLabs streams asynchronously — if the delay is too short, volume restores while TTS is still playing (§7.4).
 3. Check the automation trace — did the restore step actually fire? If the automation errored or timed out between duck and restore, volume stays ducked.
 
@@ -393,6 +395,16 @@ target:
 # Then manually set the volume back
 ```
 
+If using the pyscript duck manager, also reset the reference count:
+```yaml
+# In Developer Tools → Actions:
+action: input_number.set_value
+target:
+  entity_id: input_number.ai_duck_ref_count
+data:
+  value: 0
+```
+
 **"Volume sync keeps firing / feedback loop"**
 
 Symptom: Volume changes rapidly between two values, logs show volume sync automation firing repeatedly.
@@ -403,6 +415,26 @@ Fix:
 1. Increase the tolerance threshold (the minimum difference that triggers a sync). 0.02 (2%) is usually the floor.
 2. Verify the ducking flag check is in the conditions (§7.4).
 3. Add a short cooldown delay at the end of the sync automation to absorb rounding-induced re-triggers.
+
+```yaml
+# In the volume sync automation conditions:
+conditions:
+  - alias: "Ducking not active"
+    condition: state
+    entity_id: input_boolean.voice_pe_ducking
+    state: "off"
+  - alias: "Volume difference exceeds tolerance"
+    condition: template
+    value_template: >-
+      {{ (state_attr(source_player, 'volume_level') | float(0)
+          - state_attr(target_player, 'volume_level') | float(0))
+         | abs > 0.02 }}
+
+# At the end of the sync action sequence:
+  - alias: "Cooldown — absorb rounding re-triggers"
+    delay:
+      seconds: 2
+```
 
 ### 13.8 Debugging ESPHome devices
 
@@ -469,6 +501,26 @@ Diagnosis:
 
 This is a three-layer debug: LLM → tool/script → device. Work from the top down.
 
+**"Agent responds but the wrong persona / wrong voice / wrong context"**
+
+Symptom: You said "Hey Rick" but got Quark's personality, or the agent responded without time-of-day context, or bedtime tools appeared during daytime.
+
+Diagnosis — check the pyscript orchestration layer:
+
+1. **Was the dispatcher routing correctly?** Check pyscript logs for the last `agent_dispatch` call. Look for the routing decision chain: explicit name → wake word → continuity → topic keywords → era → fallback. If the wrong level won, the dispatcher's input data was wrong (stale era helper, wrong wake word mapping, etc.).
+   ```bash
+   grep "agent_dispatch" home-assistant.log | tail -10
+   ```
+2. **Was an unexpected handoff triggered?** Check `voice_handoff` logs (blueprint + pyscript `voice_handoff.py`). If the previous conversation triggered the `handoff_agent` LLM tool, the handoff blueprint may have switched the satellite's pipeline to the wrong persona. (`agent_handoff.py` was archived — superseded by `voice_handoff.yaml` / I-24.)
+   ```bash
+   grep "voice_handoff" home-assistant.log | tail -10
+   ```
+3. **Is the whisper network interfering?** `agent_whisper.py` auto-updates dispatcher topic keywords from conversation content. If a conversation about cooking got tagged with keywords that now route to the wrong agent, the keyword table has drifted.
+4. **Is the L1 hot context stale?** Check `sensor.ai_hot_context` in Developer Tools → States. If it shows wrong time-of-day data, wrong presence zone, or wrong identity confidence, every agent downstream gets wrong context.
+5. **Is the voice profile mismatched?** If using loryanstrant voice profiles, check whether `tts_queue.py` resolved the correct time-based profile. A wrong profile means the right text in the wrong voice.
+
+This is a five-layer debug when the orchestration layer is involved: wake word → dispatcher → agent → pyscript context injection → TTS/voice profile. Work from the top down.
+
 ### 13.10 The nuclear options — escalation ladder
 
 When nothing else works, escalate one step at a time. **Never skip levels** — each step is more disruptive than the last.
@@ -476,6 +528,7 @@ When nothing else works, escalate one step at a time. **Never skip levels** — 
 | Level | Action | Disruption | When to use |
 |-------|--------|------------|-------------|
 | **1** | **Reload automations** — Developer Tools → YAML → Reload Automations | ⭐ None — re-parses YAML, no downtime | Changed automation YAML, need HA to pick it up |
+| **1.5** | **Reload pyscript** — Developer Tools → Actions → `pyscript.reload` | ⚠️ **Resets in-memory state** — pending queue items, active duck counts, and write batches are lost | Changed a `.py` file in `pyscript/`, service isn't registering, or pyscript module is in a bad state |
 | **2** | **Reload specific component** — Developer Tools → YAML → individual reload buttons (scripts, scenes, groups, input helpers, etc.) | ⭐ None — targeted reload | Changed scripts, helpers, or scene definitions |
 | **3** | **Check config validity** — Developer Tools → YAML → Check Configuration | ⭐ None — read-only validation | **Always run this before level 4+.** A YAML error can prevent HA from starting. (Button requires Advanced Mode: Settings → People → your user → Advanced Mode toggle) |
 | **4** | **Restart Home Assistant** — Settings → System → Restart | ⚠️ **1–5 min downtime** — all automations stop, integrations reconnect | Reload didn't fix it, integration is stuck, entity won't update |
@@ -483,3 +536,88 @@ When nothing else works, escalate one step at a time. **Never skip levels** — 
 | **6** | **Restore from backup** | ❌ **Destructive** — rolls back ALL changes since backup | Everything is worse after restart. Last resort. Try to undo changes manually first (§11). |
 
 **Rule of thumb:** Start at level 1. Move to the next level only if the previous one didn't fix it. And always pass through level 3 before hitting level 4+, or you might be staring at a boot loop like a damn Ferengi who forgot to read the fine print.
+
+> For pyscript-specific issues, try level 1.5 before level 4. A pyscript reload is much faster than a full HA restart and resolves most module-level problems. But be aware it resets all in-memory state — check §13.11 for what's affected.
+
+### 13.11 Debugging pyscript modules
+
+The pyscript orchestration layer (550KB, 15 modules) runs inside HA's Python runtime but has no automation trace visibility. When pyscript fails, there are no trace nodes, no gray/green/red indicators, and often no visible error. Debugging requires a different approach than YAML automations.
+
+**Enabling pyscript logging:**
+
+```yaml
+# In configuration.yaml
+logger:
+  logs:
+    custom_components.pyscript: info        # General pyscript runtime
+    custom_components.pyscript.eval: info    # Script evaluation (function calls, service dispatch)
+    custom_components.pyscript.trigger: debug # Trigger evaluation (only enable temporarily — verbose)
+```
+
+Reload after changes: Developer Tools → YAML → Reload Logger.
+
+**"Pyscript service call does nothing"**
+
+This is the most common and most frustrating pyscript failure. The YAML calls `pyscript.some_service`, HA accepts it, pyscript receives it, and... nothing happens. No error, no log, no trace.
+
+Diagnosis:
+1. **Does the service exist?** Developer Tools → Actions → search for `pyscript.`. If your service isn't listed, it's not registered — either the module isn't loaded, or the function lacks `@service`.
+2. **Are the parameters correct?** The most common cause. Pyscript doesn't validate parameter names — if you pass `speaker_entity` but the function expects `speaker`, it silently ignores the unknown parameter and runs with the default (if any) or `None`. Compare your YAML `data:` keys against the function signature in the `.py` file character by character.
+3. **Is the module loaded?** Check HA logs during startup for pyscript module load messages. If a module has a syntax error, it won't load and its services won't register — but HA won't tell you unless you check the logs.
+4. **Is there a runtime exception?** Set `custom_components.pyscript.eval` to `debug` and re-trigger. Pyscript catches exceptions internally and logs them — but at debug level, not error level.
+
+**"L2 memory not updating"**
+
+Diagnosis:
+1. Check `memory.db` exists and is growing: file size and modification timestamp.
+2. Verify the `memory_store` service is being called — grep pyscript logs for `memory` entries.
+3. Check if `agent_whisper.py` is recording interactions — it's the primary writer to L2.
+4. Verify the FTS5 index is intact — a corrupted index causes silent search failures. If suspected, the nuclear option is deleting `memory.db` and letting it rebuild from scratch (you lose history).
+
+**"TTS queue not processing"**
+
+Diagnosis:
+1. Check `pyscript.tts_queue_speak` is registered (Developer Tools → Actions).
+2. Check the queue state — is it stuck? Look for `tts_queue` entries in pyscript logs.
+3. Verify the target speaker entity is available and not in an error state.
+4. Check the ducking manager — if `duck_manager.py` has an unreleased reference count, the queue may be waiting for a duck release that never comes. Check `ai_duck_*` helper states in Developer Tools → States.
+5. Verify the TTS entity (ElevenLabs or loryanstrant) is responsive — test with a direct `tts.speak` call in Developer Tools → Actions. If direct TTS works but the queue doesn't, the problem is in the queue logic, not the TTS service.
+
+**"Dispatcher routing to wrong agent"**
+
+Diagnosis:
+1. Check the `ai_dispatcher_*` helper states — era, mode, last-used persona.
+2. Check the dispatcher's routing decision in pyscript logs. It logs the decision chain: which level matched and why.
+3. If keyword routing is wrong, the whisper network may have auto-learned bad keywords. Check `agent_whisper.py` logs for recent keyword updates.
+4. Override test: temporarily set `ai_dispatcher_mode` to force a specific persona and verify the pipeline works. If it works with a forced persona, the routing logic is the problem. If it still fails, the problem is downstream.
+
+**"Duck manager stuck / volume won't restore"**
+
+Symptom: Media volume stays ducked after TTS finishes.
+
+Diagnosis:
+1. Check `ai_duck_*` helper states — is the reference count > 0? The duck manager uses reference counting, so multiple concurrent ducking requests stack. If one caller didn't release, the count never hits zero.
+2. Check pyscript logs for `duck_manager` entries — look for acquire/release pairs. A missing release means a caller crashed or errored between duck and unduck.
+3. Manual recovery:
+   ```yaml
+   # In Developer Tools → Actions:
+   # Reset the duck reference count to 0
+   action: input_number.set_value
+   target:
+     entity_id: input_number.ai_duck_ref_count
+   data:
+     value: 0
+   # Then restore volume manually
+   ```
+
+**Reloading pyscript modules:**
+
+Pyscript modules cache state in memory. After editing a `.py` file, the module must be reloaded for changes to take effect. Unlike automations, there is no "Reload Pyscript" button in Developer Tools → YAML.
+
+Options:
+1. **Service call:** Developer Tools → Actions → `pyscript.reload`. This reloads all pyscript modules without restarting HA. Registered services are re-registered, but any in-memory state (counters, caches, active timers) is lost.
+2. **Full HA restart:** Settings → System → Restart. Use this if `pyscript.reload` doesn't pick up changes (rare, usually means a syntax error prevented reload).
+
+**Caution:** `pyscript.reload` resets all in-memory state. If the TTS queue has items pending, they're lost. If the duck manager has an active reference count, it resets to zero (which may be what you want if it's stuck, or may cause a volume jump if a legitimate duck was in progress). If `memory.py` has a pending write batch, it may be lost — check `memory.db` timestamps after reload.
+
+> **Cross-references:** §13.6.1 (log access protocol — tail/grep/surgical reads apply to pyscript logs too), §13.9 (conversation agent debugging — now includes orchestration layer), §13.10 (nuclear options — pyscript.reload is between levels 1 and 2).

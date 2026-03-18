@@ -1,217 +1,178 @@
-# Music Assistant – Local LLM Enhanced Voice Support
+# Music Assistant -- Local LLM Enhanced Voice Support
 
-![Music Assistant LLM Enhanced Voice](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/mass_llm_enhanced_assist-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/mass_llm_enhanced_assist-header.jpeg)
 
-A voice-controlled music playback automation that uses an LLM conversation agent to parse natural-language voice commands into structured media queries, then plays them via Music Assistant. Supports area-based and player-based targeting with automatic fallback, player protection, URI shortcuts, and playback verification.
+Uses an LLM conversation agent to parse voice commands into structured media queries, then plays them via Music Assistant. Supports area-based and player-based targeting with automatic fallback to a default player, player blacklisting with optional divert, URI shortcuts for direct playlist/station mapping, and playback verification. Originally from the Music Assistant project, with style-guide fixes and enhancements by madalone.
 
-**This is a modified fork** of the official [Music Assistant voice-support LLM-enhanced blueprint](https://github.com/music-assistant/voice-support/blob/main/llm-enhanced-local-assist-blueprint/mass_llm_enhanced_assist_blueprint_en.yaml) by the Music Assistant Project (TheFes, JLo, and contributors). All upstream functionality is preserved; the additions below are by **madalone**.
-
-## What This Fork Adds
-
-The upstream blueprint provides the core LLM → JSON → play_media pipeline with area/player targeting, radio mode, and customizable prompts/responses. This fork layers the following on top:
-
-### Player Blacklist & Divert (§③)
-
-Permanently exclude specific MA players from receiving voice-triggered music — useful for TV-based players (e.g., a Chromecast-backed "MadTeeVee") that should never be hijacked by a voice command. When an area contains a blacklisted player, the blueprint expands the area into individual player entities and removes only the blacklisted ones, keeping the rest. If all targets are removed and divert is enabled, playback redirects to a designated fallback player instead of silently failing.
-
-### Enqueue Mode (§②)
-
-Adds a three-way selector for how new media enters the queue: "Replace" (clear and play immediately, upstream default), "Add" (append to end), or "Next" (insert after current track). The upstream blueprint always replaces.
-
-### URI Override Shortcuts (§⑥)
-
-Maps voice keywords directly to exact Music Assistant URIs, bypassing search entirely. Configured as one `keyword=uri` mapping per line. When the LLM extracts a `media_id` that matches a keyword (case-insensitive), the blueprint substitutes the URI directly. Solves the problem of playlists and media that are hard to find by name (e.g., "liked songs" → `library://playlist/157`).
-
-### Playback Verification (§②, steps 8a–8b)
-
-After calling `play_media`, waits a configurable delay (default 2s), then checks whether any target player is in `playing` or `buffering` state. If not, the voice response reports a failure instead of falsely claiming "Now playing…". This catches cases where MA is down, media wasn't found, or the player is unavailable — which `continue_on_error` alone would silently swallow.
-
-### Pronoun Fix (v11)
-
-The LLM prompt now instructs the agent to use second-person pronouns ("your liked songs") instead of echoing back first-person ("my liked songs"). A `regex_replace` safety net on `media_info` catches any LLM that ignores the instruction.
-
-### LLM Error Gating (steps 2a, 4)
-
-Two explicit bail-out gates: one after the `conversation.process` call (catches LLM timeout, crash, or empty response) and one after JSON parsing (catches malformed/garbage output). Both return clear user-facing error messages instead of silent failures or cryptic trace errors.
-
-### Safe Delimiter Handling
-
-Area and player names are internally joined with `|||` instead of commas for matching operations, because MA player friendly names can contain commas. The comma-delimited versions are preserved for LLM prompt readability.
-
-### Execution Mode
-
-Changed from the upstream's default `single` to `parallel` with `max: 10`, allowing concurrent voice commands from different rooms. Includes `trace: stored_traces: 15` for debugging.
-
-### Style Guide Compliance (v12)
-
-Collapsible input sections with numbered stage icons (①–⑥), `conversation_agent` selector, consistent section key/name conventions, descriptive aliases on every step, and `===` divider style throughout.
-
-## Pipeline Flow
+## How It Works
 
 ```
-Voice command ("Play Pink Floyd in the kitchen")
-            │
-            ▼
-┌───────────────────────────────────┐
-│  ① LLM QUERY                      │
-│  Assemble prompt from 7 sections   │
-│  → conversation.process            │
-│  → Parse JSON response             │
-│  Gates: LLM failure / parse error  │
-└───────────────┬───────────────────┘
-                │
-                ▼
-┌───────────────────────────────────┐
-│  ② RESOLVE TARGETS                 │
-│  LLM areas/players → entity_ids    │
-│  Fallback: device area → default   │
-│  Safe |||  delimiter matching      │
-└───────────────┬───────────────────┘
-                │
-                ▼
-┌───────────────────────────────────┐
-│  ③ PLAYER BLACKLIST & DIVERT       │
-│  Remove protected players          │
-│  Expand tainted areas → rescue     │
-│  Divert to fallback if empty       │
-└───────────────┬───────────────────┘
-                │
-                ▼
-┌───────────────────────────────────┐
-│  ④ URI OVERRIDE                    │
-│  Match media_id to keyword map     │
-│  Substitute exact URI if matched   │
-└───────────────┬───────────────────┘
-                │
-                ▼
-┌───────────────────────────────────┐
-│  ⑤ PLAYBACK                       │
-│  play_media (3 radio_mode branches)│
-│  shuffle_set (separate call)       │
-│  Verify: delay → state check       │
-└───────────────┬───────────────────┘
-                │
-                ▼
-┌───────────────────────────────────┐
-│  ⑥ VOICE RESPONSE                  │
-│  Failure → error message           │
-│  Success → area/player/both/none   │
-│  Pronoun regex safety net          │
-└───────────────────────────────────┘
+┌──────────────────────────┐
+│  Voice trigger:          │
+│  "Play/Shuffle/Listen to │
+│   {query} [in area/on    │
+│   player]"               │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  Resolve dispatcher /    │
+│  conversation agent      │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  Send query to LLM with │
+│  full prompt (media type,│
+│  areas, players, etc.)   │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  Parse JSON response     │
+│  → media_id, media_type, │
+│    artist, album, areas, │
+│    players               │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  Resolve targets:        │
+│  1. Named areas/players  │
+│  2. Device area fallback │
+│  3. Default player       │
+│  Blacklist filtering +   │
+│  optional divert         │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  URI override check      │
+│  (shortcut map)          │
+└────────────┬─────────────┘
+             │
+             ▼
+┌──────────────────────────┐
+│  music_assistant.        │
+│  play_media              │
+│  → verify playback       │
+│  → return response       │
+└──────────────────────────┘
 ```
+
+## Features
+
+- Natural language voice commands via LLM parsing (Play, Shuffle, Listen to)
+- Area-based and player-based targeting with fuzzy name matching via LLM
+- Automatic fallback to device area, then default player
+- Player blacklist with optional divert to fallback player
+- URI shortcut map bypasses search for known playlists/stations
+- Radio mode control (use player settings / always / never)
+- Enqueue mode (replace / add / next)
+- Playback verification with configurable delay
+- AI dispatcher support for dynamic persona selection
+- Customizable trigger sentences for multi-language support
+- Fully tunable LLM prompt sections
 
 ## Prerequisites
 
-- **Home Assistant 2024.10.0+**
-- **Music Assistant** integration with at least one player
-- An **LLM conversation agent** (OpenAI, Ollama, Google AI, etc.) configured **without** house control — it only needs to return JSON
-- A voice pipeline (Voice PE, browser, or conversation trigger)
+- Home Assistant 2024.10.0 or later
+- Music Assistant integration with at least one media player
+- An LLM conversation agent (or AI dispatcher)
 
 ## Installation
 
-1. Copy `mass_llm_enhanced_assist_blueprint_en.yaml` into your blueprints directory:
-   ```
-   config/blueprints/automation/<your_namespace>/mass_llm_enhanced_assist_blueprint_en.yaml
-   ```
-   Or import via URL if hosted on GitHub.
-
-2. Create a new automation from the blueprint: **Settings → Automations → Create Automation → Use Blueprint**
-
-3. At minimum, select your **LLM conversation agent** in §①.
+1. Copy `mass_llm_enhanced_assist_blueprint_en.yaml` to `config/blueprints/automation/madalone/`
+2. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
 
 ## Configuration
 
-### ① Core Settings
-
-| Input | Description |
-|-------|-------------|
-| **LLM conversation agent** | The agent that parses voice commands into JSON. Should have no house control. |
-| **Default Player** | Fallback MA player when no area/player can be determined. Leave empty to return an error instead. |
-
-### ② Playback Settings
+### Section 1 -- Core settings
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| **Radio Mode** | Use player settings | "Always" keeps adding songs, "Never" stops at queue end, "Use player settings" defers to the player's "Don't stop the music" setting |
-| **Enqueue Mode** | Replace | "Replace" clears queue, "Add" appends, "Next" inserts after current track |
-| **Playback verification delay** | 2 sec | How long to wait before checking if playback started. Increase for slow backends. |
+|---|---|---|
+| Use Dispatcher | true | When enabled, AI dispatcher selects persona dynamically |
+| Voice Assistant | "Rick" | Assist Pipeline used when dispatcher is disabled |
+| Default Player | _(empty)_ | Fallback MA player when no target can be determined |
 
-### ③ Player Blacklist & Divert
+### Section 2 -- Playback settings
 
 | Input | Default | Description |
-|-------|---------|-------------|
-| **Blacklisted players** | (empty) | MA players that should never receive music from this automation |
-| **Enable divert** | Off | Redirect to fallback player when blacklist removes all targets |
-| **Divert fallback player** | (empty) | The player to divert to when divert is enabled |
+|---|---|---|
+| Radio Mode | Use player settings | Controls MA radio_mode (use player settings / always / never) |
+| Enqueue Mode | replace | How new media is added to the queue (replace / add / next) |
+| Playback verification delay | 2 s | Seconds to wait before checking if playback started |
 
-### ④ Trigger & Response Settings
+### Section 3 -- Player blacklist & divert
 
-Customizable trigger sentences (`(shuffle|play|listen to) {query}` by default), combine word for multi-target responses, and five response templates with `<action_word>`, `<media_info>`, `<area_info>`, `<player_info>` placeholders. All translatable.
+| Input | Default | Description |
+|---|---|---|
+| Blacklisted players | _(empty)_ | MA players that should NEVER receive music from this automation |
+| Enable divert to fallback | false | Redirect to fallback player instead of just dropping the target |
+| Divert fallback player | _(empty)_ | The MA player to use when a blacklisted player is excluded |
 
-### ⑤ LLM Prompt Tuning
+### Section 4 -- Trigger & response settings
 
-Seven individually editable prompt sections (intro, media_type, media_id, artist/album, examples, media_description, target, outro) that are concatenated and sent to the LLM. The default prompt works for most models. The intro section includes the second-person pronoun instruction for media_description.
+| Input | Default | Description |
+|---|---|---|
+| Conversation trigger sentences | `(shuffle\|play\|listen to) {query}` | Voice trigger patterns |
+| Combine word | "and" | Word joining multiple targets in responses |
+| No target response | "No target could be determined..." | Error response text |
+| Area response | "Now playing/shuffling ... in ..." | Response template for area targets |
+| Player response | "Now playing/shuffling ... on ..." | Response template for player targets |
+| Area and Player response | Combined template | Response when both targets are used |
 
-### ⑥ Media URI Shortcuts
+### Section 5 -- LLM prompt tuning
 
-One mapping per line in `keyword=uri` format. Case-insensitive matching against the LLM-extracted `media_id`. Example:
+| Input | Default | Description |
+|---|---|---|
+| Introduction for LLM prompt | _(long default)_ | Sets LLM role and expected JSON output structure |
+| Media type LLM prompt | _(long default)_ | Explains 6 media_type values to the LLM |
+| Media ID LLM prompt | _(long default)_ | Explains media_id formatting and multi-track patterns |
+| Artist and album LLM prompt | _(long default)_ | Optional artist/album fields for search refinement |
+| Examples action data LLM prompt | _(long default)_ | Concrete JSON examples for common query types |
+| Media description LLM prompt | _(long default)_ | Explains the media_description key |
+| Target data LLM prompt | _(long default)_ | Explains target_data for area/player routing |
+| Outro for LLM prompt | _(long default)_ | Final instructions ensuring raw JSON output |
+| Expose Music Assistant Players | true | Send player names to LLM for fuzzy matching |
+| Expose areas with MA Players | true | Send area names to LLM for fuzzy matching |
 
-```
-liked songs=library://playlist/157
-chill vibes=library://playlist/42
-workout mix=spotify://playlist/abc123
-```
+### Section 6 -- Media URI shortcuts
 
-## Target Resolution Order
+| Input | Default | Description |
+|---|---|---|
+| URI override map | _(empty)_ | Maps voice keywords to exact MA URIs (one per line, `keyword=uri`) |
 
-1. LLM-extracted areas and/or players (fuzzy-matched against known MA entities)
-2. Device area — if the trigger came from a physical voice satellite in an area with an MA player
-3. Default player from blueprint config
-4. Error response if none of the above resolves
+### Section 7 -- Infrastructure
 
-## Upstream vs. Fork Feature Comparison
-
-| Feature | Upstream | This Fork |
-|---------|----------|-----------|
-| LLM voice → JSON → play_media | Yes | Yes |
-| Area + player targeting | Yes | Yes |
-| Radio mode (3 options) | Yes | Yes |
-| Customizable prompts & responses | Yes | Yes |
-| Expose areas/players to LLM | Yes | Yes |
-| Player blacklist & divert | — | Yes (§③) |
-| Enqueue mode (replace/add/next) | — | Yes (§②) |
-| URI override shortcuts | — | Yes (§⑥) |
-| Playback verification | — | Yes (steps 8a–8b) |
-| LLM failure gating | — | Yes (steps 2a, 4) |
-| Pronoun fix (my → your) | — | Yes (v11) |
-| Safe delimiter for comma-names | — | Yes (|||) |
-| Parallel mode (max: 10) | — | Yes |
-| Stored traces | — | 15 |
-| Collapsible input sections | — | Yes (①–⑥) |
+| Input | Default | Description |
+|---|---|---|
+| Dispatcher enabled entity | `input_boolean.ai_dispatcher_enabled` | Boolean that enables the AI agent dispatcher |
 
 ## Technical Notes
 
-- Runs in `mode: parallel` / `max: 10` / `max_exceeded: silent` — allows concurrent voice commands from different rooms without blocking.
-- `continue_on_error: true` is placed on each individual `play_media` branch (not the outer choose), so failures are caught per-branch and the playback verification step runs regardless.
-- The LLM has no native timeout in HA service calls. Defense: configure the agent integration's own request timeout (OpenAI timeout, Ollama keep_alive, etc.). That timeout fires → agent returns error → `continue_on_error` catches it → gate 2a bails with a user-facing message.
-- Shuffle is a separate `media_player.shuffle_set` call because `music_assistant.play_media` has no shuffle parameter.
-- The blacklist expansion logic handles the case where an area contains both protected and unprotected MA players — it rescues the unprotected ones and only removes the blacklisted entities.
-- `trace: stored_traces: 15` keeps debugging data for the last 15 runs.
+- **Mode:** Not explicitly set (defaults to `single`)
+- **Trigger:** Conversation trigger matching configurable sentence patterns
+- **LLM output:** Expects raw JSON (no code fences) with `action_data`, `media_description`, and `target_data` keys
+- **Safe-split:** Area and player names use `|||` delimiter internally because names may contain commas
+- **integration_entities() guards:** All calls use `| default([])` to prevent cascade failure if MA is temporarily unavailable
+- **Boolean coercion:** All boolean inputs use `| bool` guards to prevent string-coercion bugs across serialization boundaries
+- **Blacklist divert:** When a blacklisted player is the only target and divert is enabled, it is replaced with the divert fallback player
 
 ## Changelog
 
-- **v12:** Style guide compliance — `conversation_agent` selector, section key/name conventions, `===` divider style, collapsible input sections
-- **v11:** Pronoun fix — voice responses now say "your liked songs" instead of echoing back "my liked songs". LLM prompt instructs second-person pronouns; `regex_replace` safety net on `media_info` as fallback
-- **v10:** URI override layer — map voice keywords to exact Music Assistant URIs, bypassing search. Configurable `keyword=uri` mappings for playlists and media that are hard to find by name
-
-## Acknowledgments
-
-- **Music Assistant Project** — The upstream [LLM-enhanced voice blueprint](https://github.com/music-assistant/voice-support) by TheFes and contributors provides the core LLM → JSON → play_media pipeline that this fork builds upon.
-- **JLo** — Original [GPT-powered music search blog post](https://github.com/music-assistant/voice-support/blob/main/README.md) that inspired the LLM-enhanced approach.
+- **v19:** Fix TemplateSyntaxError -- move Jinja comments out of mid-expression filter chains
+- **v18:** Restore `| reject('none')` guard on `area_list` in step 9 response assembly
+- **v17:** Add missing `| bool` guard on `divert_enabled` in blacklist divert logic; complete `| bool` guards on all expose conditionals
+- **v16:** Add `| bool` guards at all boolean consumption points; add DO-NOT-HOIST warning on play_succeeded
+- **v15:** Add `| default([])` guards on all `integration_entities()` calls
+- **v14:** Defensive template hardening -- default guards on trigger.sentence, area_entities() fallback
+- **v13:** Fix regex injection in fuzzy target matching, explicit from_json guard
+- **v12:** Style guide compliance -- conversation_agent selector, section conventions
 
 ## Author
 
-**Music Assistant Project** (original) · **madalone** (style-guide fixes and feature additions v10–v12)
+**Music Assistant Project** (style-guide fixes by madalone)
 
 ## License
 

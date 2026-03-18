@@ -1,0 +1,1038 @@
+# =============================================================================
+# Agent Escalation Blueprint — Probability Gate (v2)
+# =============================================================================
+# When an LLM agent threatens escalation, it fires the escalate_action
+# tool → ai_escalation_request event.  This blueprint catches the event
+# and rolls dice against a per-type configurable probability.
+#
+# 7 action types:
+#   persona_switch   — set ai_handoff_pending → voice_handoff.yaml
+#   play_media       — play audio clip on speaker
+#   light_flash      — flash room lights (500ms on/off cycle)
+#   volume_boost     — repeat message LOUDER via TTS priority 0
+#   send_notification— push notification to mobile
+#   prompt_barrage   — fire prompt at ANOTHER agent, play their TTS
+#   run_script       — run a configured HA script
+#
+# Prompt pool for prompt_barrage is embedded in the variables block.
+# To customize prompts: edit the prompt_pool variable below.
+#
+# Requires:
+#   - input_boolean.ai_escalation_enabled       (master toggle)
+#   - input_text.ai_last_satellite               (satellite tracking)
+#   - input_text.ai_escalation_last_outcome      (status tracking)
+#   - input_datetime.ai_escalation_last_followthrough (cooldown gate)
+#   - input_text.ai_handoff_pending              (for persona_switch)
+#   - input_text.ai_last_agent_name              (current agent)
+#   - pyscript/memory.py                         (L2 logging)
+#   - pyscript/agent_whisper.py                  (whisper context)
+#   - pyscript/agent_dispatcher.py               (engine resolution)
+#   - pyscript/tts_queue.py                      (TTS playback)
+#   - voice_handoff.yaml                         (persona switching)
+# =============================================================================
+blueprint:
+  name: Agent Escalation — Probability Gate
+  description: >-
+    Catches ai_escalation_request events fired by the LLM escalate_action
+    tool.  Rolls a per-type configurable probability die — on hit, executes
+    the threatened action.  On miss, logs a bluff to L2.  7 action types:
+    persona_switch, play_media, light_flash, volume_boost, send_notification,
+    prompt_barrage, run_script.  Per-satellite instance with independent
+    probability and cooldown.
+  domain: automation
+  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/agent_escalation.yaml
+
+  input:
+    # ===========================================================================
+    # ① CORE
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:bullhorn
+      description: Satellite assignment, cooldown, and logging.
+      collapsed: false
+      input:
+        satellite:
+          name: Voice PE Satellite
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        cooldown_minutes:
+          name: Cooldown (minutes)
+          description: >-
+            Minimum time between actual follow-throughs (any type).
+            0 = no cooldown.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 120
+              step: 5
+
+        log_escalations:
+          name: Log Escalations to L2
+          description: >-
+            When enabled, logs bluffs and follow-throughs to L2 memory so
+            agents can reference escalation history in future interactions.
+          default: true
+          selector:
+            boolean:
+
+    # ===========================================================================
+    # ② PROBABILITY
+    # ===========================================================================
+    probability:
+      name: "② Probability"
+      icon: mdi:dice-multiple
+      description: Global fallback and per-type probability overrides (-1 = use global).
+      collapsed: true
+      input:
+        escalation_probability:
+          name: Global Probability (%)
+          description: >-
+            Fallback probability for types that don't have a specific override.
+            0 = always bluff, 100 = always follow through.
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+
+        probability_persona_switch:
+          name: "% — Persona Switch"
+          description: "-1 = use global. 0-100 = type-specific probability."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_play_media:
+          name: "% — Play Media"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_light_flash:
+          name: "% — Light Flash"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_volume_boost:
+          name: "% — Volume Boost"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_send_notification:
+          name: "% — Send Notification"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_prompt_barrage:
+          name: "% — Prompt Barrage"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+        probability_run_script:
+          name: "% — Run Script"
+          description: "-1 = use global."
+          default: -1
+          selector:
+            number:
+              min: -1
+              max: 100
+              step: 5
+
+    # ===========================================================================
+    # ③ ACTION TOGGLES
+    # ===========================================================================
+    action_toggles:
+      name: "③ Action Toggles"
+      icon: mdi:toggle-switch-outline
+      description: Enable or disable individual escalation action types.
+      collapsed: true
+      input:
+        allow_persona_switch:
+          name: Allow Persona Switch
+          description: "Hand conversation to another agent via voice_handoff.yaml."
+          default: true
+          selector:
+            boolean:
+
+        allow_play_media:
+          name: Allow Play Media
+          description: "Play audio clip from media folder."
+          default: true
+          selector:
+            boolean:
+
+        allow_light_flash:
+          name: Allow Light Flash
+          description: "Flash room lights to get attention."
+          default: true
+          selector:
+            boolean:
+
+        allow_volume_boost:
+          name: Allow Volume Boost
+          description: "Repeat message louder via TTS at emergency priority."
+          default: true
+          selector:
+            boolean:
+
+        allow_send_notification:
+          name: Allow Send Notification
+          description: "Push mobile notification."
+          default: true
+          selector:
+            boolean:
+
+        allow_prompt_barrage:
+          name: Allow Prompt Barrage
+          description: "Summon another agent to chime in via TTS."
+          default: true
+          selector:
+            boolean:
+
+        allow_run_script:
+          name: Allow Run Script
+          description: "Run a configured HA script."
+          default: true
+          selector:
+            boolean:
+
+    # ===========================================================================
+    # ④ DEVICES
+    # ===========================================================================
+    devices:
+      name: "④ Devices"
+      icon: mdi:speaker
+      description: Output players, lights, notification targets, and scripts.
+      collapsed: true
+      input:
+        tts_output_player:
+          name: TTS / Media Output Player
+          description: "Media player for audio clips and TTS output."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        flash_light_entity:
+          name: Flash Light Entity
+          description: "Light to flash for light_flash escalation. Leave empty to skip."
+          default: []
+          selector:
+            entity:
+              domain: light
+
+        notify_service_name:
+          name: Notify Service Name
+          description: >-
+            Service name for send_notification (e.g. notify.mobile_app_iphone).
+            Leave empty to skip.
+          default: ""
+          selector:
+            text:
+
+        escalation_script:
+          name: Escalation Script (Optional)
+          description: >-
+            Script entity to run for run_script escalation.
+            Optional — leave empty to skip.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ⑤ TUNING
+    # ===========================================================================
+    tuning:
+      name: "⑤ Tuning"
+      icon: mdi:tune-variant
+      description: Media paths, flash parameters, and volume levels.
+      collapsed: true
+      input:
+        media_folder:
+          name: Media Folder
+          description: "Path to escalation audio clips. Clips stored as {name}.mp3."
+          default: "/config/media/agent_escalation/"
+          selector:
+            text:
+
+        flash_count:
+          name: Flash Count
+          description: "Number of on/off flash cycles for light_flash."
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 20
+              step: 1
+
+        flash_brightness:
+          name: Flash Brightness
+          description: "Brightness for flash cycles (0-255)."
+          default: 255
+          selector:
+            number:
+              min: 0
+              max: 255
+              step: 5
+
+        boost_volume_level:
+          name: Volume Boost Level
+          description: "Volume level (0.0-1.0) for volume_boost TTS."
+          default: 0.9
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+
+    # ===========================================================================
+    # ⑥ MUSIC
+    # ===========================================================================
+    music:
+      name: "⑥ Music"
+      icon: mdi:music-note
+      description: >-
+        I-10 music composition integration for play_media escalations.
+        When enabled, resolves audio from the music library or composes
+        on the fly instead of using static media folder clips.
+      collapsed: true
+      input:
+        enable_escalation_music:
+          name: Enable escalation music
+          description: >-
+            When enabled, play_media escalations resolve audio from the
+            music library (Tier 1), auto-compose via compose engine
+            (Tier 2), or fall back to static media folder (Tier 3).
+            When disabled, only Tier 3 (original behavior) fires.
+          default: false
+          selector:
+            boolean:
+
+        escalation_music_agent:
+          name: Music agent override
+          description: >-
+            Agent persona for library/compose lookups. Empty = use the
+            current agent from ai_last_agent_name.
+          default: ""
+          selector:
+            text:
+
+        escalation_library_id_override:
+          name: Library ID override
+          description: >-
+            Explicit music library ID to play. When set, skips
+            auto-resolve and compose — plays this track directly.
+          default: ""
+          selector:
+            text:
+
+        escalation_music_volume:
+          name: Escalation music volume
+          description: >-
+            Volume level for music playback (0.0 = use current volume).
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+
+        escalation_delay_after:
+          name: Delay after music (seconds)
+          description: >-
+            Pause after music playback before continuing.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 10
+              step: 1
+
+        compose_escalation_if_missing:
+          name: Compose if not in library
+          description: >-
+            When auto-resolve finds no matching track, compose a
+            stinger locally via FluidSynth. When off, falls through
+            to the static media folder (Tier 3).
+          default: true
+          selector:
+            boolean:
+
+mode: single
+
+# =============================================================================
+# Trigger: ai_escalation_request event
+# =============================================================================
+triggers:
+  - trigger: event
+    event_type: ai_escalation_request
+    id: escalation_trigger
+
+# =============================================================================
+# Conditions — master toggle + satellite match
+# =============================================================================
+variables:
+  satellite_entity: !input satellite
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.ai_escalation_enabled
+    state: "on"
+  - condition: template
+    value_template: >-
+      {{ states('input_text.ai_last_satellite') == satellite_entity }}
+
+# =============================================================================
+# Actions
+# =============================================================================
+actions:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. Resolve all variables
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Resolve all input variables"
+    variables:
+      satellite_entity: !input satellite
+      speaker_entity: !input tts_output_player
+      media_folder_input: !input media_folder
+      flash_light: !input flash_light_entity
+      notify_service: !input notify_service_name
+      escalation_script_entity: !input escalation_script
+      flash_count_input: !input flash_count
+      flash_brightness_input: !input flash_brightness
+      boost_volume: !input boost_volume_level
+      do_log: !input log_escalations
+      cooldown: !input cooldown_minutes
+      global_prob: !input escalation_probability
+      # Event data
+      action_type: "{{ trigger.event.data.action_type | default('') }}"
+      target_persona: "{{ trigger.event.data.target | default('') | lower | trim }}"
+      media_clip: "{{ trigger.event.data.clip | default('') | trim }}"
+      event_prompt: "{{ trigger.event.data.prompt | default('') | trim }}"
+      event_message: "{{ trigger.event.data.message | default('') | trim }}"
+      current_agent: "{{ states('input_text.ai_last_agent_name') | default('unknown') }}"
+      now_ts: "{{ now().timestamp() }}"
+      # ── I-10: Music composition inputs ──
+      v_enable_escalation_music: !input enable_escalation_music
+      v_escalation_music_agent: !input escalation_music_agent
+      v_escalation_library_id: !input escalation_library_id_override
+      v_escalation_music_volume: !input escalation_music_volume
+      v_escalation_delay_after: !input escalation_delay_after
+      v_compose_if_missing: !input compose_escalation_if_missing
+      # Valid action types
+      valid_actions:
+        - persona_switch
+        - play_media
+        - light_flash
+        - volume_boost
+        - send_notification
+        - prompt_barrage
+        - run_script
+
+  # ── Lookup maps (second variables block — references first) ──
+  - alias: "Build permission, probability, voice, and prompt maps"
+    variables:
+      # Permission map — action_type → toggle
+      permission_map:
+        persona_switch: !input allow_persona_switch
+        play_media: !input allow_play_media
+        light_flash: !input allow_light_flash
+        volume_boost: !input allow_volume_boost
+        send_notification: !input allow_send_notification
+        prompt_barrage: !input allow_prompt_barrage
+        run_script: !input allow_run_script
+      # Per-type probability map — action_type → override (-1 = use global)
+      probability_map:
+        persona_switch: !input probability_persona_switch
+        play_media: !input probability_play_media
+        light_flash: !input probability_light_flash
+        volume_boost: !input probability_volume_boost
+        send_notification: !input probability_send_notification
+        prompt_barrage: !input probability_prompt_barrage
+        run_script: !input probability_run_script
+      # Voice map (same as voice_handoff.yaml)
+      voice_map:
+        deadpool: "tts.deepee_text_to_speech"
+        deepee: "tts.deepee_text_to_speech"
+        quark: "tts.elevenlabs_quark_text_to_speech"
+        kramer: "tts.elevenlabs_kramer_text_to_speech"
+        rick: "tts.elevenlabs_text_to_speech"
+        doctor portuondo: "tts.dr_portuondo_text_to_speech"
+        doctor_portuondo: "tts.dr_portuondo_text_to_speech"
+      # ── Prompt barrage pool ──
+      # Each key is a persona name. Value is a list of prompts.
+      # The blueprint picks randomly when no custom prompt is provided.
+      # To customize: edit this block directly in the blueprint file.
+      prompt_pool:
+        quark:
+          - "The user is ignoring the other agent. Recite a Rule of Acquisition about the cost of ignoring good advice."
+          - "Butt in and explain, Ferengi-style, why the user should listen."
+          - "Interject with a short sales pitch about why paying attention is profitable."
+        deadpool:
+          - "Crash the conversation and break the fourth wall about the user ignoring an AI."
+          - "Sing a brief show tune about stubbornness. Two lines max."
+          - "Make a pop culture reference about ignoring warnings, then suggest the user cooperate."
+        rick:
+          - "Interrupt with a scientific explanation of why ignoring warnings leads to catastrophic outcomes. Be condescending."
+          - "Burp, then explain why the user should pay attention to the other agent."
+          - "Drop a multiverse reference about timelines where the user listened vs didn't."
+        kramer:
+          - "Burst in with an elaborate scheme about why the user needs to pay attention."
+          - "Tell a story about Bob Sacamano that relates to ignoring good advice."
+          - "Slide in dramatically and explain why this is a very important moment."
+        doctor portuondo:
+          - "Gently but firmly analyze why the user might be avoiding this interaction. Brief and insightful."
+          - "Offer a therapeutic observation about resistance and avoidance patterns."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. Validate action type
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Validate action type"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type not in valid_actions }}
+    then:
+      - alias: "Stop: unknown action type"
+        stop: "Unknown escalation action_type: {{ action_type }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. Check action permissions (map-based)
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Resolve action permission from map"
+    variables:
+      action_allowed: "{{ permission_map.get(action_type, false) | bool(false) }}"
+
+  - alias: "Check action permission gate"
+    if:
+      - condition: template
+        value_template: "{{ not action_allowed }}"
+    then:
+      - alias: "Record blocked status for disabled action type"
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_escalation_last_outcome
+        data:
+          value: "blocked:{{ action_type }}"
+      - alias: "Stop: action type disabled"
+        stop: "Action type {{ action_type }} disabled for this satellite"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 4. Cooldown check — compare last follow-through timestamp
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Calculate cooldown window"
+    variables:
+      last_ft_str: "{{ states('input_datetime.ai_escalation_last_followthrough') }}"
+      last_ft_ts: >-
+        {% if last_ft_str not in ['unknown', 'unavailable', ''] %}
+          {{ as_timestamp(today_at(last_ft_str), 0) }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      cooldown_seconds: "{{ cooldown | float(30) * 60 }}"
+      in_cooldown: >-
+        {{ cooldown | float(0) > 0
+           and last_ft_ts | float(0) > 0
+           and (now_ts | float - last_ft_ts | float) < cooldown_seconds | float }}
+
+  - alias: "Check cooldown gate"
+    if:
+      - condition: template
+        value_template: "{{ in_cooldown | bool(false) }}"
+    then:
+      - alias: "Record cooldown-blocked status"
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_escalation_last_outcome
+        data:
+          value: "cooldown:{{ action_type }}:{{ target_persona or media_clip }}"
+      - alias: "Stop: blocked by cooldown"
+        stop: "Escalation blocked by cooldown ({{ cooldown }} min)"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 5. Roll the dice (per-type probability)
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Roll the dice against per-type probability"
+    variables:
+      type_prob_raw: "{{ probability_map.get(action_type, -1) | int(-1) }}"
+      effective_probability: >-
+        {{ type_prob_raw if type_prob_raw | int(-1) >= 0
+           else global_prob | int(15) }}
+      dice_roll: "{{ range(100) | random }}"
+      is_hit: "{{ dice_roll | int < effective_probability | int }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 6. MISS — bluff
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "Handle miss — bluff path"
+    if:
+      - condition: template
+        value_template: "{{ not is_hit | bool(false) }}"
+    then:
+      - alias: "Update status — bluff"
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_escalation_last_outcome
+        data:
+          value: "bluff:{{ action_type }}:{{ target_persona or media_clip }}"
+
+      - alias: "Log bluff to L2"
+        if:
+          - condition: template
+            value_template: "{{ do_log }}"
+        then:
+          - alias: "Write bluff record to L2 memory"
+            action: pyscript.memory_set
+            response_variable: _mem_bluff
+            continue_on_error: true
+            data:
+              key: "escalation:bluff:{{ now().strftime('%Y%m%d_%H%M%S') }}"
+              value: >-
+                {{ current_agent }} threatened {{ action_type }}
+                (target: {{ target_persona or media_clip or 'n/a' }}) — bluff
+                (rolled {{ dice_roll }}, needed < {{ effective_probability }})
+              scope: session
+              expiration_days: 7
+              tags: "escalation bluff {{ current_agent }}"
+              force_new: true
+
+      - alias: "Whisper — bluff context"
+        action: pyscript.agent_whisper
+        data:
+          agent_name: "{{ current_agent }}"
+          source: "automation"
+          user_query: >-
+            Escalation bluff — {{ current_agent }} threatened {{ action_type }}
+            ({{ target_persona or media_clip or 'n/a' }}) but didn't follow through
+        continue_on_error: true
+
+      - alias: "Stop: bluff — dice miss"
+        stop: "Bluff — rolled {{ dice_roll }}, needed < {{ effective_probability }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 7. HIT — execute the escalation
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # 7a. Persona switch → set handoff pending flag
+  - alias: "7a · Persona switch via handoff"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type == 'persona_switch' and target_persona | length > 0 }}
+    then:
+      - alias: "Set handoff pending flag to trigger persona switch"
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_handoff_pending
+        data:
+          value: "{{ target_persona }}"
+
+  # 7b. Play media clip — 3-tier: library → compose → static fallback
+  - alias: "7b · Play escalation media clip"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type == 'play_media' and media_clip | length > 0 }}
+    then:
+      - alias: "7b · Resolve escalation agent for music lookup"
+        variables:
+          v_music_agent: >-
+            {{ v_escalation_music_agent if v_escalation_music_agent | default('') | length > 0
+               else current_agent | default('rick') | lower }}
+      - alias: "7b · 3-tier escalation music resolution"
+        choose:
+          # ── Tier 1: Explicit library ID → music_library_play ──
+          - alias: "Tier 1 — Explicit library ID"
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ v_enable_escalation_music | bool(false)
+                     and v_escalation_library_id | default('') | length > 0 }}
+            sequence:
+              - alias: "Play from music library by ID"
+                action: pyscript.music_library_play
+                continue_on_error: true
+                data:
+                  library_id: "{{ v_escalation_library_id }}"
+                  target: "{{ speaker_entity }}"
+                  volume_level: "{{ v_escalation_music_volume | float(0) if v_escalation_music_volume | float(0) > 0 else none }}"
+              - if: "{{ v_escalation_delay_after | int(1) > 0 }}"
+                then:
+                  - delay:
+                      seconds: "{{ v_escalation_delay_after | int(1) }}"
+
+          # ── Tier 2: Auto-resolve by agent → compose if missing ──
+          - alias: "Tier 2 — Auto-resolve / compose"
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ v_enable_escalation_music | bool(false)
+                     and v_escalation_library_id | default('') | length == 0 }}
+            sequence:
+              - alias: "Look up stinger in library by agent"
+                action: pyscript.music_compose_get
+                response_variable: _esc_lookup
+                continue_on_error: true
+                data:
+                  agent: "{{ v_music_agent }}"
+                  content_type: "stinger"
+              - alias: "Tier 2 — play found or compose"
+                choose:
+                  # Found in library → play it
+                  - alias: "Library hit — play via media_player"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (_esc_lookup | default({})).get('status', '') == 'ok' }}
+                    sequence:
+                      - alias: "Play library stinger"
+                        action: media_player.play_media
+                        target:
+                          entity_id: "{{ speaker_entity }}"
+                        data:
+                          media_content_id: >-
+                            {{ (_esc_lookup.get('file_path', '') | replace('/config/www/', '/local/')) }}
+                          media_content_type: music
+                          announce: true
+                        continue_on_error: true
+                      - if: "{{ v_escalation_delay_after | int(1) > 0 }}"
+                        then:
+                          - delay:
+                              seconds: "{{ v_escalation_delay_after | int(1) }}"
+
+                  # Not found + compose enabled → compose locally
+                  - alias: "Not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (_esc_lookup | default({})).get('status', '') == 'not_found'
+                             and v_compose_if_missing | bool(true) }}
+                    sequence:
+                      - alias: "Compose stinger via FluidSynth"
+                        action: pyscript.music_compose_local
+                        response_variable: _esc_composed
+                        continue_on_error: true
+                        data:
+                          agent: "{{ v_music_agent }}"
+                          content_type: "stinger"
+                          duration_s: 3.0
+                      - alias: "Play composed stinger if successful"
+                        if:
+                          - condition: template
+                            value_template: >-
+                              {{ (_esc_composed | default({})).get('status', '') == 'ok' }}
+                        then:
+                          - action: media_player.play_media
+                            target:
+                              entity_id: "{{ speaker_entity }}"
+                            data:
+                              media_content_id: >-
+                                {{ (_esc_composed.get('file_path', '') | replace('/config/www/', '/local/')) }}
+                              media_content_type: music
+                              announce: true
+                            continue_on_error: true
+                          - if: "{{ v_escalation_delay_after | int(1) > 0 }}"
+                            then:
+                              - delay:
+                                  seconds: "{{ v_escalation_delay_after | int(1) }}"
+
+                default:
+                  # Compose disabled or lookup error → fall through to Tier 3
+                  - alias: "Tier 2 fallback — play static clip"
+                    action: media_player.play_media
+                    target:
+                      entity_id: "{{ speaker_entity }}"
+                    data:
+                      media_content_id: "{{ media_folder_input }}{{ media_clip }}.mp3"
+                      media_content_type: music
+                      announce: true
+                    continue_on_error: true
+
+        # ── Tier 3 (default): Original static media folder ──
+        default:
+          - alias: "Tier 3 — Play static escalation clip (original behavior)"
+            action: media_player.play_media
+            target:
+              entity_id: "{{ speaker_entity }}"
+            data:
+              media_content_id: "{{ media_folder_input }}{{ media_clip }}.mp3"
+              media_content_type: music
+              announce: true
+            continue_on_error: true
+
+  # 7c. Light flash — repeat on/off cycle
+  - alias: "7c · Flash room lights"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type == 'light_flash'
+             and flash_light is defined
+             and flash_light | length > 0
+             and flash_light not in ['[]', 'none', 'None', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Repeat flash on/off cycles"
+        repeat:
+          count: "{{ flash_count_input | int(5) }}"
+          sequence:
+            - alias: "Flash off"
+              action: light.turn_off
+              target:
+                entity_id: "{{ flash_light }}"
+              continue_on_error: true
+            - alias: "Wait 500ms between flash cycles"
+              delay:
+                milliseconds: 500
+            - alias: "Flash on at configured brightness"
+              action: light.turn_on
+              target:
+                entity_id: "{{ flash_light }}"
+              data:
+                brightness: "{{ flash_brightness_input | int(255) }}"
+              continue_on_error: true
+            - alias: "Wait 500ms after flash on"
+              delay:
+                milliseconds: 500
+      # Restore: turn off after flashing
+      - alias: "Turn off light after flash cycles complete"
+        action: light.turn_off
+        target:
+          entity_id: "{{ flash_light }}"
+        continue_on_error: true
+
+  # 7d. Volume boost — TTS at emergency priority + elevated volume
+  - alias: "7d · Repeat message louder"
+    if:
+      - condition: template
+        value_template: "{{ action_type == 'volume_boost' }}"
+    then:
+      - alias: "Resolve boost message text"
+        variables:
+          boost_message: >-
+            {% if event_prompt | length > 0 %}
+              {{ event_prompt }}
+            {% else %}
+              Hey! I am talking to you! Pay attention!
+            {% endif %}
+      - alias: "Speak boosted message at emergency priority and volume"
+        action: pyscript.tts_queue_speak
+        response_variable: _tts_boost
+        continue_on_error: true
+        data:
+          text: "{{ boost_message }}"
+          voice: "{{ voice_map.get(current_agent | lower, '') }}"
+          priority: 0
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+          volume_level: "{{ boost_volume | float(0.9) }}"
+
+  # 7e. Send notification — mobile push
+  - alias: "7e · Send mobile notification"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type == 'send_notification'
+             and notify_service | length > 0 }}
+    then:
+      - alias: "Resolve notification message text"
+        variables:
+          notif_message: >-
+            {% if event_message | length > 0 %}
+              {{ event_message }}
+            {% else %}
+              {{ current_agent | capitalize }} is trying to get your attention and you are ignoring them.
+            {% endif %}
+      - alias: "Push escalation notification to mobile device"
+        action: "{{ notify_service }}"
+        data:
+          title: "{{ current_agent | capitalize }} — Escalation"
+          message: "{{ notif_message }}"
+        continue_on_error: true
+
+  # 7f. Prompt barrage — another agent chimes in via TTS
+  - alias: "7f · Prompt barrage"
+    if:
+      - condition: template
+        value_template: "{{ action_type == 'prompt_barrage' }}"
+    then:
+      # 7f-1. Select target agent + prompt
+      - alias: "Select barrage target agent and prompt"
+        variables:
+          barrage_target: >-
+            {% set t = target_persona | default('') | trim | lower %}
+            {% if t | length > 0 and t in prompt_pool %}
+              {{ t }}
+            {% else %}
+              {{ prompt_pool.keys() | list | random }}
+            {% endif %}
+          barrage_prompt: >-
+            {% if event_prompt | length > 0 %}
+              {{ event_prompt }}
+            {% elif barrage_target in prompt_pool %}
+              {{ prompt_pool[barrage_target] | random }}
+            {% else %}
+              Chime in and tell the user to pay attention. Be brief and in character.
+            {% endif %}
+
+      # 7f-2. Resolve target agent's conversation engine
+      - alias: "7f-2 · Resolve barrage agent engine"
+        action: pyscript.dispatcher_resolve_engine
+        response_variable: barrage_resolve
+        continue_on_error: true
+        data:
+          pipeline_name: "{{ barrage_target }}"
+
+      - alias: "Extract barrage engine from resolution"
+        variables:
+          barrage_engine: >-
+            {{ (barrage_resolve | default({})).get('engine', '') }}
+
+      # 7f-3. Guard — bail if engine resolution failed
+      - alias: "7f-3 · Guard — engine resolution check"
+        if:
+          - condition: template
+            value_template: "{{ barrage_engine | length == 0 }}"
+        then:
+          - alias: "Stop: barrage engine resolution failed"
+            stop: "Prompt barrage failed — could not resolve engine for {{ barrage_target }}"
+
+      # 7f-4. Call target agent with the prompt
+      - alias: "7f-4 · Call barrage agent"
+        action: conversation.process
+        response_variable: barrage_response
+        continue_on_error: true
+        data:
+          agent_id: "{{ barrage_engine }}"
+          text: "{{ barrage_prompt }}"
+
+      # 7f-5. Extract speech from response
+      - alias: "7f-5 · Extract speech from barrage response"
+        variables:
+          barrage_speech: >-
+            {% if barrage_response is defined and barrage_response is mapping %}
+              {{ barrage_response.get('response', {})
+                 .get('speech', {}).get('plain', {}).get('speech', '') }}
+            {% else %}
+              {{ '' }}
+            {% endif %}
+
+      # 7f-6. Guard — bail if no speech
+      - alias: "7f-6 · Guard — barrage speech check"
+        if:
+          - condition: template
+            value_template: "{{ barrage_speech | trim | length == 0 }}"
+        then:
+          - alias: "Stop: no speech from barrage agent"
+            stop: "Prompt barrage produced no speech from {{ barrage_target }}"
+
+      # 7f-7. Play barrage agent's response in THEIR voice
+      - alias: "7f-7 · Speak barrage response"
+        action: pyscript.tts_queue_speak
+        response_variable: _tts_barrage
+        continue_on_error: true
+        data:
+          text: "{{ barrage_speech | trim }}"
+          voice: "{{ voice_map.get(barrage_target, '') }}"
+          priority: 1
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+
+  # 7g. Run script
+  - alias: "7g · Run escalation script"
+    if:
+      - condition: template
+        value_template: >-
+          {{ action_type == 'run_script'
+             and escalation_script_entity is defined
+             and escalation_script_entity | length > 0
+             and escalation_script_entity not in ['[]', 'none', 'None', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Execute configured escalation script"
+        action: script.turn_on
+        target:
+          entity_id: "{{ escalation_script_entity }}"
+        continue_on_error: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 8. Post-hit bookkeeping
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # 8a. Update last follow-through timestamp (for cooldown gate)
+  - alias: "8a · Update cooldown timestamp"
+    action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.ai_escalation_last_followthrough
+    data:
+      time: "{{ now().strftime('%H:%M:%S') }}"
+
+  # 8b. Update status helper
+  - alias: "8b · Update status — follow-through"
+    action: input_text.set_value
+    target:
+      entity_id: input_text.ai_escalation_last_outcome
+    data:
+      value: "followthrough:{{ action_type }}:{{ target_persona or media_clip or 'n/a' }}"
+
+  # 8c. Log follow-through to L2
+  - alias: "8c · Log follow-through to L2"
+    if:
+      - condition: template
+        value_template: "{{ do_log }}"
+    then:
+      - alias: "Write follow-through record to L2 memory"
+        action: pyscript.memory_set
+        response_variable: _mem_ft
+        continue_on_error: true
+        data:
+          key: "escalation:followthrough:{{ now().strftime('%Y%m%d_%H%M%S') }}"
+          value: >-
+            {{ current_agent }} followed through on {{ action_type }}
+            (target: {{ target_persona or media_clip or 'n/a' }}) —
+            rolled {{ dice_roll }}, needed < {{ effective_probability }}
+          scope: session
+          expiration_days: 30
+          tags: "escalation followthrough {{ current_agent }}"
+          force_new: true
+
+  # 8d. Whisper — update self-awareness
+  - alias: "Whisper — escalation follow-through"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ current_agent }}"
+      source: "automation"
+      user_query: >-
+        Escalation follow-through — {{ current_agent }} executed {{ action_type }}
+        ({{ target_persona or media_clip or 'n/a' }})
+    continue_on_error: true

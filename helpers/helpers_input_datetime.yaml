@@ -1,0 +1,164 @@
+# Input datetime helpers
+# Bedtime timestamps (bedtime_last_start/success/abort/reply_received) were orphans — removed 2026-03-04
+
+notification_last_announced:
+  name: Notification last announced
+  icon: mdi:clock-check
+  has_date: true
+  has_time: true
+
+ai_summarizer_batch_time:
+  name: "AI Summarizer Batch Time"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Patterns
+# ═══════════════════════════════════════════════════════════════════
+ai_away_departed_miquel:
+  name: "AI Away - Miquel Departed At"
+  has_date: true
+  has_time: true
+  icon: mdi:exit-run
+
+ai_away_departed_jessica:
+  name: "AI Away - Jessica Departed At"
+  has_date: true
+  has_time: true
+  icon: mdi:exit-run
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Hot Context
+# ═══════════════════════════════════════════════════════════════════
+ai_context_wake_time_weekday:
+  name: "AI Context - Wake Time (Weekday)"
+  has_date: false
+  has_time: true
+ai_context_wake_time_weekend:
+  name: "AI Context - Wake Time (Weekend)"
+  has_date: false
+  has_time: true
+ai_context_bed_time:
+  name: "AI Context - Bedtime Target"
+  has_date: false
+  has_time: true
+
+# ── Per-User Schedule (Miquel) ──
+# Note: input_datetime has no 'initial' — set defaults via UI or automation.
+# Intended defaults: weekday 07:30, weekend 09:00, bedtime 22:30.
+ai_context_wake_time_weekday_miquel:
+  name: "AI Context - Wake Time Weekday (Miquel)"
+  has_date: false
+  has_time: true
+ai_context_wake_time_weekend_miquel:
+  name: "AI Context - Wake Time Weekend (Miquel)"
+  has_date: false
+  has_time: true
+ai_context_bed_time_miquel:
+  name: "AI Context - Bedtime Target (Miquel)"
+  has_date: false
+  has_time: true
+
+# ── Per-User Schedule (Jessica) ──
+# Shares bedtime with Miquel. Set wake/bed times via UI.
+ai_context_wake_time_weekday_jessica:
+  name: "AI Context - Wake Time Weekday (Jessica)"
+  has_date: false
+  has_time: true
+ai_context_wake_time_weekend_jessica:
+  name: "AI Context - Wake Time Weekend (Jessica)"
+  has_date: false
+  has_time: true
+ai_context_bed_time_jessica:
+  name: "AI Context - Bedtime Target (Jessica)"
+  has_date: false
+  has_time: true
+
+# ── Self-Awareness (Task 2) ──
+ai_last_interaction_time:
+  name: "AI - Last Interaction Time"
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search
+# ═══════════════════════════════════════════════════════════════════
+# Nightly batch embedding schedule. Runs before summarization (04:00).
+ai_embedding_batch_time:
+  name: "AI Embedding - Batch Time"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Agent Escalation
+# ═══════════════════════════════════════════════════════════════════
+ai_escalation_last_followthrough:
+  name: "AI Escalation Last Follow-Through"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-check
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_focus_guard — Focus Guard
+# ═══════════════════════════════════════════════════════════════════
+# Last meal timestamp. Updated by voice command ("I just ate") or
+# pyscript.focus_guard_mark_meal service.
+last_meal_time:
+  name: "Last Meal Time"
+  has_date: true
+  has_time: true
+  icon: mdi:food-apple
+
+# Snooze expiry. Set by voice command ("remind me in 30 minutes")
+# or pyscript.focus_guard_snooze. Calendar P1 (critical) nudges bypass snooze.
+focus_guard_snooze_until:
+  name: "Focus Guard - Snooze Until"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm-snooze
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_predictive_schedule — Predictive Schedule
+# ═══════════════════════════════════════════════════════════════════
+# Predicted routine start time. Updated by the bedtime advisor.
+ai_predicted_routine_start:
+  name: "AI Predicted Routine Start"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-start
+
+# I-29: Predicted wake time. Used by calendar_alarm.yaml as the dynamic trigger time.
+ai_predicted_wake_time:
+  name: "AI Predicted Wake Time"
+  has_date: false
+  has_time: true
+  icon: mdi:alarm
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep Detection
+# ═══════════════════════════════════════════════════════════════════
+ai_sleep_start:
+  name: "AI Sleep - Start"
+  has_date: true
+  has_time: true
+  icon: mdi:bed
+
+ai_sleep_end:
+  name: "AI Sleep - End"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm
+
+ai_sleep_window_start:
+  name: "AI Sleep Detection - Window Start"
+  has_date: false
+  has_time: true
+  icon: mdi:weather-night
+
+ai_sleep_window_end:
+  name: "AI Sleep Detection - Window End"
+  has_date: false
+  has_time: true
+  icon: mdi:weather-sunny

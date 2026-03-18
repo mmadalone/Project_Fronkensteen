@@ -1,0 +1,142 @@
+# =============================================================================
+# AI Predictive Schedule Package — Task 17 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Predictive Scheduling"
+#   and "Learning Loop (Feedback)"
+#
+# Provides:
+#   input_number.ai_target_sleep_hours — target sleep duration (default 7h)
+#   input_number.ai_morning_prep_buffer — wake-to-ready buffer (default 45m)
+#   input_text.ai_bedtime_recommendation — latest recommendation text
+#   input_text.ai_schedule_sources_raw — JSON for confidence template sensor
+#   input_text.ai_test_calendar_event — mock calendar data for test mode
+#   input_datetime.ai_predicted_routine_start — predicted routine start time
+#   sensor.ai_schedule_confidence — template: high/medium/low/none
+#   sensor.ai_predictive_schedule_status — created by pyscript (last op)
+#
+# Services (pyscript):
+#   pyscript.schedule_bedtime_advisor
+#     Fuses L1+L2+L3 to compute bedtime timing recommendation
+#   pyscript.schedule_optimal_timing
+#     General purpose event timing calculator
+#
+# Events (pyscript):
+#   ai_bedtime_advisory  — fired when <=15 min to target routine start
+#   ai_bedtime_overdue   — fired when past target and routine not active
+#
+# CREEP FACTOR GATE (hard design constraint):
+#   Recommendations are about SCHEDULE and SLEEP, never about tracked
+#   behavior. "Start winding down in about 45 minutes for 7 hours of
+#   sleep" is OK. "I tracked your bathroom routine at 11:23 PM" is NOT.
+#
+# Dependencies:
+#   pyscript/predictive_schedule.py
+#   pyscript/routine_fingerprint.py (Task 16 — fingerprints, completion events)
+#   pyscript/presence_patterns.py (Task 15 — frequency tables)
+#   pyscript/memory.py (L2 memory)
+#   packages/ai_context_hot.yaml (default wake times)
+#   packages/ai_routine_tracker.yaml (routine stage, bedtime predicted)
+#   packages/ai_test_harness.yaml (test mode toggle)
+#   calendar.miquel_angel_cano_gmail_com (Google Calendar integration)
+#
+# Deployed: 2026-03-02
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      # Schedule confidence: derived from which data sources contributed
+      # to the latest bedtime recommendation.
+      #   high   = calendar (L3) + fingerprint (L2) + presence (L1)
+      #   medium = fingerprint (L2) + presence (L1), no calendar
+      #   low    = presence (L1) only, no fingerprint or calendar
+      #   none   = no data yet
+      - name: "AI Schedule Confidence"
+        unique_id: ai_schedule_confidence
+        icon: mdi:shield-check
+        state: >-
+          {%- set raw = states('input_text.ai_schedule_sources_raw') -%}
+          {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+            {%- set src = raw | from_json -%}
+            {%- set cal = src.calendar | default(false) -%}
+            {%- set fp = src.fingerprint | default(false) -%}
+            {%- if cal and fp -%}
+              high
+            {%- elif fp -%}
+              medium
+            {%- elif cal -%}
+              low
+            {%- else -%}
+              low
+            {%- endif -%}
+          {%- else -%}
+            none
+          {%- endif -%}
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Predictive Schedule"
+# cards:
+#   # ── Settings ──
+#   - type: entities
+#     title: "Schedule Settings"
+#     entities:
+#       - entity: input_number.ai_target_sleep_hours
+#         name: "Target Sleep"
+#       - entity: input_number.ai_morning_prep_buffer
+#         name: "Morning Prep Buffer"
+#
+#   # ── Current Recommendation ──
+#   - type: entities
+#     title: "Bedtime Advisor"
+#     entities:
+#       - entity: input_text.ai_bedtime_recommendation
+#         name: "Recommendation"
+#       - entity: input_datetime.ai_predicted_routine_start
+#         name: "Predicted Routine Start"
+#       - entity: sensor.ai_schedule_confidence
+#         name: "Confidence"
+#
+#   # ── Status ──
+#   - type: entities
+#     title: "Engine Status"
+#     entities:
+#       - entity: sensor.ai_predictive_schedule_status
+#         name: "Schedule Status"
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#       - entity: input_text.ai_test_calendar_event
+#         name: "Mock Calendar Event"
+#
+#   # ── Manual trigger buttons ──
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Run Bedtime Advisor"
+#         icon: mdi:bed-clock
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.schedule_bedtime_advisor
+#         icon_height: 40px
+#       - type: button
+#         name: "Optimal Timing"
+#         icon: mdi:clock-check
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.schedule_optimal_timing
+#           perform_action_data:
+#             event_description: "dentist appointment"
+#             event_time: "13:00"
+#             prep_minutes: 30
+#             travel_minutes: 20
+#         icon_height: 40px
+# =============================================================================

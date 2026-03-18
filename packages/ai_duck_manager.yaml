@@ -1,0 +1,22 @@
+# =============================================================================
+# AI Duck Manager — Unified Volume Ducking Helpers
+# =============================================================================
+# Central duck/restore engine for satellite wake words, TTS queue, and external.
+# Duck group = media players to duck (short IDs, media_player. prefix auto-added).
+# Announcement players = speakers to boost during voice events.
+# Duck satellites = assist_satellite entities that trigger ducking on wake.
+# Watchdog force-restores stale sessions.
+#
+# Reuses existing helpers from ai_tts_queue.yaml:
+#   input_number.ai_tts_duck_volume / ai_tts_announcement_volume
+#   input_select.ai_tts_restore_mode
+#   input_number.ai_tts_restore_fixed_delay / ai_tts_restore_timeout
+#   input_text.ai_tts_restore_satellites
+#   input_boolean.ducking_flag
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)

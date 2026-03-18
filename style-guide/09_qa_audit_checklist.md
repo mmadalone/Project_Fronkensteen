@@ -20,6 +20,36 @@
 
 ## 15.1 — Check Definitions
 
+### 0 — Blueprint-First Gate (Pre-Build)
+
+### BPG-1: Blueprint-First Decision Tree [WARNING]
+
+**Check:** Before ANY automation code is written, verify the §3.0 decision tree has been applied.
+
+```
+FAIL if: automation: block exists in a package file AND the logic follows
+         trigger → conditions → actions with configurable parameters that
+         could be blueprint inputs (entity selections, time schedules,
+         thresholds, person entities, zone references)
+
+PASS if: blueprint created in blueprints/automation/madalone/, OR
+         automation is confirmed infrastructure glue with no user-facing
+         inputs (startup resets, midnight housekeeping, pyscript coordination)
+```
+
+**When to run:** At the START of any build workflow — as part of §11.1 steps 0–1, before any code is written. This is a pre-build gate, not a post-build review.
+
+**Detection heuristics:**
+- Does the automation have `input:` sections or variables that could be `!input` references? → Blueprint candidate.
+- Could someone deploy this for a different room, person, or device by changing parameters? → Blueprint candidate.
+- Does it only exist to reset helpers at midnight or initialize state on HA boot? → Package glue. Pass.
+
+**Fix:** Migrate the automation to a blueprint in `blueprints/automation/madalone/`. Move configurable parameters to blueprint `input:` sections. Shared-state helpers consumed by pyscript or dashboards stay in the package.
+
+**Cross-references:** §3.0 (decision tree), §5.0 (when to use what), AP-52 (anti-pattern).
+
+---
+
 ### 1 — Security & Secrets Management
 
 ### SEC-1: No Inline Secrets [ERROR]
@@ -355,8 +385,8 @@ Known return value documentation required:
 
 | Legacy (pre-2024.10) | Modern (2024.10+) | Ties to |
 |---|---|---|
-| `service:` | `action:` | AP-08 |
-| `service_data:` | `data:` (under `action:`) | AP-08 |
+| `service:` | `action:` | AP-10 |
+| `service_data:` | `data:` (under `action:`) | AP-10 |
 | `trigger:` (singular, inside automation) | `triggers:` (plural) | §3.8 |
 | `condition:` (singular, inside automation) | `conditions:` (plural) | §3.8 |
 | `action:` (singular, inside automation) | `actions:` (plural) | §3.8 |
@@ -888,6 +918,264 @@ triggers:
 
 ---
 
+### 11 — Pyscript Integration
+
+These checks validate the interface between YAML configurations (automations, blueprints, scripts, packages) and the pyscript orchestration layer. Pyscript failures are particularly dangerous because HA does not surface them as visible errors — a wrong service call or missing helper silently does nothing.
+
+### PSY-1: Service Call Parameter Correctness [ERROR]
+
+**Check:** Every YAML action that calls a `pyscript.*` service MUST pass all required parameters with correct names and types. Flag when:
+1. A `pyscript.*` service call is missing a required parameter
+2. A parameter name doesn't match the `@service` function signature in the pyscript module
+3. A parameter type is wrong (e.g., passing a string where the function expects a list)
+
+**Why ERROR severity:** A misspelled or missing parameter in a pyscript service call produces no HA error log, no UI warning, no automation trace failure — the call silently does nothing. This is the hardest class of bug to diagnose.
+
+**Verification procedure:**
+1. Collect all `pyscript.*` service calls from YAML files: `grep -rn 'action: pyscript\.' *.yaml`
+2. For each call, locate the corresponding `@service` function in `pyscript/*.py`
+3. Compare the `data:` keys in the YAML call against the function's parameter list
+4. Flag any mismatch — missing params, extra params, wrong names
+
+**Common pyscript services to verify (update as modules are added):**
+
+| Service | Module | Required Parameters |
+|---------|--------|---------------------|
+| `pyscript.agent_dispatch` | `agent_dispatcher.py` | Verify against `@service` signature |
+| `pyscript.tts_queue_speak` | `tts_queue.py` | Verify against `@service` signature |
+| `pyscript.memory_store` | `memory.py` | Verify against `@service` signature |
+| `pyscript.duck_manager_*` | `duck_manager.py` | Verify against `@service` signature |
+
+> **Note:** Parameter lists are not hardcoded here because they change as the pyscript modules evolve. Always verify against the actual `@service` decorator in the source file, not against this table.
+
+📋 QA Check: Run on every automation, blueprint, or script that calls a `pyscript.*` service. Run after any pyscript module refactor that changes function signatures.
+
+### PSY-2: Helper ↔ Package Coupling [ERROR]
+
+**Check:** The `ai_*` helper ecosystem must be bidirectionally consistent:
+
+**Direction A — Package → Pyscript:** Every `ai_*` helper entity defined in `packages/ai_*.yaml` SHOULD be referenced by at least one pyscript module. An orphan helper (defined but never read) is dead weight that clutters the entity registry and confuses dashboard builders.
+
+**Direction B — Pyscript → Package:** Every `ai_*` helper entity referenced in a pyscript module (`state.get()`, `state.set()`, or Jinja2 `states()` calls) MUST be defined in the corresponding `packages/ai_*.yaml`. A missing helper definition causes a silent `None` return — no error, just wrong behavior.
+
+**Severity:**
+- Direction A (orphan helpers): [WARNING] — cleanup opportunity, not a runtime failure
+- Direction B (missing definitions): [ERROR] — causes silent failures at runtime
+
+**Verification procedure:**
+1. Extract all helper entity IDs from `packages/ai_*.yaml` (look for `input_boolean`, `input_number`, `input_text`, `input_select`, `input_datetime` entries with `ai_` prefix)
+2. Extract all `ai_*` entity references from `pyscript/*.py` (look for `state.get("input_*.ai_")`, `state.set()`, and string literals matching `input_*.ai_*`)
+3. Compute set difference in both directions
+4. Flag Direction B mismatches as [ERROR], Direction A as [WARNING]
+
+📋 QA Check: Run after adding or removing helpers from AI packages, or after pyscript modules are refactored. Include in deep-pass audits.
+
+### PSY-3: Blueprint Orchestration Toggles [WARNING]
+
+**Check:** Every blueprint that integrates with pyscript orchestration features (dispatcher, TTS queue, ducking, dedup, whisper, etc.) MUST:
+1. Expose each pyscript feature as an **optional boolean input** (or appropriate selector) with a sensible default
+2. **Function without the orchestration layer enabled** — the pyscript features are enhancements, not hard dependencies
+3. Use the HA Voice Assistant pipeline's configured agent as the **default** agent selection mechanism (Decision #49) — the pyscript dispatcher overrides this only when its toggle is enabled
+4. Guard pyscript service calls behind the corresponding toggle:
+
+```yaml
+# ✅ CORRECT — dispatcher is optional, falls back to pipeline default
+input:
+  use_dispatcher:
+    name: "Use AI dispatcher for agent selection"
+    description: "When enabled, routes through pyscript.agent_dispatch instead of using the pipeline's configured agent. Requires pyscript orchestration layer."
+    default: false
+    selector:
+      boolean:
+
+actions:
+  - alias: "Route through dispatcher or use pipeline default"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ use_dispatcher }}"
+        sequence:
+          - alias: "Dispatch via pyscript"
+            action: pyscript.agent_dispatch
+            data:
+              # ... dispatcher params
+      - conditions: []
+        sequence:
+          - alias: "Use pipeline default agent"
+            action: conversation.process
+            data:
+              agent_id: !input conversation_agent
+```
+
+```yaml
+# ❌ WRONG — hard dependency on pyscript dispatcher, no fallback
+actions:
+  - alias: "Dispatch"
+    action: pyscript.agent_dispatch
+    data:
+      # ... no toggle, no fallback
+```
+
+**Why:** Blueprints are shared artifacts. Users who haven't installed the pyscript orchestration layer must still be able to use the blueprint with basic functionality. The orchestration features are power-user enhancements.
+
+📋 QA Check: Run on every blueprint that contains a `pyscript.*` service call. Verify toggle exists, default is sensible, and fallback path works.
+
+### PSY-4: Dashboard Exposure Completeness [WARNING]
+
+**Check:** Every tunable parameter in the pyscript orchestration layer and AI packages should be evaluated for dashboard exposure. Flag when:
+1. A threshold, timeout, or limit is **hardcoded** in a pyscript module but could reasonably be user-tunable (e.g., TTS cache size limit, dedup TTL, budget tier thresholds, escalation intervals)
+2. A tunable parameter has a helper entity defined but is **not documented** as a candidate for the AI management dashboard
+3. An `input_number` helper lacks `min:`/`max:`/`step:` constraints (users will set nonsensical values via dashboard sliders)
+4. An `input_select` helper has options that don't match the values the pyscript module actually checks for
+
+**Decision framework for "should this be dashboard-exposed?":**
+
+| Parameter type | Expose? | Example |
+|---------------|---------|---------|
+| On/off feature flag | Yes — `input_boolean` | Enable/disable proactive briefings |
+| Numeric threshold with reasonable user control | Yes — `input_number` with min/max/step | TTS volume override, dedup TTL seconds, budget daily limit |
+| Mode selection from fixed options | Yes — `input_select` | Dispatcher era override, ducking mode |
+| Internal implementation detail | No — keep hardcoded | Markov chain decay factor, FTS5 tokenizer config |
+| Security-sensitive value | No — keep in `!secret` or hardcoded | API keys, PIN codes, rate limit internals |
+
+**Note:** This check is aspirational — not every hardcoded value needs a helper today. The goal is to ensure the *pattern* is followed: if it's tunable and user-facing, it gets a helper and a dashboard element. Flag gaps for future work, don't treat them as blockers.
+
+📋 QA Check: Run during deep-pass audits. Compare pyscript module constants/config values against the helper entities in `packages/ai_*.yaml`. Low urgency — [INFO] severity for individual findings, [WARNING] at category level.
+
+### PSY-5: Pyscript Service Registration [INFO]
+
+**Check:** Every `pyscript.*` service call in YAML must correspond to an actually registered pyscript service (a function decorated with `@service` in a loaded pyscript module). Flag when:
+1. A YAML file calls `pyscript.some_service` but no `@service` decorated function named `some_service` exists in any pyscript module
+2. A pyscript module registers a service (`@service`) that is never called from any YAML file (potential dead code)
+
+**Verification procedure:**
+1. Collect all `@service` decorated functions: `grep -rn '@service' pyscript/*.py`
+2. Collect all `pyscript.*` action calls: `grep -rn 'action: pyscript\.' *.yaml automations.yaml scripts.yaml blueprints/**/*.yaml`
+3. Compare the two sets
+4. Flag YAML calls with no matching registration as [ERROR] (will fail at runtime)
+5. Flag registrations with no YAML callers as [INFO] (might be called programmatically from other pyscript modules — verify before flagging as dead code)
+
+📋 QA Check: Run after adding or removing pyscript services, or during deep-pass audits.
+
+### 13 — Live Codebase Validation
+
+These checks validate the **live codebase on disk** (`HA_CONFIG`) — not style guide content. They catch integration-level bugs that slip through per-file reviews: orphaned inputs, stale entity references, parameter signature drift, and naming mismatches between YAML callers and their targets.
+
+**Prerequisite:** `HA_CONFIG` must be mounted and accessible. If the SMB mount is unavailable, report all LIVE checks as `[SKIP] mount unavailable`.
+
+### LIVE-1: Instance↔Blueprint Input Alignment [ERROR]
+
+**Check:** Every key under `use_blueprint.input:` in `automations.yaml` and `scripts.yaml` must exist as a defined `input:` in the referenced blueprint YAML. Conversely, required blueprint inputs (no `default:`) must appear in every instance.
+
+**Procedure:**
+1. Extract all `use_blueprint:` blocks from `HA_CONFIG/automations.yaml` + `HA_CONFIG/scripts.yaml`
+2. For each instance, read the referenced blueprint's `input:` definitions at `HA_CONFIG/<path>`
+3. Flag: instance key not in blueprint inputs → `[ERROR]` orphaned input (will be silently ignored — likely a rename leftover)
+4. Flag: required blueprint input (no `default:`) missing from instance → `[WARNING]` (HA may fail to load or use unexpected empty value)
+5. Flag: instance value type mismatch (e.g., entity ID where `text:` selector expects display name) → `[WARNING]`
+
+**Grep patterns:**
+```bash
+grep -n 'use_blueprint:' HA_CONFIG/automations.yaml HA_CONFIG/scripts.yaml
+grep -n 'path:' HA_CONFIG/automations.yaml HA_CONFIG/scripts.yaml
+```
+
+📋 QA Check: Run after renaming, adding, or removing blueprint inputs. Critical after refactors like I-53 (pipeline_name migration).
+
+### LIVE-2: Pipeline Name Existence [WARNING]
+
+**Check:** Every `pipeline_name` value in automation/script instances and blueprint defaults resolves to an actual pipeline display name in HA's pipeline storage.
+
+**Procedure:**
+1. Read `HA_CONFIG/.storage/assist_pipeline.pipelines`, extract all `name` fields
+2. Grep all blueprint defaults + instance values for pipeline-related inputs (`conversation_agent`, `llm_agent`, `llm_agent_id`, `persona_agent_id`, `bedtime_conversation_agent`, `agent_1`–`agent_10`, and any input with `pipeline` in the name)
+3. Flag: value is a non-empty string that doesn't match any pipeline display name (case-insensitive) → `[WARNING]`
+4. Flag: value looks like a ULID (26-char alphanumeric) or `conversation.*` entity ID → `[ERROR]` (should be display name post-I-53, see AP-54)
+
+**Grep patterns:**
+```bash
+grep -rn 'pipeline' HA_CONFIG/blueprints/automation/madalone/*.yaml HA_CONFIG/blueprints/script/madalone/*.yaml | grep 'default:'
+grep -n 'conversation_agent\|llm_agent\|persona_agent' HA_CONFIG/automations.yaml HA_CONFIG/scripts.yaml
+```
+
+📋 QA Check: Run after pipeline creation/deletion or after migrating from entity IDs to display names.
+
+### LIVE-3: Pyscript Service Signature Drift [ERROR]
+
+**Check:** Every `data:` key in a `pyscript.*` service call (across blueprints, automations, scripts, packages) matches an actual parameter name in the corresponding `@service`-decorated Python function.
+
+**Procedure:**
+1. Collect all `action: pyscript.*` calls from YAML files, extract each call's `data:` keys
+2. For each pyscript service, read the `@service` function signature from `HA_CONFIG/pyscript/*.py`
+3. Flag: YAML `data:` key not in function params → `[ERROR]` (will cause `unexpected keyword argument` at runtime)
+4. Flag: required function param (no default value) not in YAML `data:` → `[WARNING]` (will cause `missing required argument`)
+
+**Note:** This is a stricter, live-file version of PSY-1 (which checks guide examples). LIVE-3 checks the actual codebase.
+
+**Grep patterns:**
+```bash
+grep -rn 'action: pyscript\.' HA_CONFIG/blueprints/**/*.yaml HA_CONFIG/automations.yaml HA_CONFIG/scripts.yaml HA_CONFIG/packages/*.yaml
+grep -rn '@service' HA_CONFIG/pyscript/*.py
+```
+
+📋 QA Check: Run after adding/removing/renaming pyscript service parameters, or after any refactor that touches pyscript call sites.
+
+### LIVE-4: Helper Entity Definition Completeness [ERROR]
+
+**Check:** Every `input_boolean.*`, `input_number.*`, `input_text.*`, `input_select.*`, `input_datetime.*` entity referenced in pyscript modules or package YAML exists in either:
+- A `helpers_input_*.yaml` file, OR
+- A `packages/*.yaml` file, OR
+- Created via HA UI (verified via `ha_get_entity_state`)
+
+**Procedure:**
+1. Extract all `input_*.*` references from `HA_CONFIG/pyscript/*.py` and `HA_CONFIG/packages/ai_*.yaml`
+2. Extract all defined helpers from `HA_CONFIG/helpers_input_*.yaml` + `HA_CONFIG/packages/*.yaml`
+3. Set difference: referenced − defined = missing → `[ERROR]` (entity won't exist at runtime)
+4. Set difference: defined − referenced = potentially orphaned → `[INFO]` (may be used by UI automations or dashboards — verify before removing)
+
+**Note:** Stricter live-file version of PSY-2. Some helpers are UI-created (especially `input_text` — see CLAUDE.md note about `helpers_input_text.yaml` not loading). Check HA state for those before flagging as missing.
+
+**Grep patterns:**
+```bash
+grep -rn 'input_boolean\.\|input_number\.\|input_text\.\|input_select\.\|input_datetime\.' HA_CONFIG/pyscript/*.py HA_CONFIG/packages/ai_*.yaml
+grep -n '^  [a-z_]*:' HA_CONFIG/helpers_input_*.yaml
+```
+
+📋 QA Check: Run after adding new pyscript modules, new packages, or after helper cleanup sweeps.
+
+### LIVE-5: Orphaned Automation/Script Instances [WARNING]
+
+**Check:** Every `use_blueprint.path:` value in `automations.yaml` and `scripts.yaml` points to a blueprint file that actually exists on disk.
+
+**Procedure:**
+1. Extract all `path:` values under `use_blueprint:` blocks from `HA_CONFIG/automations.yaml` + `HA_CONFIG/scripts.yaml`
+2. Verify each path exists at `HA_CONFIG/<path>`
+3. Flag: path not found on disk → `[ERROR]` (automation/script will fail to load)
+4. Flag: blueprint exists but is in an `archive/` directory → `[WARNING]` (stale instance referencing a retired blueprint)
+
+**Grep patterns:**
+```bash
+grep -A1 'use_blueprint:' HA_CONFIG/automations.yaml HA_CONFIG/scripts.yaml | grep 'path:'
+```
+
+📋 QA Check: Run after archiving, deleting, or moving blueprint files.
+
+### LIVE-6: Cross-File Variable Consistency [WARNING]
+
+**Check:** Variable names used in blueprint `variables:` blocks match the template references in `action:` blocks within the same file. Catches rename drift (e.g., `v_pipeline_id` renamed to `v_pipeline_name` in variables but stale `{{ v_pipeline_id }}` remains in an action template).
+
+**Procedure:**
+1. For each blueprint YAML file, extract all keys from `variables:` blocks (e.g., `v_pipeline_name`, `v_satellite_id`)
+2. Grep the same file for all `{{ v_* }}` and `{{ v_*` template references (accounting for filters like `{{ v_name | default('') }}`)
+3. Flag: template references a variable not defined in any `variables:` block in that file → `[ERROR]` (will render as empty string or cause Jinja error)
+4. Flag: variable defined in `variables:` but never referenced in any template → `[INFO]` (dead variable — cleanup candidate)
+
+**Note:** Variables may be defined in one `variables:` block and used in a nested `choose:` or `repeat:` scope — scan the entire file, not just adjacent action blocks.
+
+📋 QA Check: Run after variable renames or blueprint refactors. Critical after bulk find-and-replace operations.
+
+---
+
 ## 15.2 — When to Run Checks
 
 ### Automatic (AI suggests when relevant)
@@ -903,7 +1191,13 @@ triggers:
 | Renaming, renumbering, or moving sections between files | ARCH-4 (cross-ref integrity), ARCH-5 (routing reachability) |
 | Building a new blueprint/script or materially editing one | ARCH-6 (README exists and reflects current state — §11.14) |
 | Creating or materially editing a blueprint YAML file | BP-1 (metadata), BP-2 (selectors), BP-3 (edge cases), PERF-1, plus SEC-1, SEC-3, CQ-1 through CQ-10, VER-2 |
+| Creating, editing, or refactoring pyscript modules or `packages/ai_*.yaml` | PSY-1 (service params), PSY-2 (helper coupling), PSY-4 (dashboard exposure), PSY-5 (service registration) |
+| Creating or editing a blueprint that calls `pyscript.*` services | PSY-1 (service params), PSY-3 (orchestration toggles), LIVE-3 (signature drift) |
 | Blueprint has `text` or `template` selector inputs | SEC-3 (template injection review) |
+| Renaming, adding, or removing blueprint inputs | LIVE-1 (instance alignment), LIVE-6 (variable consistency) |
+| Renaming or refactoring pyscript service parameters | LIVE-3 (signature drift), LIVE-4 (helper completeness) |
+| Archiving, deleting, or moving blueprint files | LIVE-5 (orphaned instances) |
+| Migrating pipeline references (entity IDs → display names) | LIVE-2 (pipeline name existence) |
 | First conversation in a new session involving the style guide | Mention that `run audit` is available if it's been a while |
 
 **For YAML generation checks:** run silently, fix violations before presenting output. Don't ask — just fix.
@@ -923,8 +1217,10 @@ The user can say any of these at any time:
 | `check vibe readiness` | AIR-1 through AIR-7 — find vague guidance, missing skeletons, unclear decision logic, stale token counts, contradictory guidance. |
 | `run maintenance` | MAINT-1 through MAINT-5 — version sweep, deprecation sweep, new features, link rot, community alignment. |
 | `check <CHECK-ID>` | Run a single specific check (e.g., `check CQ-3`). |
-| `sanity check` | Technical correctness scan: SEC-1 + SEC-3 + VER-1 + VER-3 + CQ-5 + CQ-6 + CQ-7 + CQ-8 + CQ-9 + PERF-1 + AIR-6 + ARCH-4 + ARCH-5. Only flags broken things — no style nits. |
-| `check blueprint` or `check blueprint <filename>` | Full blueprint validation: BP-1 (metadata) + BP-2 (selectors) + BP-3 (edge cases) + SEC-1 + SEC-3 + CQ-5 + CQ-6 + CQ-7 + CQ-8 + CQ-9 + CQ-10 + PERF-1 + VER-2. The complete pre-deployment checklist for a blueprint file. |
+| `sanity check` | Technical correctness scan: SEC-1 + SEC-3 + VER-1 + VER-3 + CQ-5 + CQ-6 + CQ-7 + CQ-8 + CQ-9 + PERF-1 + AIR-6 + ARCH-4 + ARCH-5 + PSY-1 + PSY-2 + LIVE-1 + LIVE-3 + LIVE-5. Only flags broken things — no style nits. |
+| `check blueprint` or `check blueprint <filename>` | Full blueprint validation: BP-1 (metadata) + BP-2 (selectors) + BP-3 (edge cases) + SEC-1 + SEC-3 + CQ-5 + CQ-6 + CQ-7 + CQ-8 + CQ-9 + CQ-10 + PERF-1 + VER-2 + PSY-3 + LIVE-1 + LIVE-2 + LIVE-5 + LIVE-6. The complete pre-deployment checklist for a blueprint file. |
+| `check pyscript` | PSY-1 through PSY-5 + LIVE-3 + LIVE-4 — full pyscript integration validation. Verifies service call parameters, helper coupling, blueprint toggles, dashboard exposure, service registration, and live signature/helper alignment. |
+| `check live` | LIVE-1 through LIVE-6 — full live codebase validation against `HA_CONFIG`. Checks instance↔blueprint alignment, pipeline names, pyscript signatures, helper completeness, orphaned instances, and variable consistency. Requires `HA_CONFIG` to be mounted. |
 
 > **Execution standard (applies to ALL commands above):** Every check runs to its full procedure as defined in §15.1. Spot-checking, eyeballing, sampling, or "structural scans" do not satisfy a check. If a procedure says "verify all 9 claims," verify all 9. If it says "parse every YAML block," parse every YAML block. If it says "compute the set difference," compute it — don't declare PASS on vibes. A check is either fully executed or reported as `[SKIP]` with a reason.
 
@@ -1028,6 +1324,47 @@ grep -n 'time_pattern' *.md *.yaml -A3 | grep -E 'seconds:.*(/1"|/1$|\*)'
 
 # CQ-10: Find multi-step flows without logging (rough — look for conversation.process or tts without logbook)
 grep -l 'conversation.process\|tts.speak\|music_assistant' *.md *.yaml | xargs grep -L 'logbook.log\|persistent_notification'
+
+# PSY-1: Find all pyscript service calls in YAML (verify params against @service signatures)
+grep -rn 'action: pyscript\.' *.yaml automations.yaml scripts.yaml
+grep -rn 'action: pyscript\.' blueprints/**/*.yaml
+
+# PSY-2: Find ai_* helper definitions in packages
+grep -rn 'input_boolean\.\|input_number\.\|input_text\.\|input_select\.\|input_datetime\.' packages/ai_*.yaml | grep 'ai_'
+
+# PSY-2: Find ai_* helper references in pyscript modules
+grep -rn 'state\.get\|state\.set\|states(' pyscript/*.py | grep 'ai_'
+
+# PSY-3: Find blueprints that call pyscript services (candidates for toggle check)
+grep -rln 'pyscript\.' blueprints/**/*.yaml
+
+# PSY-5: Find registered pyscript services
+grep -rn '@service' pyscript/*.py | grep 'def '
+
+# PSY-5: Cross-reference — pyscript services called but never registered
+comm -23 \
+  <(grep -roh 'pyscript\.[a-z_]*' *.yaml blueprints/**/*.yaml | sort -u) \
+  <(grep -A1 '@service' pyscript/*.py | grep 'def ' | sed 's/.*def /pyscript./' | sed 's/(.*//' | sort -u)
+
+# LIVE-1: Find all use_blueprint instances and their paths
+grep -n 'use_blueprint:' automations.yaml scripts.yaml
+grep -A1 'use_blueprint:' automations.yaml scripts.yaml | grep 'path:'
+
+# LIVE-2: Find pipeline-related values (check against .storage/assist_pipeline.pipelines)
+grep -rn 'conversation_agent\|llm_agent\|persona_agent\|pipeline' automations.yaml scripts.yaml | grep -v '^#'
+# AP-54: Find stale entity IDs or ULIDs in pipeline inputs
+grep -rn 'conversation\.[a-z_]*\|[0-9A-Z]\{26\}' automations.yaml scripts.yaml blueprints/**/*.yaml
+
+# LIVE-3: Cross-reference pyscript data: keys against @service function params
+grep -rn 'action: pyscript\.' blueprints/**/*.yaml automations.yaml scripts.yaml packages/*.yaml
+grep -rn '@service' pyscript/*.py
+
+# LIVE-5: Verify use_blueprint paths exist on disk
+grep -A1 'use_blueprint:' automations.yaml scripts.yaml | grep 'path:' | sed 's/.*path: //' | while read p; do [ -f "$p" ] || echo "MISSING: $p"; done
+
+# LIVE-6: Find variable definitions and template references in blueprints
+grep -rn 'variables:' blueprints/**/*.yaml
+grep -rn '{{ v_' blueprints/**/*.yaml
 ```
 
 ---
@@ -1048,7 +1385,7 @@ Two tiers. Pick one based on the situation.
 - Quick sweeps when the user says "give it a once-over"
 - Default tier when the user says "audit this" without specifying depth
 
-**Check roster (10 checks):**
+**Check roster (15 checks):**
 
 | Check ID | Category | What it catches |
 |----------|----------|-----------------|
@@ -1062,6 +1399,11 @@ Two tiers. Pick one based on the situation.
 | ARCH-4 | Architecture | Broken cross-references — dangling §X.X, missing AP-codes, dead file refs |
 | PERF-1 | Performance | Resource-hungry triggers — unfiltered state triggers, aggressive time patterns |
 | AIR-6 | AI-Readability | Token count drift — estimates off by >15% from measured values |
+| PSY-1 | Pyscript Integration | Wrong or missing parameters in pyscript service calls |
+| PSY-2 | Pyscript Integration | Helper entities referenced in pyscript but not defined in packages (Direction B only) |
+| LIVE-1 | Live Codebase | Orphaned or missing inputs in automation/script instances vs. blueprint definitions |
+| LIVE-3 | Live Codebase | Pyscript `data:` keys that don't match `@service` function parameters |
+| LIVE-5 | Live Codebase | `use_blueprint.path:` pointing to non-existent or archived blueprint files |
 
 **Context budget:** ~5–7K tokens of style guide. Load §10 scan table + §10.5 security checklist + the target file. No need for full pattern docs.
 
@@ -1078,7 +1420,7 @@ Two tiers. Pick one based on the situation.
 - After major HA version upgrades
 - After significant style guide restructuring
 
-**Check roster:** All checks in §15.1 — SEC-1 through SEC-3, VER-1 through VER-3, AIR-1 through AIR-7, CQ-1 through CQ-10, ARCH-1 through ARCH-6, INT-1 through INT-4, ZONE-1 through ZONE-2, MAINT-1 through MAINT-5, BP-1 through BP-3, PERF-1. No exclusions.
+**Check roster:** All checks in §15.1 — SEC-1 through SEC-3, VER-1 through VER-3, AIR-1 through AIR-7, CQ-1 through CQ-10, ARCH-1 through ARCH-6, INT-1 through INT-4, ZONE-1 through ZONE-2, MAINT-1 through MAINT-5, BP-1 through BP-3, PERF-1, PSY-1 through PSY-5, LIVE-1 through LIVE-6. No exclusions. **Note:** LIVE checks require `HA_CONFIG` to be mounted — report as `[SKIP] mount unavailable` if the SMB share is not accessible.
 
 **Context budget:** ~12–15K tokens of style guide, loaded in stages per §11.15 (sectional chunking). Never load all at once.
 
@@ -1097,7 +1439,7 @@ Two tiers. Pick one based on the situation.
 | `check <CHECK-ID>` | Neither — runs one specific check | Single-check commands bypass tier selection |
 | "Review this" / "look at this" | Quick-pass | Casual language → lightweight response |
 | "Full review" / "thorough review" | Deep-pass | Explicit depth request |
-| Post-edit verification (§11.1 step 6) | Quick-pass | Just checking the work, not auditing the universe |
+| Post-edit verification (§11.1 step 7) | Quick-pass | Just checking the work, not auditing the universe |
 | MAINT-x sweep | Deep-pass (MAINT checks only) | Maintenance sweeps are inherently comprehensive |
 
 **Escalation:** A quick-pass that uncovers 3+ ERROR-severity findings automatically suggests escalation to deep-pass: *"I found 3 errors on quick-pass — want me to run a deep-pass to make sure there isn't more hiding underneath?"* The user decides.

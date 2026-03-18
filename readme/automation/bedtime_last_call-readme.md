@@ -1,191 +1,180 @@
-# Proactive – Presence-Based Last Call
+# Proactive -- Presence-Based Last Call
 
-![Last Call header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_last_call-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_last_call-header.jpeg)
 
-Speaks a single, AI-generated "last call" message when presence is detected in an area during an allowed time window. Optionally runs an external script after the announcement (e.g., turn off lights, start bedtime routine, queue up audio). No questions, no repeats, no cooldowns — fire once and done.
-
-Designed as a lightweight proactive layer that notices you're still in a room late at night and gives you a gentle nudge. Pairs well with the bedtime routine blueprints as a pre-bedtime trigger.
+Speaks a single, AI-generated "last call" message when presence is detected in an area during an allowed time window. Optionally runs an external script after the announcement (e.g. turn off lights, TV, start audio). Uses the AI agent dispatcher or a manually selected pipeline to generate and deliver the message via TTS. Intentionally has no once-per-window cooldown -- if presence is lost and re-detected, the announcement fires again.
 
 ## How It Works
 
 ```
-Presence sensor turns ON
-         │
-         ▼
-┌─────────────────────────────┐
-│ Condition checks (all must   │
-│ pass before actions fire):   │
-│                              │
-│  ✓ Today is an allowed day   │
-│  ✓ Current time within       │
-│    active window             │
-│    (midnight crossing OK)    │
-│  ✓ Media not playing         │
-│    (if guard enabled)        │
-│  ✓ Minimum presence          │
-│    duration met              │
-│  ✓ Presence still active     │
-│    (not a walk-by)           │
-└──────────────┬──────────────┘
+┌─────────────────────────────────────┐
+│  Presence sensor turns ON           │
+│  (any configured sensor)            │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌─────────────────────────────┐
-│ conversation.process         │
-│ Generate one-sentence        │
-│ last-call message            │
-│ (area + time + sensor        │
-│  context injected)           │
-│ Fallback on LLM failure      │
-└──────────────┬──────────────┘
+┌─────────────────────────────────────┐
+│  Conditions:                        │
+│  ├─ Allowed day? (cross-midnight)   │
+│  ├─ Within time window?            │
+│  ├─ Media not playing? (optional)  │
+│  ├─ Min presence duration met?     │
+│  ├─ Presence still active?         │
+│  └─ Privacy gate pass?             │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌─────────────────────────────┐
-│ TTS speak                    │
-│ (standard or ElevenLabs      │
-│  with voice profile)         │
-└──────────────┬──────────────┘
+┌─────────────────────────────────────┐
+│  Agent selection:                   │
+│  ├─ Dispatcher path (dynamic)      │
+│  └─ Manual pipeline (fallback)     │
+└──────────────┬──────────────────────┘
                │
                ▼
-┌─────────────────────────────┐
-│ Follow-up script (optional)  │
-│ Post-TTS delay → script.     │
-│ turn_on on external script   │
-└─────────────────────────────┘
+┌─────────────────────────────────────┐
+│  Generate message via LLM           │
+│  (conversation.process)             │
+│  ├─ LLM prompt + sensor context    │
+│  └─ Fallback if LLM fails          │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  Speak via TTS queue                │
+│  Whisper self-awareness update      │
+│  Run follow-up script (optional)    │
+└─────────────────────────────────────┘
 ```
-
-## Key Design Decisions
-
-### Single-Fire, No Cooldown
-
-This blueprint runs in `mode: single` with `max_exceeded: silent`. Once triggered, it fires once and won't re-trigger while still running. There's no cooldown timer, no repeat logic, no multi-stage escalation. It's a one-shot nudge — if you want escalation, pair it with the escalating wake-up guard or bedtime routine blueprints.
-
-### Midnight-Crossing Time Window
-
-The schedule condition handles time windows that cross midnight (e.g., 22:00 → 02:00). If the end time is earlier than the start time, the logic uses OR instead of AND: `now >= start OR now <= end`. This is essential for "last call" scenarios where the active window spans late evening into early morning.
-
-### Five-Layer Condition Stack
-
-All five conditions must pass before the automation fires:
-
-1. **Day check** — Today's weekday key (mon-sun) must be in the allowed days list
-2. **Time window** — Current time must be within the active window (midnight crossing supported)
-3. **Media guard** — If enabled, blocks the announcement when the target media player is playing or buffering
-4. **Minimum presence** — If configured, presence must have been continuously detected for at least N seconds (uses `last_changed` on the most recent sensor transition)
-5. **Presence still active** — Re-checks that at least one sensor is still ON at condition evaluation time (filters out walk-by triggers where the sensor turned OFF between the trigger and the condition check)
-
-### Context-Rich LLM Prompt
-
-The LLM receives structured context: area name, current timestamp, and optional sensor states (temperature, light levels, media status, etc.) formatted as entity-id/name/state/unit tuples. The prompt enforces a single natural sentence, max 220 characters, no quotation marks. The fallback message uses the area name: "Last call, {area}. Time to wrap it up."
-
-### Follow-Up Script Pattern
-
-Instead of embedding bedtime actions directly, the blueprint fires an external script after the announcement. This keeps the blueprint focused (announce) and delegates behavior (lights, TV, audio) to a separate script that can be shared across automations. A configurable delay between TTS and script execution ensures the speech finishes before actions start.
 
 ## Features
 
-- **Presence-triggered** — Any configured binary sensor turning ON fires the automation
-- **Time-windowed** — Configurable active window with midnight-crossing support
-- **Day filtering** — Per-day control over when the automation runs
-- **AI-generated message** — `conversation.process` with area/time/sensor context
-- **Media playing guard** — Optional: skip announcement if media player is actively playing
-- **Minimum presence duration** — Optional: require N seconds of continuous presence before firing
-- **Walk-by filter** — Re-checks presence is still active at condition evaluation time
-- **ElevenLabs voice profile** — Optional custom voice via `options.voice_profile`
-- **Follow-up script** — Optional external script execution after announcement with configurable delay
-- **Static fallback** — Graceful fallback message if LLM fails
+- AI-generated last-call message with sensor context injection
+- Configurable time window with cross-midnight support
+- Day-of-week gate with cross-midnight day attribution
+- Minimum presence duration to reduce false triggers from brief walk-throughs
+- Optional media-playing guard to avoid interrupting active playback
+- Dispatcher or manual pipeline agent selection
+- Rich sensor context: media players show title/artist/type, Kodi shows series/episode/PVR data
+- Configurable LLM prompt with customizable user name and area name
+- Optional follow-up script with configurable delay
+- Privacy gate with per-feature override (T1/T2/T3 tiers)
+- Fallback static message if LLM fails
+- Self-awareness whisper after delivery
 
 ## Prerequisites
 
-- **Home Assistant 2024.10.0+**
-- One or more **binary sensors** for presence detection (motion, occupancy, presence)
-- A **media player** entity for TTS output
-- A **TTS engine** entity (ElevenLabs, Piper, Google, etc.)
-- A **conversation agent** (OpenAI, Ollama, Google AI, etc.)
-- Optional: an external **script** entity for follow-up actions
+- Home Assistant 2024.10.0+
+- Binary sensors for presence detection
+- A media player entity for TTS output
+- pyscript services: `agent_dispatch`, `tts_queue_speak`, `agent_whisper`
+- (Optional) A conversation agent for LLM message generation
 
 ## Installation
 
-1. Copy `bedtime_last_call.yaml` into your blueprints directory:
-   ```
-   config/blueprints/automation/<your_namespace>/bedtime_last_call.yaml
-   ```
-   Or import via URL if hosted on GitHub.
-
-2. Create a new automation from the blueprint: **Settings → Automations → Create Automation → Use Blueprint**
-
-3. At minimum, configure: presence sensors, media player, TTS entity, and conversation agent.
+1. Copy `bedtime_last_call.yaml` to `config/blueprints/automation/madalone/`
+2. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
 
 ## Configuration
 
-### ① Presence & Area
+<details>
+<summary><strong>Section 1 -- Presence & Area</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Presence sensors** | (required) | Binary sensors — automation triggers when ANY turns ON |
-| **Area name** | Living room | Friendly name used in spoken message and LLM context. Dropdown with common rooms + custom value support. |
+| Presence sensors | `[]` | Binary sensors indicating presence. Automation triggers when ANY turns ON. |
+| Area name | `Living room` | Friendly area name used in speech and LLM context. Custom values allowed. |
+| User name | `friend` | First name or nickname the AI uses when speaking to the user. |
 
-### ② Schedule
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| **Active from** | 20:00 | Start of the active time window |
-| **Active until** | 01:00 | End of window — can cross midnight |
-| **Allowed days** | All days | Per-day enable/disable |
-
-### ③ Speech Output
+<details>
+<summary><strong>Section 2 -- Schedule</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Media player** | (required) | Speaker for TTS output |
-| **TTS mode** | standard_tts_entity | Standard TTS or ElevenLabs custom service |
-| **TTS entity** | (required) | TTS engine entity |
-| **ElevenLabs voice profile** | (empty) | Voice name — only used with ElevenLabs mode |
+| Active from | `20:00:00` | Start of the active time window. |
+| Active until | `01:00:00` | End of the active window. Supports cross-midnight. |
+| Allowed days | All days | Days of the week this automation is allowed to run. |
 
-### ④ Safety & Interruption Guards
+</details>
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| **Minimum presence duration** | 0 sec | Seconds of continuous presence required before firing (0 = disabled) |
-| **Block if media playing** | false | Skip announcement if media player is playing/buffering |
-
-### ⑤ AI Message Generation
+<details>
+<summary><strong>Section 3 -- Speech Output</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Conversation agent** | (required) | LLM agent for message generation |
-| **LLM prompt style** | "ONE short, natural last call sentence..." | Prompt instructions — enforces single sentence, 220 char max |
-| **Extra context entities** | (empty) | Sensor states injected into LLM prompt as structured context |
+| Media player | _(required)_ | Speaker for the spoken announcement. |
 
-### ⑥ Follow-Up Script
+</details>
+
+<details>
+<summary><strong>Section 4 -- Safety & Interruption Guards</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Enable follow-up script** | false | Run an external script after the announcement |
-| **Delay before script** | 5 sec | Post-TTS buffer before script fires |
-| **Script to run** | (required if enabled) | External script entity — blueprint doesn't define what it does |
+| Minimum presence duration | `0` s | Seconds of continuous presence before firing. |
+| Block if media playing | `false` | Suppress announcement if the media player is active. |
 
-## Usage Patterns
+</details>
 
-**Standalone nudge** — Configure with living room presence sensors, active 22:00–01:00. No follow-up script. Just a gentle "hey, it's late" message.
+<details>
+<summary><strong>Section 5 -- AI Message Generation</strong></summary>
 
-**Bedtime pre-trigger** — Enable follow-up script pointing to a script that triggers the bedtime routine. Last call announces, then the bedtime routine starts after the delay.
+| Input | Default | Description |
+|-------|---------|-------------|
+| Voice Assistant | `Rick - Bedtime` | Assist Pipeline for message generation (overridden by dispatcher). |
+| Use Dispatcher | `true` | Let the AI dispatcher select the persona dynamically. |
+| LLM prompt style | _(default prompt)_ | Instructions for the AI's last-call message. |
+| Extra context entities | `[]` | Entities whose state is passed to the AI as context. |
 
-**Multi-room deployment** — Create multiple automations from the same blueprint, each targeting a different room with appropriate sensors and area name. Each instance runs independently.
+</details>
+
+<details>
+<summary><strong>Section 6 -- Follow-Up Script</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Enable follow-up script | `false` | Run a script after the announcement. |
+| Delay before script | `5` s | Wait for TTS to finish before running the script. |
+| Script to run | _(empty)_ | External script entity to execute. |
+
+</details>
+
+<details>
+<summary><strong>Section 7 -- Privacy</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Privacy gate tier | `t1` | Privacy tier (off/T1 intimate/T2 personal/T3 ambient). |
+| Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Toggle for the privacy gate system. |
+| Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector (auto/force_suppress/force_allow). |
+| Privacy gate person | `miquel` | Person name for tier suppression lookups. |
+
+</details>
+
+<details>
+<summary><strong>Section 8 -- Infrastructure</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | Toggle for the AI agent dispatcher. |
+
+</details>
 
 ## Technical Notes
 
-- `mode: single` with `max_exceeded: silent` — no overlapping runs, no queue, no error on re-trigger.
-- The time window condition uses `as_timestamp()` comparisons with conditional logic for midnight crossing.
-- The day check converts `now().weekday()` (0–6) to a three-letter string (mon–sun) and checks membership in the allowed days list.
-- The minimum presence check uses `expand()` on sensors, filters to state `on`, finds the most recent `last_changed`, and compares elapsed time against the threshold.
-- The presence-still-active check is a separate condition that runs after the minimum duration check — covers the edge case where presence was detected long enough but the sensor turned OFF before conditions finished evaluating.
-- `continue_on_error: true` on `conversation.process` — LLM failure doesn't block the announcement.
-- The sensor context builder uses `expand()` to get entity names and unit_of_measurement attributes, formatted as structured lines for the LLM.
-- The LLM prompt appends a hard task instruction after the user-configurable prompt style, ensuring the output stays as a single sentence regardless of prompt customization.
+- **Mode:** `single` (silent on overflow)
+- No once-per-window cooldown by design -- re-triggers if presence is lost and re-detected
+- Cross-midnight day attribution: post-midnight hours are attributed to the previous calendar day
+- The LLM prompt enforces a single sentence, max 220 characters, no quotation marks
+- If the LLM call fails or returns empty, a static fallback message is used
+- `continue_on_error: true` on all TTS and LLM service calls
 
 ## Changelog
 
-- **v2:** Style guide compliance — collapsible sections, aliases, error handling
+- **v2.2:** Audit remediation -- added user_name input (removed hardcoded name), TTS empty-entity guards, continue_on_error on TTS, follow-up script empty-entity guard, sensor_context whitespace cleanup
+- **v2.1:** Cross-midnight day attribution fix -- effective_day_key shifts post-midnight hours to previous day
+- **v2:** Style guide compliance -- collapsible sections, aliases, error handling
 - **v1:** Initial version
 
 ## Author

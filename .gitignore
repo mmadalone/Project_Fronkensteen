@@ -13,3 +13,4 @@
 *.bak
 .smbdelete*
 /style-guide/_reference
+/archive

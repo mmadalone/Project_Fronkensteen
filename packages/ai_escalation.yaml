@@ -1,0 +1,53 @@
+# =============================================================================
+# AI Escalation Package — Helpers & Template Sensor
+# =============================================================================
+# Supports agent_escalation.yaml blueprint.
+# Global helpers provide dashboard visibility and default values.
+# Per-satellite blueprint instances can override probability/cooldown.
+#
+# Helpers:
+#   input_boolean.ai_escalation_enabled           — master toggle
+#   input_number.ai_escalation_probability         — global fallback %
+#   input_number.ai_escalation_cooldown_minutes    — cooldown gate
+#   input_number.ai_escalation_prob_*              — per-type % (7 types)
+#   input_text.ai_escalation_last_outcome          — last event outcome
+#   input_datetime.ai_escalation_last_followthrough — cooldown timestamp
+#   sensor.ai_escalation_status                    — dashboard sensor
+# =============================================================================
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+template:
+  - sensor:
+      - name: "AI Escalation Status"
+        unique_id: ai_escalation_status
+        icon: mdi:dice-5-outline
+        state: >-
+          {{ states('input_text.ai_escalation_last_outcome') | default('idle', true) }}
+        attributes:
+          last_followthrough: >-
+            {{ states('input_datetime.ai_escalation_last_followthrough') | default('unknown', true) }}
+          probability_global: >-
+            {{ states('input_number.ai_escalation_probability') | default(-1, true) }}
+          cooldown_minutes: >-
+            {{ states('input_number.ai_escalation_cooldown_minutes') | default(-1, true) }}
+          enabled: >-
+            {{ is_state('input_boolean.ai_escalation_enabled', 'on') }}
+          prob_persona_switch: >-
+            {{ states('input_number.ai_escalation_prob_persona_switch') | default(-1, true) }}
+          prob_play_media: >-
+            {{ states('input_number.ai_escalation_prob_play_media') | default(-1, true) }}
+          prob_light_flash: >-
+            {{ states('input_number.ai_escalation_prob_light_flash') | default(-1, true) }}
+          prob_volume_boost: >-
+            {{ states('input_number.ai_escalation_prob_volume_boost') | default(-1, true) }}
+          prob_send_notification: >-
+            {{ states('input_number.ai_escalation_prob_send_notification') | default(-1, true) }}
+          prob_prompt_barrage: >-
+            {{ states('input_number.ai_escalation_prob_prompt_barrage') | default(-1, true) }}
+          prob_run_script: >-
+            {{ states('input_number.ai_escalation_prob_run_script') | default(-1, true) }}
