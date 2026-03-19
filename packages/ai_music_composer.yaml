@@ -55,6 +55,7 @@ automation:
       - alias: "Log to L2 (best-effort)"
         continue_on_error: true
         action: pyscript.memory_set
+        response_variable: _mem_result
         data:
           key: >-
             music_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}

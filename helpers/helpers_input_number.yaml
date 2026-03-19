@@ -79,7 +79,7 @@ ai_handoff_restore_seconds:
 
 # Orphan ai_tts_playback_timeout removed 2026-03-14
 
-duck_refcount:
+ai_duck_refcount:
   name: Duck cycle refcount
   icon: mdi:counter
   initial: 0
@@ -146,6 +146,18 @@ ai_away_prediction_update_minutes:
   mode: slider
   unit_of_measurement: "min"
   icon: mdi:update
+
+# I-40b: Ordinal filtering threshold
+ai_away_ordinal_min_samples:
+  name: "AI Away - Ordinal Min Samples"
+  # Minimum ordinal-specific samples before ordinal filtering is used.
+  # Below this threshold, prediction falls back to all-ordinal data.
+  initial: 5
+  min: 3
+  max: 20
+  step: 1
+  mode: slider
+  icon: mdi:counter
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -299,6 +311,49 @@ ai_memory_archive_recency_days:
   unit_of_measurement: "days"
   icon: mdi:calendar-clock
 
+# ── Search-time enrichment (auto-relationships Option A) ────────
+# Maximum related entries appended per search.
+ai_memory_search_enrich_max:
+  name: "AI Memory - Search Enrich Max"
+  min: 0
+  max: 10
+  step: 1
+  initial: 3
+  mode: box
+  icon: mdi:graph-outline
+
+# Minimum relationship weight for search enrichment (0.0-1.0).
+# Higher values = stricter filtering, only strong connections surface.
+ai_memory_search_enrich_min_weight:
+  name: "AI Memory - Search Enrich Min Weight"
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.15
+  mode: slider
+  icon: mdi:weight
+
+# ── Semantic autolink (vec0 content_match) ──────────────────────
+# Minimum cosine similarity for content_match edges.
+ai_memory_semantic_autolink_threshold:
+  name: "AI Memory - Semantic Autolink Threshold"
+  min: 0.5
+  max: 1
+  step: 0.05
+  initial: 0.7
+  mode: slider
+  icon: mdi:vector-link
+
+# Maximum keys to process per semantic autolink run.
+ai_memory_semantic_autolink_batch:
+  name: "AI Memory - Semantic Autolink Batch"
+  min: 10
+  max: 200
+  step: 10
+  initial: 50
+  mode: box
+  icon: mdi:vector-link
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_escalation — Agent Escalation System
@@ -401,7 +456,7 @@ ai_escalation_prob_run_script:
 
 # Hours of continuous workshop presence before first time-check nudge.
 # Lower = more aggressive reminders. Default 2h is a balanced start.
-focus_guard_threshold_hours:
+ai_focus_guard_threshold_hours:
   name: "Focus Guard - Threshold Hours"
   min: 1
   max: 4
@@ -412,7 +467,7 @@ focus_guard_threshold_hours:
 
 # How long focus mode stays active before auto-expiring.
 # Prevents "I said focus mode 6 hours ago and forgot."
-focus_mode_max_hours:
+ai_focus_mode_max_hours:
   name: "Focus Mode - Max Duration"
   min: 0.5
   max: 4
@@ -698,6 +753,18 @@ ai_email_priority_count:
   step: 1
   mode: box
   icon: mdi:email-multiple
+
+# Gap 2: Email staleness detection timeout.
+# If IMAP sensor last_changed exceeds this, set ai_email_stale ON.
+ai_email_stale_timeout:
+  name: "AI Email Stale Timeout"
+  min: 30
+  max: 1440
+  step: 30
+  initial: 120
+  mode: slider
+  unit_of_measurement: "min"
+  icon: mdi:timer-alert
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1098,3 +1165,489 @@ ai_tts_cache_protect_hours:
   step: 0.5
   icon: mdi:shield-lock-outline
   mode: box
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Playback Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_tts_playback_buffer:
+  name: "TTS Playback Buffer (seconds)"
+  icon: mdi:timer-outline
+  min: 0
+  max: 5
+  step: 0.1
+  mode: slider
+  unit_of_measurement: s
+  initial: 0.5
+
+ai_tts_poll_interval:
+  name: "TTS Playback Poll Interval (seconds)"
+  icon: mdi:timer-sync-outline
+  min: 0.1
+  max: 2
+  step: 0.05
+  mode: slider
+  unit_of_measurement: s
+  initial: 0.25
+
+ai_tts_max_timeout:
+  name: "TTS Playback Max Timeout (seconds)"
+  icon: mdi:timer-alert-outline
+  min: 5
+  max: 120
+  step: 1
+  mode: slider
+  unit_of_measurement: s
+  initial: 30
+
+ai_tts_post_buffer:
+  name: "TTS Post-Playback Buffer (seconds)"
+  icon: mdi:timer-check-outline
+  min: 0
+  max: 5
+  step: 0.1
+  mode: slider
+  unit_of_measurement: s
+  initial: 0.3
+
+ai_tts_max_ambient:
+  name: "TTS Max Ambient Queue"
+  icon: mdi:playlist-music
+  min: 1
+  max: 20
+  step: 1
+  mode: box
+  initial: 3
+
+ai_tts_default_duration:
+  name: "TTS Default Duration (seconds)"
+  icon: mdi:clock-outline
+  min: 1
+  max: 30
+  step: 0.5
+  mode: slider
+  unit_of_measurement: s
+  initial: 5
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Audio Ducking Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_duck_volume:
+  name: "Duck Manager - Duck Volume Level"
+  icon: mdi:volume-low
+  min: 0
+  max: 1
+  step: 0.05
+  mode: slider
+  initial: 0.1
+
+ai_duck_announce_volume:
+  name: "Duck Manager - Announce Volume Level"
+  icon: mdi:volume-high
+  min: 0
+  max: 1
+  step: 0.05
+  mode: slider
+  initial: 0.5
+
+# ai_duck_watchdog_timeout already exists (line 169)
+
+ai_duck_restore_delay:
+  name: "Duck Manager - Restore Delay (seconds)"
+  icon: mdi:timer-outline
+  min: 0
+  max: 10
+  step: 0.1
+  mode: slider
+  unit_of_measurement: s
+  initial: 0.5
+
+ai_duck_restore_timeout:
+  name: "Duck Manager - Restore Timeout (seconds)"
+  icon: mdi:timer-alert-outline
+  min: 5
+  max: 120
+  step: 1
+  mode: slider
+  unit_of_measurement: s
+  initial: 25
+
+ai_duck_post_buffer:
+  name: "Duck Manager - Post-Playback Buffer (seconds)"
+  icon: mdi:timer-check-outline
+  min: 0
+  max: 30
+  step: 0.5
+  mode: slider
+  unit_of_measurement: s
+  initial: 5
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_identity — Presence Confidence & Decay
+# ═══════════════════════════════════════════════════════════════════
+
+ai_presence_conf_solo:
+  name: "Presence Confidence - Solo"
+  icon: mdi:account
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 100
+
+ai_presence_conf_voice:
+  name: "Presence Confidence - Voice"
+  icon: mdi:microphone
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 95
+
+ai_presence_conf_departure:
+  name: "Presence Confidence - Departure"
+  icon: mdi:exit-run
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 95
+
+ai_presence_conf_arrival:
+  name: "Presence Confidence - Arrival"
+  icon: mdi:home-import-outline
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 90
+
+ai_presence_conf_count:
+  name: "Presence Confidence - Count Constraint"
+  icon: mdi:counter
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 85
+
+ai_presence_conf_transition:
+  name: "Presence Confidence - Transition"
+  icon: mdi:swap-horizontal
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 80
+
+ai_presence_conf_markov_cap:
+  name: "Presence Confidence - Markov Cap"
+  icon: mdi:chart-line
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 50
+
+ai_presence_fp2_dwell_sec:
+  name: "Presence FP2 Dwell Time (seconds)"
+  icon: mdi:timer-outline
+  min: 5
+  max: 120
+  step: 5
+  mode: slider
+  unit_of_measurement: s
+  initial: 30
+
+ai_presence_decay_start:
+  name: "Presence Decay Start (minutes)"
+  icon: mdi:clock-start
+  min: 1
+  max: 60
+  step: 1
+  mode: slider
+  unit_of_measurement: min
+  initial: 15
+
+ai_presence_decay_cap:
+  name: "Presence Decay Cap (minutes)"
+  icon: mdi:clock-end
+  min: 10
+  max: 240
+  step: 5
+  mode: slider
+  unit_of_measurement: min
+  initial: 60
+
+ai_presence_decay_range:
+  name: "Presence Decay Range (minutes)"
+  icon: mdi:arrow-expand-horizontal
+  min: 5
+  max: 180
+  step: 5
+  mode: slider
+  unit_of_measurement: min
+  initial: 45
+
+ai_presence_decay_factor:
+  name: "Presence Decay Factor"
+  icon: mdi:percent-outline
+  min: 0
+  max: 1
+  step: 0.05
+  mode: slider
+  initial: 0.5
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promote — Email Promotion Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_identity_confidence_min:
+  name: "Identity Confidence Minimum (%)"
+  icon: mdi:account-check
+  min: 0
+  max: 100
+  step: 5
+  mode: slider
+  initial: 70
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_calendar_promote — Calendar Promotion Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_calendar_promote_ttl:
+  name: "Calendar Promote Cache TTL (seconds)"
+  icon: mdi:timer-sand
+  min: 30
+  max: 1800
+  step: 30
+  mode: slider
+  unit_of_measurement: s
+  initial: 300
+
+ai_calendar_failure_threshold:
+  name: "Calendar Failure Notify Threshold"
+  icon: mdi:alert-circle-outline
+  min: 1
+  max: 20
+  step: 1
+  mode: box
+  initial: 3
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_music_taste — Music Tracking Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_music_dedup_cooldown:
+  name: "Music Dedup Cooldown (seconds)"
+  icon: mdi:timer-lock-outline
+  min: 10
+  max: 600
+  step: 10
+  mode: slider
+  unit_of_measurement: s
+  initial: 180
+
+ai_music_play_expiry_days:
+  name: "Music Play History Expiry (days)"
+  icon: mdi:calendar-clock
+  min: 30
+  max: 730
+  step: 30
+  mode: slider
+  unit_of_measurement: d
+  initial: 365
+
+ai_music_top_limit:
+  name: "Music Top Artists Limit"
+  icon: mdi:format-list-numbered
+  min: 5
+  max: 50
+  step: 5
+  mode: box
+  initial: 15
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Dispatcher Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dispatcher_cache_ttl:
+  name: "Dispatcher Cache TTL (seconds)"
+  icon: mdi:timer-cog-outline
+  min: 30
+  max: 1800
+  step: 30
+  mode: slider
+  unit_of_measurement: s
+  initial: 300
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Briefing Time Boundaries
+# ═══════════════════════════════════════════════════════════════════
+
+ai_briefing_morning_hour:
+  name: "Briefing Morning Start Hour"
+  icon: mdi:weather-sunset-up
+  min: 0
+  max: 12
+  step: 1
+  mode: box
+  initial: 5
+
+ai_briefing_afternoon_hour:
+  name: "Briefing Afternoon Start Hour"
+  icon: mdi:weather-sunny
+  min: 10
+  max: 18
+  step: 1
+  mode: box
+  initial: 12
+
+ai_briefing_evening_hour:
+  name: "Briefing Evening Start Hour"
+  icon: mdi:weather-sunset-down
+  min: 14
+  max: 23
+  step: 1
+  mode: box
+  initial: 17
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_notification_dedup — Dedup Cleanup
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dedup_cleanup_hours:
+  name: "Dedup Cleanup Max Age (hours)"
+  icon: mdi:broom
+  min: 1
+  max: 168
+  step: 1
+  mode: slider
+  unit_of_measurement: h
+  initial: 48
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_identity — WiFi Scoring Weights
+# ═══════════════════════════════════════════════════════════════════
+
+ai_wifi_score_primary:
+  name: "WiFi Score - Primary Device"
+  icon: mdi:wifi-strength-4
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 40
+
+ai_wifi_score_secondary:
+  name: "WiFi Score - Secondary Device"
+  icon: mdi:wifi-strength-3
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 30
+
+ai_wifi_score_tertiary:
+  name: "WiFi Score - Tertiary Device"
+  icon: mdi:wifi-strength-2
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 20
+
+ai_wifi_score_quaternary:
+  name: "WiFi Score - Quaternary Device"
+  icon: mdi:wifi-strength-1
+  min: 0
+  max: 100
+  step: 5
+  mode: box
+  initial: 10
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — Budget Threshold Tuning
+# ═══════════════════════════════════════════════════════════════════
+
+ai_budget_threshold_low:
+  name: "LLM Budget Low Threshold (%)"
+  icon: mdi:cash-minus
+  min: 0
+  max: 100
+  step: 5
+  mode: slider
+  initial: 30
+
+ai_budget_threshold_high:
+  name: "LLM Budget High Threshold (%)"
+  icon: mdi:cash-plus
+  min: 0
+  max: 100
+  step: 5
+  mode: slider
+  initial: 60
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_whisper — Agent Whisper Network (moved from ai_whisper.yaml, C6)
+# ═══════════════════════════════════════════════════════════════════
+
+ai_whisper_interaction_expiry_days:
+  name: "Whisper - Interaction Expiry (days)"
+  icon: mdi:clock-outline
+  min: 1
+  max: 30
+  step: 1
+  initial: 2
+  mode: slider
+  unit_of_measurement: days
+
+ai_whisper_mood_expiry_days:
+  name: "Whisper - Mood Expiry (days)"
+  icon: mdi:clock-outline
+  min: 1
+  max: 14
+  step: 1
+  initial: 1
+  mode: slider
+  unit_of_measurement: days
+
+ai_whisper_topic_expiry_days:
+  name: "Whisper - Topic Expiry (days)"
+  icon: mdi:clock-outline
+  min: 1
+  max: 30
+  step: 1
+  initial: 3
+  mode: slider
+  unit_of_measurement: days
+
+ai_whisper_mood_dedup_seconds:
+  name: "Whisper - Mood Dedup Window"
+  icon: mdi:timer-sand
+  min: 60
+  max: 7200
+  step: 60
+  initial: 3600
+  mode: slider
+  unit_of_measurement: s
+
+ai_whisper_max_auto_keywords:
+  name: "Whisper - Max Auto Keywords"
+  icon: mdi:tag-multiple
+  min: 5
+  max: 100
+  step: 5
+  initial: 30
+  mode: box
+
+ai_whisper_keyword_cooldown:
+  name: "Whisper - Keyword Update Cooldown"
+  icon: mdi:timer-cog
+  min: 60
+  max: 1800
+  step: 30
+  initial: 300
+  mode: slider
+  unit_of_measurement: s

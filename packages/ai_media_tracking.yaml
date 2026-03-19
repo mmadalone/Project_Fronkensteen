@@ -11,6 +11,9 @@
 # Deployed: 2026-03-10
 # =============================================================================
 
+# Pyscript-created sensor (media_promote.py via state.set):
+#   sensor.ai_media_promotion_status — last sync result, promoted media counts
+
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
 
 # input_text: moved to helpers_input_text.yaml (C5 consolidation)

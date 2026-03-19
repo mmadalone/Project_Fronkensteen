@@ -1,0 +1,268 @@
+blueprint:
+  name: "Voice – PIN-Gated Action (tool script)"
+  description: |
+    ## Version 1.0
+
+    SCRIPT TOOL: Require a spoken passphrase before executing a protected
+    action. Uses `assist_satellite.ask_question` with the passphrase as a
+    templated answer. Retries on wrong answer, announces and stops on
+    failure or cancel.
+
+    Designed to chain with the `va_confirmation_dialog` automation blueprint:
+
+        Voice command → va_confirmation_dialog (automation)
+          → voice_pin_action instance (script — PIN challenge)
+            → protected action script (executes the action)
+
+    PASSPHRASE FORMAT
+    -----------------
+    Use word-based passphrases ("banana", "open sesame"), NOT numeric PINs.
+    Speech-to-text may transcribe "1234" as "one thousand two hundred
+    thirty-four" — word-based phrases are transcribed reliably by STT.
+
+    HOW TO USE
+    ----------
+    1. Create (or pick) a simple action script, e.g. script.unlock_front_door.
+
+    2. Create a voice_pin_action instance pointing at that script:
+         - Satellite: assist_satellite.kitchen
+         - Protected script: script.unlock_front_door
+         - PIN / enabled entities: defaults work for single-household
+
+    3. Pair with va_confirmation_dialog automation:
+         - Primary command: "unlock the front door"
+         - Confirmation script: script.pin_unlock_front_door (this instance)
+
+    4. Set the passphrase in the UI: Helpers → AI Voice PIN → "banana"
+
+    KNOWN LIMITATION
+    ----------------
+    The satellite_entity is set per instance. Multi-satellite homes need
+    one PIN script instance per satellite per action (matches existing
+    voice_confirm_device_toggle pattern).
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_pin_action.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CORE CONFIGURATION
+    # ===========================================================================
+    core:
+      name: "① Core configuration"
+      icon: mdi:shield-lock
+      collapsed: false
+      input:
+        satellite_entity:
+          name: "Assist Satellite"
+          description: "The voice satellite to use for the PIN challenge."
+          selector:
+            entity:
+              domain: assist_satellite
+
+        protected_script:
+          name: "Protected script"
+          description: >
+            The script entity to call when the correct passphrase is spoken.
+            This is the action being protected (e.g. script.unlock_front_door).
+          selector:
+            entity:
+              domain: script
+
+        pin_entity:
+          name: "PIN helper"
+          description: >
+            The input_text entity that stores the passphrase.
+            Must be created via HA UI (Settings → Helpers → Text) with
+            mode set to "password".
+          default: "input_text.ai_voice_pin"
+          selector:
+            entity:
+              domain: input_text
+
+        pin_enabled_entity:
+          name: "PIN enabled toggle"
+          description: >
+            When OFF, the protected script runs immediately without
+            a PIN challenge (bypass mode).
+          default: "input_boolean.ai_voice_pin_enabled"
+          selector:
+            entity:
+              domain: input_boolean
+
+        max_attempts:
+          name: "Maximum attempts"
+          description: >
+            How many tries the user gets before being locked out.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 5
+              mode: slider
+              step: 1
+
+    # ===========================================================================
+    # ② MESSAGES
+    # ===========================================================================
+    messages:
+      name: "② Messages"
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        challenge_prompt:
+          name: "Challenge prompt"
+          description: "The question asked on the first attempt."
+          default: "Please say your access code."
+          selector:
+            text: {}
+
+        retry_prompt:
+          name: "Retry prompt"
+          description: "The question asked on subsequent attempts."
+          default: "That's not right. Try again."
+          selector:
+            text: {}
+
+        success_message:
+          name: "Success announcement"
+          description: "Announced when the correct passphrase is spoken."
+          default: "Access granted."
+          selector:
+            text: {}
+
+        failure_message:
+          name: "Failure announcement"
+          description: "Announced when all attempts are exhausted."
+          default: "Access denied. Too many attempts."
+          selector:
+            text: {}
+
+        cancel_message:
+          name: "Cancel announcement"
+          description: "Announced when the user cancels."
+          default: "Cancelled."
+          selector:
+            text: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  satellite_entity: !input satellite_entity
+  protected_script: !input protected_script
+  pin_entity: !input pin_entity
+  pin_enabled_entity: !input pin_enabled_entity
+  max_attempts: !input max_attempts
+  challenge_prompt: !input challenge_prompt
+  retry_prompt: !input retry_prompt
+  success_message: !input success_message
+  failure_message: !input failure_message
+  cancel_message: !input cancel_message
+
+sequence:
+  # ── Step 1: Bypass if PIN protection is disabled ──────────────────────
+  - alias: "Check if PIN protection is enabled"
+    if:
+      - condition: template
+        value_template: "{{ states(pin_enabled_entity) | default('on') == 'off' }}"
+    then:
+      - alias: "Bypass — call protected script directly"
+        action: script.turn_on
+        target:
+          entity_id: "{{ protected_script }}"
+      - stop: "PIN disabled — action executed without challenge"
+
+  # ── Step 2: Block if PIN is not configured ────────────────────────────
+  - alias: "Check if PIN is configured"
+    if:
+      - condition: template
+        value_template: >-
+          {{ states(pin_entity) in ['', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Announce PIN not configured"
+        action: assist_satellite.announce
+        target:
+          entity_id: "{{ satellite_entity }}"
+        data:
+          message: "Access code is not configured. Action blocked."
+      - alias: "Stop: PIN not configured — action blocked"
+        stop: "PIN not configured — action blocked"
+
+  # ── Step 3: PIN challenge loop ────────────────────────────────────────
+  - alias: "PIN challenge loop"
+    repeat:
+      sequence:
+        - alias: "Ask for passphrase"
+          action: assist_satellite.ask_question
+          continue_on_error: true
+          data:
+            entity_id: "{{ satellite_entity }}"
+            question: >-
+              {{ retry_prompt if repeat.index > 1 else challenge_prompt }}
+            answers:
+              - id: "correct"
+                sentences:
+                  - "{{ states(pin_entity) }}"
+              - id: "cancel"
+                sentences:
+                  - "cancel"
+                  - "stop"
+                  - "never mind"
+                  - "forget it"
+          response_variable: response
+
+        - alias: "Branch on response"
+          choose:
+            # ── Correct passphrase ──
+            - conditions:
+                - condition: template
+                  value_template: >-
+                    {{ response is defined and response.id == 'correct' }}
+              sequence:
+                - alias: "Call protected script"
+                  action: script.turn_on
+                  target:
+                    entity_id: "{{ protected_script }}"
+                - alias: "Announce success"
+                  action: assist_satellite.announce
+                  target:
+                    entity_id: "{{ satellite_entity }}"
+                  data:
+                    message: "{{ success_message }}"
+
+            # ── Cancel spoken ──
+            - conditions:
+                - condition: template
+                  value_template: >-
+                    {{ response is defined and response.id == 'cancel' }}
+              sequence:
+                - alias: "Announce cancel"
+                  action: assist_satellite.announce
+                  target:
+                    entity_id: "{{ satellite_entity }}"
+                  data:
+                    message: "{{ cancel_message }}"
+
+          # ── Wrong answer (or timeout) ──
+          default:
+            - alias: "Announce failure if last attempt"
+              if:
+                - condition: template
+                  value_template: "{{ repeat.index >= max_attempts }}"
+              then:
+                - alias: "Announce access denied after max attempts"
+                  action: assist_satellite.announce
+                  target:
+                    entity_id: "{{ satellite_entity }}"
+                  data:
+                    message: "{{ failure_message }}"
+
+      until:
+        - condition: template
+          value_template: >-
+            {{ (response is defined and response.id in ['correct', 'cancel'])
+               or repeat.index >= max_attempts }}

@@ -1,0 +1,249 @@
+# =============================================================================
+# Budget Fallback — Per-Satellite Pipeline Switch (I-46)
+# =============================================================================
+# When ai_budget_fallback_active turns ON:
+#   1. Save current pipeline to shared JSON helper
+#   2. Switch satellite to fallback pipeline (default: Davis)
+#   3. Optional TTS announcement via HA Cloud
+#
+# When ai_budget_fallback_active turns OFF (midnight reset or manual):
+#   1. Restore saved pipeline from JSON helper
+#   2. Clean up JSON entry
+#
+# One instance per satellite. Follows same per-satellite pattern as
+# voice_handoff.yaml. Does NOT extend voice_handoff because that blueprint
+# uses mode: restart — mixing flows would cause cancellation conflicts.
+#
+# Requires:
+#   - input_boolean.ai_budget_fallback_active (set by exhaustion automation)
+#   - input_text.ai_budget_saved_pipelines (shared JSON storage)
+#   - pyscript/tts_queue.py (tts_queue_speak for announcement)
+# =============================================================================
+blueprint:
+  name: Budget Fallback — Per-Satellite Pipeline Switch
+  description: >-
+    When the AI budget is exhausted (ai_budget_fallback_active turns ON),
+    saves the current pipeline and switches to a fallback pipeline.
+    Restores when the flag turns OFF (midnight reset or manual toggle).
+    One instance per satellite.
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/budget_fallback.yaml
+
+  input:
+    # ===========================================================================
+    # ① CORE
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:cash-lock
+      description: Satellite, pipeline selector, and enable toggle.
+      collapsed: false
+      input:
+        satellite:
+          name: Voice PE Satellite
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        pipeline_select:
+          name: Satellite Pipeline Select
+          description: The select entity controlling this satellite's pipeline.
+          default: ""
+          selector:
+            entity:
+              domain: select
+
+        enable_budget_fallback:
+          name: Enable Budget Fallback
+          description: "When off, this satellite ignores budget exhaustion."
+          default: true
+          selector:
+            boolean:
+
+    # ===========================================================================
+    # ② FALLBACK CONFIGURATION
+    # ===========================================================================
+    fallback_config:
+      name: "② Fallback Configuration"
+      icon: mdi:swap-horizontal
+      description: Fallback pipeline, announcement text, and TTS speaker.
+      collapsed: true
+      input:
+        fallback_pipeline:
+          name: Fallback Pipeline Name
+          description: >-
+            Pipeline to switch to when budget is exhausted.
+            Must match an option in the satellite's pipeline selector.
+          default: "Davis"
+          selector:
+            text:
+
+        announcement_text:
+          name: Announcement Text
+          description: >-
+            TTS text announced on this satellite when switching to fallback.
+            Leave empty to skip announcement.
+          default: "Budget limit reached. Switching to basic mode."
+          selector:
+            text:
+              multiline: true
+
+        tts_speaker:
+          name: TTS Speaker
+          description: Speaker for the fallback announcement.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+mode: restart
+
+# =============================================================================
+# Triggers: flag ON (activate) or OFF (restore)
+# =============================================================================
+triggers:
+  - trigger: state
+    entity_id: input_boolean.ai_budget_fallback_active
+    to: "on"
+    id: fallback_on
+  - trigger: state
+    entity_id: input_boolean.ai_budget_fallback_active
+    to: "off"
+    id: fallback_off
+
+# =============================================================================
+# Conditions — per-satellite enable toggle
+# =============================================================================
+conditions:
+  - condition: template
+    value_template: !input enable_budget_fallback
+
+# =============================================================================
+# Actions
+# =============================================================================
+actions:
+  - alias: "Set pipeline select and 3 more variables"
+    variables:
+      pipeline_select: !input pipeline_select
+      fallback_pipeline: !input fallback_pipeline
+      announcement: !input announcement_text
+      speaker_entity: !input tts_speaker
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # ACTIVATE: save current pipeline + switch to fallback
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "ACTIVATE: save current pipeline + switch to fallback"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'fallback_on' }}"
+    then:
+      # 1. Read current pipeline and find fallback option
+      - alias: "Set current pipeline, available options"
+        variables:
+          current_pipeline: "{{ states(pipeline_select) }}"
+          available_options: "{{ state_attr(pipeline_select, 'options') or [] }}"
+      - alias: "Set target option"
+        variables:
+          target_option: >-
+            {% for opt in available_options %}
+              {% if opt | lower == fallback_pipeline | lower %}{{ opt }}{% endif %}
+            {% endfor %}
+
+      # 2. Only switch if target exists and differs from current
+      - alias: "2. Only switch if target exists and differs from current"
+        if:
+          - condition: template
+            value_template: >-
+              {{ target_option | trim != ''
+                 and current_pipeline | lower != target_option | trim | lower }}
+        then:
+          # 3. Save current pipeline to shared JSON helper
+          - alias: "Set updated json"
+            variables:
+              updated_json: >-
+                {% set saved = states('input_text.ai_budget_saved_pipelines') | from_json(default={}) %}
+                {% set ns = namespace(result={}) %}
+                {% for k, v in saved.items() %}
+                  {% set ns.result = dict(ns.result, **{k: v}) %}
+                {% endfor %}
+                {% set ns.result = dict(ns.result, **{pipeline_select: current_pipeline}) %}
+                {{ ns.result | to_json }}
+          - alias: "Save current pipeline to shared JSON helper"
+            action: input_text.set_value
+            target:
+              entity_id: input_text.ai_budget_saved_pipelines
+            data:
+              value: "{{ updated_json }}"
+
+          # 4. Switch pipeline
+          - alias: "Switch satellite to fallback pipeline"
+            action: select.select_option
+            target:
+              entity_id: "{{ pipeline_select }}"
+            data:
+              option: "{{ target_option | trim }}"
+
+          # 5. Optional TTS announcement on this satellite
+          - alias: "5. Optional TTS announcement on this satellite"
+            if:
+              - condition: template
+                value_template: "{{ announcement | trim != '' }}"
+            then:
+              - alias: "Announce budget fallback via TTS"
+                action: pyscript.tts_queue_speak
+                continue_on_error: true
+                response_variable: _tts
+                data:
+                  text: "{{ announcement }}"
+                  voice: "tts.home_assistant_cloud"
+                  priority: 1
+                  target: "{{ speaker_entity }}"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # DEACTIVATE: restore saved pipeline
+  # ─────────────────────────────────────────────────────────────────────────
+  - alias: "DEACTIVATE: restore saved pipeline"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'fallback_off' }}"
+    then:
+      # 1. Read saved pipelines JSON
+      - alias: "Set saved dict"
+        variables:
+          saved_dict: "{{ states('input_text.ai_budget_saved_pipelines') | from_json(default={}) }}"
+      - alias: "Set restore to"
+        variables:
+          restore_to: "{{ saved_dict.get(pipeline_select, '') }}"
+
+      # 2. Restore if we have a saved value
+      - alias: "2. Restore if we have a saved value"
+        if:
+          - condition: template
+            value_template: "{{ restore_to | trim != '' }}"
+        then:
+          - alias: "Restore satellite to saved pipeline"
+            action: select.select_option
+            target:
+              entity_id: "{{ pipeline_select }}"
+            data:
+              option: "{{ restore_to }}"
+
+          # 3. Remove our entry from the shared JSON
+          - alias: "Set cleaned json"
+            variables:
+              cleaned_json: >-
+                {% set saved = saved_dict %}
+                {% set ns = namespace(result={}) %}
+                {% for k, v in saved.items() %}
+                  {% if k != pipeline_select %}
+                    {% set ns.result = dict(ns.result, **{k: v}) %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.result | to_json }}
+          - alias: "Remove restored entry from saved pipelines JSON"
+            action: input_text.set_value
+            target:
+              entity_id: input_text.ai_budget_saved_pipelines
+            data:
+              value: "{{ cleaned_json }}"

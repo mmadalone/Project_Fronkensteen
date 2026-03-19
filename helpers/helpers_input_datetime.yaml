@@ -28,6 +28,18 @@ ai_away_departed_jessica:
   has_time: true
   icon: mdi:exit-run
 
+ai_home_since_miquel:
+  name: "AI Home Since - Miquel"
+  has_date: true
+  has_time: true
+  icon: mdi:home-clock
+
+ai_home_since_jessica:
+  name: "AI Home Since - Jessica"
+  has_date: true
+  has_time: true
+  icon: mdi:home-clock
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context
 # ═══════════════════════════════════════════════════════════════════
@@ -105,7 +117,7 @@ ai_escalation_last_followthrough:
 # ═══════════════════════════════════════════════════════════════════
 # Last meal timestamp. Updated by voice command ("I just ate") or
 # pyscript.focus_guard_mark_meal service.
-last_meal_time:
+ai_last_meal_time:
   name: "Last Meal Time"
   has_date: true
   has_time: true
@@ -113,7 +125,7 @@ last_meal_time:
 
 # Snooze expiry. Set by voice command ("remind me in 30 minutes")
 # or pyscript.focus_guard_snooze. Calendar P1 (critical) nudges bypass snooze.
-focus_guard_snooze_until:
+ai_focus_guard_snooze_until:
   name: "Focus Guard - Snooze Until"
   has_date: true
   has_time: true

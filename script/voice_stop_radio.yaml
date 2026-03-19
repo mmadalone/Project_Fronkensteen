@@ -1,0 +1,194 @@
+blueprint:
+  name: Voice – Stop Radio (Music Assistant) (tool script)
+  description: |
+    ## Version 2.0
+
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_stop_radio-header.jpeg)
+
+    SCRIPT TOOL: Stop/pause Music Assistant "radio" playback.
+
+    RELATIONSHIP TO AUTOMATION BLUEPRINT
+    ------------------------------------
+    This script is a wrapper around the automation blueprint:
+
+      "Voice – Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)"
+
+    That automation:
+      - Has an input `radio_players`: a list of MA players you consider "radio".
+      - Implements `command = "stop_radio"`:
+          • Calls media_player.media_pause on all `radio_players`.
+
+    This script simply triggers that automation with `command = "stop_radio"`.
+
+
+    EDITABLE PHRASES
+    ----------------
+    This blueprint lets you edit example phrases for "stop radio":
+
+      - "Radio stop phrases (radio-stop intent)":
+          Phrases that *do* mean "stop MA radio".
+          Default examples:
+            • stop the radio
+            • turn off the radio
+            • stop this radio station
+            • kill the radio
+
+      - "Radio EXCLUDE phrases (NO radio-stop intent)":
+          Optional examples where "radio" appears but is not a stop command.
+          Purely for your prompt/documentation.
+
+    The script logic itself does NOT read these; they are for your LLM
+    agent description so all phrase examples live here in HA.
+
+
+    HOW TO USE
+    ----------
+    1. Create/configure the automation from:
+         "Voice – Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)"
+       including its "radio_players" list.
+
+    2. Create this script from the blueprint, e.g.:
+         script.voice_stop_radio
+
+    3. In this script's settings:
+         - Select your "Voice Active Media Controls" automation.
+         - Adjust the phrase lists to match how you talk about radio.
+
+    4. Expose script.voice_stop_radio to your LLM agent as a tool and say:
+
+       ---
+       TOOL: script.voice_stop_radio
+       --------------------------------
+       Purpose:
+         - Stop/pause MA "radio" playback on configured radio players.
+
+       Use this when:
+         - The user clearly wants radio to stop, e.g.:
+           {{ radio_phrases | join(', ') }}
+
+       Do NOT use this when:
+         - They mention radio in some other context, for example:
+           {{ radio_exclude_phrases | join(', ') }}
+       ---
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_stop_radio.yaml
+
+  input:
+    section_core:
+      name: "① Core Configuration"
+      icon: mdi:cog
+      collapsed: false
+      input:
+        active_media_automation:
+          name: "Voice Active Media Controls automation"
+          description: |
+            Select the automation created from the automation blueprint:
+              "Voice – Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)"
+
+            In that automation, configure the "radio_players" list with the
+            Music Assistant players that you treat as "radio".
+          default:
+          selector:
+            entity:
+              domain: automation
+
+        enable_notifications:
+          name: Enable requirement notifications
+          description: |
+            When enabled, this script will create a persistent notification if:
+              - The selected "Voice Active Media Controls" automation is missing
+                or disabled.
+          default: true
+          selector:
+            boolean: {}
+
+    section_phrases:
+      name: "② Phrase Lists"
+      icon: mdi:format-list-text
+      collapsed: true
+      input:
+        radio_phrases:
+          name: Radio stop phrases (radio-stop intent)
+          description: |
+            Example phrases that *should* trigger stopping MA radio.
+            For your LLM agent prompt; the script itself doesn't parse them.
+          default:
+            - stop the radio
+            - turn off the radio
+            - stop this radio station
+            - kill the radio
+            - stop the radio in here
+          selector:
+            text:
+              multiline: false
+              multiple: true
+
+        radio_exclude_phrases:
+          name: Radio EXCLUDE phrases (NO radio-stop intent)
+          description: |
+            Optional examples where "radio" appears but does NOT mean "stop".
+            For documentation and LLM guidance only.
+          default:
+            - I like this radio station
+            - which radio station is this
+          selector:
+            text:
+              multiline: false
+              multiple: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  active_media_automation: !input active_media_automation
+  enable_notifications: !input enable_notifications
+  radio_phrases: !input radio_phrases
+  radio_exclude_phrases: !input radio_exclude_phrases
+
+sequence:
+  - alias: "Resolve automation state — check availability"
+    variables:
+      auto_state: "{{ states(active_media_automation) | default('unavailable') }}"
+      missing_or_disabled: >
+        {{ auto_state in ['unavailable', 'unknown'] or auto_state == 'off' }}
+
+  - alias: "Gate — abort if automation missing or disabled"
+    if:
+      - condition: template
+        value_template: "{{ missing_or_disabled }}"
+    then:
+      - alias: "Gate — check if notifications are enabled"
+        if:
+          - condition: template
+            value_template: "{{ enable_notifications }}"
+        then:
+          - alias: "Notify — misconfiguration warning"
+            action: persistent_notification.create
+            continue_on_error: true
+            data:
+              title: "Voice – Stop Radio (script) – Misconfiguration"
+              message: >-
+                The script "Voice – Stop Radio" tried to run, but the selected
+                "Voice Active Media Controls" automation
+                ({{ active_media_automation }}) is missing, unavailable, or
+                disabled.
+
+                Please ensure you:
+                  1) Created the automation from its blueprint:
+                     "Voice – Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)"
+                  2) Enabled it.
+                  3) Configured the "radio_players" input with your MA
+                     radio speakers.
+      - alias: "Stop — automation not available"
+        stop: "Active media automation not available"
+
+  - alias: "Trigger — fire stop_radio command via Active Media Controls"
+    action: automation.trigger
+    target:
+      entity_id: "{{ active_media_automation }}"
+    data:
+      skip_condition: true
+      variables:
+        command: "stop_radio"

@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import build_result_entity_name, load_entity_config, reload_entity_config
 
 # =============================================================================
 # Routine Fingerprinting & Position Tracker — Task 16 of Voice Context Arch.
@@ -1072,6 +1072,9 @@ async def _daily_fingerprint_refresh():
 @time_trigger("startup")  # noqa: F821
 async def _startup():
     """Initialize on startup: load known fingerprints from L2."""
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     _ensure_result_entity_name(force=True)
     _set_result("ok", op="startup", message="initializing")
 

@@ -23,6 +23,9 @@
 # Deployed: 2026-03-02 | Unified: 2026-03-07
 # =============================================================================
 
+# Pyscript-created sensor (proactive_briefing.py via state.set):
+#   sensor.ai_proactive_briefing_status — last delivery result, section breakdown
+#
 # ── INPUT HELPERS ────────────────────────────────────────────────────────────
 
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)

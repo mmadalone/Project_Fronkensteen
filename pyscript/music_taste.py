@@ -13,40 +13,52 @@ import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import build_result_entity_name, load_entity_config, reload_entity_config
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 RESULT_ENTITY = "sensor.ai_music_taste_status"
 KILL_SWITCH = "input_boolean.ai_music_taste_enabled"
-_DEFAULT_SPOTIFYPLUS_ENTITY = "media_player.spotifyplus_miquel_angel_madalone"
 
-_DEFAULT_MA_PLAYERS = [
-    "media_player.workshop_ma",
-    "media_player.bathroom_ma",
-]
-
-DEDUP_COOLDOWN = 180  # seconds — ignore same artist:title within window
-L2_PLAY_EXPIRY = 365  # days
 L2_SPOTIFY_EXPIRY = 30  # days
 L2_PROFILE_EXPIRY = 30  # days
-SPOTIFY_TOP_LIMIT = 15
 PROFILE_KEY = "music_taste:profile"
+
+
+def _helper_int(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
+def _helper_str(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
 
 
 def _get_ma_players() -> list:
     cfg = load_entity_config()
-    return cfg.get("music_players") or _DEFAULT_MA_PLAYERS
+    return cfg.get("music_players") or []
 
 
 def _get_spotifyplus_entity() -> str:
     cfg = load_entity_config()
-    return cfg.get("spotifyplus_entity") or _DEFAULT_SPOTIFYPLUS_ENTITY
+    return cfg.get("spotifyplus_entity") or ""
 
 
 # ── Module State ─────────────────────────────────────────────────────────────
 
 _recent_plays: dict[str, float] = {}  # "artist:title" → timestamp
+_recent_plays_lock = asyncio.Lock()
 _media_triggers = []           # factory-created trigger references (keep alive)
 result_entity_name: dict[str, str] = {}
 
@@ -143,16 +155,18 @@ async def _log_play(entity_id: str, artist: str, title: str) -> bool:
     title_norm = _normalize(title)
     dedup_key = f"{artist_norm}:{title_norm}"
     now = time.monotonic()
+    dedup_cooldown = _helper_int("input_number.ai_music_dedup_cooldown", 180)
 
     # Dedup: same artist:title within cooldown window
-    if dedup_key in _recent_plays and (now - _recent_plays[dedup_key]) < DEDUP_COOLDOWN:
-        return False
-    _recent_plays[dedup_key] = now
+    async with _recent_plays_lock:
+        if dedup_key in _recent_plays and (now - _recent_plays[dedup_key]) < dedup_cooldown:
+            return False
+        _recent_plays[dedup_key] = now
 
-    # Clean old dedup entries (older than 2× cooldown)
-    stale = [k for k, v in _recent_plays.items() if (now - v) > DEDUP_COOLDOWN * 2]
-    for k in stale:
-        del _recent_plays[k]
+        # Clean old dedup entries (older than 2× cooldown)
+        stale = [k for k, v in _recent_plays.items() if (now - v) > dedup_cooldown * 2]
+        for k in stale:
+            del _recent_plays[k]
 
     # Determine room from entity
     room = entity_id.replace("media_player.", "").replace("_ma", "").replace("_", " ").title()
@@ -191,12 +205,13 @@ async def _log_play(entity_id: str, artist: str, title: str) -> bool:
             "rooms": [room],
         }
 
+    play_expiry = _helper_int("input_number.ai_music_play_expiry_days", 365)
     ok = await _l2_set(
         key=l2_key,
         value=json.dumps(data),
         tags="music_taste",
         scope="music",
-        expiration_days=L2_PLAY_EXPIRY,
+        expiration_days=play_expiry,
     )
     if ok:
         log.info(f"music_taste: logged {artist} — {title} (plays={data['plays']}, room={room})")  # noqa: F821
@@ -279,7 +294,7 @@ async def _poll_playing_media():
 
 # ── 2B: Spotify Taste Pull ──────────────────────────────────────────────────
 
-@time_trigger("cron(0 4 * * *)")  # noqa: F821
+@time_trigger("cron(0 4 * * *)")  # noqa: F821  # helper: input_number.ai_music_top_limit
 async def _spotify_daily_pull():
     """Pull Spotify taste analytics via SpotifyPlus once daily at 04:00."""
     if not _is_enabled():
@@ -293,19 +308,21 @@ async def _spotify_daily_pull():
         log.warning("music_taste: SpotifyPlus entity unavailable — skipping Spotify pull")  # noqa: F821
         return
 
+    spotify_top_limit = _helper_int("input_number.ai_music_top_limit", 15)
+
     # Top artists (medium_term = ~6 months)
     try:
         resp = spotifyplus.get_users_top_artists(  # noqa: F821
             entity_id=sp_entity,
             time_range="medium_term",
-            limit=SPOTIFY_TOP_LIMIT,
+            limit=spotify_top_limit,
         )
         if resp and isinstance(resp, dict):
             items = resp.get("items", [])
             artist_names = [item.get("name", "") for item in items if item.get("name")]
             await _l2_set(
                 key="music_spotify:top_artists",
-                value=json.dumps(artist_names[:SPOTIFY_TOP_LIMIT]),
+                value=json.dumps(artist_names[:spotify_top_limit]),
                 tags="music_taste,spotify",
                 scope="music",
                 expiration_days=L2_SPOTIFY_EXPIRY,
@@ -321,7 +338,7 @@ async def _spotify_daily_pull():
         resp = spotifyplus.get_users_top_tracks(  # noqa: F821
             entity_id=sp_entity,
             time_range="medium_term",
-            limit=SPOTIFY_TOP_LIMIT,
+            limit=spotify_top_limit,
         )
         if resp and isinstance(resp, dict):
             items = resp.get("items", [])
@@ -334,7 +351,7 @@ async def _spotify_daily_pull():
                     tracks.append({"artist": artist_name, "title": track_name})
             await _l2_set(
                 key="music_spotify:top_tracks",
-                value=json.dumps(tracks[:SPOTIFY_TOP_LIMIT]),
+                value=json.dumps(tracks[:spotify_top_limit]),
                 tags="music_taste,spotify",
                 scope="music",
                 expiration_days=L2_SPOTIFY_EXPIRY,
@@ -415,9 +432,10 @@ async def _aggregate_profile() -> dict[str, Any]:
     for artist, plays in artist_plays.items():
         artist_scores[artist] = plays * 2.0
 
+    spotify_top_limit = _helper_int("input_number.ai_music_top_limit", 15)
     for idx, sp_artist in enumerate(sp_artists):
-        # Spotify rank bonus: top artist = 15 pts, descending
-        bonus = max(1, SPOTIFY_TOP_LIMIT - idx)
+        # Spotify rank bonus: top artist = N pts, descending
+        bonus = max(1, spotify_top_limit - idx)
         # Try to match with existing MA artist (case-insensitive)
         matched = False
         for existing in list(artist_scores.keys()):
@@ -534,6 +552,9 @@ async def _daily_aggregate():
 @time_trigger("startup")  # noqa: F821
 async def _startup():
     """Restore taste profile from L2 on startup."""
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup", message="initializing")
 

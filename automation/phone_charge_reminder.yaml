@@ -1,0 +1,1318 @@
+blueprint:
+  name: "Phone charge reminder – persona-aware battery nudges"
+  author: madalone
+  description: >
+    # Phone charge reminder – persona-aware battery nudges
+
+    Escalating TTS reminders when phone battery drops below configurable
+    thresholds. Supports three delivery styles — prompt (LLM-generated,
+    persona-aware), factual (static, no LLM), or silent (no TTS).
+    Congratulates on plug-in when battery was low.
+
+    Escalation: casual → critical → urgent. Each tier has its own
+    editable prompt/factual message, reminder count, and dedup window.
+
+    ### Recent changes
+    - **v4:** Optional "fully charged" TTS announcement when battery
+      reaches 100% while still charging — LLM prompt or static fallback
+    - **v3:** Per-tier prompts & factual messages, reminder count with
+      repeat loops, bypass follow-me & ducking, mode restart
+    - **v2:** Dispatcher support, conversation-agent selector, editable
+      prompts for nudge and congrats, presence sensor selector
+    - **v1:** Initial blueprint — replaces package ai_phone_charge_reminder.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/phone_charge_reminder.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① PHONE SENSORS
+    # ===========================================================================
+    phone_sensors:
+      name: "① Phone sensors"
+      icon: mdi:cellphone
+      description: Battery level sensor and charging state sensor.
+      collapsed: false
+      input:
+        battery_sensor:
+          name: Battery level sensor
+          description: >
+            The sensor that reports battery percentage
+            (e.g. sensor.phone_battery_level).
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+              device_class: battery
+
+        charging_sensor:
+          name: Charging state sensor
+          description: >
+            Binary sensor that reports whether the phone is charging
+            (on = charging, off = not charging).
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+    # ===========================================================================
+    # ② THRESHOLDS & MESSAGES
+    # ===========================================================================
+    thresholds_and_messages:
+      name: "② Thresholds & messages"
+      icon: mdi:battery-alert
+      description: >
+        Battery percentage thresholds, reminder counts, and per-tier
+        prompts/factual messages. Set thresholds in descending order
+        (low > critical > urgent). Use {battery} as placeholder.
+      collapsed: true
+      input:
+        # ── Low tier ──────────────────────────────────────────────────
+        low_threshold:
+          name: Low threshold (%)
+          description: >
+            First casual nudge fires when battery drops below this.
+          default: 20
+          selector:
+            number:
+              min: 10
+              max: 50
+              step: 5
+              unit_of_measurement: "%"
+
+        low_reminder_count:
+          name: Low — reminder count
+          description: >
+            How many times the low-tier nudge repeats (with 30 min delay
+            between each). Stops early if the phone is plugged in.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+
+        low_prompt:
+          name: Low — LLM prompt
+          description: >
+            LLM prompt for the casual nudge. Use {battery} for percentage.
+            Only used when delivery style is "prompt".
+          default: >-
+            The user's phone battery is at {battery}%. This is a casual,
+            low-priority reminder. Say ONE short, in-character sentence
+            nudging them to charge their phone. Keep it playful and
+            light-hearted. No quotation marks, no special formatting.
+          selector:
+            text:
+              multiline: true
+
+        low_factual:
+          name: Low — factual message
+          description: >
+            Static message for the casual nudge. Use {battery} for
+            percentage. Only used when delivery style is "factual".
+          default: >-
+            Phone battery at {battery}%. Consider charging soon.
+          selector:
+            text:
+              multiline: true
+
+        # ── Critical tier ─────────────────────────────────────────────
+        critical_threshold:
+          name: Critical threshold (%)
+          description: >
+            Second, more urgent nudge fires below this.
+          default: 10
+          selector:
+            number:
+              min: 8
+              max: 20
+              step: 1
+              unit_of_measurement: "%"
+
+        critical_reminder_count:
+          name: Critical — reminder count
+          description: >
+            How many times the critical nudge repeats (with 15 min delay
+            between each). Stops early if the phone is plugged in.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+
+        critical_prompt:
+          name: Critical — LLM prompt
+          description: >
+            LLM prompt for the critical nudge. Use {battery} for
+            percentage. Only used when delivery style is "prompt".
+          default: >-
+            The user's phone battery is at {battery}%. This is a critical
+            warning — battery is getting dangerously low. Say ONE short,
+            firm, in-character sentence urging them to charge NOW. Be
+            serious, not playful. No quotation marks, no special formatting.
+          selector:
+            text:
+              multiline: true
+
+        critical_factual:
+          name: Critical — factual message
+          description: >
+            Static message for the critical nudge. Use {battery} for
+            percentage. Only used when delivery style is "factual".
+          default: >-
+            {battery}% battery. This is not a drill. Charger. Now.
+          selector:
+            text:
+              multiline: true
+
+        # ── Urgent tier ───────────────────────────────────────────────
+        urgent_threshold:
+          name: Urgent threshold (%)
+          description: >
+            Emergency-level warning fires below this.
+          default: 5
+          selector:
+            number:
+              min: 2
+              max: 15
+              step: 1
+              unit_of_measurement: "%"
+
+        urgent_reminder_count:
+          name: Urgent — reminder count
+          description: >
+            How many times the urgent warning repeats (with 5 min delay
+            between each). Stops early if the phone is plugged in.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+
+        urgent_prompt:
+          name: Urgent — LLM prompt
+          description: >
+            LLM prompt for the emergency warning. Use {battery} for
+            percentage. Only used when delivery style is "prompt".
+          default: >-
+            The user's phone battery is at {battery}%! This is an
+            EMERGENCY — the phone is about to die. Say ONE short,
+            alarming, in-character sentence demanding they plug in
+            IMMEDIATELY. Maximum urgency. No quotation marks, no
+            special formatting.
+          selector:
+            text:
+              multiline: true
+
+        urgent_factual:
+          name: Urgent — factual message
+          description: >
+            Static message for the emergency warning. Use {battery} for
+            percentage. Only used when delivery style is "factual".
+          default: >-
+            {battery}%! Your phone is about to die! Plug it in right now!
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ③ AGENT & DELIVERY
+    # ===========================================================================
+    agent_and_delivery:
+      name: "③ Agent & delivery"
+      icon: mdi:account-voice
+      description: >
+        Agent selection (dispatcher or manual) and delivery style.
+      collapsed: true
+      input:
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically.
+            When disabled, uses the Voice Assistant below.
+          default: true
+          selector:
+            boolean: {}
+
+        conversation_agent:
+          name: Voice Assistant
+          description: >
+            The Voice Assistant (Assist Pipeline) used when dispatcher is
+            disabled. Ignored when dispatcher is enabled.
+          default: Rick
+          selector:
+            text:
+
+        style:
+          name: Delivery style
+          description: >
+            "prompt" generates persona-aware lines via LLM.
+            "factual" uses plain static messages, no LLM call.
+            "silent" suppresses all TTS.
+          default: "prompt"
+          selector:
+            select:
+              options:
+                - label: "Prompt (LLM persona)"
+                  value: "prompt"
+                - label: "Factual (plain)"
+                  value: "factual"
+                - label: "Silent (no TTS)"
+                  value: "silent"
+
+        congrats_prompt:
+          name: Congratulate on plug-in prompt
+          description: >
+            LLM prompt for the plug-in celebration message. Use {battery}
+            for the percentage when they plugged in. Only used when delivery
+            style is "prompt".
+          default: >-
+            The user just plugged in their phone at {battery}% battery.
+            Congratulate them in ONE short, in-character sentence. Be
+            playful — they were cutting it close. No quotation marks, no
+            special formatting.
+          selector:
+            text:
+              multiline: true
+
+        congrats_factual:
+          name: Congratulate on plug-in (factual)
+          description: >
+            Static text for the plug-in celebration. Use {battery} for the
+            percentage. Used when delivery style is "factual" or as fallback
+            when the LLM call fails.
+          default: "Good call plugging that in. {battery}% was cutting it close."
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ④ TTS OUTPUT
+    # ===========================================================================
+    tts_output:
+      name: "④ TTS & speaker output"
+      icon: mdi:speaker
+      description: >
+        Where TTS plays. Satellite takes priority over media player.
+        Leave both empty to use the TTS queue default target.
+      collapsed: true
+      input:
+        satellite_entity:
+          name: Assist Satellite
+          description: >
+            Assist Satellite entity for TTS announcements. When set,
+            announcements play via assist_satellite.announce instead of
+            the TTS queue.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        tts_output_player:
+          name: Media player for TTS
+          description: >
+            Speaker or speaker group where TTS will play via the TTS
+            queue. Ignored when an Assist Satellite is configured above.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tts_volume:
+          name: TTS volume
+          description: >
+            Volume set on speaker for TTS delivery. The previous volume
+            is captured and restored automatically. 0 = disabled.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ===========================================================================
+    # ⑤ FEATURES & PRESENCE
+    # ===========================================================================
+    features_and_presence:
+      name: "⑤ Features & presence"
+      icon: mdi:home-account
+      description: Optional features and presence gating.
+      collapsed: true
+      input:
+        enable_congrats:
+          name: Congratulate on plug-in
+          description: >
+            Send a celebratory TTS when the phone is plugged in
+            while battery was below the low threshold.
+          default: true
+          selector:
+            boolean: {}
+
+        enable_fully_charged:
+          name: Announce fully charged
+          description: >
+            Send a TTS announcement when battery reaches 100%
+            while still charging.
+          default: true
+          selector:
+            boolean: {}
+
+        fully_charged_prompt:
+          name: Fully charged — LLM prompt
+          description: >
+            Prompt sent to the LLM when battery hits 100%.
+            Used when style is "prompt". Keep it short — the agent
+            should return a single sentence.
+          default: >-
+            The phone is fully charged at 100%. Generate a short,
+            friendly message letting the user know they can unplug it.
+            One sentence only.
+          selector:
+            text:
+              multiline: true
+
+        fully_charged_factual:
+          name: Fully charged — static message
+          description: >
+            Fallback message when style is "factual" or LLM is unavailable.
+          default: "Phone is fully charged. You can unplug it."
+          selector:
+            text:
+              multiline: true
+
+        presence_sensor:
+          name: Presence sensor
+          description: >
+            Binary sensor indicating whether someone is home
+            (e.g. an occupancy or presence sensor). Leave empty
+            to skip the presence check. When set, TTS is suppressed
+            if the sensor is off.
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class: occupancy
+
+    # ===========================================================================
+    # ⑥ BYPASS CONTROLS
+    # ===========================================================================
+    bypass_controls:
+      name: "⑥ Bypass controls"
+      icon: mdi:shield-off
+      description: >
+        Temporarily disable follow-me or ducking during the reminder
+        sequence. Originals are restored when the sequence finishes.
+      collapsed: true
+      input:
+        bypass_follow_me:
+          name: Bypass follow-me
+          description: >
+            Pause notification follow-me during the reminder sequence
+            so nudges always play on the configured speaker.
+          default: true
+          selector:
+            boolean: {}
+
+        bypass_ducking:
+          name: Bypass ducking
+          description: >
+            Disable volume ducking during TTS delivery so nudges
+            play at full volume.
+          default: false
+          selector:
+            boolean: {}
+
+        duck_toggle_helper:
+          name: Duck toggle helper
+          description: >
+            The input_boolean that controls the duck manager master toggle.
+            Bypass ducking turns this OFF during the sequence and restores it after.
+          default: input_boolean.ai_duck_manager_enabled
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+        bypass_claim_script:
+          name: Refcount claim script
+          description: >
+            Script entity that registers a bypass claim. Create from the
+            Refcount Bypass — Claim blueprint.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount release script
+          description: >
+            Script entity that releases a bypass claim. Create from the
+            Refcount Bypass — Release blueprint.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ⑦ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑦ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑧ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑧ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+variables:
+  battery_sensor: !input battery_sensor
+  charging_sensor: !input charging_sensor
+  low_threshold: !input low_threshold
+  critical_threshold: !input critical_threshold
+  urgent_threshold: !input urgent_threshold
+  low_reminder_count: !input low_reminder_count
+  critical_reminder_count: !input critical_reminder_count
+  urgent_reminder_count: !input urgent_reminder_count
+  low_prompt: !input low_prompt
+  low_factual: !input low_factual
+  critical_prompt: !input critical_prompt
+  critical_factual: !input critical_factual
+  urgent_prompt: !input urgent_prompt
+  urgent_factual: !input urgent_factual
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_pipeline_name: !input conversation_agent
+  style: !input style
+  congrats_prompt: !input congrats_prompt
+  congrats_factual: !input congrats_factual
+  enable_congrats: !input enable_congrats
+  enable_fully_charged: !input enable_fully_charged
+  fully_charged_prompt: !input fully_charged_prompt
+  fully_charged_factual: !input fully_charged_factual
+  presence_sensor: !input presence_sensor
+  v_satellite_entity: !input satellite_entity
+  v_tts_output_player: !input tts_output_player
+  v_tts_volume: !input tts_volume
+  v_bypass_follow_me: !input bypass_follow_me
+  v_bypass_ducking: !input bypass_ducking
+  v_duck_toggle: !input duck_toggle_helper
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: restart
+max_exceeded: silent
+
+triggers:
+  - alias: "Low battery — casual nudge threshold"
+    id: low_battery
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    below: !input low_threshold
+
+  - alias: "Critical battery — second nudge threshold"
+    id: critical_battery
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    below: !input critical_threshold
+
+  - alias: "Urgent battery — emergency threshold"
+    id: urgent_battery
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    below: !input urgent_threshold
+
+  - alias: "Phone plugged in"
+    id: plugged_in
+    trigger: state
+    entity_id: !input charging_sensor
+    from: "off"
+    to: "on"
+
+  - alias: "Phone fully charged"
+    id: fully_charged
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    above: 99
+
+  - alias: "HA restart — catch-up check"
+    id: ha_restart
+    trigger: homeassistant
+    event: start
+
+conditions:
+  - alias: "Style is not silent"
+    condition: template
+    value_template: "{{ style != 'silent' }}"
+
+  - alias: "Someone is home (or no presence sensor configured)"
+    condition: template
+    value_template: >-
+      {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_phone_charge_reminder') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Set battery"
+    variables:
+      _battery: "{{ states(battery_sensor) | int(0) }}"
+
+  # ── Bypass save/disable ──────────────────────────────────────────────
+  - alias: "Set follow me was on, ducking was on"
+    variables:
+      follow_me_was_on: >-
+        {{ v_bypass_follow_me | default(false)
+           and is_state('input_boolean.notification_follow_me', 'on') }}
+      ducking_was_on: >-
+        {{ v_bypass_ducking | default(false)
+           and is_state(v_duck_toggle, 'on') }}
+
+  - alias: "Bypass follow-me (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Claim follow-me bypass via refcount"
+            action: "{{ v_bypass_claim }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+  - alias: "Bypass ducking (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ ducking_was_on }}"
+        sequence:
+          - alias: "Disable duck manager during reminder sequence"
+            action: input_boolean.turn_off
+            target:
+              entity_id: "{{ v_duck_toggle }}"
+
+  # ── Agent selection — dispatcher > manual ──────────────────────────────
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ style == 'prompt' and use_dispatcher
+                 and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for phone charge reminder"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: ""
+              intent_text: "phone charge reminder"
+              skip_continuity: true
+            continue_on_error: true
+
+          - alias: "Set dispatch agent, dispatch voice"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+
+      - alias: "Manual pipeline path (prompt mode, dispatcher off)"
+        conditions:
+          - condition: template
+            value_template: "{{ style == 'prompt' }}"
+        sequence:
+          - alias: "Resolve manually selected pipeline to agent"
+            action: pyscript.agent_dispatch
+            response_variable: pipeline_resolve
+            data:
+              pipeline_name: "{{ v_pipeline_name }}"
+            continue_on_error: true
+          - alias: "Set dispatch agent, dispatch voice"
+            variables:
+              dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+    default:
+      - alias: "Set dispatch agent, dispatch voice"
+        variables:
+          dispatch_agent: ""
+          dispatch_voice: ""
+
+  - alias: "Route by trigger"
+    choose:
+      # ── LOW BATTERY — casual nudge ───────────────────────────────────
+      - alias: "Low battery — casual nudge"
+        conditions:
+          - condition: trigger
+            id: low_battery
+          - condition: state
+            entity_id: !input charging_sensor
+            state: "off"
+        sequence:
+          - alias: "Repeat low-battery reminder loop"
+            repeat:
+              count: "{{ low_reminder_count | int(2) }}"
+              sequence:
+                - alias: "Stop if phone was plugged in"
+                  condition: state
+                  entity_id: !input charging_sensor
+                  state: "off"
+
+                - alias: "Generate casual nudge"
+                  choose:
+                    - alias: "Prompt mode — LLM-generated nudge"
+                      conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ style == 'prompt'
+                               and (dispatch_agent | default('') | length > 0) }}
+                      sequence:
+                        - alias: "LLM-generate casual low-battery nudge"
+                          action: conversation.process
+                          data:
+                            agent_id: "{{ dispatch_agent }}"
+                            text: >-
+                              {{ low_prompt
+                                 | replace('{battery}', _battery | string) }}
+                          response_variable: llm_result
+                          continue_on_error: true
+                        - alias: "Set message"
+                          variables:
+                            _message: >-
+                              {{ (llm_result | default({})).get('response', {})
+                                 .get('speech', {}).get('plain', {}).get('speech',
+                                 low_factual | replace('{battery}', _battery | string)) }}
+                  default:
+                    - alias: "Set message"
+                      variables:
+                        _message: >-
+                          {{ low_factual | replace('{battery}', _battery | string) }}
+
+                - alias: "Deliver casual nudge — satellite > player > default"
+                  choose:
+                    - alias: "Via Assist Satellite"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Announce casual nudge via satellite"
+                          action: assist_satellite.announce
+                          target:
+                            entity_id: "{{ v_satellite_entity }}"
+                          data:
+                            message: "{{ _message }}"
+                          continue_on_error: true
+                    - alias: "Via TTS queue — explicit player"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Speak casual nudge on explicit player"
+                          action: pyscript.tts_queue_speak
+                          data:
+                            text: "{{ _message }}"
+                            voice: "{{ dispatch_voice | default('') }}"
+                            volume_level: "{{ v_tts_volume }}"
+                            priority: 3
+                            target_mode: explicit
+                            target: "{{ v_tts_output_player }}"
+                          response_variable: tts_result
+                          continue_on_error: true
+                  default:
+                    - alias: "Speak casual nudge on default player"
+                      action: pyscript.tts_queue_speak
+                      data:
+                        text: "{{ _message }}"
+                        voice: "{{ dispatch_voice | default('') }}"
+                        volume_level: "{{ v_tts_volume }}"
+                        priority: 3
+                      response_variable: tts_result
+                      continue_on_error: true
+
+                - alias: "Delay between reminders (skip on last)"
+                  if:
+                    - condition: template
+                      value_template: "{{ repeat.index < (low_reminder_count | int(2)) }}"
+                  then:
+                    - alias: "Wait 00:30:00"
+                      delay: "00:30:00"
+
+      # ── CRITICAL BATTERY — second nudge ─────────────────────────────
+      - alias: "Critical battery — urgent tone"
+        conditions:
+          - condition: trigger
+            id: critical_battery
+          - condition: state
+            entity_id: !input charging_sensor
+            state: "off"
+        sequence:
+          - alias: "Repeat critical-battery reminder loop"
+            repeat:
+              count: "{{ critical_reminder_count | int(2) }}"
+              sequence:
+                - alias: "Stop if phone was plugged in"
+                  condition: state
+                  entity_id: !input charging_sensor
+                  state: "off"
+
+                - alias: "Generate critical nudge"
+                  choose:
+                    - alias: "Prompt mode — LLM-generated critical nudge"
+                      conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ style == 'prompt'
+                               and (dispatch_agent | default('') | length > 0) }}
+                      sequence:
+                        - alias: "LLM-generate critical battery nudge"
+                          action: conversation.process
+                          data:
+                            agent_id: "{{ dispatch_agent }}"
+                            text: >-
+                              {{ critical_prompt
+                                 | replace('{battery}', _battery | string) }}
+                          response_variable: llm_result
+                          continue_on_error: true
+                        - alias: "Set message"
+                          variables:
+                            _message: >-
+                              {{ (llm_result | default({})).get('response', {})
+                                 .get('speech', {}).get('plain', {}).get('speech',
+                                 critical_factual | replace('{battery}', _battery | string)) }}
+                  default:
+                    - alias: "Set message"
+                      variables:
+                        _message: >-
+                          {{ critical_factual | replace('{battery}', _battery | string) }}
+
+                - alias: "Deliver critical nudge — satellite > player > default"
+                  choose:
+                    - alias: "Via Assist Satellite"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Announce critical nudge via satellite"
+                          action: assist_satellite.announce
+                          target:
+                            entity_id: "{{ v_satellite_entity }}"
+                          data:
+                            message: "{{ _message }}"
+                          continue_on_error: true
+                    - alias: "Via TTS queue — explicit player"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Speak critical nudge on explicit player"
+                          action: pyscript.tts_queue_speak
+                          data:
+                            text: "{{ _message }}"
+                            voice: "{{ dispatch_voice | default('') }}"
+                            volume_level: "{{ v_tts_volume }}"
+                            priority: 2
+                            target_mode: explicit
+                            target: "{{ v_tts_output_player }}"
+                          response_variable: tts_result
+                          continue_on_error: true
+                  default:
+                    - alias: "Speak critical nudge on default player"
+                      action: pyscript.tts_queue_speak
+                      data:
+                        text: "{{ _message }}"
+                        voice: "{{ dispatch_voice | default('') }}"
+                        volume_level: "{{ v_tts_volume }}"
+                        priority: 2
+                      response_variable: tts_result
+                      continue_on_error: true
+
+                - alias: "Delay between reminders (skip on last)"
+                  if:
+                    - condition: template
+                      value_template: "{{ repeat.index < (critical_reminder_count | int(2)) }}"
+                  then:
+                    - alias: "Wait 00:15:00"
+                      delay: "00:15:00"
+
+      # ── URGENT BATTERY — emergency ──────────────────────────────────
+      - alias: "Urgent battery — emergency warning"
+        conditions:
+          - condition: trigger
+            id: urgent_battery
+          - condition: state
+            entity_id: !input charging_sensor
+            state: "off"
+        sequence:
+          - alias: "Repeat urgent-battery reminder loop"
+            repeat:
+              count: "{{ urgent_reminder_count | int(2) }}"
+              sequence:
+                - alias: "Stop if phone was plugged in"
+                  condition: state
+                  entity_id: !input charging_sensor
+                  state: "off"
+
+                - alias: "Generate urgent warning"
+                  choose:
+                    - alias: "Prompt mode — LLM-generated urgent warning"
+                      conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ style == 'prompt'
+                               and (dispatch_agent | default('') | length > 0) }}
+                      sequence:
+                        - alias: "LLM-generate urgent battery warning"
+                          action: conversation.process
+                          data:
+                            agent_id: "{{ dispatch_agent }}"
+                            text: >-
+                              {{ urgent_prompt
+                                 | replace('{battery}', _battery | string) }}
+                          response_variable: llm_result
+                          continue_on_error: true
+                        - alias: "Set message"
+                          variables:
+                            _message: >-
+                              {{ (llm_result | default({})).get('response', {})
+                                 .get('speech', {}).get('plain', {}).get('speech',
+                                 urgent_factual | replace('{battery}', _battery | string)) }}
+                  default:
+                    - alias: "Set message"
+                      variables:
+                        _message: >-
+                          {{ urgent_factual | replace('{battery}', _battery | string) }}
+
+                - alias: "Deliver emergency warning — satellite > player > default"
+                  choose:
+                    - alias: "Via Assist Satellite"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Announce urgent warning via satellite"
+                          action: assist_satellite.announce
+                          target:
+                            entity_id: "{{ v_satellite_entity }}"
+                          data:
+                            message: "{{ _message }}"
+                          continue_on_error: true
+                    - alias: "Via TTS queue — explicit player"
+                      conditions:
+                        - condition: template
+                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                      sequence:
+                        - alias: "Speak urgent warning on explicit player"
+                          action: pyscript.tts_queue_speak
+                          data:
+                            text: "{{ _message }}"
+                            voice: "{{ dispatch_voice | default('') }}"
+                            volume_level: "{{ v_tts_volume }}"
+                            priority: 1
+                            target_mode: explicit
+                            target: "{{ v_tts_output_player }}"
+                          response_variable: tts_result
+                          continue_on_error: true
+                  default:
+                    - alias: "Speak urgent warning on default player"
+                      action: pyscript.tts_queue_speak
+                      data:
+                        text: "{{ _message }}"
+                        voice: "{{ dispatch_voice | default('') }}"
+                        volume_level: "{{ v_tts_volume }}"
+                        priority: 1
+                      response_variable: tts_result
+                      continue_on_error: true
+
+                - alias: "Delay between reminders (skip on last)"
+                  if:
+                    - condition: template
+                      value_template: "{{ repeat.index < (urgent_reminder_count | int(2)) }}"
+                  then:
+                    - alias: "Wait 00:05:00"
+                      delay: "00:05:00"
+
+      # ── PLUGGED IN — congratulation ─────────────────────────────────
+      - alias: "Plugged in — celebrate"
+        conditions:
+          - condition: trigger
+            id: plugged_in
+          - condition: template
+            value_template: "{{ enable_congrats }}"
+          - condition: template
+            value_template: "{{ _battery < (low_threshold | int(20)) }}"
+        sequence:
+          - alias: "Generate congrats message"
+            choose:
+              - alias: "Prompt mode — LLM-generated congrats"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ style == 'prompt'
+                         and (dispatch_agent | default('') | length > 0) }}
+                sequence:
+                  - alias: "LLM-generate plug-in celebration message"
+                    action: conversation.process
+                    data:
+                      agent_id: "{{ dispatch_agent }}"
+                      text: >-
+                        {{ congrats_prompt
+                           | replace('{battery}', _battery | string) }}
+                    response_variable: llm_result
+                    continue_on_error: true
+                  - alias: "Set message"
+                    variables:
+                      _message: >-
+                        {{ (llm_result | default({})).get('response', {})
+                           .get('speech', {}).get('plain', {}).get('speech',
+                           congrats_factual | replace('{battery}', _battery | string)) }}
+            default:
+              - alias: "Set message"
+                variables:
+                  _message: >-
+                    {{ congrats_factual | replace('{battery}', _battery | string) }}
+          - alias: "Deliver congrats — satellite > player > default"
+            choose:
+              - alias: "Via Assist Satellite"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Announce plug-in congrats via satellite"
+                    action: assist_satellite.announce
+                    target:
+                      entity_id: "{{ v_satellite_entity }}"
+                    data:
+                      message: "{{ _message }}"
+                    continue_on_error: true
+              - alias: "Via TTS queue — explicit player"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Speak congrats on explicit player"
+                    action: pyscript.tts_queue_speak
+                    data:
+                      text: "{{ _message }}"
+                      voice: "{{ dispatch_voice | default('') }}"
+                      volume_level: "{{ v_tts_volume }}"
+                      priority: 3
+                      target_mode: explicit
+                      target: "{{ v_tts_output_player }}"
+                    response_variable: tts_result
+                    continue_on_error: true
+            default:
+              - alias: "Speak congrats on default player"
+                action: pyscript.tts_queue_speak
+                data:
+                  text: "{{ _message }}"
+                  voice: "{{ dispatch_voice | default('') }}"
+                  volume_level: "{{ v_tts_volume }}"
+                  priority: 3
+                response_variable: tts_result
+                continue_on_error: true
+
+      # ── FULLY CHARGED — announcement ────────────────────────────────
+      - alias: "Fully charged — announcement"
+        conditions:
+          - condition: trigger
+            id: fully_charged
+          - condition: template
+            value_template: "{{ enable_fully_charged }}"
+          - condition: state
+            entity_id: !input charging_sensor
+            state: "on"
+        sequence:
+          - alias: "Generate fully-charged message"
+            choose:
+              - alias: "Prompt mode — LLM-generated message"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ style == 'prompt'
+                         and (dispatch_agent | default('') | length > 0) }}
+                sequence:
+                  - alias: "LLM-generate fully-charged announcement"
+                    action: conversation.process
+                    data:
+                      agent_id: "{{ dispatch_agent }}"
+                      text: "{{ fully_charged_prompt }}"
+                    response_variable: llm_result
+                    continue_on_error: true
+                  - alias: "Set message"
+                    variables:
+                      _message: >-
+                        {{ (llm_result | default({})).get('response', {})
+                           .get('speech', {}).get('plain', {}).get('speech',
+                           fully_charged_factual) }}
+            default:
+              - alias: "Set message"
+                variables:
+                  _message: "{{ fully_charged_factual }}"
+          - alias: "Deliver fully-charged — satellite > player > default"
+            choose:
+              - alias: "Via Assist Satellite"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Announce fully-charged via satellite"
+                    action: assist_satellite.announce
+                    target:
+                      entity_id: "{{ v_satellite_entity }}"
+                    data:
+                      message: "{{ _message }}"
+                    continue_on_error: true
+              - alias: "Via TTS queue — explicit player"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Speak fully-charged on explicit player"
+                    action: pyscript.tts_queue_speak
+                    data:
+                      text: "{{ _message }}"
+                      voice: "{{ dispatch_voice | default('') }}"
+                      volume_level: "{{ v_tts_volume }}"
+                      priority: 3
+                      target_mode: explicit
+                      target: "{{ v_tts_output_player }}"
+                    response_variable: tts_result
+                    continue_on_error: true
+            default:
+              - alias: "Speak fully-charged on default player"
+                action: pyscript.tts_queue_speak
+                data:
+                  text: "{{ _message }}"
+                  voice: "{{ dispatch_voice | default('') }}"
+                  volume_level: "{{ v_tts_volume }}"
+                  priority: 3
+                response_variable: tts_result
+                continue_on_error: true
+
+    # ── FALLBACK — null-trigger (reload/restart/manual) ──────────────
+    default:
+      - alias: "Wait for sensors to settle after restart"
+        delay: "00:00:30"
+
+      - alias: "Determine tier from battery level"
+        variables:
+          _tier: >-
+            {% if _battery | int(0) >= (low_threshold | int(20)) %}none
+            {% elif _battery | int(0) < (urgent_threshold | int(5)) %}urgent
+            {% elif _battery | int(0) < (critical_threshold | int(10)) %}critical
+            {% else %}low{% endif %}
+          _tier_prompt: >-
+            {% if _tier == 'urgent' %}{{ urgent_prompt }}
+            {% elif _tier == 'critical' %}{{ critical_prompt }}
+            {% else %}{{ low_prompt }}{% endif %}
+          _tier_factual: >-
+            {% if _tier == 'urgent' %}{{ urgent_factual }}
+            {% elif _tier == 'critical' %}{{ critical_factual }}
+            {% else %}{{ low_factual }}{% endif %}
+          _tier_count: >-
+            {% if _tier == 'urgent' %}{{ urgent_reminder_count | int(2) }}
+            {% elif _tier == 'critical' %}{{ critical_reminder_count | int(2) }}
+            {% else %}{{ low_reminder_count | int(2) }}{% endif %}
+          _tier_priority: >-
+            {% if _tier == 'urgent' %}1
+            {% elif _tier == 'critical' %}2
+            {% else %}3{% endif %}
+          _tier_delay: >-
+            {% if _tier == 'urgent' %}00:05:00
+            {% elif _tier == 'critical' %}00:15:00
+            {% else %}00:30:00{% endif %}
+
+      - alias: "Skip if battery above low threshold"
+        condition: template
+        value_template: "{{ _tier != 'none' }}"
+
+      - alias: "Skip if already charging"
+        condition: state
+        entity_id: !input charging_sensor
+        state: "off"
+
+      - alias: "Repeat charge reminder loop for current tier"
+        repeat:
+          count: "{{ _tier_count | int(2) }}"
+          sequence:
+            - alias: "Stop if phone was plugged in"
+              condition: state
+              entity_id: !input charging_sensor
+              state: "off"
+
+            - alias: "Generate nudge (tier-parameterized)"
+              choose:
+                - alias: "Prompt mode — LLM-generated nudge"
+                  conditions:
+                    - condition: template
+                      value_template: >-
+                        {{ style == 'prompt'
+                           and (dispatch_agent | default('') | length > 0) }}
+                  sequence:
+                    - alias: "LLM-generate tier-parameterized nudge after restart"
+                      action: conversation.process
+                      data:
+                        agent_id: "{{ dispatch_agent }}"
+                        text: >-
+                          {{ _tier_prompt
+                             | replace('{battery}', _battery | string) }}
+                      response_variable: llm_result
+                      continue_on_error: true
+                    - alias: "Set message"
+                      variables:
+                        _message: >-
+                          {{ (llm_result | default({})).get('response', {})
+                             .get('speech', {}).get('plain', {}).get('speech',
+                             _tier_factual | replace('{battery}', _battery | string)) }}
+              default:
+                - alias: "Set message"
+                  variables:
+                    _message: >-
+                      {{ _tier_factual | replace('{battery}', _battery | string) }}
+
+            - alias: "Deliver nudge — satellite > player > default"
+              choose:
+                - alias: "Via Assist Satellite"
+                  conditions:
+                    - condition: template
+                      value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                  sequence:
+                    - alias: "Announce fallback nudge via satellite"
+                      action: assist_satellite.announce
+                      target:
+                        entity_id: "{{ v_satellite_entity }}"
+                      data:
+                        message: "{{ _message }}"
+                      continue_on_error: true
+                - alias: "Via TTS queue — explicit player"
+                  conditions:
+                    - condition: template
+                      value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                  sequence:
+                    - alias: "Speak fallback nudge on explicit player"
+                      action: pyscript.tts_queue_speak
+                      data:
+                        text: "{{ _message }}"
+                        voice: "{{ dispatch_voice | default('') }}"
+                        volume_level: "{{ v_tts_volume }}"
+                        priority: "{{ _tier_priority | int(3) }}"
+                        target_mode: explicit
+                        target: "{{ v_tts_output_player }}"
+                      response_variable: tts_result
+                      continue_on_error: true
+              default:
+                - alias: "Speak fallback nudge on default player"
+                  action: pyscript.tts_queue_speak
+                  data:
+                    text: "{{ _message }}"
+                    voice: "{{ dispatch_voice | default('') }}"
+                    volume_level: "{{ v_tts_volume }}"
+                    priority: "{{ _tier_priority | int(3) }}"
+                  response_variable: tts_result
+                  continue_on_error: true
+
+            - alias: "Delay between reminders (skip on last)"
+              if:
+                - condition: template
+                  value_template: "{{ repeat.index < (_tier_count | int(2)) }}"
+              then:
+                - alias: "Wait for configured delay"
+                  delay: "{{ _tier_delay }}"
+
+  # ── Restore bypassed toggles ─────────────────────────────────────────
+  - alias: "Restore follow-me (if bypassed)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass via refcount"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+  - alias: "Restore ducking (if bypassed)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ ducking_was_on }}"
+        sequence:
+          - alias: "Re-enable duck manager after reminder sequence"
+            action: input_boolean.turn_on
+            target:
+              entity_id: "{{ v_duck_toggle }}"

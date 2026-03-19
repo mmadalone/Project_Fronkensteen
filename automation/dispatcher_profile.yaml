@@ -1,0 +1,524 @@
+# =============================================================================
+# Dispatcher Profile — Centralized Agent Dispatcher Configuration
+# =============================================================================
+# One-stop blueprint for all dispatcher routing knobs. Creates a single
+# automation that pushes config into helpers on startup or manual apply.
+#
+# Multiple instances supported (e.g., "Daytime Profile", "Guest Profile")
+# but only one should be enabled at a time — last-write-wins.
+#
+# Deployed: 2026-03-11
+# =============================================================================
+
+blueprint:
+  name: "Dispatcher Profile"
+  description: >-
+    Centralized Agent Dispatcher configuration. Exposes all routing knobs
+    as blueprint inputs — dispatch mode, era personas, continuity window,
+    handoff settings, expertise routing, and budget fallback. On trigger
+    (HA startup or manual button press), pushes all values into the
+    dispatcher's helpers and reloads the routing cache.
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/dispatcher_profile.yaml
+  author: madalone
+
+  input:
+    # ── Trigger ────────────────────────────────────────────────────────
+    apply_button:
+      name: Apply Button
+      description: >-
+        An input_button entity to manually trigger config apply.
+        Press this after changing any input to push the new config.
+      default: input_button.ai_dispatcher_apply_config
+      selector:
+        entity:
+          filter:
+            domain: input_button
+
+    # ── Dispatch Mode ──────────────────────────────────────────────────
+    dispatch_mode:
+      name: Dispatch Mode
+      description: >-
+        How the dispatcher selects agents.
+        Auto = full priority chain (wake word → continuity → topic → era → preference → random).
+        Fixed = always use the Fixed Agent below.
+        Random = pick randomly each time.
+        Round Robin = cycle through agents in order.
+      default: "auto"
+      selector:
+        select:
+          options:
+            - label: "Auto (full priority chain)"
+              value: "auto"
+            - label: "Fixed (single agent)"
+              value: "fixed"
+            - label: "Random"
+              value: "random"
+            - label: "Round Robin"
+              value: "round_robin"
+
+    fixed_agent:
+      name: Fixed Agent
+      description: >-
+        When mode is Fixed, which persona to always route to.
+        Ignored in other modes.
+      default: "rick"
+      selector:
+        select:
+          options:
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    # ── Agent Pool ─────────────────────────────────────────────────────
+    agent_pool:
+      name: Agent Pool
+      description: >-
+        Which agents participate in Random, Round Robin, and Auto rotate/fallback.
+        Leave empty to use ALL discovered agents.
+      default: []
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    # ── Era Personas ───────────────────────────────────────────────────
+    era_late_night:
+      name: "Late Night Persona (00:00–05:59)"
+      description: >-
+        Default agent during late night hours. None skips this priority
+        and falls through to the next. Rotate picks a different agent each time.
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None (skip to next priority)"
+              value: "none"
+            - label: "Rotate"
+              value: "rotate"
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    era_morning:
+      name: "Morning Persona (06:00–11:59)"
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None (skip to next priority)"
+              value: "none"
+            - label: "Rotate"
+              value: "rotate"
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    era_afternoon:
+      name: "Afternoon Persona (12:00–17:59)"
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None (skip to next priority)"
+              value: "none"
+            - label: "Rotate"
+              value: "rotate"
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    era_evening:
+      name: "Evening Persona (18:00–23:59)"
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None (skip to next priority)"
+              value: "none"
+            - label: "Rotate"
+              value: "rotate"
+            - label: "Rick"
+              value: "rick"
+            - label: "Quark"
+              value: "quark"
+            - label: "Kramer"
+              value: "kramer"
+            - label: "Deadpool"
+              value: "deadpool"
+            - label: "Doctor Portuondo"
+              value: "doctor_portuondo"
+          custom_value: true
+
+    # ── Continuity ─────────────────────────────────────────────────────
+    continuity_window:
+      name: Continuity Window
+      description: >-
+        Keep the same agent if last interaction was within this many
+        minutes. Set to 0 to disable continuity.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: min
+
+    # ── Handoff ────────────────────────────────────────────────────────
+    handoff_enabled:
+      name: Voice Handoff
+      description: >-
+        Allow "pass me to Rick" style commands to switch agents mid-conversation.
+      default: true
+      selector:
+        boolean:
+
+    # ── Expertise Routing ──────────────────────────────────────────────
+    expertise_routing:
+      name: Expertise Routing Mode
+      description: >-
+        When an agent detects an out-of-domain question:
+        Off = ignore, Suggest = agent suggests switching,
+        Auto = agent switches automatically.
+      default: "suggest"
+      selector:
+        select:
+          options:
+            - label: "Off"
+              value: "off"
+            - label: "Suggest (agent recommends handoff)"
+              value: "suggest"
+            - label: "Auto (agent hands off automatically)"
+              value: "auto"
+
+    # ── TTS Stage Directions ─────────────────────────────────────────
+    strip_stage_directions:
+      name: Strip Stage Directions
+      description: >-
+        Remove [bracketed] stage directions (e.g. [burps], [sigh])
+        from LLM output before TTS. Disable to preserve persona
+        speech cadence markers for ElevenLabs voices.
+      default: true
+      selector:
+        boolean: {}
+
+    # ── Budget Fallback ────────────────────────────────────────────────
+    budget_fallback_agent:
+      name: Budget Fallback Agent
+      description: >-
+        Which local conversation agent to fall back to when LLM budget
+        is exhausted. Only local/HA Cloud agents — no per-call API costs.
+      default: "homeassistant"
+      selector:
+        select:
+          options:
+            - label: "Home Assistant (built-in local NLU)"
+              value: "homeassistant"
+            - label: "HA Cloud (Davis/Joana/Alvaro pipeline)"
+              value: "conversation.home_assistant"
+          custom_value: true
+
+    # ── Infrastructure ───────────────────────────────────────────────
+    infrastructure:
+      name: "⑩ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        tts_strip_stage_directions:
+          name: "TTS strip stage directions entity"
+          description: "Boolean that controls whether stage directions are stripped from TTS output."
+          default: input_boolean.ai_tts_strip_stage_directions
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+        voice_handoff_enabled:
+          name: "Voice handoff enabled entity"
+          description: "Boolean that controls whether voice handoff is enabled."
+          default: input_boolean.ai_voice_handoff_enabled
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+    # ── Privacy ───────────────────────────────────────────────────────
+    privacy:
+      name: "⑨ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_tts_strip: !input tts_strip_stage_directions
+  v_handoff_enabled: !input voice_handoff_enabled
+
+triggers:
+  - trigger: homeassistant
+    event: start
+    id: startup
+  - trigger: state
+    entity_id: !input apply_button
+    id: manual_apply
+
+conditions:
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_dispatcher_profile') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  # ── Step 0: On startup, wait for pyscript to initialize first ──────
+  - alias: "Step 0: On startup, wait for pyscript to initialize first"
+    if:
+      - condition: trigger
+        id: startup
+    then:
+      - alias: "Wait 15 seconds"
+        delay:
+          seconds: 15
+
+  # ── Step 1: Reload dispatcher cache (populates era helper options) ──
+  - alias: "Reload dispatcher cache to refresh agent registry"
+    action: pyscript.dispatcher_reload_cache
+    continue_on_error: true
+    response_variable: reload_result
+
+  # ── Step 2: Push dispatch mode ─────────────────────────────────────
+  - alias: "Set dispatch mode (auto/fixed/random/round_robin)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_dispatcher_mode
+    data:
+      option: !input dispatch_mode
+
+  # ── Step 3: Push fixed agent ───────────────────────────────────────
+  - alias: "Set fixed agent persona"
+    action: input_text.set_value
+    target:
+      entity_id: input_text.ai_dispatcher_fixed_agent
+    data:
+      value: !input fixed_agent
+
+  # ── Step 3b: Push agent pool (comma-separated) ────────────────────
+  - alias: "Set pool list"
+    variables:
+      pool_list: !input agent_pool
+  - alias: "Set agent pool for rotation and fallback"
+    action: input_text.set_value
+    target:
+      entity_id: input_text.ai_dispatcher_agent_pool
+    data:
+      value: "{{ pool_list | join(',') if pool_list else '' }}"
+
+  # ── Step 4: Push era personas ──────────────────────────────────────
+  - alias: "Set late night era persona (00:00-05:59)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_dispatcher_era_late_night
+    data:
+      option: !input era_late_night
+
+  - alias: "Set morning era persona (06:00-11:59)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_dispatcher_era_morning
+    data:
+      option: !input era_morning
+
+  - alias: "Set afternoon era persona (12:00-17:59)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_dispatcher_era_afternoon
+    data:
+      option: !input era_afternoon
+
+  - alias: "Set evening era persona (18:00-23:59)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_dispatcher_era_evening
+    data:
+      option: !input era_evening
+
+  # ── Step 5: Push continuity window ─────────────────────────────────
+  - alias: "Set continuity window for same-agent retention"
+    action: input_number.set_value
+    target:
+      entity_id: input_number.ai_conversation_continuity_window
+    data:
+      value: !input continuity_window
+
+  # ── Step 6: Push handoff settings ──────────────────────────────────
+  - alias: "Set handoff on"
+    variables:
+      handoff_on: !input handoff_enabled
+
+  - alias: "Conditional check"
+    if:
+      - condition: template
+        value_template: "{{ handoff_on }}"
+    then:
+      - alias: "Enable voice handoff"
+        action: input_boolean.turn_on
+        target:
+          entity_id: "{{ v_handoff_enabled }}"
+    else:
+      - alias: "Disable voice handoff"
+        action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_handoff_enabled }}"
+
+  # ── Step 7: Push expertise routing ─────────────────────────────────
+  - alias: "Set expertise routing mode (off/suggest/auto)"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_expertise_routing_mode
+    data:
+      option: !input expertise_routing
+
+  # ── Step 8: Push budget fallback agent ─────────────────────────────
+  - alias: "Set budget fallback agent for exhaustion mode"
+    action: input_text.set_value
+    target:
+      entity_id: input_text.ai_budget_fallback_agent
+    data:
+      value: !input budget_fallback_agent
+
+  # ── Step 8b: Push strip stage directions ─────────────────────────
+  - alias: "Set strip dirs"
+    variables:
+      strip_dirs: !input strip_stage_directions
+  - alias: "Conditional check"
+    if:
+      - condition: template
+        value_template: "{{ strip_dirs }}"
+    then:
+      - alias: "Enable TTS stage direction stripping"
+        action: input_boolean.turn_on
+        target:
+          entity_id: "{{ v_tts_strip }}"
+    else:
+      - alias: "Disable TTS stage direction stripping"
+        action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_tts_strip }}"
+
+  # ── Step 9: Log completion ─────────────────────────────────────────
+  - alias: "Log profile application to system log"
+    action: system_log.write
+    data:
+      message: >-
+        Dispatcher Profile applied: mode={{ states('input_select.ai_dispatcher_mode') }},
+        fixed={{ states('input_text.ai_dispatcher_fixed_agent') }},
+        eras=[{{ states('input_select.ai_dispatcher_era_late_night') }}/{{
+        states('input_select.ai_dispatcher_era_morning') }}/{{
+        states('input_select.ai_dispatcher_era_afternoon') }}/{{
+        states('input_select.ai_dispatcher_era_evening') }}],
+        continuity={{ states('input_number.ai_conversation_continuity_window') }}min,
+        handoff={{ states(v_handoff_enabled) }},
+        expertise={{ states('input_select.ai_expertise_routing_mode') }},
+        fallback={{ states('input_text.ai_budget_fallback_agent') }},
+        strip_dirs={{ states(v_tts_strip) }}
+      level: info
+      logger: dispatcher_profile

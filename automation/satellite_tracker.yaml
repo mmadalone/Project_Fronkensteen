@@ -1,0 +1,52 @@
+# =============================================================================
+# Satellite Tracker Blueprint — Records Last Active Satellite
+# =============================================================================
+# When the satellite starts responding, stores its entity_id in
+# input_text.ai_last_satellite. Used by voice_handoff.yaml to route
+# the handoff to the correct satellite.
+#
+# Requires:
+#   - input_text.ai_last_satellite (in packages/ai_self_awareness.yaml)
+#
+# Create one instance per satellite.
+# =============================================================================
+blueprint:
+  name: Satellite Tracker — Last Active
+  description: >-
+    Tracks when a satellite starts responding and stores its entity_id
+    in input_text.ai_last_satellite. Create one instance per satellite.
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/satellite_tracker.yaml
+
+  input:
+    # ===========================================================================
+    # ① Satellite
+    # ===========================================================================
+    satellite_config:
+      name: "① Satellite"
+      icon: mdi:access-point
+      description: Which satellite to track for last-active routing.
+      collapsed: false
+      input:
+        satellite:
+          name: Voice PE Satellite
+          description: The satellite to track.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+mode: restart
+
+triggers:
+  - trigger: state
+    entity_id: !input satellite
+    to: "responding"
+
+actions:
+  - alias: "Record last-used satellite for presence routing"
+    action: input_text.set_value
+    target:
+      entity_id: input_text.ai_last_satellite
+    data:
+      value: "{{ trigger.entity_id }}"

@@ -12,8 +12,11 @@
 #   input_select.ai_tts_restore_mode
 #   input_number.ai_tts_restore_fixed_delay / ai_tts_restore_timeout
 #   input_text.ai_tts_restore_satellites
-#   input_boolean.ducking_flag
+#   input_boolean.ai_ducking_flag
 # =============================================================================
+
+# Pyscript-created sensor (duck_manager.py via state.set):
+#   sensor.ai_duck_manager_status — ducking state, active sessions, snapshot info
 
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
 

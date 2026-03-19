@@ -43,7 +43,7 @@ _select_map = {}    # satellite_entity → select_entity (pipeline picker)
 
 # ── Device Discovery ────────────────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _discover_satellite_devices_sync(registry_file: str) -> tuple:
     """Read entity registry, group by device_id, build satellite maps.
 
@@ -636,9 +636,7 @@ async def voice_session_request(
 async def _run_discovery():
     """Discover satellite device mappings from entity registry."""
     global _select_map, _speaker_map
-    sel, spk = await task.executor(  # noqa: F821
-        _discover_satellite_devices_sync, ENTITY_REGISTRY_FILE
-    )
+    sel, spk = _discover_satellite_devices_sync(ENTITY_REGISTRY_FILE)
     _select_map = sel
     _speaker_map = spk
     log.warning(  # noqa: F821

@@ -23,9 +23,20 @@ def load_entity_config() -> dict:
     if _config_cache is not None:
         return _config_cache
     try:
-        with open(_CONFIG_PATH) as f:
-            _config_cache = yaml.safe_load(f) or {}
-    except Exception:
+        if not _CONFIG_PATH.exists():
+            import logging
+            logging.getLogger(__name__).warning(
+                "shared_utils: entity_config.yaml not found at %s", _CONFIG_PATH
+            )
+            _config_cache = {}
+            return _config_cache
+        # Use Path.read_text() instead of open() — pyscript sandboxes builtins
+        _config_cache = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error(
+            "shared_utils: failed to load entity_config.yaml: %s", exc
+        )
         _config_cache = {}
     return _config_cache
 

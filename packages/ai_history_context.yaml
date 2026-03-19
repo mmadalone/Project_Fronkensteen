@@ -1,0 +1,144 @@
+# =============================================================================
+# AI History Context — Pre-computed historical data for hot context
+# =============================================================================
+# Provides accurate history data that voice agents read from context,
+# avoiding reliance on tool calls for common questions like
+# "how long have I been home?" or "what was the temperature last night?"
+#
+# Uses official HA platforms: history_stats (state duration) and
+# statistics (numeric aggregation). Auto-updating, zero pyscript.
+#
+# Sensors created:
+#   sensor.ai_home_time_today_miquel   — hours home today (person.miquel)
+#   sensor.ai_home_time_today_jessica  — hours home today (person.jessica)
+#   sensor.ai_outside_temperature_24h  — mean temp 24h (attrs: min_value, max_value)
+# =============================================================================
+
+sensor:
+  # ── Home duration today (per person) ──────────────────────────────
+  - platform: history_stats
+    name: "AI Home Time Today Miquel"
+    unique_id: ai_home_time_today_miquel
+    entity_id: person.miquel
+    state: "home"
+    type: time
+    start: "{{ today_at('00:00') }}"
+    end: "{{ now() }}"
+
+  - platform: history_stats
+    name: "AI Home Time Today Jessica"
+    unique_id: ai_home_time_today_jessica
+    entity_id: person.jessica
+    state: "home"
+    type: time
+    start: "{{ today_at('00:00') }}"
+    end: "{{ now() }}"
+
+  # ── Temperature range last 24h ────────────────────────────────────
+  # State = mean. Attributes include min_value, max_value, count.
+  - platform: statistics
+    name: "AI Outside Temperature 24h"
+    unique_id: ai_outside_temperature_24h
+    entity_id: sensor.weather_temperature
+    state_characteristic: mean
+    max_age:
+      hours: 24
+    precision: 1
+
+# =============================================================================
+# Automations — Arrival / Departure timestamps for "home since" context
+# =============================================================================
+# Epoch sentinel "1970-01-01 00:00:00" = not home / unknown.
+# history_stats sensors kept for focus_guard + startup seed fallback.
+# =============================================================================
+
+automation:
+  # ── Arrival stamp ─────────────────────────────────────────────────
+  # When person.* → home, stamp input_datetime.ai_home_since_{slug}.
+  # Guard: only if helper is at epoch sentinel (prevents re-stamp on
+  # tracker flaps or zone-edge bounces).
+  - id: ai_history_home_arrival_stamp
+    alias: "AI History — Home Arrival Stamp"
+    description: >-
+      Sets ai_home_since_{person} to now() when a person arrives home.
+      Only fires when the helper is at the epoch sentinel to prevent
+      re-stamping on tracker flaps.
+    mode: queued
+    max: 4
+    trigger:
+      - platform: state
+        entity_id: person.miquel, person.jessica
+        to: "home"
+    condition:
+      - condition: template
+        value_template: >-
+          {% set slug = trigger.to_state.object_id %}
+          {% set helper = 'input_datetime.ai_home_since_' ~ slug %}
+          {{ states(helper) in ['unknown', 'unavailable', '1970-01-01 00:00:00', ''] }}
+    action:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: >-
+            {{ 'input_datetime.ai_home_since_' ~ trigger.to_state.object_id }}
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # ── Departure clear ───────────────────────────────────────────────
+  # When person.* leaves home, reset helper to epoch sentinel.
+  - id: ai_history_home_departure_clear
+    alias: "AI History — Home Departure Clear"
+    description: >-
+      Clears ai_home_since_{person} to epoch sentinel when a person
+      leaves home.
+    mode: queued
+    max: 4
+    trigger:
+      - platform: state
+        entity_id: person.miquel, person.jessica
+        from: "home"
+    action:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: >-
+            {{ 'input_datetime.ai_home_since_' ~ trigger.to_state.object_id }}
+        data:
+          datetime: "1970-01-01 00:00:00"
+
+  # ── Startup seed ──────────────────────────────────────────────────
+  # On HA start, wait 30s for history_stats to populate, then for each
+  # person currently home whose helper is at sentinel: approximate
+  # arrival as now() minus history_stats hours. Best-effort fallback.
+  - id: ai_history_home_startup_seed
+    alias: "AI History — Home Startup Seed"
+    description: >-
+      After HA restart, seeds ai_home_since_{person} from history_stats
+      for anyone currently home with an unset helper. Best-effort
+      approximation — history_stats resets at midnight so the seed is
+      only accurate for same-day arrivals.
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      - delay:
+          seconds: 30
+      - repeat:
+          for_each:
+            - miquel
+            - jessica
+          sequence:
+            - condition: template
+              value_template: >-
+                {% set slug = repeat.item %}
+                {% set helper = 'input_datetime.ai_home_since_' ~ slug %}
+                {{ is_state('person.' ~ slug, 'home')
+                   and states(helper) in ['unknown', 'unavailable', '1970-01-01 00:00:00', ''] }}
+            - action: input_datetime.set_datetime
+              target:
+                entity_id: >-
+                  {{ 'input_datetime.ai_home_since_' ~ repeat.item }}
+              data:
+                datetime: >-
+                  {% set slug = repeat.item %}
+                  {% set hrs = states('sensor.ai_home_time_today_' ~ slug) | float(0) %}
+                  {{ (now() - timedelta(hours=hrs)).strftime('%Y-%m-%d %H:%M:%S') }}

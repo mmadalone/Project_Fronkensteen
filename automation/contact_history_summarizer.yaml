@@ -1,0 +1,366 @@
+# =============================================================================
+# Contact History Summarizer (v1.0.0)
+# =============================================================================
+# Scheduled/event-driven job that compresses raw per-contact message entries
+# into LLM-compressed digests. Part of I-47: Per-Contact Message History.
+#
+# Calls pyscript.contact_history_summarize, which:
+#   - Searches L2 for unsummarized contact_msg_* entries
+#   - Groups by contact name
+#   - Compresses each group via LLM into a 2-3 sentence digest
+#   - Stores digest with configurable TTL
+#   - Tags source entries as "summarized"
+#
+# Three trigger modes:
+#   - scheduled: runs on a fixed interval
+#   - event_driven: fires on contact_history_log_complete event,
+#     checks threshold per contact
+#   - hybrid: both triggers, with cooldown on event path
+#
+# Cost: ~$0.001/contact at gpt-4o-mini. Budget-gated via kill switch.
+# =============================================================================
+
+blueprint:
+  name: "Contact History Summarizer (v1.0.0)"
+  author: madalone
+  description: >
+    # Contact History Summarizer
+
+
+    Batch job that compresses raw per-contact message entries into LLM-compressed
+    digests for the notification follow-me contact history feature (I-47).
+
+
+    **Trigger modes:**
+
+    - `scheduled` — runs on a fixed interval (default: every 60 minutes)
+
+    - `event_driven` — fires each time a message is logged; runs summarizer
+      only when unsummarized messages for that contact reach the threshold
+
+    - `hybrid` — both triggers active, with a cooldown on the event-driven
+      path to prevent excessive runs
+
+
+    **Budget safety:** Uses the configured ha_text_ai instance (default:
+    gpt-4o-mini tier). Kill switch disables all summarization.
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/contact_history_summarizer.yaml
+
+  input:
+    # ===========================================================================
+    # ① TRIGGER MODE
+    # ===========================================================================
+    trigger_config:
+      name: "① Trigger Mode"
+      icon: mdi:clock-start
+      description: How and when the summarizer runs.
+      collapsed: false
+      input:
+        trigger_mode:
+          name: Trigger Mode
+          description: >-
+            How the summarizer is triggered. Scheduled runs on a timer.
+            Event-driven fires after each logged message. Hybrid uses both
+            with a cooldown on event-driven runs.
+          default: "scheduled"
+          selector:
+            select:
+              options:
+                - label: "Scheduled (fixed interval)"
+                  value: "scheduled"
+                - label: "Event-driven (per message log)"
+                  value: "event_driven"
+                - label: "Hybrid (both with cooldown)"
+                  value: "hybrid"
+
+        schedule_interval:
+          name: Schedule Interval
+          description: >-
+            How often the scheduled trigger fires. Only used in scheduled
+            and hybrid modes.
+          default: "1h"
+          selector:
+            select:
+              options:
+                - label: "Every 15 minutes"
+                  value: "15m"
+                - label: "Every 30 minutes"
+                  value: "30m"
+                - label: "Every hour"
+                  value: "1h"
+                - label: "Every 2 hours"
+                  value: "2h"
+                - label: "Every 4 hours"
+                  value: "4h"
+                - label: "Every 6 hours"
+                  value: "6h"
+                - label: "Every 12 hours"
+                  value: "12h"
+
+        event_threshold:
+          name: Event Threshold
+          description: >-
+            In event-driven/hybrid mode, how many unsummarized messages
+            per contact before triggering summarization.
+          default: 3
+          selector:
+            number:
+              min: 2
+              max: 20
+              step: 1
+              mode: box
+
+        hybrid_cooldown_minutes:
+          name: Hybrid Cooldown (minutes)
+          description: >-
+            In hybrid mode, minimum interval between event-driven runs.
+            Prevents excessive LLM calls when many messages arrive quickly.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 120
+              step: 5
+              mode: slider
+
+    # ===========================================================================
+    # ② TUNING
+    # ===========================================================================
+    tuning:
+      name: "② Tuning"
+      icon: mdi:tune-variant
+      description: Batch size limits and digest retention.
+      collapsed: true
+      input:
+        min_messages:
+          name: Min Messages per Contact
+          description: >-
+            Skip contacts with fewer unsummarized messages than this.
+            Prevents wasting an LLM call on a single message.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 20
+              step: 1
+              mode: box
+
+        max_contacts:
+          name: Max Contacts per Run
+          description: >-
+            Cap on contacts processed per run. Budget safeguard.
+          default: 20
+          selector:
+            number:
+              min: 1
+              max: 50
+              step: 1
+              mode: box
+
+        summary_expiry_days:
+          name: Summary Expiry (days)
+          description: >-
+            How long digest entries persist in L2 memory.
+          default: 7
+          selector:
+            number:
+              min: 1
+              max: 90
+              step: 1
+              mode: box
+
+    # ===========================================================================
+    # ③ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog-outline
+      description: LLM instance and kill switch.
+      collapsed: true
+      input:
+        llm_instance:
+          name: LLM Instance
+          description: >-
+            Which ha_text_ai sensor to use for LLM compression calls.
+          default:
+            entity_id: sensor.ha_text_ai
+          selector:
+            entity:
+              domain: sensor
+
+        kill_switch:
+          name: Kill Switch
+          description: >-
+            Boolean to disable summarization without removing the automation.
+            ON = enabled, OFF = disabled.
+          default:
+            entity_id: input_boolean.ai_contact_history_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+variables:
+  v_trigger_mode: !input trigger_mode
+  v_event_threshold: !input event_threshold
+  v_hybrid_cooldown: !input hybrid_cooldown_minutes
+  v_kill_switch: !input kill_switch
+  v_schedule: !input schedule_interval
+
+triggers:
+  # Scheduled trigger — sub-hour intervals (15m, 30m)
+  - alias: "Scheduled interval trigger (minutes)"
+    id: scheduled_tick_m
+    trigger: time_pattern
+    minutes: "/15"
+
+  # Scheduled trigger — hourly+ intervals (1h..12h)
+  - alias: "Scheduled interval trigger (hours)"
+    id: scheduled_tick_h
+    trigger: time_pattern
+    hours: "/1"
+    minutes: "0"
+
+  # Event-driven trigger — fires on each logged message
+  - alias: "Contact message logged event"
+    id: event_log
+    trigger: event
+    event_type: contact_history_log_complete
+
+conditions:
+  - alias: "Kill switch must be ON (enabled)"
+    condition: template
+    value_template: >-
+      {{ is_state(v_kill_switch, 'on') }}
+
+  - alias: "Schedule + trigger mode gate"
+    condition: template
+    value_template: >-
+      {% set tid = trigger.id | default('') %}
+      {% if tid == 'event_log' %}
+        {{ v_trigger_mode in ['event_driven', 'hybrid'] }}
+      {% elif tid == 'scheduled_tick_m' %}
+        {% if v_trigger_mode not in ['scheduled', 'hybrid'] %}
+          false
+        {% elif v_schedule == '15m' %}
+          true
+        {% elif v_schedule == '30m' %}
+          {{ now().minute % 30 == 0 }}
+        {% else %}
+          false
+        {% endif %}
+      {% elif tid == 'scheduled_tick_h' %}
+        {% if v_trigger_mode not in ['scheduled', 'hybrid'] %}
+          false
+        {% else %}
+          {% set h = now().hour %}
+          {% if v_schedule == '1h' %}true
+          {% elif v_schedule == '2h' %}{{ h % 2 == 0 }}
+          {% elif v_schedule == '4h' %}{{ h % 4 == 0 }}
+          {% elif v_schedule == '6h' %}{{ h % 6 == 0 }}
+          {% elif v_schedule == '12h' %}{{ h % 12 == 0 }}
+          {% else %}false
+          {% endif %}
+        {% endif %}
+      {% else %}
+        true
+      {% endif %}
+
+actions:
+  - alias: "Route by trigger type"
+    choose:
+      # ── Event-driven path ──────────────────────────────────────────────
+      - alias: "Event-driven: check threshold and optional cooldown"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'event_log' }}"
+        sequence:
+          # Hybrid cooldown check
+          - alias: "Hybrid cooldown gate"
+            condition: template
+            value_template: >-
+              {% if v_trigger_mode != 'hybrid' %}
+                true
+              {% else %}
+                {% set last = this.attributes.get('last_event_run', '') %}
+                {% if last == '' %}
+                  true
+                {% else %}
+                  {% set elapsed = (now().timestamp() - (last | as_timestamp(0))) / 60 %}
+                  {{ elapsed >= (v_hybrid_cooldown | int(30)) }}
+                {% endif %}
+              {% endif %}
+
+          # Threshold check — count unsummarized entries for this contact
+          - alias: "Check unsummarized count for contact"
+            continue_on_error: true
+            action: pyscript.memory_search
+            response_variable: count_result
+            data:
+              query: >-
+                contact message {{ trigger.event.data.contact | default('') }}
+              limit: 50
+
+          - alias: "Gate: threshold met?"
+            condition: template
+            value_template: >-
+              {% set entries = count_result.results | default([]) %}
+              {% set unsummarized = entries | selectattr('tags', 'defined')
+                  | rejectattr('tags', 'search', 'summarized') | list %}
+              {{ unsummarized | length >= (v_event_threshold | int(3)) }}
+
+          # Run summarizer for this contact only
+          - alias: "Summarize target contact"
+            continue_on_error: true
+            action: pyscript.contact_history_summarize
+            response_variable: result
+            data:
+              min_messages: !input min_messages
+              max_contacts: 1
+              summary_expiry_days: !input summary_expiry_days
+              llm_instance: !input llm_instance
+              target_contact: "{{ trigger.event.data.contact | default('') }}"
+
+          - alias: "Log event-driven result"
+            action: system_log.write
+            continue_on_error: true
+            data:
+              message: >-
+                Contact history summarizer (event): contact={{ trigger.event.data.contact | default('?') }},
+                digests={{ result.digests_created | default(0) }},
+                processed={{ result.entries_processed | default(0) }},
+                llm_calls={{ result.llm_calls | default(0) }}
+              level: info
+              logger: contact_history.summarizer
+
+      # ── Scheduled path ─────────────────────────────────────────────────
+      - alias: "Scheduled: run full batch"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id in ['scheduled_tick_m', 'scheduled_tick_h'] }}"
+        sequence:
+          - alias: "Run full summarization batch"
+            continue_on_error: true
+            action: pyscript.contact_history_summarize
+            response_variable: result
+            data:
+              min_messages: !input min_messages
+              max_contacts: !input max_contacts
+              summary_expiry_days: !input summary_expiry_days
+              llm_instance: !input llm_instance
+
+          - alias: "Log scheduled result"
+            action: system_log.write
+            continue_on_error: true
+            data:
+              message: >-
+                Contact history summarizer (scheduled):
+                contacts={{ result.contacts_processed | default(0) }},
+                digests={{ result.digests_created | default(0) }},
+                processed={{ result.entries_processed | default(0) }},
+                llm_calls={{ result.llm_calls | default(0) }}
+              level: info
+              logger: contact_history.summarizer
+
+mode: single

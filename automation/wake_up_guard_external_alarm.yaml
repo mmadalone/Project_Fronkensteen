@@ -1,0 +1,129 @@
+blueprint:
+  name: "Wake-Up Guard – External Alarm Trigger (Android / Alexa / etc.)"
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/wake_up_guard_external_alarm.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  description: >-
+    ![Wake-Up Guard header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wake_up_guard_external_alarm-header.jpeg)
+
+
+    Triggers your wake-up script based on an external alarm-time sensor,
+    such as:
+
+    - Android phone next alarm (`sensor.<phone>_next_alarm`)
+
+    - Alexa Media Player next alarm (`sensor.<echo>_next_alarm`)
+
+    Optionally fires some minutes **before** the alarm instead of exactly
+    at the alarm time.
+
+
+    This blueprint is designed to hook into an existing wake-up script like
+    `script.wake_up_guard_rick`. That script handles all the actual
+    yelling / negotiation / lights / music.
+
+
+    ### Recent changes
+
+    - **v3 (2026-02-17):** Audit fixes — collapsible defaults on all inputs,
+      `source_url`, `homeassistant: min_version` nesting, `continue_on_error`.
+
+    - **v2 (2026-02-11):** Full style-guide compliance rewrite —
+      header image, collapsible sections, variables block, 2024.10+ syntax,
+      template safety guards with defaults.
+
+  domain: automation
+
+  input:
+    alarm_source:
+      name: "① Alarm source"
+      icon: "mdi:alarm"
+      collapsed: false
+      description: "Which alarm sensor to watch and how far ahead to trigger."
+      input:
+        alarm_sensor:
+          name: Alarm time sensor
+          description: >-
+            Sensor that holds the next alarm time as a timestamp.
+            Examples: `sensor.pixel_7_next_alarm`,
+            `sensor.bedroom_echo_next_alarm`.
+            Must have device class "timestamp".
+            At least one alarm sensor is required.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: timestamp
+
+        offset_minutes:
+          name: Offset before alarm (minutes)
+          description: >-
+            How many minutes before the alarm time to trigger.
+            0 = run exactly at alarm time, 10 = run 10 min early.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 120
+              step: 1
+              unit_of_measurement: min
+              mode: slider
+
+    wakeup_action:
+      name: "② Wake-up action"
+      icon: "mdi:script-text-play"
+      collapsed: true
+      description: "The script that performs the actual wake-up routine."
+      input:
+        wakeup_script:
+          name: Wake-up script to run
+          description: >-
+            Script that performs the actual wake-up routine, e.g.
+            `script.wake_up_guard_rick`.
+            A wake-up script must be selected for the automation to function.
+          default: {}
+          selector:
+            entity:
+              domain: script
+
+mode: single
+max_exceeded: silent
+
+variables:
+  alarm_sensor: !input alarm_sensor
+  offset_minutes: !input offset_minutes
+  wakeup_script: !input wakeup_script
+
+triggers:
+  - alias: "Poll every minute for alarm match"
+    trigger: time_pattern
+    minutes: "/1"
+
+conditions:
+  - condition: template
+    alias: "Current time falls within alarm-minus-offset window"
+    value_template: >-
+      {% set alarm = states(alarm_sensor) %}
+      {% if alarm in ['unknown', 'unavailable', 'none', ''] %}
+        false
+      {% else %}
+        {% set alarm_ts = as_timestamp(alarm, 0) %}
+        {% if alarm_ts == 0 %}
+          false
+        {% else %}
+          {% set now_ts = as_timestamp(now()) %}
+          {% set offset = (offset_minutes | int(0)) * 60 %}
+          {% set target_ts = alarm_ts - offset %}
+          {% set delta = target_ts - now_ts %}
+          {# Fire when target is between now and 60 s from now #}
+          {{ 0 <= delta < 60 }}
+        {% endif %}
+      {% endif %}
+
+actions:
+  - alias: "Run the wake-up script"
+    action: script.turn_on
+    target:
+      entity_id: !input wakeup_script
+    continue_on_error: true

@@ -58,18 +58,15 @@ from shared_utils import (
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_email_promotion_status"
-IDENTITY_CONFIDENCE_MIN = 70
-FALLBACK_TTS_VOICE = "tts.home_assistant_cloud"
-BUDGET_STRIPPED_THRESHOLD = 20  # Below this % → skip LLM reformulation
 
-# Built-in priority keywords (always checked alongside user-defined)
-DEFAULT_PRIORITY_KEYWORDS = [
+# Built-in fallback priority keywords (always checked alongside user-defined)
+_FALLBACK_PRIORITY_KEYWORDS = [
     "shipping", "delivery", "appointment", "urgent", "invoice",
     "confirmation", "password reset", "security alert", "payment", "receipt",
 ]
 
-# Urgent keywords (subset of priority — trigger TTS announcement)
-URGENT_KEYWORDS = [
+# Fallback urgent keywords (subset of priority — trigger TTS announcement)
+_FALLBACK_URGENT_KEYWORDS = [
     "urgent", "security alert", "password reset", "immediate",
 ]
 
@@ -80,6 +77,50 @@ EMAIL_ANNOUNCE_PROMPT = (
 )
 
 result_entity_name: dict[str, str] = {}
+
+
+# ── Helper Utilities ─────────────────────────────────────────────────────────
+
+def _helper_float(entity_id: str, default: float) -> float:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return float(val)
+    except Exception:
+        pass
+    return default
+
+def _helper_int(entity_id: str, default: int) -> int:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+def _helper_str(entity_id: str, default: str) -> str:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
+
+
+def _get_priority_keywords():
+    csv = _helper_str("input_text.ai_email_priority_keywords", "")
+    if csv:
+        return [k.strip() for k in csv.split(",") if k.strip()]
+    return _FALLBACK_PRIORITY_KEYWORDS
+
+
+def _get_urgent_keywords():
+    csv = _helper_str("input_text.ai_email_urgent_keywords", "")
+    if csv:
+        return [k.strip() for k in csv.split(",") if k.strip()]
+    return _FALLBACK_URGENT_KEYWORDS
 
 
 # ── Entity Name Helpers (standard pattern) ───────────────────────────────────
@@ -333,6 +374,18 @@ def _update_last_priority(subject: str) -> None:
         log.warning(f"email_promote: last priority update failed: {exc}")  # noqa: F821
 
 
+def _set_email_stale(stale_val: bool) -> None:
+    """Set or clear the email stale flag (Gap 2)."""
+    try:
+        svc = "turn_on" if stale_val else "turn_off"
+        service.call(  # noqa: F821
+            "input_boolean", svc,
+            entity_id="input_boolean.ai_email_stale",
+        )
+    except Exception as exc:
+        log.warning(f"email_promote: stale flag update failed: {exc}")  # noqa: F821
+
+
 # ── LLM Budget Helpers ───────────────────────────────────────────────────────
 
 def _get_budget_remaining() -> int:
@@ -405,7 +458,8 @@ async def _process_email(
 
     # ── Identity gate ──
     confidence = _check_identity_confidence(person)
-    if confidence < IDENTITY_CONFIDENCE_MIN:
+    id_min = _helper_int("input_number.ai_identity_confidence_min", 70)
+    if confidence < id_min:
         reason = f"low_confidence ({confidence}%)"
         if test_mode:
             log.info(  # noqa: F821
@@ -480,7 +534,7 @@ async def _process_email(
                 sender_email, sender_domain, contacts_csv,
             )
             is_keyword, matched_keyword = _check_keywords(
-                subject, DEFAULT_PRIORITY_KEYWORDS, custom_kw_csv,
+                subject, _get_priority_keywords(), custom_kw_csv,
             )
             if is_contact:
                 match_reason = f"known_contact ({sender_email})"
@@ -507,7 +561,7 @@ async def _process_email(
                 sender_email, sender_domain, contacts_csv,
             )
             is_keyword, matched_keyword = _check_keywords(
-                subject, DEFAULT_PRIORITY_KEYWORDS, custom_kw_csv,
+                subject, _get_priority_keywords(), custom_kw_csv,
             )
             is_priority = is_contact or is_keyword
             if is_contact:
@@ -522,7 +576,7 @@ async def _process_email(
             sender_email, sender_domain, contacts_csv,
         )
         is_keyword, matched_keyword = _check_keywords(
-            subject, DEFAULT_PRIORITY_KEYWORDS, custom_kw_csv,
+            subject, _get_priority_keywords(), custom_kw_csv,
         )
         is_priority = is_contact or is_keyword
         if is_contact:
@@ -531,7 +585,7 @@ async def _process_email(
             match_reason = f"keyword ({matched_keyword})"
 
     # ── Urgent check (applies in both modes) ──
-    is_urgent, urgent_keyword = _check_urgent(subject, URGENT_KEYWORDS)
+    is_urgent, urgent_keyword = _check_urgent(subject, _get_urgent_keywords())
 
     # ── Not priority → filtered out ──
     if not is_priority:
@@ -586,6 +640,7 @@ async def _process_email(
 
     # Update last priority subject
     _update_last_priority(subject)
+    _set_email_stale(False)  # Gap 2: clear stale on successful email processing
 
     # ── Urgent → TTS announcement via dedup ──
     tts_announced = False
@@ -596,7 +651,7 @@ async def _process_email(
         subject_slug = _make_slug(subject[:30])
 
         # Get TTS voice + agent entity from dispatcher (pipeline-aware)
-        announce_voice = FALLBACK_TTS_VOICE
+        announce_voice = _helper_str("input_text.ai_default_tts_voice", "tts.home_assistant_cloud")
         agent_entity = ""
         dispatch_resp = None
         try:
@@ -622,7 +677,8 @@ async def _process_email(
 
         # LLM persona reformulation (budget-gated)
         budget = _get_budget_remaining()
-        if agent_entity and budget >= BUDGET_STRIPPED_THRESHOLD:
+        budget_threshold = _helper_int("input_number.ai_budget_personality_threshold", 20)
+        if agent_entity and budget >= budget_threshold:
             try:
                 prompt = EMAIL_ANNOUNCE_PROMPT.format(text=raw_text)
                 conv_resp = await hass.services.async_call(  # noqa: F821
@@ -814,13 +870,10 @@ async def email_clear_count():
 
 # ── T24-3b: IMAP Health Check ─────────────────────────────────────────────────
 
-_DEFAULT_IMAP_SENSOR = "sensor.gmail_messages"
-
-
 def _get_imap_sensor() -> str:
     """Read IMAP sensor entity from config file."""
     cfg = load_entity_config()
-    return cfg.get("imap_sensor") or _DEFAULT_IMAP_SENSOR
+    return cfg.get("imap_sensor") or "sensor.gmail_messages"
 
 
 def _check_imap_health() -> None:
@@ -833,6 +886,7 @@ def _check_imap_health() -> None:
                 f"email_promote: IMAP sensor {imap_sensor} is "
                 f"{imap_state or 'missing'} — email processing may fail"
             )
+            _set_email_stale(True)
             service.call(  # noqa: F821
                 "persistent_notification", "create",
                 title="Email Integration: IMAP Unavailable",
@@ -845,6 +899,7 @@ def _check_imap_health() -> None:
             )
         else:
             # IMAP healthy — dismiss any lingering alert
+            _set_email_stale(False)
             service.call(  # noqa: F821
                 "persistent_notification", "dismiss",
                 notification_id="ai_imap_failure",
@@ -863,6 +918,22 @@ async def email_promote_startup():
     # Delay to let IMAP sensor load
     await task.sleep(30)  # noqa: F821
     _check_imap_health()
+
+    # Gap 4: Reload IMAP config entry to re-fire events for unread messages.
+    # Fixes startup race condition where IMAP events fire before automations are ready.
+    # blocking=False prevents hanging on IMAP reconnect/IDLE setup.
+    try:
+        imap_sensor = _get_imap_sensor()
+        log.info(f"email_promote: requesting IMAP reload for {imap_sensor}")  # noqa: F821
+        service.call(  # noqa: F821
+            "homeassistant", "reload_config_entry",
+            entity_id=imap_sensor,
+            blocking=False,
+        )
+        log.info("email_promote: IMAP config entry reload dispatched — catch-up events will fire")  # noqa: F821
+    except Exception as exc:
+        log.warning(f"email_promote: IMAP reload failed (non-fatal): {exc}")  # noqa: F821
+
     log.info("email_promote.py loaded — email priority filter idle")  # noqa: F821
 
 
@@ -882,3 +953,36 @@ async def email_promote_midnight():
 
     _check_imap_health()
     log.info("email_promote: midnight reset — counter cleared")  # noqa: F821
+
+
+# ── Periodic Stale Check (Gap 2) ─────────────────────────────────────────────
+
+@time_trigger("cron(*/30 * * * *)")  # noqa: F821
+async def email_check_stale():
+    """Flag email as stale if IMAP sensor hasn't changed in N minutes."""
+    try:
+        imap_sensor = _get_imap_sensor()
+        imap_state = state.get(imap_sensor)  # noqa: F821
+        if imap_state in (None, "unavailable", "unknown"):
+            _set_email_stale(True)
+            return
+
+        try:
+            raw_timeout = state.get("input_number.ai_email_stale_timeout")  # noqa: F821
+            timeout_min = int(float(raw_timeout)) if raw_timeout not in (None, "unknown", "unavailable") else 120
+        except (TypeError, ValueError):
+            timeout_min = 120
+
+        last_changed = state.get(imap_sensor + ".last_changed")  # noqa: F821
+        if last_changed:
+            from datetime import datetime, timezone
+            changed_dt = datetime.fromisoformat(str(last_changed))
+            age_min = (datetime.now(timezone.utc) - changed_dt).total_seconds() / 60
+            if age_min > timeout_min:
+                _set_email_stale(True)
+            else:
+                _set_email_stale(False)
+        else:
+            _set_email_stale(False)
+    except Exception as exc:
+        log.warning(f"email_promote: stale check failed: {exc}")  # noqa: F821

@@ -1,0 +1,1767 @@
+title: AI Management
+views:
+- title: Overview
+  path: overview
+  icon: mdi:brain
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '## System Overview
+
+
+        Real-time health of all AI subsystems.
+
+        Green = active, yellow = degraded, red = error.'
+    - type: glance
+      title: Subsystem Health
+      state_color: true
+      columns: 4
+      entities:
+      - entity: sensor.ai_dispatcher_status
+        name: Dispatch
+      - entity: sensor.ai_tts_queue_status
+        name: TTS
+      - entity: sensor.ai_whisper_status
+        name: Whisper
+      - entity: sensor.ai_dedup_status
+        name: Dedup
+      - entity: sensor.ai_calendar_promotion_status
+        name: Calendar
+      - entity: sensor.ai_email_promotion_status
+        name: Email
+      - entity: sensor.ai_predictive_schedule_status
+        name: Schedule
+      - entity: sensor.ai_presence_pattern_status
+        name: Presence
+      - entity: sensor.ai_proactive_briefing_status
+        name: Briefing
+      - entity: sensor.ai_routine_tracker_status
+        name: Routine
+      - entity: sensor.ai_focus_guard_status
+        name: Focus Guard
+      - entity: sensor.ai_duck_manager_status
+        name: Duck Mgr
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### LLM Budget & Counters
+
+
+        Daily LLM API call budget. Resets at midnight.
+
+        Below personality threshold, agents switch to stripped mode (no LLM reformulation).'
+    - type: gauge
+      title: LLM Budget Remaining
+      entity: sensor.ai_llm_budget_remaining
+      min: 0
+      max: 100
+      severity:
+        green: 50
+        yellow: 20
+        red: 0
+    - type: entities
+      title: Daily Counters
+      entities:
+      - entity: input_number.ai_llm_calls_today
+        name: LLM Calls Today
+      - entity: input_number.ai_llm_daily_limit
+        name: LLM Daily Limit
+      - entity: sensor.ai_dedup_blocked_today
+        name: Dedup Blocked Today
+      - entity: sensor.ai_email_priority_count
+        name: Priority Emails
+    - type: gauge
+      title: TTS Budget Remaining
+      entity: sensor.ai_tts_budget_remaining
+      min: 0
+      max: 100
+      severity:
+        green: 50
+        yellow: 20
+        red: 0
+    - type: entities
+      title: Extended Counters
+      entities:
+      - entity: input_button.ai_budget_manual_reset
+        name: Reset Budget Now
+      - entity: input_number.ai_llm_tokens_today
+        name: LLM Tokens Today
+      - entity: input_number.ai_tts_chars_today
+        name: TTS Characters Today
+      - entity: input_number.ai_stt_calls_today
+        name: STT Calls Today
+      - entity: sensor.ai_total_daily_cost
+        name: Total Daily Cost
+      - entity: sensor.ai_llm_budget_remaining
+        name: Budget Remaining (min of all)
+      - entity: input_number.ai_budget_daily_cost_limit
+        name: Daily Cost Limit
+      - entity: input_number.ai_llm_daily_limit
+        name: Daily Call Limit
+      - entity: input_number.ai_llm_daily_token_limit
+        name: Daily Token Limit
+      - entity: input_select.ai_budget_view_level
+        name: View Level
+    - type: entities
+      title: ElevenLabs Credits
+      entities:
+      - entity: sensor.elevenlabs_credits_remaining
+        name: Credits Remaining
+      - entity: sensor.elevenlabs_subscription
+        name: API Remaining (chars)
+      - entity: input_number.ai_elevenlabs_credit_cap
+        name: Manual Cap
+      - entity: sensor.elevenlabs_daily_usage
+        name: Today's Usage
+      - entity: input_number.ai_elevenlabs_credit_floor
+        name: Credit Floor
+    - type: entities
+      title: OpenRouter Usage
+      entities:
+      - entity: sensor.ai_openrouter_rolling_usage
+        name: Rolling Usage (€)
+      - entity: sensor.openrouter_daily_usage
+        name: Today's Usage (€)
+      - entity: input_number.ai_budget_rolling_months
+        name: Rolling Window
+    - type: entities
+      title: Serper Web Search
+      entities:
+      - entity: sensor.serper_account
+        name: Credits Remaining
+      - entity: sensor.serper_daily_usage
+        name: Today's Usage
+      - entity: sensor.ai_serper_rolling_usage
+        name: Rolling Usage (credits)
+      - type: attribute
+        entity: sensor.ai_serper_rolling_usage
+        attribute: total_cost_eur
+        name: Rolling Cost
+        suffix: "€"
+      - entity: sensor.ai_cost_per_serper_credit
+        name: Cost per Credit
+      - entity: input_number.ai_budget_rolling_months
+        name: Rolling Window
+    - type: entities
+      title: Budget Fallback
+      entities:
+      - entity: sensor.ai_budget_fallback_status
+        name: Status
+      - entity: input_boolean.ai_budget_fallback_active
+        name: Fallback Active (manual override)
+      - entity: input_text.ai_budget_fallback_agent
+        name: Fallback Agent
+    - type: markdown
+      title: Per-Agent Breakdown
+      content: >-
+        {% set bd = state_attr('sensor.ai_budget_breakdown', 'breakdown') %}
+        {% set level = states('input_select.ai_budget_view_level') %}
+        {% set model_map = state_attr('sensor.ai_budget_breakdown', 'model_map') or {} %}
+        {% if bd is not mapping %}
+        *Waiting for data...*
+        {% else %}
+        {% set ns = namespace(rows=[]) %}
+        {% for svc in ['llm', 'tts', 'stt'] %}
+        {% set agents = bd.get(svc, {}) %}
+        {% if agents %}
+        {% if level == 'agent' %}
+        {% for agent, data in agents.items() %}
+        {% set ns.rows = ns.rows + [svc ~ ' | ' ~ agent ~ ' | ' ~ data.get('calls', 0)
+           ~ ' | ' ~ data.get('tokens', 0) ~ ' | ' ~ data.get('chars', 0)] %}
+        {% endfor %}
+        {% elif level == 'model' %}
+        {% set grp = namespace(agg={}) %}
+        {% for agent, data in agents.items() %}
+        {% set m = (model_map.get(svc, {}) or {}).get(agent, agent) %}
+        {% set prev = grp.agg.get(svc ~ ':' ~ m, {'calls': 0, 'tokens': 0, 'chars': 0}) %}
+        {% set grp.agg = dict(grp.agg, **{svc ~ ':' ~ m: {'calls': prev.calls + data.get('calls', 0),
+           'tokens': prev.tokens + data.get('tokens', 0), 'chars': prev.chars + data.get('chars', 0)}}) %}
+        {% endfor %}
+        {% for key, data in grp.agg.items() %}
+        {% set parts = key.split(':') %}
+        {% set ns.rows = ns.rows + [parts[0] ~ ' | ' ~ parts[1] ~ ' | ' ~ data.calls
+           ~ ' | ' ~ data.tokens ~ ' | ' ~ data.chars] %}
+        {% endfor %}
+        {% elif level == 'provider' %}
+        {% set pmap = state_attr('sensor.ai_budget_breakdown', 'provider_map') or {} %}
+        {% set grp = namespace(agg={}) %}
+        {% for agent, data in agents.items() %}
+        {% set m = (model_map.get(svc, {}) or {}).get(agent, agent) %}
+        {% set p = pmap.get(m, m) %}
+        {% set key = svc ~ ':' ~ p %}
+        {% set prev = grp.agg.get(key, {'calls': 0, 'tokens': 0, 'chars': 0}) %}
+        {% set grp.agg = dict(grp.agg, **{key: {'calls': prev.calls + data.get('calls', 0),
+           'tokens': prev.tokens + data.get('tokens', 0), 'chars': prev.chars + data.get('chars', 0)}}) %}
+        {% endfor %}
+        {% for key, data in grp.agg.items() %}
+        {% set parts = key.split(':') %}
+        {% set ns.rows = ns.rows + [parts[0] ~ ' | ' ~ parts[1] ~ ' | ' ~ data.calls
+           ~ ' | ' ~ data.tokens ~ ' | ' ~ data.chars] %}
+        {% endfor %}
+        {% else %}
+        {% set grp = namespace(agg={}) %}
+        {% for agent, data in agents.items() %}
+        {% set prev = grp.agg.get(svc, {'calls': 0, 'tokens': 0, 'chars': 0}) %}
+        {% set grp.agg = dict(grp.agg, **{svc: {'calls': prev.calls + data.get('calls', 0),
+           'tokens': prev.tokens + data.get('tokens', 0), 'chars': prev.chars + data.get('chars', 0)}}) %}
+        {% endfor %}
+        {% for key, data in grp.agg.items() %}
+        {% set ns.rows = ns.rows + [key ~ ' | total | ' ~ data.calls
+           ~ ' | ' ~ data.tokens ~ ' | ' ~ data.chars] %}
+        {% endfor %}
+        {% endif %}
+        {% endif %}
+        {% endfor %}
+        Type | {{ level | title }} | Calls | Tokens | Chars
+
+        :--- | :--- | ---: | ---: | ---:
+
+        {% for row in ns.rows %}
+        {{ row }}
+
+        {% endfor %}
+        {% endif %}
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Active Agent & Identity
+
+
+        Which AI persona is active, dispatch mode, and who the system thinks
+
+        is home based on WiFi + FP2 presence scoring.'
+    - type: entities
+      title: Active Agent
+      entities:
+      - entity: input_text.ai_last_agent_name
+        name: Last Agent
+      - entity: input_select.ai_dispatcher_mode
+        name: Dispatch Mode
+      - entity: input_text.ai_last_interaction_topic
+        name: Last Topic
+      - entity: input_datetime.ai_last_interaction_time
+        name: Last Interaction
+      - entity: input_button.ai_dispatcher_apply_config
+        name: Apply Dispatcher Config
+    - type: entities
+      title: Identity Confidence
+      entities:
+      # ── Scores ──
+      - entity: sensor.identity_confidence_miquel
+        name: Miquel Confidence
+      - entity: sensor.identity_confidence_jessica
+        name: Jessica Confidence
+      - entity: sensor.occupancy_mode
+        name: Occupancy
+      - type: divider
+      # ── Raw Signals ──
+      - entity: device_tracker.oppo_a60
+        name: Miquel WiFi
+      - entity: device_tracker.oppo_a38
+        name: Jessica WiFi
+      - entity: device_tracker.madoppo
+        name: Miquel GPS
+      - type: divider
+      # ── Presence Inference ──
+      - entity: binary_sensor.ai_solo_single_zone
+        name: Solo Single Zone
+      - entity: input_boolean.ai_sustained_solo_zone
+        name: Sustained Solo Zone
+      - entity: binary_sensor.ai_wifi_stale_condition_jessica
+        name: WiFi Stale Condition (Jessica)
+      - entity: input_boolean.ai_wifi_stale_jessica
+        name: WiFi Stale (Jessica)
+      - entity: input_number.ai_wifi_stale_timeout
+        name: WiFi Stale Timeout
+      - type: divider
+      # ── Overrides ──
+      - entity: input_boolean.ai_context_guests_present
+        name: Guests Present
+      - entity: input_boolean.ai_guest_mode
+        name: Guest Mode
+      - type: divider
+      # ── House Mode ──
+      - entity: input_boolean.ai_bedtime_active
+        name: Bedtime Active
+      - entity: input_boolean.ai_bedtime_global_lock
+        name: Bedtime Lock
+      - entity: input_boolean.ai_wake_up_snooze
+        name: Wake-Up Snooze
+      - entity: input_boolean.ai_wake_up_stop
+        name: Wake-Up Stop
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### TTS & Voice
+
+
+        Text-to-speech queue, daily call counts, and cache performance.
+
+        Cache hits avoid redundant TTS API calls.
+
+        TTS routes to your current FP2 zone''s assigned speaker.
+
+        Configure zone→speaker mapping in the Configuration tab.'
+    - type: entities
+      title: TTS Stats
+      entities:
+      - entity: sensor.ai_tts_queue_status
+        name: Queue Status
+      - entity: input_number.ai_tts_calls_today
+        name: TTS Calls Today
+      - entity: input_number.ai_tts_cache_hits_today
+        name: Cache Hits Today
+      - entity: sensor.ai_tts_cache_hit_rate
+        name: Cache Hit Rate
+      - entity: input_text.ai_default_speaker
+        name: Default Speaker
+      - entity: input_text.ai_tts_zone_priority
+        name: Zone Priority
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Clear Queue
+        icon: mdi:playlist-remove
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.tts_queue_clear
+      - type: button
+        name: Stop Queue
+        icon: mdi:stop-circle
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.tts_queue_stop
+    - type: entities
+      title: Voice Handoff
+      entities:
+      - entity: input_boolean.ai_voice_handoff_enabled
+        name: Handoff Enabled
+      - entity: input_select.ai_handoff_restore_mode
+        name: Restore Mode
+      - entity: input_number.ai_handoff_restore_seconds
+        name: Restore After (sec)
+      - type: button
+        name: Restore Now
+        icon: mdi:restore
+        action_name: Restore
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.voice_handoff_restore_now
+      - entity: input_select.ai_expertise_routing_mode
+        name: Expertise Routing
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Phone Status
+
+
+        Battery level, charging state, and phone call detection.'
+    - type: glance
+      title: Phone
+      state_color: true
+      columns: 4
+      entities:
+      - entity: sensor.madaringer_battery_level
+        name: Battery
+      - entity: sensor.madaringer_battery_state
+        name: State
+      - entity: binary_sensor.madaringer_is_charging
+        name: Charging
+      - entity: input_boolean.ai_phone_call_active
+        name: On Call
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Sleep Detection
+
+
+        Current sleep state and last sleep timing.'
+    - type: entities
+      title: Sleep
+      entities:
+      - entity: input_boolean.ai_sleep_detected
+        name: Sleep Detected
+      - entity: input_datetime.ai_sleep_start
+        name: Last Sleep Start
+      - entity: input_datetime.ai_sleep_end
+        name: Last Sleep End
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Focus Guards & Wellness
+
+
+        Monitors work duration, meal timing, break patterns, and bedtime approach.
+
+        Nudges escalate if ignored. Focus Mode (DND) suppresses non-critical interruptions.'
+    - type: entities
+      title: Focus Guards
+      entities:
+      - entity: input_boolean.ai_focus_mode
+        name: Focus Mode (DND)
+      - entity: sensor.workshop_hours_today
+        name: Workshop Hours Today
+      - entity: input_datetime.ai_last_meal_time
+        name: Last Meal
+      - entity: input_number.ai_focus_guard_threshold_hours
+        name: Threshold Hours
+      - entity: input_datetime.ai_focus_guard_snooze_until
+        name: Snooze Until
+      - entity: sensor.ai_focus_guard_status
+      - entity: sensor.ai_duck_manager_status
+        name: Guard Status
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Duck Manager
+
+
+        Current ducking state and last duck event.'
+    - type: entities
+      title: Duck Manager
+      entities:
+      - entity: sensor.ai_duck_manager_status
+        name: Status
+      - entity: input_boolean.ai_ducking_flag
+        name: Ducking Active
+      - entity: input_number.ai_duck_refcount
+        name: Active Duck Cycles
+    - type: markdown
+      content: '**Last duck:** {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_source'')
+        | default(''none'') }} {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_detail'')
+        | default('''') }} — {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_duration_s'')
+        | default(''?'') }}s
+
+        {% if state_attr(''sensor.ai_duck_manager_status'', ''last_duck_time'') %}
+
+        **When:** {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_time'')
+        }}
+
+        **Sessions:** {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_sessions'')
+        | default(''?'') }}
+
+        {% endif %}
+
+        **Last topic:** {{ states(''input_text.ai_last_interaction_topic'') | default(''none'')
+        }}'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Schedule & Routine
+
+
+        Predictive scheduling from historical presence patterns. Routine stage
+
+        tracks daily progression (morning → work → evening → bedtime).'
+    - type: markdown
+      title: Schedule & Routine
+      content: '{% set stage = states(''input_text.ai_routine_stage'') %}
+
+        {% set pp = states(''sensor.ai_presence_pattern_status'') %}
+
+        {% set rt = states(''sensor.ai_routine_tracker_status'') %}
+
+        {% if stage in [''none'', '''', ''unknown'', ''unavailable''] %}
+
+        {% if pp == ''ok'' and state_attr(''sensor.ai_presence_pattern_status'', ''cache_entries'')
+        | int(0) > 0 %}
+
+        _Presence data loaded. Routine fingerprints building — patterns refine daily
+        at 04:15._
+
+        {% else %}
+
+        _Pipeline bootstrapping — presence extraction runs ~90s after startup. Full
+        patterns build overnight at 04:00._
+
+        {% endif %}
+
+        {% endif %}
+
+
+        | Field | Value |
+
+        |-------|-------|
+
+        | Routine Stage | {{ stage }} |
+
+        | Routine ETA | {{ states(''sensor.ai_routine_eta'') }} |
+
+        | Deviation | {{ states(''input_text.ai_routine_deviation'') }} |
+
+        | Schedule Confidence | {{ states(''sensor.ai_schedule_confidence'') }} |
+
+        | Predicted Next Zone | {{ states(''sensor.ai_predicted_next_zone'') }} |
+
+        | Bedtime Recommendation | {{ states(''input_text.ai_bedtime_recommendation'')
+        }} |'
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Run Bedtime Advisor
+        icon: mdi:bed-clock
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.schedule_bedtime_advisor
+        icon_height: 40px
+      - type: button
+        name: Optimal Timing
+        icon: mdi:clock-check
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.schedule_optimal_timing
+          perform_action_data:
+            event_description: dentist appointment
+            event_time: '13:00'
+            prep_minutes: 30
+            travel_minutes: 20
+        icon_height: 40px
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Calendar & Briefing
+
+
+        Calendar sync, email priority filtering, and morning briefing status.
+
+        Briefing triggers on presence in bathroom/kitchen after wake time.'
+    - type: entities
+      title: Calendar & Briefing
+      entities:
+      - entity: input_text.ai_calendar_today_summary
+        name: Today's Calendar
+      - entity: input_text.ai_calendar_tomorrow_summary
+        name: Tomorrow's Calendar
+      - entity: input_boolean.ai_calendar_stale
+        name: Calendar Stale
+      - entity: input_boolean.ai_briefing_delivered_morning
+        name: Morning Briefing Delivered
+      - entity: input_text.ai_email_last_priority
+        name: Last Priority Email
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Kill Switches
+
+
+        Master toggles for each subsystem. Turn off any without affecting others.'
+    - type: entities
+      title: Kill Switches
+      show_header_toggle: false
+      entities:
+      - entity: input_boolean.ai_tts_queue_active
+        name: TTS Queue
+      - entity: input_boolean.ai_dispatcher_enabled
+        name: Dispatcher
+      - entity: input_boolean.ai_dedup_enabled
+        name: Notification Dedup
+      - entity: input_boolean.ai_calendar_promotion_enabled
+        name: Calendar Sync
+      - entity: input_boolean.ai_email_promotion_enabled
+        name: Email Filter
+      - entity: input_boolean.ai_proactive_briefing_enabled
+        name: Proactive Briefing
+      - entity: input_boolean.ai_routine_tracking_enabled
+        name: Routine Tracking
+      - entity: input_boolean.ai_presence_patterns_enabled
+        name: Presence Patterns
+      - entity: input_boolean.ai_focus_guard_enabled
+        name: Focus Guard
+      - entity: input_boolean.ai_duck_manager_enabled
+        name: Duck Manager
+      - entity: input_boolean.ai_sleep_detection_enabled
+        name: Sleep Detection
+      - entity: input_boolean.ai_auto_off_enabled
+        name: Auto-Off
+      - entity: input_boolean.ai_voice_handoff_enabled
+        name: Voice Handoff
+      - entity: input_boolean.ai_music_follow_me
+        name: Music Follow-Me
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Blueprint Instances
+
+
+        Status of all blueprint-managed automations. Toggle on/off directly.
+
+        Tap an entity for last triggered time and full details.'
+    - type: glance
+      title: Sleep & Lights
+      state_color: true
+      columns: 3
+      entities:
+      - entity: automation.ai_sleep_detection
+        name: Sleep Detect
+      - entity: automation.ai_sleep_lights_out
+        name: Sleep Lights
+      - entity: automation.ai_meal_passive_detection
+        name: Meal Detect
+    - type: glance
+      title: Charge & Phone
+      state_color: true
+      columns: 2
+      entities:
+      - entity: automation.phone_charge_reminder
+        name: Charge Reminder
+      - entity: automation.ai_email_priority_filter
+        name: Email Filter
+    - type: glance
+      title: Auto-Off Zones
+      state_color: true
+      columns: 4
+      entities:
+      - entity: automation.ai_auto_off_workshop
+        name: Workshop
+      - entity: automation.ai_auto_off_living_room
+        name: Living Room
+      - entity: automation.ai_auto_off_kitchen
+        name: Kitchen
+      - entity: automation.ai_auto_off_bedroom
+        name: Bedroom
+    - type: glance
+      title: Briefing
+      state_color: true
+      columns: 3
+      entities:
+      - entity: automation.ai_morning_briefing
+        name: Morning
+      - entity: automation.ai_afternoon_briefing
+        name: Afternoon
+      - entity: automation.ai_evening_briefing
+        name: Evening
+- title: Configuration
+  path: configuration
+  icon: mdi:cog
+  cards:
+  - type: markdown
+    content: '## Configuration
+
+
+      Tunable parameters for all AI subsystems. Changes take effect on next
+
+      evaluation cycle — no restart needed.'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Keyword Manager
+
+
+        Per-agent routing keywords. **[M]** = manual (sticky, survives auto-updates),
+
+        **[A]** = auto (from whisper topics). Add keywords to steer conversations
+
+        toward specific agents.'
+    - type: entities
+      entities:
+      - entity: input_select.ai_keyword_agent_select
+        name: Agent
+      - entity: input_text.ai_keyword_add
+        name: Add Keyword
+      - entity: input_boolean.ai_keyword_manual
+        name: Mark as Manual
+      - entity: input_text.ai_keyword_remove
+        name: Remove Keyword
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Load
+        icon: mdi:refresh
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.dispatcher_load_keywords
+      - type: button
+        name: Add
+        icon: mdi:tag-plus
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.dispatcher_add_keyword
+      - type: button
+        name: Remove
+        icon: mdi:tag-minus
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.dispatcher_remove_keyword
+      - type: button
+        name: Clear Auto
+        icon: mdi:tag-off
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.dispatcher_clear_auto_keywords
+    - type: markdown
+      title: Current Keywords
+      content: '{% if state_attr(''sensor.ai_keyword_display'', ''keywords_md'') %}
+
+        {{ state_attr(''sensor.ai_keyword_display'', ''keywords_md'') }}
+
+        {% else %}
+
+        _Select an agent and tap Load._
+
+        {% endif %}'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### LLM Budget
+
+
+        **Daily Call Limit** = max LLM API calls per day.
+
+        **Personality Threshold** = below this remaining %, agents use
+
+        stripped mode (no LLM reformulation, raw TTS fallback).'
+    - type: entities
+      title: LLM Budget
+      entities:
+      - entity: input_number.ai_llm_daily_limit
+        name: Daily Call Limit
+      - entity: input_number.ai_llm_daily_budget
+        name: Budget Scale (%)
+      - entity: input_number.ai_llm_calls_today
+        name: Calls Today
+      - entity: input_number.ai_budget_personality_threshold
+        name: Personality Threshold (%)
+      - entity: input_select.ai_budget_metric
+        name: Budget Metric (I-33)
+      - entity: input_number.ai_tts_daily_limit
+        name: TTS Daily Limit
+      - entity: input_number.ai_llm_daily_token_limit
+        name: LLM Token Limit
+      - entity: input_number.ai_budget_daily_cost_limit
+        name: Daily Cost Limit (€)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Project Tracking
+
+
+        Promotes `/config/projects/*.md` files to L1 hot context and L2 memory.
+
+        Syncs every 30 minutes. Use **Promote Now** for an immediate refresh.'
+    - type: entities
+      title: Project Tracking
+      entities:
+      - entity: input_boolean.ai_project_tracking_enabled
+        name: Enabled
+      - entity: input_number.ai_project_hot_context_limit
+        name: Hot Context Limit
+      - entity: input_boolean.ai_project_data_stale
+        name: Data Stale
+      - entity: input_text.ai_project_last_sync
+        name: Last Sync
+      - entity: input_text.ai_project_hot_context_line
+        name: Hot Context Line
+      - entity: input_text.ai_active_projects_summary
+        name: Active Summary
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Promote Now
+        icon: mdi:refresh
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.project_promote_now
+          data:
+            force: true
+      - type: button
+        name: Status
+        icon: mdi:information
+        tap_action:
+          action: more-info
+          entity: sensor.ai_project_promotion_status
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Focus Guard Tuning
+
+
+        All thresholds configurable. **Meal Reminder** = hours since last meal.
+
+        **Nudge Cooldown** = minutes between nudges.
+
+        **Break Suggest** = hours in same zone before break nudge.
+
+        **Bedtime Approach** = minutes before bedtime for wind-down nudges.'
+    - type: entities
+      title: Focus Guard Settings
+      entities:
+      - entity: input_number.ai_focus_guard_threshold_hours
+        name: Workshop Threshold (hours)
+      - entity: input_number.ai_focus_mode_max_hours
+        name: Focus Mode Max Duration
+      - entity: input_number.ai_focus_meal_reminder_hours
+        name: Meal Reminder (hours)
+      - entity: input_number.ai_focus_nudge_cooldown_minutes
+        name: Nudge Cooldown (minutes)
+      - entity: input_number.ai_focus_social_nudge_minutes
+        name: Social Nudge (minutes)
+      - entity: input_number.ai_focus_break_suggest_hours
+        name: Break Suggest (hours)
+      - entity: input_number.ai_focus_bedtime_approach_minutes
+        name: Bedtime Approach (minutes)
+    - type: entities
+      title: Per-Nudge Toggles
+      show_header_toggle: true
+      entities:
+      - entity: input_boolean.ai_focus_time_check_enabled
+        name: Time Check
+      - entity: input_boolean.ai_focus_meal_reminder_enabled
+        name: Meal Reminder
+      - entity: input_boolean.ai_focus_calendar_warn_enabled
+        name: Calendar Warning
+      - entity: input_boolean.ai_focus_social_nudge_enabled
+        name: Social Nudge
+      - entity: input_boolean.ai_focus_break_suggest_enabled
+        name: Break Suggest
+      - entity: input_boolean.ai_focus_bedtime_approach_enabled
+        name: Bedtime Approach
+      - entity: input_boolean.ai_focus_meal_ask_eaten
+        name: Meal Ask-If-Eaten
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Duck Manager
+
+
+        Unified volume ducking engine. First wake word or TTS play ducks
+
+        all background media. Last session ending restores original volumes.
+
+        Reference-counted — overlapping satellite + TTS plays are safe.
+
+
+        **Duck Group** = CSV of media players to duck (short IDs without
+
+        media_player. prefix, auto-added by code).
+
+        **Announcement Players** = speakers to boost (Voice PE satellites).
+
+        **Duck Satellites** = assist_satellite entities that trigger ducking.
+
+
+        **Restore Mode**: Fixed = blind delay after audio.
+
+        Dynamic = polls speaker state, restores when audio ends.
+
+        **Watchdog** = force-restores stale sessions after timeout.'
+    - type: entities
+      title: Duck Manager
+      entities:
+      - entity: input_boolean.ai_duck_manager_enabled
+        name: Engine Enabled
+      - entity: input_boolean.ai_ducking_flag
+        name: Ducking Active
+      - entity: sensor.ai_duck_manager_status
+        name: Engine Status
+      - entity: input_number.ai_tts_duck_volume
+        name: Duck Volume Level
+      - entity: input_number.ai_tts_announcement_volume
+        name: Announcement Volume
+      - entity: input_select.ai_tts_restore_mode
+        name: Restore Mode
+      - entity: input_number.ai_tts_restore_fixed_delay
+        name: Fixed Delay (s)
+      - entity: input_number.ai_tts_restore_timeout
+        name: Dynamic Timeout (s)
+      - entity: input_text.ai_tts_restore_satellites
+        name: Monitor Satellites
+      - entity: input_text.ai_duck_group
+        name: Duck Group (CSV)
+      - entity: input_text.ai_duck_announcement_players
+        name: Announcement Players (CSV)
+      - entity: input_text.ai_duck_satellites
+        name: Duck Satellites (CSV)
+      - entity: input_number.ai_duck_watchdog_timeout
+        name: Watchdog Timeout (s)
+      - entity: input_select.ai_duck_behavior
+        name: Duck Behavior (I-39)
+      - entity: input_number.ai_duck_pre_delay_ms
+        name: Pre-Delay ms (I-21)
+      - entity: input_boolean.ai_duck_allow_manual_override
+        name: Allow Manual Override (I-22)
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Force Restore
+        icon: mdi:volume-high
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.duck_manager_force_restore
+      - type: button
+        name: Status
+        icon: mdi:information
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.duck_manager_status
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Volume Sync
+
+
+        Per-room volume sync between grouped speakers. All settings are
+
+        blueprint inputs — edit the automation instance to configure.'
+    - type: entities
+      title: Volume Sync Instances
+      entities:
+      - entity: automation.volume_sync_living_room
+        name: Living Room
+      - entity: automation.volume_sync_workshop
+        name: Workshop
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Sleep Schedule
+
+
+        Per-person wake/bed times drive routine tracker and bedtime approach nudges.
+
+        Household values are shared defaults; per-person overrides take priority.'
+    - type: entities
+      title: Sleep Schedule (Household)
+      entities:
+      - entity: input_datetime.ai_context_wake_time_weekday
+        name: Wake (Weekday)
+      - entity: input_datetime.ai_context_wake_time_weekend
+        name: Wake (Weekend)
+      - entity: input_datetime.ai_context_bed_time
+        name: Bedtime Target
+      - entity: input_number.ai_target_sleep_hours
+        name: Target Sleep
+      - entity: input_number.ai_morning_prep_buffer
+        name: Morning Prep Buffer
+      - entity: input_boolean.ai_context_work_day
+        name: Work Day (auto)
+      - entity: input_boolean.ai_work_day_manual_override
+        name: Work Day Manual Override (I-27)
+      - entity: input_text.ai_work_calendar_keywords
+        name: Work Keywords (I-27)
+      - entity: input_text.ai_schedule_day_overrides
+        name: Day Overrides JSON (I-28)
+      - entity: input_number.ai_bedtime_relaxed_extension_minutes
+        name: Relaxed Extension min (I-29)
+    - type: horizontal-stack
+      cards:
+      - type: entities
+        title: Miquel Schedule
+        entities:
+        - entity: input_datetime.ai_context_wake_time_weekday_miquel
+          name: Wake Weekday
+        - entity: input_datetime.ai_context_wake_time_weekend_miquel
+          name: Wake Weekend
+        - entity: input_datetime.ai_context_bed_time_miquel
+          name: Bedtime
+        - entity: input_boolean.ai_context_work_day_miquel
+          name: Work Day
+      - type: entities
+        title: Jessica Schedule
+        entities:
+        - entity: input_datetime.ai_context_wake_time_weekday_jessica
+          name: Wake Weekday
+        - entity: input_datetime.ai_context_wake_time_weekend_jessica
+          name: Wake Weekend
+        - entity: input_datetime.ai_context_bed_time_jessica
+          name: Bedtime
+        - entity: input_boolean.ai_context_work_day_jessica
+          name: Work Day
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### TTS Speaker Routing
+
+
+        Select which speaker plays TTS for each FP2 zone. When you''re detected
+
+        in a zone, TTS routes to that zone''s speaker. **Zone Priority** controls
+
+        which zone wins when multiple zones detect presence simultaneously.'
+    - type: entities
+      title: Zone → Speaker
+      entities:
+      - entity: input_select.ai_tts_speaker_workshop
+        name: Workshop
+      - entity: input_select.ai_tts_speaker_living_room
+        name: Living Room
+      - entity: input_select.ai_tts_speaker_main_room
+        name: Main Room
+      - entity: input_select.ai_tts_speaker_kitchen
+        name: Kitchen
+      - entity: input_select.ai_tts_speaker_bed
+        name: Bed
+      - entity: input_select.ai_tts_speaker_lobby
+        name: Lobby
+      - entity: input_select.ai_tts_speaker_bathroom
+        name: Bathroom
+      - entity: input_select.ai_tts_speaker_shower
+        name: Shower
+    - type: entities
+      title: General
+      entities:
+      - entity: input_text.ai_default_speaker
+        name: Default Speaker (fallback)
+      - entity: input_text.ai_tts_zone_priority
+        name: Zone Scan Priority (CSV)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Email Filters
+
+
+        **whitelist** = only known contacts + priority keywords promoted.
+
+        **blacklist** = everything promoted EXCEPT blocked senders/keywords.
+
+        **hybrid** = blocked rejected first, then only contacts + keywords promoted.'
+    - type: entities
+      title: Email Filters
+      entities:
+      - entity: input_select.ai_email_filter_mode
+        name: Filter Mode
+      - entity: input_text.ai_email_known_contacts
+        name: Known Contacts
+      - entity: input_text.ai_email_priority_keywords
+        name: Priority Keywords
+      - entity: input_text.ai_email_blocked_senders
+        name: Blocked Senders
+      - entity: input_text.ai_email_blocked_keywords
+        name: Blocked Keywords
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Clear Count
+        icon: mdi:email-check-outline
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.email_clear_count
+        icon_height: 40px
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Proactive Briefing
+
+
+        Kill switch + status only. All scheduling, sections, speaker, and
+        volume controls live in each blueprint instance.'
+    - type: entities
+      title: Proactive Briefing
+      entities:
+      - entity: input_boolean.ai_proactive_briefing_enabled
+        name: Kill Switch
+      - entity: sensor.ai_proactive_briefing_status
+        name: Status
+      - entity: input_text.ai_last_briefing_summary
+        name: Last Summary
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Presence Patterns
+
+
+        **Lookback Days** = days of FP2 history for Markov chain analysis.
+
+        **Min Samples** = transitions needed for reliable pattern.
+
+        **Transition Window** = max seconds between zone OFF→ON to count as one transition.'
+    - type: entities
+      title: Presence Patterns
+      entities:
+      - entity: input_number.ai_presence_pattern_lookback_days
+        name: Lookback Days
+      - entity: input_number.ai_presence_pattern_min_samples
+        name: Min Samples
+      - entity: input_number.ai_presence_transition_window
+        name: Transition Window (sec)
+    - type: entities
+      title: Active FP2 Zones
+      show_header_toggle: true
+      entities:
+      - entity: input_boolean.ai_fp2_zone_workshop_enabled
+        name: Workshop
+      - entity: input_boolean.ai_fp2_zone_living_room_enabled
+        name: Living Room
+      - entity: input_boolean.ai_fp2_zone_main_room_enabled
+        name: Main Room
+      - entity: input_boolean.ai_fp2_zone_kitchen_enabled
+        name: Kitchen
+      - entity: input_boolean.ai_fp2_zone_bed_enabled
+        name: Bed
+      - entity: input_boolean.ai_fp2_zone_lobby_enabled
+        name: Lobby
+      - entity: input_boolean.ai_fp2_zone_bathroom_enabled
+        name: Bathroom
+      - entity: input_boolean.ai_fp2_zone_shower_enabled
+        name: Shower
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Notification Dedup
+
+
+        **Default TTL** = minutes before a duplicate notification is allowed again.'
+    - type: entities
+      title: Notification Dedup
+      entities:
+      - entity: input_number.ai_dedup_default_ttl
+        name: Default TTL (minutes)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Phone Charge Reminder
+
+
+        This feature is now managed by a blueprint instance.
+
+        Configure in **Settings > Automations & Scenes > AI - Phone Charge Reminder**.'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Phone Call Detection
+
+
+        Defers TTS playback while you are on a phone call.
+
+        Deferred items flush automatically when the call ends.'
+    - type: entities
+      title: Phone Call
+      entities:
+      - entity: input_boolean.ai_phone_call_active
+        name: Call Active
+      - entity: input_boolean.ai_phone_call_defer_tts
+        name: Defer TTS During Calls
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Sleep Detection
+
+
+        Kill switch and false-positive override. Full configuration
+
+        (sensor, window, duration) in **Settings > Automations & Scenes >
+
+        AI - Sleep Detection**.'
+    - type: entities
+      title: Sleep Detection
+      entities:
+      - entity: input_boolean.ai_sleep_detection_enabled
+        name: Enabled
+      - entity: input_boolean.ai_sleep_false_positive_flag
+        name: Flag False Positive
+      - entity: input_select.ai_sleep_detection_sensor
+        name: Detection Sensor
+      - entity: input_number.ai_sleep_min_duration
+        name: Min Duration (min)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Sleep Lights
+
+
+        This feature is now managed by a blueprint instance.
+
+        Configure in **Settings > Automations & Scenes > AI - Sleep Lights Out**.'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Meal Detection
+
+
+        This feature is now managed by a blueprint instance.
+
+        Configure in **Settings > Automations & Scenes > AI - Meal Passive Detection**.'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Auto-Off Zones
+
+
+        Turn off lights/media when zones are unoccupied.
+
+        Select a zone to configure, or add/remove zones below.'
+    - type: entities
+      title: Auto-Off Master
+      entities:
+      - entity: input_boolean.ai_auto_off_enabled
+        name: Master Switch
+      - entity: input_boolean.ai_auto_off_lights_enabled
+        name: Lights
+      - entity: input_boolean.ai_auto_off_media_enabled
+        name: Media
+    - type: markdown
+      content: >-
+        Configure zones in **Settings > Automations & Scenes** — filter by
+        "Auto-Off" to find per-zone blueprint instances.
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### TTS Queue
+
+
+        **Conflict Mode**: What to do when target speaker is already playing.
+
+        override = play immediately, wait = brief delay, skip = drop item.
+
+
+        **Cache Eviction**: Static entries expire after max age (days). LRU eviction
+        kicks in when total cache exceeds size cap. Recent entries within the protection
+        window are never evicted.'
+    - type: entities
+      title: TTS Queue
+      entities:
+      - entity: input_select.ai_tts_conflict_mode
+        name: Conflict Mode
+      - entity: input_number.ai_tts_cache_static_max_days
+        name: Static Cache Max Age (days)
+      - entity: input_number.ai_tts_cache_max_size_mb
+        name: Cache Size Cap (MB)
+      - entity: input_number.ai_tts_cache_protect_hours
+        name: Cache Protection Window (hours)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Household & Language
+
+
+        General household context and language preferences.
+
+        Per-person overrides apply when identity confidence is high.'
+    - type: entities
+      title: Household & Language
+      entities:
+      - entity: input_text.ai_context_household
+        name: Household
+      - entity: input_text.ai_context_pets
+        name: Pets
+      - entity: input_select.ai_context_preferred_language
+        name: System Language
+      - entity: input_select.ai_context_preferred_language_miquel
+        name: Miquel Language
+      - entity: input_select.ai_context_preferred_language_jessica
+        name: Jessica Language
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Blueprint-Managed Features
+
+
+        These features are configured via blueprint instance settings, not
+
+        dashboard helpers. Open each in **Settings > Automations & Scenes**.
+
+
+        | Feature | Automation Instance |
+
+        |---------|-------------------|
+
+        | Phone Charge Reminder | AI - Phone Charge Reminder |
+
+        | Sleep Lights Out | AI - Sleep Lights Out |
+
+        | Meal Passive Detection | AI - Meal Passive Detection |
+
+        | Sleep Detection (tuning) | AI - Sleep Detection |
+
+        | Auto-Off Workshop | AI Auto-Off - Workshop |
+
+        | Auto-Off Living Room | AI Auto-Off - Living Room |
+
+        | Auto-Off Kitchen | AI Auto-Off - Kitchen |
+
+        | Auto-Off Bedroom | AI Auto-Off - Bedroom |
+
+        | Morning Briefing Trigger | AI - Proactive Morning Briefing Trigger |
+
+        | Afternoon Briefing | AI - Proactive Afternoon Briefing |
+
+        | Evening Briefing | AI - Proactive Evening Briefing |
+
+        | Email Priority Filter | AI Email - Priority Filter |'
+- title: Debug
+  path: debug
+  icon: mdi:bug
+  cards:
+  - type: markdown
+    content: '## Debug
+
+
+      Raw state, internals, and test harness. L1 Hot Context shows the full
+
+      context blob injected into every LLM conversation.'
+  - type: markdown
+    title: L1 Hot Context
+    content: >-
+      {%- set ctx = state_attr('sensor.ai_hot_context', 'context') | default('No data', true) -%}
+      {%- set icons = {
+        'Time': '🕐', 'User': '👤', 'Household': '🏠', 'Presence': '📡',
+        'Occupancy': '🚪', 'Media': '🎵', 'Music taste': '🎶',
+        'Sonarr': '📺', 'Radarr': '🎬',
+        'House mode': '🏡', 'Expertise routing': '🧭',
+        'Weather': '🌤', "Tomorrow's weather": '🌤', 'Tomorrow weather': '🌤',
+        'Next alarm': '⏰', 'Schedule': '📅', 'Projects': '📋', 'Focus': '🎯',
+        'Privacy': '🔒', 'Guests': '👥',
+        'Memory context': '🧠', 'Last interaction': '💬'
+      } -%}
+      {%- for line in ctx.split('\n') -%}
+      {%- if line.startswith('- ') -%}
+      {%- set clean = line[2:] | trim -%}
+      {%- if clean[:1] == '[' -%}
+      {%- set agent = clean.split(']')[0][1:] | title -%}
+      {%- set rest = clean.split('] ', 1)[1] | default('') -%}
+      {%- set rest = rest | regex_replace('^topic: *', '') -%}
+      {%- set rest = rest | regex_replace(' *\\| *intent: *', ' — ') %}
+
+      · {{ agent }}: {{ rest }}
+      {%- else %}
+
+      · {{ clean }}
+      {%- endif -%}
+      {%- elif line.startswith('Recent') %}
+
+      📝 **Recent:**
+      {%- else -%}
+      {%- set parts = line.split(': ', 1) -%}
+      {%- if parts | length > 1 -%}
+      {%- set label = parts[0] | trim -%}
+      {%- set icon = icons.get(label, '•') -%}
+      {%- if label == 'Memory context' %}
+
+      ---
+
+      **{{ icon }} {{ label }}**
+      {%- else %}
+
+      {{ icon }} **{{ label }}:** {{ parts[1] }}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Last Briefing
+
+        Most recent briefing text (before LLM reformulation).'
+    - type: markdown
+      title: Last Briefing
+      content: '{{ states(''input_text.ai_last_briefing_summary'') }}'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Dispatcher Detail
+
+
+        Last agent routing decision: which agent, why, and timing.'
+    - type: markdown
+      title: Dispatcher Detail
+      content: '{% if state_attr(''sensor.ai_dispatcher_status'', ''agent'') %}
+
+        **Agent:** {{ state_attr(''sensor.ai_dispatcher_status'', ''agent'') }}
+
+        **Persona:** {{ state_attr(''sensor.ai_dispatcher_status'', ''persona'') }}
+
+        **Verbosity:** {{ state_attr(''sensor.ai_dispatcher_status'', ''verbosity'')
+        }}
+
+        **Reason:** {{ state_attr(''sensor.ai_dispatcher_status'', ''reason'') }}
+
+        **TTS Engine:** {{ state_attr(''sensor.ai_dispatcher_status'', ''tts_engine'')
+        }}
+
+        **Elapsed:** {{ state_attr(''sensor.ai_dispatcher_status'', ''elapsed_ms'')
+        }}ms
+
+        {% else %}
+
+        _No dispatch yet — start a voice conversation to populate._
+
+        {% endif %}'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### TTS Speaker Info
+
+
+        Current speaker routing. Default speaker is fallback; zone priority
+
+        maps FP2 zones to specific speakers.'
+    - type: entities
+      title: TTS Speaker Routing
+      entities:
+      - entity: input_text.ai_default_speaker
+        name: Default Speaker
+      - entity: input_text.ai_tts_zone_priority
+        name: Zone → Speaker Map
+      - entity: sensor.ai_tts_queue_status
+        name: Queue Status
+      - entity: input_number.ai_tts_calls_today
+        name: TTS Calls Today
+      - entity: sensor.ai_tts_cache_hit_rate
+        name: Cache Hit Rate
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Subsystem Status (Raw)
+
+        All subsystem sensors with full attributes.'
+    - type: entities
+      title: Subsystem Status (Raw)
+      entities:
+      - entity: sensor.ai_dispatcher_status
+      - entity: sensor.ai_tts_queue_status
+      - entity: sensor.ai_whisper_status
+      - entity: sensor.ai_dedup_status
+      - entity: sensor.ai_calendar_promotion_status
+      - entity: sensor.ai_email_promotion_status
+      - entity: sensor.ai_predictive_schedule_status
+      - entity: sensor.ai_presence_pattern_status
+      - entity: sensor.ai_proactive_briefing_status
+      - entity: sensor.ai_routine_tracker_status
+      - entity: sensor.ai_focus_guard_status
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Test Harness
+
+
+        When Test Mode is ON: TTS routes to log sink, identity can be overridden,
+
+        and seeded L2 data is available.'
+    - type: entities
+      title: Test Harness
+      entities:
+      - entity: input_boolean.ai_test_mode
+        name: Test Mode
+      - entity: input_text.ai_test_identity
+        name: Identity Override
+      - entity: input_text.ai_test_routine_stage
+        name: Routine Stage Override
+      - entity: input_text.ai_test_calendar_event
+        name: Calendar Event Override
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Seed L2
+        icon: mdi:database-plus
+        tap_action:
+          action: perform-action
+          perform_action: script.ai_test_seed_memory
+        icon_height: 40px
+      - type: button
+        name: Clear L2
+        icon: mdi:database-remove
+        tap_action:
+          action: perform-action
+          perform_action: script.ai_test_clear_memory
+        icon_height: 40px
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Schedule Internals
+
+        Raw JSON data from the predictive schedule engine.'
+    - type: entities
+      title: Schedule Internals
+      entities:
+      - entity: input_text.ai_schedule_sources_raw
+        name: Sources (Raw JSON)
+      - entity: input_text.ai_predicted_next_zone_raw
+        name: Next Zone (Raw JSON)
+      - entity: input_text.ai_routine_eta_raw
+        name: ETA (Raw JSON)
+      - entity: input_datetime.ai_predicted_routine_start
+        name: Predicted Routine Start
+      - entity: input_boolean.ai_bedtime_predicted
+        name: Bedtime Predicted
+      - entity: input_boolean.ai_sustained_solo_zone
+        name: Sustained Solo Zone
+      - entity: binary_sensor.ai_solo_single_zone
+        name: Solo Single Zone
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Entity Reference
+
+
+        Auto-populated entity lists (refreshed at startup + daily 03:00).
+
+        Read-only reference for filling CSV text fields in Configuration.'
+    - type: markdown
+      title: Available Entities
+      content: |
+        **Media Players:**
+        {{ states.media_player | map(attribute='entity_id') | map('replace','media_player.','') | join(', ') }}
+
+        **Lights:**
+        {{ states.light | map(attribute='entity_id') | map('replace','light.','') | join(', ') }}
+
+        **Switches:**
+        {{ states.switch | map(attribute='entity_id') | map('replace','switch.','') | join(', ') }}
+
+        **Areas:**
+        {{ areas() | join(', ') }}
+- title: Memory
+  path: memory
+  icon: mdi:database-search
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Semantic Search (sqlite-vec)
+
+
+        Vector embeddings for meaning-based memory search. Nightly batch
+        embeds new memories. Blend weight controls FTS5 vs semantic mix
+        (0 = keywords only, 100 = meaning only, 50 = balanced).'
+    - type: entities
+      title: Embedding Configuration
+      entities:
+        - entity: input_text.ai_embedding_model
+          name: Embedding Model
+        - entity: input_number.ai_embedding_dimensions
+          name: Dimensions
+        - entity: input_number.ai_semantic_blend_weight
+          name: Blend Weight (FTS5 ↔ Semantic)
+        - entity: input_number.ai_semantic_similarity_threshold
+          name: Similarity Threshold
+        - entity: input_number.ai_semantic_search_results
+          name: Max Search Results
+        - entity: input_datetime.ai_embedding_batch_time
+          name: Nightly Batch Time
+        - entity: input_number.ai_embedding_batch_size
+          name: Batch Size
+        - entity: input_boolean.ai_embedding_reindex_needed
+          name: Reindex Needed
+    - type: entities
+      title: LLM Task Instance
+      entities:
+        - entity: input_text.ai_task_instance
+          name: ha_text_ai Entity
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '## L2 Memory Browser
+
+
+        Search the long-term memory store (SQLite + FTS5). Enter a query
+
+        and tap Search to find matching entries.'
+    - type: entities
+      title: Search
+      entities:
+      - entity: input_text.ai_memory_search_query
+        name: Search Query
+    - type: button
+      name: Search Memory
+      icon: mdi:magnify
+      tap_action:
+        action: perform-action
+        perform_action: pyscript.memory_browse
+      icon_height: 40px
+    - type: markdown
+      title: Results
+      content: '{% if state_attr(''sensor.ai_memory_browse'', ''results_md'') %}
+
+        **Query:** {{ state_attr(''sensor.ai_memory_browse'', ''query'') }} | **Results:**
+        {{ state_attr(''sensor.ai_memory_browse'', ''count'') }}
+
+
+        {{ state_attr(''sensor.ai_memory_browse'', ''results_md'') }}
+
+        {% else %}
+
+        _Run a search to see results here._
+
+        {% endif %}'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Memory Editor
+
+
+        View, edit, or delete individual memory entries. Type a key and tap
+
+        **Load** to populate fields. Edit values and tap **Save** to upsert.
+
+        Tap **Delete** to remove the entry.'
+    - type: entities
+      title: Editor
+      entities:
+      - entity: input_text.ai_memory_edit_key
+        name: Key
+      - entity: input_text.ai_memory_edit_value
+        name: Value
+      - entity: input_text.ai_memory_edit_tags
+        name: Tags
+      - entity: input_text.ai_memory_edit_scope
+        name: Scope
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Load
+        icon: mdi:download
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_load
+      - type: button
+        name: Save
+        icon: mdi:content-save
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_edit
+      - type: button
+        name: Delete
+        icon: mdi:delete
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_delete
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      title: L1 Hot Context
+      content: >-
+        {%- set ctx = state_attr('sensor.ai_hot_context', 'context') | default('No data', true) -%}
+        {%- set icons = {
+          'Time': '🕐', 'User': '👤', 'Household': '🏠', 'Presence': '📡',
+          'Occupancy': '🚪', 'Media': '🎵', 'Music taste': '🎶',
+          'Sonarr': '📺', 'Radarr': '🎬',
+          'House mode': '🏡', 'Expertise routing': '🧭',
+          'Weather': '🌤', "Tomorrow's weather": '🌤', 'Tomorrow weather': '🌤',
+          'Next alarm': '⏰', 'Schedule': '📅', 'Projects': '📋', 'Focus': '🎯',
+          'Privacy': '🔒', 'Guests': '👥',
+          'Memory context': '🧠', 'Last interaction': '💬'
+        } -%}
+        {%- for line in ctx.split('\n') -%}
+        {%- if line.startswith('- ') -%}
+        {%- set clean = line[2:] | trim -%}
+        {%- if clean[:1] == '[' -%}
+        {%- set agent = clean.split(']')[0][1:] | title -%}
+        {%- set rest = clean.split('] ', 1)[1] | default('') -%}
+        {%- set rest = rest | regex_replace('^topic: *', '') -%}
+        {%- set rest = rest | regex_replace(' *\\| *intent: *', ' — ') %}
+
+        · {{ agent }}: {{ rest }}
+        {%- else %}
+
+        · {{ clean }}
+        {%- endif -%}
+        {%- elif line.startswith('Recent') %}
+
+        📝 **Recent:**
+        {%- else -%}
+        {%- set parts = line.split(': ', 1) -%}
+        {%- if parts | length > 1 -%}
+        {%- set label = parts[0] | trim -%}
+        {%- set icon = icons.get(label, '•') -%}
+        {%- if label == 'Memory context' %}
+
+        ---
+
+        **{{ icon }} {{ label }}**
+        {%- else %}
+
+        {{ icon }} **{{ label }}:** {{ parts[1] }}
+        {%- endif -%}
+        {%- endif -%}
+        {%- endif -%}
+        {%- endfor -%}
+      card_mod:
+        style: |
+          ha-card {
+            border-left: 4px solid #9999FF;
+            border-radius: 0 12px 12px 0;
+          }
+          .card-header {
+            color: #9999FF;
+            font-size: 16px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding-bottom: 4px;
+            border-bottom: 2px solid;
+            border-image: linear-gradient(90deg, #9999FF 40%, #CC6699 70%, #F1DF6F) 1;
+          }
+          .card-content {
+            font-size: 13px;
+            line-height: 1.6;
+          }
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Memory Health
+
+
+        Database statistics. Tap Health Check to refresh or Reindex FTS
+
+        to rebuild the full-text search index.'
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Health Check
+        icon: mdi:database-check
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_health_check
+        icon_height: 40px
+      - type: button
+        name: Reindex FTS
+        icon: mdi:database-refresh
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_reindex_fts
+        icon_height: 40px
+      - type: button
+        name: Sync Todo
+        icon: mdi:checkbox-marked-outline
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_todo_sync
+          data:
+            todo_entity: todo.ai_memory
+        icon_height: 40px
+    - type: entities
+      title: L2 Memory Core
+      show_header_toggle: false
+      entities:
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: rows
+          name: Entries
+          icon: mdi:database
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: expired
+          name: Expired
+          icon: mdi:clock-alert-outline
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: fts_rows
+          name: FTS Index
+          icon: mdi:text-search
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: rel_count
+          name: Relations
+          icon: mdi:graph-outline
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: op
+          name: Last Op
+          icon: mdi:cog
+        - entity: sensor.memory_result
+          name: Status
+          icon: mdi:check-circle
+      card_mod:
+        style: |
+          ha-card {
+            border-left: 4px solid #F1DF6F;
+            border-radius: 0 12px 12px 0;
+          }
+          .card-header {
+            color: #F1DF6F;
+            font-size: 16px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding-bottom: 4px;
+            border-bottom: 2px solid;
+            border-image: linear-gradient(90deg, #F1DF6F 40%, #CC6699 70%, #9999FF) 1;
+          }

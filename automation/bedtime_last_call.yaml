@@ -1,0 +1,600 @@
+blueprint:
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_last_call.yaml
+  name: "Proactive – Presence-based Last Call (announcement + optional script)"
+  author: madalone
+  homeassistant:
+    min_version: "2024.10.0"
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_last_call-header.jpeg)
+
+    # Proactive – Presence-based Last Call
+
+    Speaks a single, AI-generated 'last call' message when presence is detected
+    in an area during an allowed time window. Optionally runs an external script
+    after the announcement (e.g. turn off lights, TV, start audio, etc.).
+
+    **Note:** This automation intentionally has no once-per-window cooldown.
+    If presence is lost and re-detected within the same time window, the
+    announcement fires again. Use minimum presence duration to reduce
+    false triggers from brief walk-throughs.
+
+    ### Recent changes
+    - **v2.2:** Audit remediation — added user_name input (removed hardcoded name),
+      TTS empty-entity guards, continue_on_error on TTS actions, follow-up script
+      empty-entity guard, sensor_context whitespace cleanup
+    - **v2.1:** Cross-midnight day attribution fix — effective_day_key
+      shifts post-midnight hours to the previous day's run_days entry
+    - **v2:** Style guide compliance — collapsible sections, aliases, error handling
+    - **v1:** Initial version
+
+  # ===========================================================================
+  # INPUTS
+  # ===========================================================================
+
+  input:
+
+    # ===========================================================================
+    # ① PRESENCE & AREA
+    # ===========================================================================
+    presence_area:
+      name: "① Presence & area"
+      icon: mdi:motion-sensor
+      collapsed: false
+      description: >
+        Configure which sensors detect presence and the area name for context.
+      input:
+
+        presence_sensors:
+          name: Presence sensors
+          description: >
+            One or more binary sensors indicating presence in this area.
+            The automation triggers when ANY of these turns ON.
+            At least one sensor is required for the automation to function.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+
+        area_name:
+          name: Area name (spoken context)
+          description: >
+            Friendly area name used in the spoken message and LLM context.
+          default: Living room
+          selector:
+            select:
+              options:
+                - Living room
+                - Bedroom
+                - Office
+                - Kitchen
+                - Workshop
+                - Bathroom
+              custom_value: true
+
+        user_name:
+          name: User name (spoken context)
+          description: >
+            First name or nickname the AI should use when speaking to the user.
+          default: friend
+          selector:
+            text:
+              multiline: false
+
+    # ===========================================================================
+    # ② SCHEDULE
+    # ===========================================================================
+    schedule:
+      name: "② Schedule"
+      icon: mdi:clock-outline
+      collapsed: true
+      description: >
+        Time window and days when this automation is allowed to run.
+      input:
+
+        start_time:
+          name: Active from
+          description: >
+            Start time of the window where this automation is allowed to run.
+          default: "20:00:00"
+          selector:
+            time: {}
+
+        end_time:
+          name: Active until
+          description: >
+            End time of the active window. Can be earlier than start time
+            to allow crossing midnight (e.g. 22:00 → 02:00).
+          default: "01:00:00"
+          selector:
+            time: {}
+
+        run_days:
+          name: Allowed days
+          description: >
+            Days of the week on which this automation is allowed to run.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - mon
+                - tue
+                - wed
+                - thu
+                - fri
+                - sat
+                - sun
+              multiple: true
+
+    # ===========================================================================
+    # ③ SPEECH OUTPUT
+    # ===========================================================================
+    speech_output:
+      name: "③ Speech output"
+      icon: mdi:bullhorn
+      collapsed: true
+      description: >
+        Speaker configuration for the spoken announcement.
+      input:
+
+        media_player:
+          name: Media player for speech
+          description: >
+            Speaker or media player used for the spoken announcement.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+    # ===========================================================================
+    # ④ SAFETY & INTERRUPTION GUARDS
+    # ===========================================================================
+    safety_guards:
+      name: "④ Safety & interruption guards"
+      icon: mdi:shield-check
+      collapsed: true
+      description: >
+        Optional protections to prevent unwanted announcements,
+        such as walk-by triggers or interrupting active playback.
+      input:
+
+        min_presence_seconds:
+          name: Minimum presence duration
+          description: >
+            Presence must be continuously detected for this many seconds
+            before the automation fires. Set to 0 to disable.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 5
+              unit_of_measurement: seconds
+
+        block_if_media_playing:
+          name: Do not speak if media is playing
+          description: >
+            Prevents the announcement from interrupting active playback
+            on the selected media player.
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑤ AI MESSAGE GENERATION
+    # ===========================================================================
+    ai_message_settings:
+      name: "⑤ AI message generation"
+      icon: mdi:robot-outline
+      collapsed: true
+      description: >
+        Controls how the AI generates the spoken 'last call' sentence.
+      input:
+
+        conversation_agent:
+          name: Voice Assistant
+          description: >
+            The Assist Pipeline (Voice Assistant) used for the last-call
+            message. The pipeline bundles the conversation agent, TTS
+            engine, and TTS voice. When the dispatcher is enabled, this
+            selection is overridden automatically.
+          default: "Rick - Bedtime"
+          selector:
+            text:
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+        llm_prompt:
+          name: LLM prompt style
+          description: >
+            Instructions for how the AI should phrase the last-call message.
+            Keep it short; the automation enforces a single sentence.
+          default: >-
+            You are a smart home assistant. Speak ONE short, natural
+            'last call' sentence to the user. Maximum 220 characters.
+            No quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        context_entities:
+          name: Extra context entities
+          description: >
+            Optional entities whose state should be passed to the AI
+            as additional context (temperature, lights, media, etc.).
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # ===========================================================================
+    # ⑥ FOLLOW-UP SCRIPT
+    # ===========================================================================
+    followup_script_settings:
+      name: "⑥ Follow-up script after announcement"
+      icon: mdi:script-text-outline
+      collapsed: true
+      description: >
+        Optional automation step that runs an external script
+        after the spoken announcement finishes.
+      input:
+
+        enable_followup_script:
+          name: Enable follow-up script
+          description: >
+            If enabled, the selected script will automatically run
+            after the announcement.
+          default: false
+          selector:
+            boolean: {}
+
+        followup_delay_seconds:
+          name: Delay before running script
+          description: >
+            Optional delay to ensure the TTS message has finished
+            playing before the script runs.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 1
+              unit_of_measurement: seconds
+
+        followup_script:
+          name: Script to run
+          description: >
+            External script to execute after the announcement.
+            This blueprint does not define what the script does.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ⑦ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑦ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t1"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑧ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑧ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+variables:
+  presence_entities: !input presence_sensors
+  player_entity: !input media_player
+  run_days: !input run_days
+  effective_start_time: !input start_time
+  effective_end_time: !input end_time
+  min_presence_seconds: !input min_presence_seconds
+  block_if_media_playing: !input block_if_media_playing
+  enable_followup_script: !input enable_followup_script
+  followup_delay_seconds: !input followup_delay_seconds
+  followup_script: !input followup_script
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+  today_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {{ days[now().weekday()] }}
+
+  effective_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(effective_start_time) %}
+    {% set end = today_at(effective_end_time) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ today_key }}
+    {% endif %}
+
+triggers:
+  - alias: "Presence detected — any sensor turns on"
+    trigger: state
+    entity_id: !input presence_sensors
+    from: "off"
+    to: "on"
+
+conditions:
+  - condition: template
+    alias: "Allowed on this day"
+    value_template: >-
+      {{ effective_day_key in run_days }}
+
+  - condition: template
+    alias: "Within active time window"
+    value_template: >-
+      {% set start = today_at(effective_start_time) %}
+      {% set end = today_at(effective_end_time) %}
+      {% set now_ts = as_timestamp(now()) %}
+      {% set start_ts = as_timestamp(start) %}
+      {% set end_ts = as_timestamp(end) %}
+      {% if end_ts > start_ts %}
+        {{ now_ts >= start_ts and now_ts <= end_ts }}
+      {% else %}
+        {{ now_ts >= start_ts or now_ts <= end_ts }}
+      {% endif %}
+
+  - condition: template
+    alias: "Not speaking over active media"
+    value_template: >-
+      {% if not block_if_media_playing %}
+        true
+      {% else %}
+        {{ states(player_entity) | default('unknown') not in ['playing', 'buffering'] }}
+      {% endif %}
+
+  - condition: template
+    alias: "Minimum presence duration met"
+    value_template: >-
+      {% set secs = min_presence_seconds | int %}
+      {% if secs <= 0 %}
+        true
+      {% else %}
+        {% set on_sensors = expand(presence_entities)
+            | selectattr('state', 'eq', 'on') | list %}
+        {% if on_sensors | length == 0 %}
+          false
+        {% else %}
+          {% set last_change = (on_sensors
+              | map(attribute='last_changed') | max) %}
+          {{ (as_timestamp(now()) - as_timestamp(last_change)) >= secs }}
+        {% endif %}
+      {% endif %}
+
+  - condition: template
+    alias: "Presence still detected"
+    value_template: >-
+      {{ expand(presence_entities)
+          | selectattr('state', 'eq', 'on') | list | length > 0 }}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_bedtime_last_call') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Resolve input variables for actions"
+    variables:
+      player: !input media_player
+      v_pipeline_name: !input conversation_agent
+      use_dispatcher: !input use_dispatcher
+      v_dispatcher_enabled: !input dispatcher_enabled
+      area_name: !input area_name
+      user_name: !input user_name
+      llm_prompt: !input llm_prompt
+      context_entities: !input context_entities
+
+      sensor_context: >-
+        {% set entities = context_entities | default([]) %}
+        {% if entities | length == 0 %}
+          none
+        {%- else %}
+          {%- set expanded = expand(entities) %}
+          {%- for e in expanded %}
+          {%- if e.domain == 'media_player' %}
+          - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.state in ['playing', 'paused'] %} — "{{ e.attributes.media_title | default('unknown') }}"{% if e.attributes.media_artist | default('') %} by {{ e.attributes.media_artist }}{% endif %}{% if e.attributes.media_content_type | default('') %} [{{ e.attributes.media_content_type }}]{% endif %}{% endif %}
+          {%- elif e.attributes.player_state is defined or e.attributes.media_category is defined %}
+          - {{ e.entity_id }} ({{ e.name }}): {{ e.state }} [{{ e.attributes.player_state | default('unknown') }}]{% if e.attributes.series_title | default('') %} — series: {{ e.attributes.series_title }}{% endif %}{% if e.attributes.season is not none and e.attributes.season is defined %}, season: {{ e.attributes.season }}{% endif %}{% if e.attributes.episode is not none and e.attributes.episode is defined %}, episode: {{ e.attributes.episode }}{% endif %}{% if e.attributes.pvr_programme | default('') %}, pvr: {{ e.attributes.pvr_programme }}{% endif %}{% if e.attributes.pvr_channel | default('') %}, channel: {{ e.attributes.pvr_channel }}{% endif %}{% if e.attributes.plot | default('') %}, plot: {{ e.attributes.plot }}{% endif %}
+          {%- else %}
+          - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.attributes.unit_of_measurement is defined %} {{ e.attributes.unit_of_measurement }}{% endif %}
+          {%- endif %}
+          {%- endfor %}
+        {% endif %}
+
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for bedtime last call"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: ""
+              intent_text: "bedtime last call"
+              skip_continuity: true
+            continue_on_error: true
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve manual pipeline for last call"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  - alias: "Generate last-call message via LLM"
+    action: conversation.process
+    continue_on_error: true
+    data:
+      agent_id: "{{ dispatch_agent }}"
+      text: >-
+        {{ llm_prompt }}
+
+        context:
+        - extra_entities:
+        {{ sensor_context }}
+
+        task:
+        respond with ONE short, natural sentence you would say out loud
+        to {{ user_name }} right now. maximum 220 characters. do not include
+        quotation marks or any surrounding formatting.
+    response_variable: ai_result
+
+  - alias: "Extract message from LLM response — fallback if unavailable"
+    variables:
+      last_call_message: >-
+        {% set resp = ai_result.response if ai_result is defined else none %}
+        {% set fallback = "Last call, " ~ user_name ~ ". Time to wrap it up in the " ~ area_name ~ "." %}
+        {% if resp is not none
+              and resp.speech is defined
+              and resp.speech.plain is defined
+              and resp.speech.plain.speech is defined %}
+          {% set txt = resp.speech.plain.speech | trim %}
+          {{ txt if txt else fallback }}
+        {% else %}
+          {{ fallback }}
+        {% endif %}
+
+  - alias: "Speak last-call message via TTS (skip if unconfigured)"
+    if:
+      - condition: template
+        alias: "TTS voice and media player are both configured"
+        value_template: "{{ dispatch_voice | default('') != '' and player | default('') != '' }}"
+    then:
+      - alias: "Speak via dispatched TTS engine"
+        action: pyscript.tts_queue_speak
+        response_variable: _tts_result
+        data:
+          text: "{{ last_call_message }}"
+          voice: "{{ dispatch_tts_voice }}"
+          target: "{{ player }}"
+          target_mode: explicit
+          priority: 1
+        continue_on_error: true
+
+  - alias: "Whisper — update self-awareness"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "Spoke bedtime last call in {{ area_name }}"
+      source: "automation"
+    continue_on_error: true
+
+  - alias: "Run follow-up script if enabled"
+    if:
+      - condition: template
+        value_template: "{{ enable_followup_script and followup_script | default('') != '' }}"
+    then:
+      - alias: "Post-TTS delay — let speech finish before script runs"
+        delay:
+          seconds: "{{ followup_delay_seconds | int }}"
+      - alias: "Fire follow-up script"
+        action: script.turn_on
+        target:
+          entity_id: "{{ followup_script }}"

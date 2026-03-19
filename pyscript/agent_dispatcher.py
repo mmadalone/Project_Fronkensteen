@@ -74,15 +74,40 @@ PIPELINE_FILE = "/config/.storage/assist_pipeline.pipelines"
 # Any pipeline named "<Persona> - <Variant>" registers as variant
 # <variant> (lowercased, spaces→underscores). No allowlist needed.
 KEYWORD_DISPLAY_ENTITY = "sensor.ai_keyword_display"
-CACHE_TTL_SECONDS = 300  # 5 minutes — re-read pipeline file on next dispatch
+KEYWORD_AGENT_SELECT = "input_select.ai_keyword_agent_select"
 
 # ── Time-of-Day Era Helpers ──────────────────────────────────────────────────
-ERA_HELPERS = {
-    "late_night": "input_select.ai_dispatcher_era_late_night",
-    "morning":    "input_select.ai_dispatcher_era_morning",
-    "afternoon":  "input_select.ai_dispatcher_era_afternoon",
-    "evening":    "input_select.ai_dispatcher_era_evening",
-}
+_ERA_NAMES = ("late_night", "morning", "afternoon", "evening")
+
+
+def _get_era_helper(era):
+    return f"input_select.ai_dispatcher_era_{era}"
+
+
+# ── Configurable Helper Getters ──────────────────────────────────────────────
+
+def _helper_int(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
+def _helper_str(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
+
+
+def _get_cache_ttl():
+    return _helper_int("input_number.ai_dispatcher_cache_ttl", 300)
 
 # ── Dynamic Cache ────────────────────────────────────────────────────────────
 # Populated on first dispatch from pipeline file + memory.
@@ -115,7 +140,7 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
 
 # ── Pipeline Discovery ───────────────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _load_pipelines_from_file_sync(pipeline_file: str) -> list:
     """Read the Assist Pipeline JSON file (sync). Returns items list or []."""
     import json as _json
@@ -123,13 +148,14 @@ def _load_pipelines_from_file_sync(pipeline_file: str) -> list:
         with open(pipeline_file, "r") as fh:
             data = _json.load(fh)
         return data.get("data", {}).get("items", [])
-    except Exception:
+    except Exception as exc:
+        print(f"dispatcher: {exc}")
         return []
 
 
 async def _load_pipelines_from_file(pipeline_file: str) -> list:
-    """Async wrapper — runs file I/O in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(_load_pipelines_from_file_sync, pipeline_file)
+    """Async wrapper — @pyscript_executor handles threading automatically."""
+    return _load_pipelines_from_file_sync(pipeline_file)
 
 
 @pyscript_compile  # noqa: F821
@@ -212,8 +238,8 @@ async def _load_topic_keywords(personas: tuple) -> dict:
                 kw_list = [k.strip().lower() for k in val.split(",") if k.strip()]
                 if kw_list:
                     keywords[persona] = kw_list
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
     if keywords:
         log.info(  # noqa: F821
             f"agent_dispatch: loaded keywords for {list(keywords.keys())}"
@@ -224,10 +250,11 @@ async def _load_topic_keywords(personas: tuple) -> dict:
 async def _update_era_helper_options(personas: tuple) -> None:
     """Update the time-of-day era helper dropdowns with discovered personas."""
     options = ["none"] + list(personas) + ["rotate"]
-    for helper_entity in ERA_HELPERS.values():
+    for helper_entity in [_get_era_helper(e) for e in _ERA_NAMES]:
         try:
             saved = state.get(helper_entity)  # noqa: F821
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             saved = None
         try:
             await service.call(  # noqa: F821
@@ -248,13 +275,13 @@ async def _update_era_helper_options(personas: tuple) -> None:
                     entity_id=helper_entity,
                     option=saved,
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning(f"dispatcher: {exc}")  # noqa: F821
     # Also update keyword agent select
     try:
         await service.call(  # noqa: F821
             "input_select", "set_options",
-            entity_id="input_select.ai_keyword_agent_select",
+            entity_id=KEYWORD_AGENT_SELECT,
             options=list(personas) + ["none"],
         )
     except Exception as exc:
@@ -358,9 +385,9 @@ def _strip_handoff_command(intent_text: str, patterns: list) -> str:
 
 
 async def _ensure_cache() -> None:
-    """Lazy-load the full cache on first dispatch. Auto-expires after CACHE_TTL_SECONDS."""
+    """Lazy-load the full cache on first dispatch. Auto-expires after configurable TTL."""
     global _cache, _cache_ts
-    if _cache is not None and (time.monotonic() - _cache_ts) < CACHE_TTL_SECONDS:
+    if _cache is not None and (time.monotonic() - _cache_ts) < _get_cache_ttl():
         return
     if _cache is not None:
         log.info("agent_dispatch: cache TTL expired, reloading")  # noqa: F821
@@ -384,8 +411,8 @@ async def _ensure_cache() -> None:
     raw_aliases = ""
     try:
         raw_aliases = state.get("input_text.ai_handoff_persona_aliases") or ""  # noqa: F821
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
     handoff_aliases = _parse_aliases(raw_aliases)
     user_handoff_patterns = _build_user_handoff_patterns(personas, handoff_aliases)
 
@@ -687,9 +714,9 @@ async def _check_user_preference(personas: tuple) -> str | None:
 
 def _get_era_persona(era: str, personas: tuple) -> str | None:
     """Read the time-of-day persona from UI helper. Returns None for 'rotate'."""
-    helper = ERA_HELPERS.get(era)
-    if not helper:
+    if era not in _ERA_NAMES:
         return None
+    helper = _get_era_helper(era)
     val = state.get(helper)  # noqa: F821
     if not val or val in ("rotate", "unknown", "unavailable", "none", ""):
         return None
@@ -701,10 +728,10 @@ def _get_era_persona(era: str, personas: tuple) -> str | None:
 
 async def _check_bedtime() -> bool:
     """Check if bedtime mode is active."""
-    bedtime = state.get("input_boolean.bedtime_active")  # noqa: F821
+    bedtime = state.get("input_boolean.ai_bedtime_active")  # noqa: F821
     if bedtime == "on":
         return True
-    bedtime_lock = state.get("input_boolean.bedtime_global_lock")  # noqa: F821
+    bedtime_lock = state.get("input_boolean.ai_bedtime_global_lock")  # noqa: F821
     if bedtime_lock == "on":
         return True
     return False
@@ -975,8 +1002,8 @@ async def agent_dispatch(
                         handoff_source = (
                             state.get("input_text.ai_last_agent_name") or ""  # noqa: F821
                         ).lower().strip()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        log.warning(f"dispatcher: {exc}")  # noqa: F821
                 # Strip the handoff command, leaving any attached query
                 remaining_query = _strip_handoff_command(
                     intent_text, _cache["user_handoff_patterns"]
@@ -1275,7 +1302,7 @@ async def dispatcher_load_keywords():
         return {"status": "test_mode_skip"}
 
     await _ensure_cache()
-    agent = (state.get("input_select.ai_keyword_agent_select") or "").strip().lower()  # noqa: F821
+    agent = (state.get(KEYWORD_AGENT_SELECT) or "").strip().lower()  # noqa: F821
     if not agent or agent == "none":
         state.set(  # noqa: F821
             KEYWORD_DISPLAY_ENTITY, value="none",
@@ -1289,7 +1316,8 @@ async def dispatcher_load_keywords():
     try:
         result = pyscript.memory_get(key=f"dispatch_keywords:{agent}")  # noqa: F821
         resp = await result
-    except Exception:
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
         resp = {"status": "error"}
 
     if resp and resp.get("status") == "ok":
@@ -1339,7 +1367,7 @@ async def dispatcher_add_keyword():
         return {"status": "test_mode_skip"}
 
     await _ensure_cache()
-    agent = (state.get("input_select.ai_keyword_agent_select") or "").strip().lower()  # noqa: F821
+    agent = (state.get(KEYWORD_AGENT_SELECT) or "").strip().lower()  # noqa: F821
     keyword = (state.get("input_text.ai_keyword_add") or "").strip().lower()  # noqa: F821
     manual = state.get("input_boolean.ai_keyword_manual") == "on"  # noqa: F821
 
@@ -1355,8 +1383,8 @@ async def dispatcher_add_keyword():
         resp = await result
         if resp and resp.get("status") == "ok":
             existing = [k.strip() for k in resp.get("value", "").split(",") if k.strip()]
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
 
     # Check if already exists (in either form)
     existing_lower = [k.lower().lstrip("!") for k in existing]
@@ -1390,7 +1418,7 @@ async def dispatcher_remove_keyword():
         return {"status": "test_mode_skip"}
 
     await _ensure_cache()
-    agent = (state.get("input_select.ai_keyword_agent_select") or "").strip().lower()  # noqa: F821
+    agent = (state.get(KEYWORD_AGENT_SELECT) or "").strip().lower()  # noqa: F821
     keyword = (state.get("input_text.ai_keyword_remove") or "").strip().lower()  # noqa: F821
 
     if not agent or agent == "none":
@@ -1402,7 +1430,8 @@ async def dispatcher_remove_keyword():
     try:
         result = pyscript.memory_get(key=f"dispatch_keywords:{agent}")  # noqa: F821
         resp = await result
-    except Exception:
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
         resp = {"status": "error"}
 
     if not resp or resp.get("status") != "ok":
@@ -1437,7 +1466,7 @@ async def dispatcher_clear_auto_keywords():
         return {"status": "test_mode_skip"}
 
     await _ensure_cache()
-    agent = (state.get("input_select.ai_keyword_agent_select") or "").strip().lower()  # noqa: F821
+    agent = (state.get(KEYWORD_AGENT_SELECT) or "").strip().lower()  # noqa: F821
 
     if not agent or agent == "none":
         return {"status": "error", "op": "clear_auto", "error": "no_agent"}
@@ -1445,7 +1474,8 @@ async def dispatcher_clear_auto_keywords():
     try:
         result = pyscript.memory_get(key=f"dispatch_keywords:{agent}")  # noqa: F821
         resp = await result
-    except Exception:
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
         resp = {"status": "error"}
 
     if not resp or resp.get("status") != "ok":

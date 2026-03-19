@@ -66,7 +66,45 @@ from shared_utils import build_result_entity_name
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_proactive_briefing_status"
-FALLBACK_TTS_VOICE = "tts.home_assistant_cloud"
+_FALLBACK_TTS_VOICE_DEFAULT = "tts.home_assistant_cloud"
+
+
+# ── Configurable Helper Getters ──────────────────────────────────────────────
+
+def _helper_int(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
+def _helper_str(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
+
+
+def _get_fallback_tts_voice():
+    return _helper_str("input_text.ai_default_tts_voice", _FALLBACK_TTS_VOICE_DEFAULT)
+
+
+def _get_morning_hour():
+    return _helper_int("input_number.ai_briefing_morning_hour", 5)
+
+
+def _get_afternoon_hour():
+    return _helper_int("input_number.ai_briefing_afternoon_hour", 12)
+
+
+def _get_evening_hour():
+    return _helper_int("input_number.ai_briefing_evening_hour", 17)
 
 # BUDGET_STRIPPED_THRESHOLD — now read from input_number.ai_budget_personality_threshold
 
@@ -102,11 +140,13 @@ MOOD_GENTLE_MAP = {
 
 def _briefing_framing_for_hour(hour: int) -> str:
     """Return time-appropriate framing instructions for the LLM."""
-    if hour < 12:
+    afternoon_hour = _get_afternoon_hour()
+    evening_hour = _get_evening_hour()
+    if hour < afternoon_hour:
         return (
             "This is a morning briefing. Set the tone for the day ahead."
         )
-    elif hour < 17:
+    elif hour < evening_hour:
         return (
             "This is an afternoon update. Frame it as a mid-day check-in."
         )
@@ -150,13 +190,18 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
 # ── Pure-Python Sync Helpers ─────────────────────────────────────────────────
 
 @pyscript_compile  # noqa: F821
-def _section_greeting(hour: int) -> str:
+def _section_greeting(
+    hour: int,
+    morning_hour: int = 5,
+    afternoon_hour: int = 12,
+    evening_hour: int = 17,
+) -> str:
     """Time-aware greeting. Raw text — the LLM will add personality."""
-    if hour < 5:
+    if hour < morning_hour:
         return "You're up early."
-    if hour < 12:
+    if hour < afternoon_hour:
         return "Good morning."
-    if hour < 17:
+    if hour < evening_hour:
         return "Afternoon already."
     return "Good evening."
 
@@ -249,7 +294,8 @@ async def _section_weather() -> str:
         temp = str(w_attrs.get("temperature", "?"))
         humidity = str(w_attrs.get("humidity", "?"))
         return _format_weather_text(w_state, temp, humidity)
-    except Exception:
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
         return ""
 
 
@@ -274,7 +320,7 @@ async def _section_calendar(hour: int = 0) -> str:
         return ""
 
     # Evening: past-tense summary — don't list events as upcoming
-    if hour >= 17:
+    if hour >= _get_evening_hour():
         if count == 1:
             return f"You had 1 event today: {events[0]}."
         return f"You had {count} events today."
@@ -310,7 +356,7 @@ async def _section_email(hour: int = 0) -> str:
         return ""
 
     plural = "s" if count > 1 else ""
-    if hour >= 17:
+    if hour >= _get_evening_hour():
         return f"{count} unread priority email{plural}."
     return f"{count} priority email{plural} overnight."
 
@@ -399,7 +445,8 @@ async def _section_household(entities_override: str = "") -> str:
                     entity_id.split(".")[-1].replace("_", " "),
                 )
                 findings.append(f"The {name} is {s}")
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             continue
 
     if findings:
@@ -460,8 +507,8 @@ async def _section_memory() -> str:
             if mood:
                 return _build_mood_phrase(mood, value)
 
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
 
     return ""
 
@@ -479,7 +526,8 @@ async def _section_projects() -> str:
     try:
         summary = state.get("input_text.ai_active_projects_summary")  # noqa: F821
         hot_line = state.get("input_text.ai_project_hot_context_line")  # noqa: F821
-    except Exception:
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
         return ""
 
     if summary in _SKIP and hot_line in _SKIP:
@@ -538,8 +586,8 @@ async def _section_media(upcoming_days: int = 0, download_window: str = "since_m
                     parts.append(f"Recently downloaded: {rs}")
                 if parts:
                     return " ".join(parts)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
     # Fallback: read from L1 helpers (separate Sonarr/Radarr)
     parts = []
     for helper in (
@@ -601,8 +649,8 @@ def _increment_llm_counter(cost: int = 1) -> None:
             entity_id="input_number.ai_llm_calls_today",
             value=min(current + cost, 999),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821
 
 
 # ── Core Assembly Logic ───────────────────────────────────────────────────────
@@ -632,11 +680,17 @@ async def _assemble_briefing(
     # ── 1. Greeting ──
     if "greeting" in enabled:
         try:
-            text = _section_greeting(hour)
+            text = _section_greeting(
+                    hour,
+                    morning_hour=_get_morning_hour(),
+                    afternoon_hour=_get_afternoon_hour(),
+                    evening_hour=_get_evening_hour(),
+                )
             sections["greeting"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["greeting"] = ""
 
     # ── 2. Weather ──
@@ -646,7 +700,8 @@ async def _assemble_briefing(
             sections["weather"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["weather"] = ""
 
     # ── 3. Calendar ──
@@ -656,7 +711,8 @@ async def _assemble_briefing(
             sections["calendar"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["calendar"] = ""
 
     # ── 4. Email ──
@@ -666,7 +722,8 @@ async def _assemble_briefing(
             sections["email"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["email"] = ""
 
     # ── 5. Schedule advisory ──
@@ -676,7 +733,8 @@ async def _assemble_briefing(
             sections["schedule"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["schedule"] = ""
 
     # ── 6. Household ──
@@ -686,7 +744,8 @@ async def _assemble_briefing(
             sections["household"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["household"] = ""
 
     # ── 7. Memory highlights ──
@@ -696,7 +755,8 @@ async def _assemble_briefing(
             sections["memory"] = text
             if text:
                 parts.append(text)
-        except Exception:
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
             sections["memory"] = ""
 
     # ── 8. Projects ──
@@ -719,7 +779,8 @@ async def _assemble_briefing(
                 sections[media_key] = text
                 if text:
                     parts.append(text)
-            except Exception:
+            except Exception as exc:
+                log.warning(f"dispatcher: {exc}")  # noqa: F821
                 sections[media_key] = ""
 
     # Assemble full text
@@ -804,8 +865,8 @@ async def _deliver_briefing(
         dedup_resp = await dedup_call
         if dedup_resp and dedup_resp.get("duplicate"):
             is_duplicate = True
-    except Exception:
-        pass  # Fail-open: deliver if dedup is down
+    except Exception as exc:
+        log.warning(f"dispatcher: {exc}")  # noqa: F821  — Fail-open: deliver if dedup is down
 
     if is_duplicate and not test_mode:
         elapsed = round((time.monotonic() - t_start) * 1000, 1)
@@ -836,7 +897,7 @@ async def _deliver_briefing(
     # ── Step 4: Agent dispatch ───────────────────────────────────────────
     persona = "unknown"
     agent_entity = ""
-    voice = FALLBACK_TTS_VOICE
+    voice = _get_fallback_tts_voice()
     dispatch_reason = "default"
 
     if not stripped:
@@ -854,7 +915,7 @@ async def _deliver_briefing(
                     agent_entity = dispatch_resp.get("agent", "")
                     dispatch_reason = dispatch_resp.get("reason", "auto")
                     voice = dispatch_resp.get(
-                        "tts_engine", FALLBACK_TTS_VOICE,
+                        "tts_engine", _get_fallback_tts_voice(),
                     )
             except Exception as exc:
                 log.warning(  # noqa: F821
@@ -881,7 +942,7 @@ async def _deliver_briefing(
                     agent_entity = dispatch_resp.get("agent", "")
                     dispatch_reason = "pipeline_override"
                     voice = dispatch_resp.get(
-                        "tts_engine", FALLBACK_TTS_VOICE,
+                        "tts_engine", _get_fallback_tts_voice(),
                     )
             except Exception as exc:
                 log.warning(  # noqa: F821
@@ -994,8 +1055,8 @@ async def _deliver_briefing(
                 source="proactive_briefing",
             )
             await reg_call
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
 
     # ── Step 8: (delivered flag handled by blueprint) ───────────────────
 
@@ -1008,8 +1069,8 @@ async def _deliver_briefing(
                 entity_id="input_text.ai_last_briefing_summary",
                 value=summary,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
 
     # ── Step 10: Whisper post-interaction ────────────────────────────────
     if not test_mode and tts_ok:
@@ -1021,8 +1082,8 @@ async def _deliver_briefing(
                 source="system",
             )
             await whisper_call
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning(f"dispatcher: {exc}")  # noqa: F821
 
     elapsed = round((time.monotonic() - t_start) * 1000, 1)
 

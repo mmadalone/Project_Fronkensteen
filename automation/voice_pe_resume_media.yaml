@@ -1,0 +1,145 @@
+blueprint:
+  name: Voice PE – Resume media after conversation
+  domain: automation
+  author: Miquel Madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/
+  homeassistant:
+    min_version: "2024.10.0"
+  description: >
+    ![Voice PE Resume Media](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_pe_resume_media-header.jpeg)
+
+
+    # RESUME MEDIA AFTER A HOME ASSISTANT VOICE PE CONVERSATION
+
+
+    Resumes playback ONLY on the media players that were actually playing
+    *before* a Home Assistant Voice PE conversation started.
+
+
+    Designed to pair with a companion automation that detects which players
+    were active, stores that state in input_boolean helpers, and pauses or
+    ducks those players while Voice PE is listening/responding.
+
+
+    This blueprint runs AFTER Voice PE finishes responding and:
+
+    1. Iterates each configured media_player.
+
+    2. Checks the matching `input_boolean.<player_id>_was_playing` helper.
+
+    3. If ON → resumes playback on that player.
+
+    4. Turns all helpers OFF so they're ready for next time.
+
+
+    ## Naming convention (IMPORTANT)
+
+    For each media_player, create a matching input_boolean helper:
+
+    `media_player.SOMETHING` → `input_boolean.SOMETHING_was_playing`
+
+
+    Examples:
+
+    - `media_player.madteevee` → `input_boolean.madteevee_was_playing`
+
+    - `media_player.workshop` → `input_boolean.workshop_was_playing`
+
+    - `media_player.alexa` → `input_boolean.alexa_was_playing`
+
+
+    If a helper does not exist, this automation will log an error for that
+    entity — create them first via Settings → Devices → Helpers → Toggle.
+
+
+    ## Companion automation
+
+    Use with "Voice PE – Duck media volumes" (or similar) which turns ON
+    the helpers and pauses/ducks media when Voice PE starts listening.
+    This blueprint ONLY handles the resume-after-conversation part.
+
+
+    ## Changelog
+
+    - **v2:** Full style guide compliance — collapsible sections, plural keys,
+      action syntax, aliases, continue_on_error, merged resume+cleanup loop
+
+    - **v1:** Initial release — functional resume with separate loops
+
+  input:
+    # ===========================================================================
+    # ① Satellites & Media Players
+    # ===========================================================================
+    satellites_and_players:
+      name: "① Satellites & Media Players"
+      icon: mdi:cast-audio-variant
+      description: >
+        Select the Voice PE satellite(s) to monitor and the media players
+        whose playback should be resumed after a conversation ends.
+      collapsed: false
+      input:
+        satellites:
+          name: Voice PE satellites to monitor
+          description: >
+            Select the Voice PE satellite(s) that trigger the resume action
+            when they transition from "responding" back to "idle". At least
+            one satellite is required for this blueprint to function.
+          default: []
+          selector:
+            entity:
+              domain: assist_satellite
+              multiple: true
+
+        media_players:
+          name: Media players to resume
+          description: >
+            Select ALL media players that should be resumed after a Voice PE
+            conversation. For EACH selected player, you must create a helper:
+            input_boolean.<player_id_without_prefix>_was_playing. At least
+            one media player is required for this blueprint to function.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+triggers:
+  - alias: "Voice PE satellite finished responding"
+    trigger: state
+    entity_id: !input satellites
+    from: responding
+    to: idle
+
+variables:
+  media_players_list: !input media_players
+
+actions:
+  - alias: "Resume players whose helper is ON, then clear all helpers"
+    repeat:
+      for_each: "{{ media_players_list }}"
+      sequence:
+        - alias: "Build helper entity_id from player name"
+          variables:
+            player: "{{ repeat.item }}"
+            player_id: "{{ player.split('.')[1] }}"
+            helper: "{{ 'input_boolean.' ~ player_id ~ '_was_playing' }}"
+
+        - alias: "Resume playback if this player's helper is ON"
+          choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ states(helper) | default('off') == 'on' }}"
+              sequence:
+                - alias: "Send media_play to resume playback"
+                  action: media_player.media_play
+                  target:
+                    entity_id: "{{ player }}"
+                  continue_on_error: true
+
+        - alias: "Clear was_playing helper for next conversation"
+          action: input_boolean.turn_off
+          target:
+            entity_id: "{{ helper }}"
+          continue_on_error: true
+
+mode: single

@@ -4,6 +4,9 @@
 # Deployed: 2026-03-01 | Updated: 2026-03-11 (dispatcher_profile blueprint)
 # =============================================================================
 
+# Pyscript-created sensor (agent_dispatcher.py via state.set):
+#   sensor.ai_dispatcher_status — dispatch result, selected agent, persona, reason
+
 # input_button: moved to helpers_input_button.yaml (C3 consolidation)
 
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)

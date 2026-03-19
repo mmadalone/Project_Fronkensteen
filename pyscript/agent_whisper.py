@@ -193,7 +193,7 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
 
 # ── Pipeline Discovery ───────────────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _load_pipelines_from_file(pipeline_file: str) -> list:
     """Read the Assist Pipeline JSON file. Returns items list or []."""
     import json as _json
@@ -253,7 +253,7 @@ async def _ensure_cache() -> None:
     if _cache is not None:
         return
 
-    items = await task.executor(_load_pipelines_from_file, PIPELINE_FILE)
+    items = _load_pipelines_from_file(PIPELINE_FILE)
     personas, entity_map, wake_word_map, pipeline_map = _build_from_pipelines(
         items, KNOWN_VARIANTS
     )

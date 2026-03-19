@@ -411,7 +411,9 @@ script:
               calls
             {% endif %}
           _threshold: >-
-            {{ 0 if priority_tier == 'essential' else (30 if priority_tier == 'standard' else 60) }}
+            {% set low = states('input_number.ai_budget_threshold_low') | int(30) %}
+            {% set high = states('input_number.ai_budget_threshold_high') | int(60) %}
+            {{ 0 if priority_tier == 'essential' else (low if priority_tier == 'standard' else high) }}
       - variables:
           result:
             allowed: >-

@@ -21,6 +21,7 @@ from shared_utils import (
     get_person_slugs,
     get_person_tracker,
     load_entity_config,
+    reload_entity_config,
 )
 
 # =============================================================================
@@ -103,10 +104,10 @@ JOINT_TRIP_THRESHOLD_SEC = 600  # 10 min — if both left within this, same trip
 
 # ── Module-Level State ───────────────────────────────────────────────────────
 
-_local_duration_cache: dict[tuple[str, str, str], list[float]] = {}
-_local_return_cache: dict[tuple[str, str, str], list[float]] = {}
-_local_count_cache: dict[tuple[str, str], dict[str, float]] = {}
-_departure_ts: dict[str, float] = {}     # person → departure unix timestamp
+_local_duration_cache: dict[tuple[str, str, str], list] = {}   # mixed float|dict
+_local_return_cache: dict[tuple[str, str, str], list] = {}     # mixed float|dict
+_local_count_cache: dict[tuple[str, str], dict[str, Any]] = {}
+_departure_ts: dict[str, list[float]] = {}  # I-40b: person → FIFO queue of dep timestamps
 _rebuild_in_progress = False
 _tracker_triggers = []         # factory-created trigger references (keep alive)
 result_entity_name: dict[str, str] = {}
@@ -168,7 +169,7 @@ def _resolve_metadata_ids(entity_ids: list[str]) -> dict[int, str]:
         return {row[0]: row[1] for row in cursor}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _extract_cycles_sync(
     lookback_days: int,
     entity_ids: list[str],
@@ -268,35 +269,54 @@ def _build_tables(
 
     Returns:
         (duration_tables, return_tables, count_tables)
-        duration_tables: {(person, bucket, day_type): [duration_minutes]}
-        return_tables:   {(person, bucket, day_type): [return_hour]}
-        count_tables:    {(person, day_type): {day_count: N, total_cycles: N}}
+        duration_tables: {(person, bucket, day_type): [float | {"d": float, "o": int}]}
+        return_tables:   {(person, bucket, day_type): [float | {"r": float, "o": int}]}
+        count_tables:    {(person, day_type): {avg_trips, max_trips, days_sampled, ordinal_dist}}
+
+    I-40b: Bare floats = ordinal 1 (backward compat), dicts = ordinal 2+.
+    ordinal_dist: {"1": N, "2": N, ...} — how many days had at least that ordinal.
     """
-    duration_tables: dict[tuple[str, str, str], list[float]] = {}
-    return_tables: dict[tuple[str, str, str], list[float]] = {}
+    duration_tables: dict[tuple[str, str, str], list] = {}
+    return_tables: dict[tuple[str, str, str], list] = {}
     daily_trips: dict[tuple[str, str, str], int] = {}  # (person, day_type, date_str) → count
 
-    for cycle in cycles:
+    # I-40b: Sort cycles by (person, date, departed_ts) to assign ordinals
+    sorted_cycles = sorted(cycles, key=lambda c: (c["person"], c["departed_ts"]))
+
+    # Assign ordinals per (person, date) group
+    ordinal_tracker: dict[tuple[str, str], int] = {}  # (person, date_str) → next ordinal
+    for cycle in sorted_cycles:
         person = cycle["person"]
         bucket = cycle["departed_bucket"]
         day_type = cycle["day_type"]
         key = (person, bucket, day_type)
+        date_str = datetime.fromtimestamp(cycle["departed_ts"]).strftime("%Y-%m-%d")
+        ord_key = (person, date_str)
+        ordinal = ordinal_tracker.get(ord_key, 0) + 1
+        ordinal_tracker[ord_key] = ordinal
+
+        dur = cycle["duration_minutes"]
+        ret = cycle["returned_hour"]
 
         if key not in duration_tables:
             duration_tables[key] = []
-        duration_tables[key].append(cycle["duration_minutes"])
-
         if key not in return_tables:
             return_tables[key] = []
-        return_tables[key].append(cycle["returned_hour"])
+
+        # I-40b: Enriched samples — bare float for ordinal 1, dict for 2+
+        if ordinal == 1:
+            duration_tables[key].append(dur)
+            return_tables[key].append(ret)
+        else:
+            duration_tables[key].append({"d": dur, "o": ordinal})
+            return_tables[key].append({"r": ret, "o": ordinal})
 
         # Count trips per day
-        date_str = datetime.fromtimestamp(cycle["departed_ts"]).strftime("%Y-%m-%d")
         trip_key = (person, day_type, date_str)
         daily_trips[trip_key] = daily_trips.get(trip_key, 0) + 1
 
     # Aggregate daily trip counts
-    count_tables: dict[tuple[str, str], dict[str, float]] = {}
+    count_tables: dict[tuple[str, str], dict] = {}
     # Group by (person, day_type)
     grouped: dict[tuple[str, str], list[int]] = {}
     for (person, day_type, _date), count in daily_trips.items():
@@ -306,10 +326,16 @@ def _build_tables(
         grouped[gkey].append(count)
 
     for gkey, counts in grouped.items():
+        # I-40b: Build ordinal distribution from daily trip counts
+        ordinal_dist: dict[str, int] = {}
+        for c in counts:
+            for i in range(1, c + 1):
+                ordinal_dist[str(i)] = ordinal_dist.get(str(i), 0) + 1
         count_tables[gkey] = {
             "avg_trips": round(sum(counts) / len(counts), 1),
             "max_trips": max(counts),
             "days_sampled": len(counts),
+            "ordinal_dist": ordinal_dist,
         }
 
     return duration_tables, return_tables, count_tables
@@ -335,6 +361,57 @@ def _filter_outliers(values: list[float], threshold: float = 3.5) -> list[float]
         return values
     filtered = [v for v in values if 0.6745 * abs(v - median) / mad <= threshold]
     return filtered if filtered else values
+
+
+# ── I-40b: Ordinal-Aware Helpers ──────────────────────────────────────────────
+
+@pyscript_compile  # noqa: F821
+def _extract_values(samples: list, field: str = "d") -> list[float]:
+    """Extract numeric values from mixed legacy/enriched array.
+
+    Legacy samples are bare floats (treated as ordinal 1).
+    Enriched samples are dicts like {"d": 120.5, "o": 2}.
+    """
+    result = []
+    for s in samples:
+        if isinstance(s, (int, float)):
+            result.append(float(s))
+        elif isinstance(s, dict) and field in s:
+            result.append(float(s[field]))
+    return result
+
+
+@pyscript_compile  # noqa: F821
+def _filter_by_ordinal_with_weights(
+    samples: list,
+    weights: list[float],
+    ordinal: int,
+    field: str = "d",
+    min_samples: int = 5,
+) -> tuple[list[float], list[float]]:
+    """Filter samples by trip ordinal, returning (values, matching_weights).
+
+    Bare floats are treated as ordinal 1.
+    Enriched dicts matched by {"o": ordinal}.
+    Falls back to all ordinals if filtered count < min_samples.
+    """
+    filtered_vals = []
+    filtered_weights = []
+    for i, s in enumerate(samples):
+        w = weights[i] if i < len(weights) else 1.0
+        if isinstance(s, (int, float)):
+            if ordinal == 1:
+                filtered_vals.append(float(s))
+                filtered_weights.append(w)
+        elif isinstance(s, dict) and field in s:
+            if s.get("o", 1) == ordinal:
+                filtered_vals.append(float(s[field]))
+                filtered_weights.append(w)
+    if len(filtered_vals) >= min_samples:
+        return (filtered_vals, filtered_weights)
+    # Fallback: all ordinals — zero quality loss vs pre-I-40b
+    all_vals = _extract_values(samples, field)
+    return (all_vals, weights[:len(all_vals)])
 
 
 @pyscript_compile  # noqa: F821
@@ -991,7 +1068,10 @@ async def _check_joint_departure(person: str) -> str | None:
     if not other:
         return None
     other_p = other[0]
-    delta = abs(_departure_ts[person] - _departure_ts[other_p])
+    # I-40b: _departure_ts is now list — use last entry for delta
+    my_ts = _departure_ts[person][-1] if _departure_ts.get(person) else 0
+    other_ts = _departure_ts[other_p][-1] if _departure_ts.get(other_p) else 0
+    delta = abs(my_ts - other_ts)
     if delta <= JOINT_TRIP_THRESHOLD_SEC:
         return other_p
     return None
@@ -1060,9 +1140,7 @@ async def away_extract_cycles(lookback_days=0):
         entity_ids = list(trackers.values())
         tracker_person = {v: k for k, v in trackers.items()}
 
-        raw = await asyncio.to_thread(
-            _extract_cycles_sync, days, entity_ids, tracker_person,
-        )
+        raw = _extract_cycles_sync(days, entity_ids, tracker_person)
 
         cycles = raw.get("cycles", [])
         if not cycles:
@@ -1205,9 +1283,9 @@ async def _predict_return_inner(person=""):
         except (NameError, ValueError):
             pass
 
-        # Also check module-level departure timestamp
-        if p in _departure_ts and elapsed_minutes <= 0:
-            elapsed_minutes = (time.time() - _departure_ts[p]) / 60.0
+        # Also check module-level departure timestamp (I-40b: list — use first entry)
+        if p in _departure_ts and _departure_ts[p] and elapsed_minutes <= 0:
+            elapsed_minutes = (time.time() - _departure_ts[p][0]) / 60.0
 
         # ── Step 2: Blend buckets (G9) ──
         blended_dur, blended_ret, blend_weights = _blend_buckets(
@@ -1236,6 +1314,45 @@ async def _predict_return_inner(person=""):
                 _local_duration_cache, _local_return_cache,
             )
 
+        # ── Step 2b: Ordinal-aware filtering (I-40b) ──
+        # Read current trip ordinal from HA counter
+        counter_entity = f"counter.ai_away_trip_count_{p}"
+        try:
+            _completed = int(float(state.get(counter_entity) or 0))  # noqa: F821
+        except (ValueError, TypeError):
+            _completed = 0
+        trip_ordinal = _completed + 1
+
+        # Read ordinal min_samples threshold from helper
+        try:
+            ordinal_min = int(float(
+                state.get("input_number.ai_away_ordinal_min_samples") or 5  # noqa: F821
+            ))
+        except (ValueError, TypeError):
+            ordinal_min = 5
+
+        # Filter by ordinal (extracts clean floats from mixed arrays)
+        ordinal_dur, ordinal_dur_w = _filter_by_ordinal_with_weights(
+            blended_dur, blend_weights, trip_ordinal, "d", ordinal_min,
+        )
+        ordinal_ret, ordinal_ret_w = _filter_by_ordinal_with_weights(
+            blended_ret, blend_weights, trip_ordinal, "r", ordinal_min,
+        )
+        ordinal_sample_count = len(ordinal_ret)
+
+        # Compute trip probability from daily counts
+        count_key = (p, current_day_type)
+        day_counts = _local_count_cache.get(count_key, {})
+        ordinal_dist = day_counts.get("ordinal_dist", {})
+        _ord_this = ordinal_dist.get(str(trip_ordinal), 0)
+        _ord_next = ordinal_dist.get(str(trip_ordinal + 1), 0)
+        prob_another_trip = round(_ord_next / max(_ord_this, 1), 2)
+
+        # Use ordinal-filtered data for downstream pipeline
+        blended_dur = ordinal_dur
+        blended_ret = ordinal_ret
+        blend_weights = ordinal_dur_w  # weights aligned to filtered data
+
         sample_count = len(blended_ret)
 
         if sample_count < 1:
@@ -1246,6 +1363,9 @@ async def _predict_return_inner(person=""):
                 "avg_duration_min": 0,
                 "sample_count": 0,
                 "method": "no_data",
+                "trip_ordinal": trip_ordinal,
+                "ordinal_sample_count": 0,
+                "prob_another_trip": prob_another_trip,
             })
             continue
 
@@ -1258,6 +1378,9 @@ async def _predict_return_inner(person=""):
                 "avg_duration_min": 0,
                 "sample_count": sample_count,
                 "method": "insufficient_samples",
+                "trip_ordinal": trip_ordinal,
+                "ordinal_sample_count": ordinal_sample_count,
+                "prob_another_trip": prob_another_trip,
             })
             continue
 
@@ -1366,6 +1489,10 @@ async def _predict_return_inner(person=""):
             "avg_duration_min": avg_duration,
             "sample_count": sample_count,
             "method": method,
+            # I-40b: multi-trip awareness
+            "trip_ordinal": trip_ordinal,
+            "ordinal_sample_count": ordinal_sample_count,
+            "prob_another_trip": prob_another_trip,
         }
 
         predictions.append(pred_dict)
@@ -1468,6 +1595,14 @@ async def away_rebuild_patterns():
         _local_return_cache.clear()
         _local_count_cache.clear()
 
+        # I-40b: Reset daily trip counters
+        for person in get_person_slugs():
+            counter_entity = f"counter.ai_away_trip_count_{person}"
+            try:
+                service.call("counter", "reset", entity_id=counter_entity)  # noqa: F821
+            except Exception:
+                pass
+
         if test_mode:
             log.info(f"away [TEST]: rebuild deleted {deleted} L2 entries")  # noqa: F821
 
@@ -1540,17 +1675,33 @@ async def _on_tracker_change(**kwargs):
 
         now = datetime.now()
         ts = time.time()
-        _departure_ts[person] = ts
+
+        # I-40b: append to FIFO departure queue (not scalar overwrite)
+        if person not in _departure_ts:
+            _departure_ts[person] = []
+        _departure_ts[person].append(ts)
+
+        # I-40b: read trip ordinal from HA counter (persists across restarts)
+        counter_entity = f"counter.ai_away_trip_count_{person}"
+        try:
+            completed_trips = int(float(state.get(counter_entity) or 0))  # noqa: F821
+        except (ValueError, TypeError):
+            completed_trips = 0
+        trip_ordinal = completed_trips + 1
 
         departure_data = {
             "ts": ts,
             "bucket": _get_time_bucket(now.hour),
             "day_type": _get_day_type(now.weekday()),
             "day_of_week": now.strftime("%A").lower(),
+            "ordinal": trip_ordinal,  # I-40b
         }
 
         if test_mode:
-            log.info(f"away [TEST]: {person} departed at {now.isoformat()}")  # noqa: F821
+            log.info(  # noqa: F821
+                f"away [TEST]: {person} departed at {now.isoformat()} "
+                f"(trip #{trip_ordinal})"
+            )
         else:
             # Set departure timestamp helper
             dep_entity = f"input_datetime.ai_away_departed_{person}"
@@ -1578,8 +1729,22 @@ async def _on_tracker_change(**kwargs):
     elif old_state == "not_home" and new_state == "home":
         # ── ARRIVAL (immediate — no debounce) ────────────────────────
         ts = time.time()
-        dep_ts = _departure_ts.pop(person, None)
+
+        # I-40b: FIFO pop from departure queue
+        dep_list = _departure_ts.get(person, [])
+        dep_ts = dep_list.pop(0) if dep_list else None
+        if not dep_list:
+            _departure_ts.pop(person, None)
+
         now = datetime.now()
+
+        # I-40b: read trip ordinal from counter
+        counter_entity = f"counter.ai_away_trip_count_{person}"
+        try:
+            completed_trips = int(float(state.get(counter_entity) or 0))  # noqa: F821
+        except (ValueError, TypeError):
+            completed_trips = 0
+        trip_ordinal = completed_trips + 1
 
         if dep_ts is not None:
             duration_sec = ts - dep_ts
@@ -1596,11 +1761,20 @@ async def _on_tracker_change(**kwargs):
 
                 if cache_key not in _local_duration_cache:
                     _local_duration_cache[cache_key] = []
-                _local_duration_cache[cache_key].append(duration_min)
-
                 if cache_key not in _local_return_cache:
                     _local_return_cache[cache_key] = []
-                _local_return_cache[cache_key].append(return_hour)
+
+                # I-40b: enriched samples for ordinal > 1, bare floats for ordinal 1
+                if trip_ordinal == 1:
+                    _local_duration_cache[cache_key].append(duration_min)
+                    _local_return_cache[cache_key].append(return_hour)
+                else:
+                    _local_duration_cache[cache_key].append(
+                        {"d": duration_min, "o": trip_ordinal}
+                    )
+                    _local_return_cache[cache_key].append(
+                        {"r": return_hour, "o": trip_ordinal}
+                    )
 
                 # Persist to L2
                 dur_key = f"away:durations:{person}:{bucket}:{day_type}"
@@ -1613,10 +1787,21 @@ async def _on_tracker_change(**kwargs):
                 await _l2_set(ret_key, json.dumps(trimmed_ret),
                               tags=f"away return {person}")
 
+                # I-40b: increment trip counter (atomic, persistent)
+                try:
+                    service.call(  # noqa: F821
+                        "counter", "increment",
+                        entity_id=counter_entity,
+                    )
+                except Exception:
+                    log.warning(  # noqa: F821
+                        f"away: failed to increment {counter_entity}"
+                    )
+
                 if test_mode:
                     log.info(  # noqa: F821
                         f"away [TEST]: {person} returned after {duration_min:.0f} min "
-                        f"(bucket={bucket}, day_type={day_type})"
+                        f"(bucket={bucket}, day_type={day_type}, trip #{trip_ordinal})"
                     )
 
                 # G12: Log prediction accuracy
@@ -1697,6 +1882,9 @@ async def _periodic_prediction_update():
 @time_trigger("startup")  # noqa: F821
 async def _startup():
     """Initialize on startup: load cache, sync current state."""
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     _ensure_result_entity_name(force=True)
     _set_result("starting", operation="startup")
 
@@ -1723,18 +1911,19 @@ async def _startup():
                 if dep_str and dep_str not in ("unknown", "unavailable", "",
                                                 "1970-01-01 00:00:00"):
                     dep_dt = datetime.fromisoformat(dep_str)
-                    _departure_ts[person] = dep_dt.timestamp()
+                    # I-40b: _departure_ts is now a list
+                    _departure_ts[person] = [dep_dt.timestamp()]
                     log.info(  # noqa: F821
                         f"away: startup — {person} is away since {dep_str}"
                     )
                 else:
                     # No departure timestamp — use now as approximation
-                    _departure_ts[person] = time.time()
+                    _departure_ts[person] = [time.time()]
                     log.info(  # noqa: F821
                         f"away: startup — {person} is away (no departure ts, using now)"
                     )
             except (NameError, ValueError):
-                _departure_ts[person] = time.time()
+                _departure_ts[person] = [time.time()]
 
             # Run prediction
             await away_predict_return(person=person)

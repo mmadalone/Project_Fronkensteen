@@ -1,0 +1,1140 @@
+blueprint:
+  name: "Proactive briefing – universal (scheduled + presence)"
+  author: madalone
+  description: >
+    # Proactive briefing – universal
+
+    Unified briefing blueprint that replaces both `proactive_briefing_morning`
+    and `proactive_briefing_slot`. Each instance is a user-scheduled briefing
+    with a custom label, fully self-contained.
+
+    Supports scheduled time triggers (weekday/weekend), presence-based
+    triggers, manual dashboard triggers, and self-resetting delivery flags.
+    Includes volume set/restore with duck guard, media player pause/resume,
+    dispatcher toggle, and custom LLM prompt with context injection.
+
+    ### Triggers
+    - **Scheduled** — time trigger at `scheduled_time`
+    - **Weekend** — time trigger at `weekend_scheduled_time` (when weekend mode active)
+    - **Presence** — binary sensor state change (bathroom/kitchen motion)
+    - **Manual** — input_boolean toggle (dashboard/voice)
+    - **Reset** — time trigger to self-reset the delivered flag
+
+    ### Recent changes
+    - **v1:** Merge of morning + slot blueprints into universal design
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/proactive_briefing.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① SCHEDULE & TRIGGERS
+    # ===========================================================================
+    schedule_and_triggers:
+      name: "① Schedule & triggers"
+      icon: mdi:calendar-clock
+      description: >
+        Time scheduling, presence triggers, manual trigger, and day-of-week
+        gating. Disable the scheduled time toggle to rely on presence or manual triggers only.
+      collapsed: false
+      input:
+        briefing_label:
+          name: Briefing label
+          description: >
+            Free-text name for this instance. Used in dedup, whisper, and
+            logging (e.g. "morning", "afternoon recap", "evening wind-down").
+          default: "briefing"
+          selector:
+            text:
+              multiline: false
+
+        enable_scheduled_time:
+          name: Enable scheduled time trigger
+          description: >
+            Toggle the scheduled time trigger on or off. When disabled,
+            the briefing relies solely on presence or manual triggers.
+          default: true
+          selector:
+            boolean: {}
+
+        scheduled_time:
+          name: Scheduled time
+          description: >
+            Primary time trigger for this briefing instance.
+          default: "07:30:00"
+          selector:
+            time: {}
+
+        presence_sensors:
+          name: Presence sensors
+          description: >
+            Optional presence-based trigger (bathroom/kitchen motion).
+            Leave empty to disable presence triggering.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+
+        manual_trigger:
+          name: Manual trigger
+          description: >
+            Optional input_boolean for voice/dashboard trigger.
+            Auto-resets after delivery. Leave empty to disable.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        run_days:
+          name: Run days
+          description: >
+            Day-of-week gate. The briefing only fires on selected days.
+            Manual trigger bypasses this gate.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - mon
+                - tue
+                - wed
+                - thu
+                - fri
+                - sat
+                - sun
+              multiple: true
+
+        weekend_mode:
+          name: Weekend mode
+          description: >
+            How to handle weekends. "Same as weekdays" uses the primary
+            schedule. "Disabled on weekends" suppresses weekend delivery.
+            "Use weekend profile" uses the weekend time and weekend days.
+          default: "same_as_weekdays"
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: "same_as_weekdays"
+                - label: "Disabled on weekends"
+                  value: "disabled_on_weekends"
+                - label: "Use weekend profile"
+                  value: "use_weekend_profile"
+
+        weekend_days:
+          name: Weekend days
+          description: >
+            Days considered "weekend" for the weekend mode gate.
+          default:
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - mon
+                - tue
+                - wed
+                - thu
+                - fri
+                - sat
+                - sun
+              multiple: true
+
+        weekend_scheduled_time:
+          name: Weekend scheduled time
+          description: >
+            Time trigger for weekend days when weekend mode is
+            "Use weekend profile".
+          default: "09:00:00"
+          selector:
+            time: {}
+
+        hard_window_start:
+          name: Hard window start
+          description: >
+            Safety net — suppress briefings before this time.
+            Applied to presence trigger only.
+          default: "05:00:00"
+          selector:
+            time: {}
+
+        hard_window_end:
+          name: Hard window end
+          description: >
+            Safety net — suppress briefings after this time.
+            Applied to presence trigger only.
+          default: "23:00:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ② IDENTITY & PRESENCE GATE
+    # ===========================================================================
+    identity_and_presence:
+      name: "② Identity & presence gate"
+      icon: mdi:account-check
+      description: >
+        Identity confidence threshold and person-based suppression.
+      collapsed: true
+      input:
+        identity_sensor:
+          name: Identity confidence sensor
+          description: >
+            Sensor that reports identity confidence score
+            (e.g. sensor.identity_confidence_miquel).
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+
+        min_confidence:
+          name: Minimum confidence (pts)
+          description: >
+            Minimum identity confidence required to deliver.
+            Below this threshold, the briefing is suppressed.
+          default: 50
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "pts"
+
+        suppress_persons:
+          name: Suppress when persons home
+          description: >
+            Person entities — if ANY are home, suppress this briefing.
+            Use case: don't deliver personal briefing when guests are present.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+        suppress_persons_enabled:
+          name: Enable person suppression
+          description: >
+            Toggle for the person suppression gate.
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ③ DELIVERY CONTROL
+    # ===========================================================================
+    delivery_control:
+      name: "③ Delivery control"
+      icon: mdi:toggle-switch
+      description: >
+        Kill switch, per-instance delivery flag, and flag self-reset time.
+      collapsed: false
+      input:
+        kill_switch:
+          name: Kill switch
+          description: >
+            Master enable/disable. When OFF, the briefing won't fire.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        delivered_flag:
+          name: Delivered flag
+          description: >
+            Per-instance input_boolean — prevents repeat delivery.
+            Set ON after delivery, self-resets at reset_time.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        reset_time:
+          name: Delivered flag reset time
+          description: >
+            Time to self-reset the delivered flag (e.g. 00:01:00).
+          default: "00:01:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ④ CONTENT CONFIGURATION
+    # ===========================================================================
+    content_configuration:
+      name: "④ Content configuration"
+      icon: mdi:text-box-edit
+      description: >
+        Content shaping: sections, household entities, LLM prompt, and
+        context template injection.
+      collapsed: true
+      input:
+        sections:
+          name: Enabled sections (CSV)
+          description: >
+            Comma-separated sections to include. Valid values: greeting,
+            weather, calendar, email, schedule, household, memory, projects,
+            media_today (1 day), media_tomorrow (2 days), media_weekly (7 days).
+            "media" is an alias for media_today.
+          default: "greeting,weather,calendar,email,schedule,household,memory,projects,media_today"
+          selector:
+            text:
+              multiline: false
+
+        household_entities:
+          name: Household monitor entities (CSV)
+          description: >
+            Comma-separated entity IDs for the household section
+            (e.g. "climate.workshop_heater,switch.bathroom_fan").
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+        briefing_prompt:
+          name: LLM briefing prompt
+          description: >
+            LLM instruction for reformulating the briefing. Placeholders:
+            {content} = assembled section text, {context} = evaluated
+            context_template output, {framing} = time-aware framing
+            (morning/afternoon/evening tone and delivery instructions).
+            Leave empty for the default prompt which includes all three
+            automatically.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        context_template:
+          name: Context template (Jinja2)
+          description: >
+            Jinja2 template evaluated by HA before passing to pyscript.
+            Result is injected into the {context} placeholder in the
+            briefing_prompt. Use for dynamic context like who's home,
+            time of day, etc.
+          default: ""
+          selector:
+            template: {}
+
+        download_window:
+          name: Download window
+          description: >
+            How far back to look for recent Radarr/Sonarr downloads.
+            "Since midnight" shows only today's downloads (recommended).
+            "Rolling 24 hours" keeps the original 24-hour rolling window.
+          default: "since_midnight"
+          selector:
+            select:
+              options:
+                - label: Since midnight (recommended)
+                  value: since_midnight
+                - label: Rolling 24 hours
+                  value: rolling_24h
+
+    # ===========================================================================
+    # ⑤ VOLUME & MEDIA
+    # ===========================================================================
+    volume_and_media:
+      name: "⑤ Volume & media"
+      icon: mdi:volume-high
+      description: >
+        Output speaker, volume set/restore, duck guard, and player
+        pause/resume.
+      collapsed: true
+      input:
+        output_speaker:
+          name: Output speaker
+          description: >
+            TTS target. Leave empty for auto (follow presence).
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tts_volume:
+          name: TTS volume (before)
+          description: >
+            Volume set on speaker BEFORE TTS. 0 = don't change.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        tts_volume_restore:
+          name: TTS volume (restore)
+          description: >
+            Volume restored AFTER TTS. 0 = don't restore.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        volume_restore_delay:
+          name: Volume restore delay (s)
+          description: >
+            Seconds to wait before restoring volume (TTS buffer drain).
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: "s"
+              mode: slider
+
+        use_duck_guard:
+          name: Use duck guard
+          description: >
+            Update duck manager snapshot after volume changes.
+          default: true
+          selector:
+            boolean: {}
+
+        pause_players:
+          name: Pause players
+          description: >
+            Media players to pause before briefing and resume after.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+    # ===========================================================================
+    # ⑥ BRIEFING MUSIC    # ===========================================================================
+    briefing_music:
+      name: "⑥ Briefing music"
+      icon: mdi:music-note
+      collapsed: true
+      description: >-
+        Play the briefing agent's theme music before the TTS delivery.
+        Sets the tone for the morning/evening briefing.
+      input:
+        enable_briefing_music:
+          name: Enable briefing theme
+          description: >
+            When enabled, plays the dispatched agent's theme (5s) from the
+            music library before the briefing TTS begins.
+          default: false
+          selector:
+            boolean: {}
+
+        briefing_music_agent:
+          name: Theme agent
+          description: >
+            Which agent's theme to use. Empty = use dispatched agent.
+            (e.g. rick, quark, deadpool, kramer, portuondo)
+          default: ""
+          selector:
+            text:
+
+        briefing_music_content_type:
+          name: Content type
+          description: >
+            "theme" for agent identity intro, "chime" for a short cue.
+          default: theme
+          selector:
+            select:
+              options:
+                - theme
+                - chime
+
+        compose_briefing_if_missing:
+          name: Compose if missing
+          description: >
+            Generate a theme via FluidSynth if not in the library.
+          default: true
+          selector:
+            boolean: {}
+
+        briefing_library_id_override:
+          name: Tune override (library ID)
+          description: >
+            Play a specific composition by library ID, bypassing auto-resolution.
+            Leave empty for automatic selection based on agent + content type.
+          default: ""
+          selector:
+            text: {}
+
+        briefing_music_volume:
+          name: Music volume
+          description: >
+            Volume for composed tune playback (0.0–1.0). 0 = keep current volume.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        briefing_delay_after:
+          name: Pause after tune (seconds)
+          description: >
+            Seconds to wait after the tune finishes before TTS.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: "s"
+
+        briefing_fallback_media_url:
+          name: Fallback audio URL
+          description: >
+            Static audio URL to play if the library is empty and compose is off.
+            Leave empty to skip music silently.
+          default: ""
+          selector:
+            text: {}
+
+    # ===========================================================================
+    # ⑦ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑦ Infrastructure"
+      icon: mdi:cog
+      description: >
+        Agent dispatch toggle and fallback pipeline selector.
+      collapsed: true
+      input:
+        use_dispatcher:
+          name: Use agent dispatcher
+          description: >
+            When ON, the dispatcher selects the agent. When OFF,
+            uses the configured conversation agent pipeline.
+          default: true
+          selector:
+            boolean: {}
+
+        conversation_agent:
+          name: Conversation agent (pipeline)
+          description: >
+            Assist pipeline ID used when dispatcher is disabled.
+          default: Rick
+          selector:
+            text:
+
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ⑧ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑧ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+# ===========================================================================
+# VARIABLES
+# ===========================================================================
+variables:
+  v_briefing_label: !input briefing_label
+  v_enable_scheduled_time: !input enable_scheduled_time
+  v_scheduled_time: !input scheduled_time
+  v_presence_sensors: !input presence_sensors
+  v_manual_trigger: !input manual_trigger
+  v_run_days: !input run_days
+  v_weekend_mode: !input weekend_mode
+  v_weekend_days: !input weekend_days
+  v_weekend_scheduled_time: !input weekend_scheduled_time
+  v_hard_window_start: !input hard_window_start
+  v_hard_window_end: !input hard_window_end
+  v_identity_sensor: !input identity_sensor
+  v_min_confidence: !input min_confidence
+  v_suppress_persons: !input suppress_persons
+  v_suppress_persons_enabled: !input suppress_persons_enabled
+  v_kill_switch: !input kill_switch
+  v_delivered_flag: !input delivered_flag
+  v_reset_time: !input reset_time
+  v_sections: !input sections
+  v_household_entities: !input household_entities
+  v_briefing_prompt: !input briefing_prompt
+  v_output_speaker: !input output_speaker
+  v_tts_volume: !input tts_volume
+  v_tts_volume_restore: !input tts_volume_restore
+  v_volume_restore_delay: !input volume_restore_delay
+  v_use_duck_guard: !input use_duck_guard
+  v_pause_players: !input pause_players
+  v_use_dispatcher: !input use_dispatcher
+  v_conversation_agent: !input conversation_agent
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+  v_briefing_library_id: !input briefing_library_id_override
+  v_briefing_volume: !input briefing_music_volume
+  v_briefing_delay_after: !input briefing_delay_after
+  v_briefing_fallback_url: !input briefing_fallback_media_url
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_download_window: !input download_window
+
+  # Evaluate context_template (Jinja2 → string)
+  v_context: >-
+    {% set tpl = context_template | default('') %}
+    {{ tpl if tpl else '' }}
+
+  # Day-of-week helpers
+  v_day_abbr: >-
+    {{ ['mon','tue','wed','thu','fri','sat','sun'][now().weekday()] }}
+  v_is_weekend_day: >-
+    {{ v_day_abbr in (v_weekend_days | default([])) }}
+
+mode: single
+max_exceeded: silent
+
+# ===========================================================================
+# TRIGGERS (5 total)
+# ===========================================================================
+triggers:
+  - id: scheduled
+    alias: "Scheduled weekday/normal time"
+    trigger: time
+    at: !input scheduled_time
+
+  - id: scheduled_weekend
+    alias: "Scheduled weekend time"
+    trigger: time
+    at: !input weekend_scheduled_time
+
+  - id: presence
+    alias: "Presence detected in trigger zone"
+    trigger: state
+    entity_id: !input presence_sensors
+    from: "off"
+    to: "on"
+
+  - id: manual
+    alias: "Manual trigger toggled on"
+    trigger: state
+    entity_id: !input manual_trigger
+    to: "on"
+
+  - id: reset
+    alias: "Delivered flag self-reset"
+    trigger: time
+    at: !input reset_time
+
+# ===========================================================================
+# CONDITIONS — reset trigger bypasses via per-condition OR gates below
+# ===========================================================================
+conditions:
+  - alias: "Kill switch is ON"
+    condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.id == 'reset' }}"
+      - condition: state
+        entity_id: !input kill_switch
+        state: "on"
+
+  - alias: "Delivered flag is OFF (or reset trigger)"
+    condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.id == 'reset' }}"
+      - condition: state
+        entity_id: !input delivered_flag
+        state: "off"
+
+  - alias: "Scheduled time toggle gate"
+    condition: template
+    value_template: >-
+      {% if trigger.id in ('scheduled', 'scheduled_weekend') %}
+        {{ v_enable_scheduled_time | bool }}
+      {% else %}
+        true
+      {% endif %}
+
+  - alias: "Day-of-week + weekend mode gate (manual bypasses)"
+    condition: template
+    value_template: >-
+      {% if trigger.id in ('reset', 'manual') %}
+        true
+      {% elif trigger.id == 'scheduled_weekend' %}
+        {# Weekend trigger only fires when weekend mode = use_weekend_profile and it IS a weekend day #}
+        {{ v_weekend_mode == 'use_weekend_profile' and v_is_weekend_day | bool }}
+      {% elif trigger.id == 'scheduled' %}
+        {# Normal trigger: skip on weekend days when "disabled_on_weekends" or "use_weekend_profile" #}
+        {% if v_weekend_mode == 'disabled_on_weekends' and v_is_weekend_day | bool %}
+          false
+        {% elif v_weekend_mode == 'use_weekend_profile' and v_is_weekend_day | bool %}
+          false
+        {% else %}
+          {{ v_day_abbr in (v_run_days | default([])) }}
+        {% endif %}
+      {% else %}
+        {# Presence trigger: check run days + weekend mode #}
+        {% if v_weekend_mode == 'disabled_on_weekends' and v_is_weekend_day | bool %}
+          false
+        {% else %}
+          {{ v_day_abbr in (v_run_days | default([])) }}
+        {% endif %}
+      {% endif %}
+
+  - alias: "Hard window gate (presence trigger only)"
+    condition: template
+    value_template: >-
+      {% if trigger.id != 'presence' %}
+        true
+      {% else %}
+        {{ today_at(v_hard_window_start) <= now()
+           and now() <= today_at(v_hard_window_end) }}
+      {% endif %}
+
+  - alias: "Identity confidence above threshold"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'reset' %}
+        true
+      {% elif v_identity_sensor | default('') | length == 0 %}
+        true
+      {% else %}
+        {{ states(v_identity_sensor) | int(0) >= v_min_confidence }}
+      {% endif %}
+
+  - alias: "Person suppression gate"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'reset' %}
+        true
+      {% elif not v_suppress_persons_enabled %}
+        true
+      {% elif v_suppress_persons | default([]) | length == 0 %}
+        true
+      {% else %}
+        {% set ns = namespace(any_home=false) %}
+        {% for p in v_suppress_persons %}
+          {% if states(p) == 'home' %}
+            {% set ns.any_home = true %}
+          {% endif %}
+        {% endfor %}
+        {{ not ns.any_home }}
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_proactive_briefing') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ===========================================================================
+# ACTIONS
+# ===========================================================================
+actions:
+  # ── 1. Reset trigger → turn off delivered flag → stop ──────────────────
+  - alias: "Handle reset trigger"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'reset' }}"
+    then:
+      - alias: "Turn off delivered flag for next-day reuse"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input delivered_flag
+      - stop: "Delivered flag reset"
+
+  # ── 2. Manual trigger → auto-reset the manual boolean ──────────────────
+  - alias: "Auto-reset manual trigger"
+    if:
+      - condition: template
+        value_template: >-
+          {{ trigger.id == 'manual'
+             and v_manual_trigger | default('') | length > 0 }}
+    then:
+      - alias: "Wait 1 seconds"
+        delay:
+          seconds: 1
+      - alias: "Auto-reset manual trigger boolean"
+        action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_manual_trigger }}"
+
+  # ── 3. Set TTS volume on output speaker (if > 0) → duck guard ─────────
+  - alias: "Set TTS volume before briefing"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_tts_volume | float(0) > 0
+             and v_output_speaker | default('') | length > 0 }}
+    then:
+      - alias: "Set speaker volume before briefing TTS"
+        action: media_player.volume_set
+        target:
+          entity_id: "{{ v_output_speaker }}"
+        data:
+          volume_level: "{{ v_tts_volume }}"
+      - alias: "Update duck snapshot if active (pre-briefing)"
+        if:
+          - condition: template
+            value_template: >-
+              {{ v_use_duck_guard
+                 and is_state(v_duck_guard, 'on')
+                 and is_state(v_ducking_flag, 'on') }}
+        then:
+          - alias: "Sync duck snapshot with pre-briefing volume"
+            action: pyscript.duck_manager_update_snapshot
+            data:
+              entity_id: "{{ v_output_speaker }}"
+              volume_level: "{{ v_tts_volume }}"
+            continue_on_error: true
+
+  # ── 4a. Auto-pause output speaker if it's currently playing ───────────
+  - alias: "Auto-pause output speaker if playing"
+    variables:
+      output_was_playing: >-
+        {{ v_output_speaker | default('') | length > 0
+           and is_state(v_output_speaker, 'playing') }}
+  - alias: "Pause output speaker before briefing"
+    if:
+      - condition: template
+        value_template: "{{ output_was_playing }}"
+    then:
+      - alias: "Pause output speaker media"
+        action: media_player.media_pause
+        target:
+          entity_id: "{{ v_output_speaker }}"
+        continue_on_error: true
+
+  # ── 4b. Pause configured players ────────────────────────────────────────
+  - alias: "Pause media players before briefing"
+    if:
+      - condition: template
+        value_template: "{{ v_pause_players | default([]) | length > 0 }}"
+    then:
+      - alias: "Pause background media during briefing"
+        action: media_player.media_pause
+        target:
+          entity_id: !input pause_players
+        continue_on_error: true
+
+  # ── 4c. Play briefing theme before TTS ──────────────────────────────────
+  - alias: "Play agent briefing theme"
+    variables:
+      v_enable_briefing_music: !input enable_briefing_music
+      v_briefing_music_agent: !input briefing_music_agent
+      v_briefing_music_type: !input briefing_music_content_type
+      v_compose_briefing_if_missing: !input compose_briefing_if_missing
+  - alias: "Briefing music gate"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_enable_briefing_music
+             and v_output_speaker | default('') | length > 0 }}
+    then:
+      - alias: "3-tier music resolution"
+        choose:
+          # ── Tier 1: Library ID override ──────────────────────────────
+          - alias: "Tier 1 — play by library ID override"
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ v_briefing_library_id | default('') | length > 0 }}
+            sequence:
+              - alias: "Set music volume if configured"
+                if:
+                  - condition: template
+                    value_template: >-
+                      {{ v_briefing_volume | float(0) > 0 }}
+                then:
+                  - action: media_player.volume_set
+                    target:
+                      entity_id: "{{ v_output_speaker }}"
+                    data:
+                      volume_level: "{{ v_briefing_volume }}"
+                    continue_on_error: true
+              - alias: "Play library composition by ID"
+                action: pyscript.music_library_play
+                data:
+                  library_id: "{{ v_briefing_library_id }}"
+                  player: "{{ v_output_speaker }}"
+                  volume: "{{ v_briefing_volume | float(0) }}"
+                continue_on_error: true
+              - delay:
+                  seconds: "{{ v_briefing_delay_after | int(5) }}"
+
+          # ── Tier 2: Auto-resolve (existing logic) ───────────────────
+          - alias: "Tier 2 — auto-resolve agent theme"
+            conditions:
+              - condition: template
+                value_template: "{{ v_briefing_library_id | default('') | length == 0 }}"
+            sequence:
+              - alias: "Look up agent theme in library"
+                action: pyscript.music_compose_get
+                response_variable: briefing_theme
+                data:
+                  agent: "{{ v_briefing_music_agent if v_briefing_music_agent else 'rick' }}"
+                  content_type: "{{ v_briefing_music_type }}"
+                continue_on_error: true
+
+              - alias: "Play theme or compose if missing"
+                choose:
+                  - alias: "Theme found"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (briefing_theme | default({})).get('status', '') in ['ok', 'staging'] }}
+                    sequence:
+                      - alias: "Set music volume if configured"
+                        if:
+                          - condition: template
+                            value_template: >-
+                              {{ v_briefing_volume | float(0) > 0 }}
+                        then:
+                          - action: media_player.volume_set
+                            target:
+                              entity_id: "{{ v_output_speaker }}"
+                            data:
+                              volume_level: "{{ v_briefing_volume }}"
+                            continue_on_error: true
+                      - action: media_player.play_media
+                        target:
+                          entity_id: "{{ v_output_speaker }}"
+                        data:
+                          media_content_id: >-
+                            {{ (briefing_theme | default({})).get('file_path', '') | replace('/config/www/', '/local/') }}
+                          media_content_type: "music"
+                          announce: true
+                        continue_on_error: true
+                      - delay:
+                          seconds: "{{ v_briefing_delay_after | int(5) }}"
+
+                  - alias: "Theme not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (briefing_theme | default({})).get('status', '') == 'not_found'
+                             and v_compose_briefing_if_missing }}
+                    sequence:
+                      - action: pyscript.music_compose_local
+                        response_variable: local_briefing_theme
+                        data:
+                          agent: "{{ v_briefing_music_agent if v_briefing_music_agent else 'rick' }}"
+                          content_type: "{{ v_briefing_music_type }}"
+                          duration_s: 5.0
+                        continue_on_error: true
+                      - if:
+                          - condition: template
+                            value_template: >-
+                              {{ (local_briefing_theme | default({})).get('status', '') == 'ok' }}
+                        then:
+                          - alias: "Set music volume if configured"
+                            if:
+                              - condition: template
+                                value_template: >-
+                                  {{ v_briefing_volume | float(0) > 0 }}
+                            then:
+                              - action: media_player.volume_set
+                                target:
+                                  entity_id: "{{ v_output_speaker }}"
+                                data:
+                                  volume_level: "{{ v_briefing_volume }}"
+                                continue_on_error: true
+                          - action: media_player.play_media
+                            target:
+                              entity_id: "{{ v_output_speaker }}"
+                            data:
+                              media_content_id: >-
+                                {{ (local_briefing_theme | default({})).get('file_path', '') | replace('/config/www/', '/local/') }}
+                              media_content_type: "music"
+                              announce: true
+                            continue_on_error: true
+                          - delay:
+                              seconds: "{{ v_briefing_delay_after | int(5) }}"
+
+        default:
+          - alias: "Tier 3 — Fallback static audio"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ v_briefing_fallback_url | default('') | length > 0 }}
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ v_briefing_volume | float(0) > 0 }}"
+                then:
+                  - action: media_player.volume_set
+                    target:
+                      entity_id: "{{ v_output_speaker }}"
+                    data:
+                      volume_level: "{{ v_briefing_volume }}"
+                    continue_on_error: true
+              - action: media_player.play_media
+                target:
+                  entity_id: "{{ v_output_speaker }}"
+                data:
+                  media_content_id: "{{ v_briefing_fallback_url }}"
+                  media_content_type: "music"
+                  announce: true
+                continue_on_error: true
+              - delay:
+                  seconds: "{{ v_briefing_delay_after | int(5) }}"
+
+  # ── 5. Call pyscript.proactive_briefing_now ─────────────────────────────
+  - alias: "Deliver briefing via pyscript"
+    continue_on_error: true
+    action: pyscript.proactive_briefing_now
+    data:
+      briefing_label: "{{ v_briefing_label }}"
+      sections_override: "{{ v_sections }}"
+      household_entities_override: "{{ v_household_entities }}"
+      output_speaker_override: "{{ v_output_speaker | default('') }}"
+      use_dispatcher: "{{ v_use_dispatcher }}"
+      pipeline_name: "{{ v_conversation_agent }}"
+      briefing_prompt: "{{ v_briefing_prompt | default('') }}"
+      extra_context: "{{ v_context }}"
+      download_window: "{{ v_download_window }}"
+    response_variable: briefing_result
+
+  - alias: "Log if briefing pyscript call failed"
+    if:
+      - condition: template
+        value_template: "{{ briefing_result is not defined or briefing_result is none }}"
+    then:
+      - alias: "Write logbook entry"
+        action: logbook.log
+        data:
+          name: "Blueprint Failure"
+          message: "pyscript.proactive_briefing_now failed in {{ this.attributes.friendly_name }}"
+          entity_id: "{{ this.entity_id }}"
+
+  # ── 6. Set delivered flag ──────────────────────────────────────────────
+  - alias: "Set delivered flag after briefing"
+    action: input_boolean.turn_on
+    target:
+      entity_id: !input delivered_flag
+
+  # ── 7. Wait for TTS buffer drain ──────────────────────────────────────
+  - alias: "Wait for TTS buffer drain before restore"
+    delay:
+      seconds: "{{ v_volume_restore_delay | int(5) }}"
+
+  # ── 8a. Resume output speaker if it was playing before ────────────────
+  - alias: "Resume output speaker after briefing"
+    if:
+      - condition: template
+        value_template: "{{ output_was_playing }}"
+    then:
+      - alias: "Resume output speaker media"
+        action: media_player.media_play
+        target:
+          entity_id: "{{ v_output_speaker }}"
+        continue_on_error: true
+
+  # ── 8b. Resume paused players ──────────────────────────────────────────
+  - alias: "Resume media players after briefing"
+    if:
+      - condition: template
+        value_template: "{{ v_pause_players | default([]) | length > 0 }}"
+    then:
+      - alias: "Resume background media after briefing"
+        action: media_player.media_play
+        target:
+          entity_id: !input pause_players
+        continue_on_error: true
+
+  # ── 9. Restore TTS volume (if > 0) → duck guard ──────────────────────
+  - alias: "Restore TTS volume after briefing"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_tts_volume_restore | float(0) > 0
+             and v_output_speaker | default('') | length > 0 }}
+    then:
+      - alias: "Restore speaker volume after briefing TTS"
+        action: media_player.volume_set
+        target:
+          entity_id: "{{ v_output_speaker }}"
+        data:
+          volume_level: "{{ v_tts_volume_restore }}"
+      - alias: "Update duck snapshot if active (post-briefing)"
+        if:
+          - condition: template
+            value_template: >-
+              {{ v_use_duck_guard
+                 and is_state(v_duck_guard, 'on')
+                 and is_state(v_ducking_flag, 'on') }}
+        then:
+          - alias: "Sync duck snapshot with post-briefing volume"
+            action: pyscript.duck_manager_update_snapshot
+            data:
+              entity_id: "{{ v_output_speaker }}"
+              volume_level: "{{ v_tts_volume_restore }}"
+            continue_on_error: true

@@ -1,0 +1,345 @@
+# =============================================================================
+# Follow-Me Refcount Watchdog (v2.0.0)
+# =============================================================================
+# Safety net for stranded follow-me bypass refcount. When parallel automation
+# instances die mid-flight (automation reload, HA restart, mode: restart kill),
+# the counter stays incremented and notification_follow_me stays OFF
+# permanently. This watchdog detects the stranded state and force-resets.
+#
+# v2.0.0: Counter-based — zero JSON, zero from_json, zero selectattr.
+# =============================================================================
+
+blueprint:
+  name: "Follow-Me Refcount Watchdog (v2.0.0)"
+  author: madalone
+  description: >
+    # Follow-Me Refcount Watchdog
+
+
+    Safety net for the follow-me bypass refcount system used by
+    Notification Follow-Me, Email Follow-Me, Voice Handoff, Wake-Up Guard,
+    Calendar Alarm, Phone Charge Reminder, and Email Priority Filter.
+
+
+    **The problem:** When parallel automation instances die mid-flight —
+    automation reload, HA restart, `mode: restart` kill — the bypass counter
+    stays incremented, and `notification_follow_me` stays OFF permanently
+    until you manually reset it.
+
+
+    **The fix:** This watchdog polls at a configurable interval (default
+    every 2 minutes). If the counter is > 0 and `last_changed` is older
+    than the TTL, the watchdog resets to 0 and restores follow-me to ON.
+    On HA startup or automation reload, it force-resets immediately.
+
+
+    ### Recent changes
+
+    - **v2.0.0:** Replaced JSON owner list with HA `counter` helper.
+      Stale detection uses `last_changed` age on the counter entity
+      instead of per-entry timestamps. Zero JSON, zero `from_json`,
+      zero `selectattr` — eliminates BRP-WATCHDOG-001 class entirely.
+
+    - **v1.3.0:** Inline stale/fresh owner filtering (BRP-WATCHDOG-001).
+
+    - **v1.2.0:** Configurable `poll_interval_minutes`, reduced TTL.
+
+    - **v1.1.0:** Replace one-shot state trigger with `time_pattern` poll.
+
+    - **v1.0.0:** Initial release.
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/follow_me_refcount_watchdog.yaml
+
+  input:
+    section_core:
+      name: "① Core"
+      icon: mdi:shield-refresh-outline
+      collapsed: false
+      input:
+        refcount_entity:
+          name: "Refcount counter"
+          description: >-
+            The counter entity that tracks active bypass claims.
+          default: counter.notification_follow_me_bypass_refcount
+          selector:
+            entity:
+              domain: counter
+
+        follow_me_toggle:
+          name: "Follow-me toggle"
+          description: >-
+            The input_boolean that enables/disables notification follow-me.
+          default: input_boolean.notification_follow_me
+          selector:
+            entity:
+              domain: input_boolean
+
+        debug_log_entity:
+          name: "Debug log helper (optional)"
+          description: >-
+            An input_text entity used for owner debug logging.
+            Cleared on watchdog reset.
+          default: input_text.notification_follow_me_bypass_log
+          selector:
+            entity:
+              domain: input_text
+
+    section_timing:
+      name: "② Timing"
+      icon: mdi:timer-alert-outline
+      collapsed: false
+      input:
+        poll_interval_minutes:
+          name: "Poll interval (minutes)"
+          description: >-
+            How often the watchdog checks for stale bypass state.
+            Lower = faster recovery but more HA overhead. Default
+            every 2 minutes. Worst-case recovery ≈ TTL + poll interval.
+          default: "/2"
+          selector:
+            select:
+              options:
+                - label: "Every 1 minute"
+                  value: "/1"
+                - label: "Every 2 minutes"
+                  value: "/2"
+                - label: "Every 3 minutes"
+                  value: "/3"
+                - label: "Every 5 minutes"
+                  value: "/5"
+                - label: "Every 10 minutes"
+                  value: "/10"
+
+        ttl_seconds:
+          name: "Entry TTL (seconds)"
+          description: >-
+            Maximum age in seconds for the counter to remain > 0 before
+            being considered stale. No legitimate bypass cycle lasts longer
+            than ~30 seconds. Default 60. Worst-case recovery ≈ TTL + poll
+            interval.
+          default: 60
+          selector:
+            number:
+              min: 30
+              max: 600
+              step: 10
+              unit_of_measurement: s
+              mode: slider
+
+    section_optional:
+      name: "③ Optional"
+      icon: mdi:cog-outline
+      collapsed: true
+      input:
+        notify_on_reset:
+          name: "Send notification when watchdog fires"
+          description: >-
+            When enabled, creates a persistent notification in HA each
+            time the watchdog resets stale bypass state.
+          default: true
+          selector:
+            boolean:
+
+    section_privacy:
+      name: "④ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >-
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+# =============================================================================
+# Triggers
+# =============================================================================
+triggers:
+  - trigger: time_pattern
+    minutes: !input poll_interval_minutes
+    id: poll
+
+  - trigger: homeassistant
+    event: start
+    id: startup
+
+  - trigger: event
+    event_type: automation_reloaded
+    id: reload
+
+# =============================================================================
+# Condition — confirm follow-me is still OFF (race guard)
+# =============================================================================
+conditions:
+  - condition: state
+    entity_id: !input follow_me_toggle
+    state: "off"
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_refcount_watchdog') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# =============================================================================
+# Variables
+# =============================================================================
+variables:
+  _counter_entity: !input refcount_entity
+  _follow_me_entity: !input follow_me_toggle
+  _log_entity: !input debug_log_entity
+  _ttl: !input ttl_seconds
+  _notify: !input notify_on_reset
+  _trigger_id: "{{ trigger.id | default('poll') }}"
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+# =============================================================================
+# Actions
+# =============================================================================
+actions:
+
+  # ---------------------------------------------------------------------------
+  # Snapshot counter + log before any reset (for notification message)
+  # ---------------------------------------------------------------------------
+  - alias: "Snapshot pre-reset state"
+    variables:
+      _count_snapshot: "{{ states(_counter_entity) | int(0) }}"
+      _log_snapshot: "{{ states(_log_entity) | default('') }}"
+
+  # ---------------------------------------------------------------------------
+  # 0. Entity settle delay (startup/reload only)
+  # ---------------------------------------------------------------------------
+  - alias: "0 · Entity settle delay (startup/reload only)"
+    if:
+      - condition: template
+        value_template: "{{ _trigger_id in ['startup', 'reload'] }}"
+    then:
+      - alias: "Wait 10 seconds"
+        delay:
+          seconds: 10
+
+  # ---------------------------------------------------------------------------
+  # 1. Handle startup/reload vs poll
+  # ---------------------------------------------------------------------------
+  - alias: "1 · Handle startup/reload vs poll"
+    choose:
+      - alias: "Startup/reload — full reset"
+        conditions:
+          - condition: template
+            value_template: "{{ _trigger_id in ['startup', 'reload'] }}"
+        sequence:
+          - alias: "Reset counter to 0"
+            action: counter.reset
+            target:
+              entity_id: "{{ _counter_entity }}"
+          - alias: "Restore follow-me toggle"
+            action: input_boolean.turn_on
+            continue_on_error: true
+            target:
+              entity_id: "{{ _follow_me_entity }}"
+          - alias: "Clear debug log"
+            action: input_text.set_value
+            continue_on_error: true
+            target:
+              entity_id: "{{ _log_entity }}"
+            data:
+              value: ""
+
+    default:
+      # -----------------------------------------------------------------------
+      # Poll path — check counter > 0 AND last_changed older than TTL
+      # -----------------------------------------------------------------------
+      - alias: "Poll · Check for stale counter"
+        if:
+          - condition: template
+            value_template: >-
+              {% set count = states(_counter_entity) | int(0) %}
+              {% set age = (now() - states[_counter_entity].last_changed).total_seconds() %}
+              {{ count > 0 and age > (_ttl | int(60)) }}
+        then:
+          - alias: "Reset stale counter to 0"
+            action: counter.reset
+            target:
+              entity_id: "{{ _counter_entity }}"
+          - alias: "Restore follow-me toggle"
+            action: input_boolean.turn_on
+            continue_on_error: true
+            target:
+              entity_id: "{{ _follow_me_entity }}"
+          - alias: "Clear debug log"
+            action: input_text.set_value
+            continue_on_error: true
+            target:
+              entity_id: "{{ _log_entity }}"
+            data:
+              value: ""
+
+  # ---------------------------------------------------------------------------
+  # 2. Optional notification
+  # ---------------------------------------------------------------------------
+  - alias: "2 · Persistent notification (optional)"
+    if:
+      - condition: template
+        value_template: "{{ _notify | bool(false) and _count_snapshot | int(0) > 0 }}"
+    then:
+      - alias: "Notify about watchdog reset for audit trail"
+        action: persistent_notification.create
+        data:
+          title: "Follow-Me Watchdog Reset"
+          message: >-
+            Stranded follow-me bypass detected
+            (trigger: {{ _trigger_id }}) — forced reset.
+            Counter was {{ _count_snapshot }}.
+            Debug log: {{ _log_snapshot if _log_snapshot else 'empty' }}.
+          notification_id: "follow_me_watchdog_reset"
+
+mode: single
+max_exceeded: silent

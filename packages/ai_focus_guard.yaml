@@ -8,12 +8,12 @@
 # type tracks its own escalation level independently.
 #
 # Provides:
-#   input_boolean.focus_mode           — voice-activated DND (suppresses non-calendar nudges)
+#   input_boolean.ai_focus_mode           — voice-activated DND (suppresses non-calendar nudges)
 #   input_boolean.ai_focus_guard_enabled — kill switch (default ON)
-#   input_datetime.last_meal_time      — user marks meals via voice/button
-#   input_datetime.focus_guard_snooze_until — snooze expiry timestamp
-#   input_number.focus_guard_threshold_hours — hours before first nudge (default 2)
-#   input_number.focus_mode_max_hours  — focus mode auto-expiry (default 2)
+#   input_datetime.ai_last_meal_time      — user marks meals via voice/button
+#   input_datetime.ai_focus_guard_snooze_until — snooze expiry timestamp
+#   input_number.ai_focus_guard_threshold_hours — hours before first nudge (default 2)
+#   input_number.ai_focus_mode_max_hours  — focus mode auto-expiry (default 2)
 #   sensor.workshop_hours_today        — history_stats: FP2 workshop ON-time today
 #   sensor.ai_focus_guard_status       — created by pyscript (last op status)
 #
@@ -83,7 +83,7 @@ automation:
     actions:
       - action: input_boolean.turn_off
         target:
-          entity_id: input_boolean.focus_mode
+          entity_id: input_boolean.ai_focus_mode
 
   # Focus mode auto-expiry: when focus mode has been on for max_hours,
   # turn it off automatically. Uses template trigger with duration.
@@ -95,17 +95,17 @@ automation:
     mode: single
     triggers:
       - trigger: state
-        entity_id: input_boolean.focus_mode
+        entity_id: input_boolean.ai_focus_mode
         to: "on"
         for:
           hours: >-
-            {{ states('input_number.focus_mode_max_hours') | float(2) | int }}
+            {{ states('input_number.ai_focus_mode_max_hours') | float(2) | int }}
           minutes: >-
-            {{ ((states('input_number.focus_mode_max_hours') | float(2) % 1) * 60) | int }}
+            {{ ((states('input_number.ai_focus_mode_max_hours') | float(2) % 1) * 60) | int }}
     actions:
       - action: input_boolean.turn_off
         target:
-          entity_id: input_boolean.focus_mode
+          entity_id: input_boolean.ai_focus_mode
 
 # =============================================================================
 # DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
@@ -118,15 +118,15 @@ automation:
 #     entities:
 #       - entity: input_boolean.ai_focus_guard_enabled
 #         name: "Focus Guard Active"
-#       - entity: input_boolean.focus_mode
+#       - entity: input_boolean.ai_focus_mode
 #         name: "Focus Mode (DND)"
 #       - entity: input_number.workshop_hours_today
 #         name: "Workshop Hours Today"
-#       - entity: input_datetime.last_meal_time
+#       - entity: input_datetime.ai_last_meal_time
 #         name: "Last Meal"
-#       - entity: input_number.focus_guard_threshold_hours
+#       - entity: input_number.ai_focus_guard_threshold_hours
 #         name: "Threshold Hours"
-#       - entity: input_datetime.focus_guard_snooze_until
+#       - entity: input_datetime.ai_focus_guard_snooze_until
 #         name: "Snooze Until"
 #       - entity: sensor.ai_focus_guard_status
 #         name: "Guard Status"

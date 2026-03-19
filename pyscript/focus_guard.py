@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import asyncio
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import build_result_entity_name, load_entity_config, reload_entity_config
 
 # =============================================================================
 # AI Focus Guard — Task 20 of Voice Context Architecture
@@ -313,7 +313,7 @@ def _is_enabled() -> bool:
 def _is_focus_mode() -> bool:
     try:
         return str(
-            state.get("input_boolean.focus_mode") or "off"  # noqa: F821
+            state.get("input_boolean.ai_focus_mode") or "off"  # noqa: F821
         ).lower() == "on"
     except NameError:
         return False
@@ -322,7 +322,7 @@ def _is_focus_mode() -> bool:
 def _is_snoozed(now_ts: float) -> bool:
     """Check if nudges are currently snoozed."""
     try:
-        snooze_state = state.get("input_datetime.focus_guard_snooze_until")  # noqa: F821
+        snooze_state = state.get("input_datetime.ai_focus_guard_snooze_until")  # noqa: F821
         if not snooze_state or snooze_state in ("unknown", "unavailable", ""):
             return False
         snooze_dt = datetime.fromisoformat(snooze_state)
@@ -376,7 +376,7 @@ def _get_workshop_hours() -> float:
 def _get_threshold_hours() -> float:
     try:
         return float(
-            state.get("input_number.focus_guard_threshold_hours") or 2  # noqa: F821
+            state.get("input_number.ai_focus_guard_threshold_hours") or 2  # noqa: F821
         )
     except (ValueError, TypeError, NameError):
         return 2.0
@@ -385,7 +385,7 @@ def _get_threshold_hours() -> float:
 def _get_hours_since_meal(now_ts: float) -> float:
     """Get hours since last meal. Returns 0 if no meal recorded."""
     try:
-        meal_state = state.get("input_datetime.last_meal_time")  # noqa: F821
+        meal_state = state.get("input_datetime.ai_last_meal_time")  # noqa: F821
         if not meal_state or meal_state in ("unknown", "unavailable", ""):
             return 0.0
         meal_dt = datetime.fromisoformat(meal_state)
@@ -507,10 +507,10 @@ def _is_sleeping() -> bool:
             state.get(_get_fp2_zones()["bed"]) or "off"  # noqa: F821
         ).lower() == "on"
         bedtime_active = str(
-            state.get("input_boolean.bedtime_active") or "off"  # noqa: F821
+            state.get("input_boolean.ai_bedtime_active") or "off"  # noqa: F821
         ).lower() == "on"
         bedtime_locked = str(
-            state.get("input_boolean.bedtime_global_lock") or "off"  # noqa: F821
+            state.get("input_boolean.ai_bedtime_global_lock") or "off"  # noqa: F821
         ).lower() == "on"
         return in_bed and (bedtime_active or bedtime_locked)
     except NameError:
@@ -1137,7 +1137,7 @@ async def focus_guard_mark_meal(meal_time=None):
     try:
         service.call(  # noqa: F821
             "input_datetime", "set_datetime",
-            entity_id="input_datetime.last_meal_time",
+            entity_id="input_datetime.ai_last_meal_time",
             datetime=now_str,
         )
     except Exception as exc:
@@ -1188,7 +1188,7 @@ async def focus_guard_snooze(minutes=30):
     try:
         service.call(  # noqa: F821
             "input_datetime", "set_datetime",
-            entity_id="input_datetime.focus_guard_snooze_until",
+            entity_id="input_datetime.ai_focus_guard_snooze_until",
             datetime=snooze_str,
         )
     except Exception as exc:
@@ -1288,6 +1288,9 @@ async def _zone_change_re_eval(**kwargs):
 @time_trigger("startup")  # noqa: F821
 async def _startup():
     """Initialize focus guard status sensor and workshop tracking."""
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     global _last_zone_change_time, _last_active_zone
 
     _ensure_result_entity_name(force=True)

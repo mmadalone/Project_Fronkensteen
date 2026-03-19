@@ -1,0 +1,90 @@
+blueprint:
+  name: "Memory Embedding Batch"
+  description: >-
+    Runs a batch of memory embeddings on a schedule.
+    Configurable batch size, schedule time, and kill switch.
+
+    **Changelog:**
+    - v1.1.0 — Fixed kill switch (was checking trigger entity instead of kill switch input)
+    - v1.0.0 — Initial version
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/embedding_batch.yaml
+
+  input:
+    # ===========================================================================
+    # ① SCHEDULE & CONTROL
+    # ===========================================================================
+    schedule_control:
+      name: "① Schedule & Control"
+      icon: mdi:calendar-clock
+      description: When the batch runs, how large it is, and the kill switch.
+      collapsed: false
+      input:
+        batch_time:
+          name: Schedule Time
+          description: >-
+            Time helper that controls when the batch runs.
+          default: ""
+          selector:
+            entity:
+              domain: input_datetime
+
+        batch_size:
+          name: Batch Size
+          description: >-
+            Number helper that controls how many entries to embed per run.
+            Default: input_number.ai_embedding_batch_size (50).
+          default:
+            entity_id: input_number.ai_embedding_batch_size
+          selector:
+            entity:
+              domain: input_number
+
+        kill_switch:
+          name: Kill Switch
+          description: >-
+            Boolean to disable embedding without removing the automation.
+            ON = embedding disabled. Default: none (always runs).
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+triggers:
+  - trigger: time
+    at: !input batch_time
+
+variables:
+  v_kill_switch: !input kill_switch
+  v_batch_size: !input batch_size
+
+conditions:
+  # Kill switch check (skip if not configured or if ON)
+  - alias: "Kill switch gate"
+    condition: template
+    value_template: >-
+      {% if v_kill_switch in ['', none, 'None'] %}
+        true
+      {% else %}
+        {{ not is_state(v_kill_switch, 'on') }}
+      {% endif %}
+
+actions:
+  - alias: "Run embedding batch"
+    action: pyscript.memory_embed_batch
+    response_variable: result
+    data:
+      batch_size: >-
+        {{ states(v_batch_size) | int(50) }}
+      scope: "all"
+
+  - alias: "Log batch result"
+    action: system_log.write
+    data:
+      message: >-
+        Embedding batch: embedded={{ result.embedded | default(0) }},
+        failed={{ result.failed | default(0) }},
+        tokens={{ result.tokens_used | default(0) }},
+        reindexed={{ result.reindexed | default(false) }}
+      level: info
+      logger: memory.embedding_batch

@@ -16,6 +16,7 @@ from shared_utils import (
     get_person_slugs,
     get_person_tracker,
     load_entity_config,
+    reload_entity_config,
 )
 
 # =============================================================================
@@ -48,36 +49,14 @@ from shared_utils import (
 # Deployed: 2026-03-13
 # =============================================================================
 
-# ── Default Constants (fallbacks when helpers are unavailable) ────────────────
-
-_DEFAULT_FP2_ENTITIES = {
-    "binary_sensor.fp2_presence_sensor_workshop": "workshop",
-    "binary_sensor.fp2_presence_sensor_living_room": "living_room",
-    "binary_sensor.fp2_presence_sensor_main_room": "main_room",
-    "binary_sensor.fp2_presence_sensor_kitchen": "kitchen",
-    "binary_sensor.fp2_presence_sensor_bed": "bed",
-    "binary_sensor.fp2_presence_sensor_lobby": "lobby",
-    "binary_sensor.fp2_presence_sensor_bathroom": "bathroom",
-    "binary_sensor.fp2_presence_sensor_shower": "shower",
-}
-
-_DEFAULT_SATELLITE_TO_ZONE = {
-    "assist_satellite.home_assistant_voice_0905c5_assist_satellite": "workshop",
-    "assist_satellite.home_assistant_voice_0a0109_assist_satellite": "living_room",
-}
-
-_DEFAULT_AGENT_TO_ZONE = {
-    "rick": "workshop",
-    "quark": "living_room",
-}
-
-
-# ── Dynamic Getters (read from config, fall back to defaults) ────────────────
+# ── Dynamic Getters (read from entity_config.yaml) ───────────────────────────
 
 def _get_fp2_entities() -> dict:
-    """Read FP2 zone map from YAML config, falling back to built-in default."""
     cfg = load_entity_config()
-    return cfg.get("fp2_zones") or _DEFAULT_FP2_ENTITIES
+    fp2 = cfg.get("fp2_zones")
+    if not fp2:
+        log.error("presence_identity: fp2_zones not found in entity_config.yaml")  # noqa: F821
+    return fp2 or {}
 
 
 def _get_zone_friendly() -> dict:
@@ -93,15 +72,19 @@ def _get_person_trackers() -> dict:
 
 
 def _get_satellite_to_zone() -> dict:
-    """Read satellite->zone map from YAML config, falling back to built-in default."""
     cfg = load_entity_config()
-    return cfg.get("satellite_zones") or _DEFAULT_SATELLITE_TO_ZONE
+    sat = cfg.get("satellite_zones")
+    if not sat:
+        log.error("presence_identity: satellite_zones not found in entity_config.yaml")  # noqa: F821
+    return sat or {}
 
 
 def _get_agent_to_zone() -> dict:
-    """Read agent->zone map from YAML config, falling back to built-in default."""
     cfg = load_entity_config()
-    return cfg.get("agent_zones") or _DEFAULT_AGENT_TO_ZONE
+    agt = cfg.get("agent_zones")
+    if not agt:
+        log.error("presence_identity: agent_zones not found in entity_config.yaml")  # noqa: F821
+    return agt or {}
 
 
 def _get_persons() -> list:
@@ -128,17 +111,41 @@ def _get_other() -> dict:
 SENSOR_PREFIX = "sensor.ai_location_"
 STATUS_ENTITY = "sensor.ai_presence_identity_status"
 
-MIN_DWELL_SEC = 30  # ignore sub-30s FP2 flicker
+
+# ── Helper Utilities ────────────────────────────────────────────────────────
+
+def _helper_int(entity_id: str, default: int) -> int:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+def _helper_float(entity_id: str, default: float) -> float:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return float(val)
+    except Exception:
+        pass
+    return default
+
+
+def _get_min_dwell_sec() -> int:
+    return _helper_int("input_number.ai_presence_fp2_dwell_sec", 30)
+
 
 # ── Anchor confidence values ─────────────────────────────────────────────────
 
-CONF_SOLO = 100
-CONF_VOICE = 95
-CONF_DEPARTURE = 95
-CONF_ARRIVAL = 90
-CONF_COUNT_CONSTRAINT = 85
-CONF_TRANSITION = 80
-CONF_MARKOV_CAP = 50
+_CONF_DEFAULTS = {
+    "solo": 100, "voice": 95, "departure": 95, "arrival": 90,
+    "count": 85, "transition": 80, "markov_cap": 50,
+}
+
+def _get_conf(name: str) -> int:
+    return _helper_int(f"input_number.ai_presence_conf_{name}", _CONF_DEFAULTS.get(name, 50))
 
 # ── Module State ─────────────────────────────────────────────────────────────
 # LOCK DISCIPLINE: All reads/writes to _location, _zone_state, _zone_change_ts,
@@ -238,22 +245,29 @@ def _is_person_home(person: str) -> bool:
 
 def _compute_confidence(person: str) -> int:
     """Decay confidence from anchor score based on elapsed time."""
-    loc = _location[person]
+    loc = _location.get(person)
+    if not loc:
+        return 0
     if loc["zone"] == "unknown" or loc["confidence"] == 0:
         return 0
 
     elapsed_min = (time.monotonic() - loc["since"]) / 60.0
     base = loc["confidence"]
 
-    if elapsed_min <= 15:
+    decay_start = _helper_float("input_number.ai_presence_decay_start", 15.0)
+    decay_cap = _helper_float("input_number.ai_presence_decay_cap", 60.0)
+    decay_range = _helper_float("input_number.ai_presence_decay_range", 45.0)
+    decay_factor = _helper_float("input_number.ai_presence_decay_factor", 0.5)
+
+    if elapsed_min <= decay_start:
         return base
-    if elapsed_min <= 60:
-        # Linear decay from base to floor over 15-60 min range
-        decay_frac = (elapsed_min - 15) / 45.0
-        decayed = int(base * (1 - decay_frac * 0.5))  # lose up to 50% over 45 min
+    if elapsed_min <= decay_cap:
+        # Linear decay from base to floor over decay range
+        decay_frac = (elapsed_min - decay_start) / decay_range
+        decayed = int(base * (1 - decay_frac * decay_factor))
         return max(decayed, _get_confidence_floor())
-    # Past 60 min — cap at Markov level
-    return min(base, CONF_MARKOV_CAP)
+    # Past decay cap — cap at Markov level
+    return min(base, _get_conf("markov_cap"))
 
 
 def _confidence_label(conf: int) -> str:
@@ -275,6 +289,8 @@ def _update_sensors():
 
     zone_friendly = _get_zone_friendly()
     for person in _get_persons():
+        if person not in _location:
+            continue
         loc = _location[person]
         conf = _compute_confidence(person)
         zone = loc["zone"]
@@ -332,6 +348,8 @@ def _update_sensors():
 
 def _assign(person: str, zone: str, confidence: int, source: str):
     """Assign a person to a zone with confidence and source."""
+    if person not in _location:
+        _location[person] = {"zone": "unknown", "confidence": 0, "source": "none", "since": 0.0}
     _location[person]["zone"] = zone
     _location[person]["confidence"] = confidence
     _location[person]["source"] = source
@@ -348,7 +366,7 @@ def _anchor_solo(person: str):
     """Solo home — all active FP2 zones belong to this person."""
     active = _get_active_zones()
     if not active:
-        _assign(person, "unknown", CONF_SOLO, "solo_no_fp2")
+        _assign(person, "unknown", _get_conf("solo"), "solo_no_fp2")
         return
 
     # Pick the most recently activated zone if tracked, else first
@@ -360,17 +378,17 @@ def _anchor_solo(person: str):
             best_ts = ts
             best_zone = z
 
-    _assign(person, best_zone, CONF_SOLO, "solo")
+    _assign(person, best_zone, _get_conf("solo"), "solo")
 
     # Other person is away
     other = _get_other().get(person)
     if other and _location[other]["zone"] != "away":
-        _assign(other, "away", CONF_SOLO, "solo_elimination")
+        _assign(other, "away", _get_conf("solo"), "solo_elimination")
 
 
 def _anchor_voice(person: str, zone: str):
     """Voice interaction pins person to satellite's zone."""
-    _assign(person, zone, CONF_VOICE, "voice_satellite")
+    _assign(person, zone, _get_conf("voice"), "voice_satellite")
 
 
 def _anchor_departure(departed: str):
@@ -378,7 +396,7 @@ def _anchor_departure(departed: str):
     other = _get_other().get(departed)
     if not other:
         return
-    _assign(departed, "away", CONF_DEPARTURE, "wifi_departure")
+    _assign(departed, "away", _get_conf("departure"), "wifi_departure")
 
     # Remaining bodies = other person
     active = _get_active_zones()
@@ -390,7 +408,7 @@ def _anchor_departure(departed: str):
             if ts > best_ts:
                 best_ts = ts
                 best_zone = z
-        _assign(other, best_zone, CONF_DEPARTURE, "departure_elimination")
+        _assign(other, best_zone, _get_conf("departure"), "departure_elimination")
 
 
 def _anchor_arrival(arriving: str):
@@ -417,10 +435,10 @@ def _anchor_arrival(arriving: str):
             if ts > best_ts:
                 best_ts = ts
                 best_zone = z
-        _assign(arriving, best_zone, CONF_ARRIVAL, "wifi_arrival")
+        _assign(arriving, best_zone, _get_conf("arrival"), "wifi_arrival")
     elif active:
         # Both in same zone
-        _assign(arriving, active[0], CONF_ARRIVAL, "wifi_arrival_same_zone")
+        _assign(arriving, active[0], _get_conf("arrival"), "wifi_arrival_same_zone")
 
 
 # ── Transition Tracking ─────────────────────────────────────────────────────
@@ -439,13 +457,13 @@ def _track_transition(from_zone: str, to_zone: str):
     # Find who was in from_zone
     for person in _get_persons():
         if _location[person]["zone"] == from_zone:
-            _assign(person, to_zone, CONF_TRANSITION, "fp2_transition")
+            _assign(person, to_zone, _get_conf("transition"), "fp2_transition")
             return
 
     # Nobody tracked to from_zone — if solo mode, assign solo person
     solo = _get_solo_person()
     if solo:
-        _assign(solo, to_zone, CONF_TRANSITION, "fp2_transition_solo")
+        _assign(solo, to_zone, _get_conf("transition"), "fp2_transition_solo")
 
 
 def _apply_count_constraint():
@@ -474,12 +492,12 @@ def _apply_count_constraint():
     # If one person is assigned to an active zone, other gets the remaining
     if p0_zone in active and p1_zone not in active:
         other_zone = [z for z in active if z != p0_zone][0]
-        _assign(p1, other_zone, CONF_COUNT_CONSTRAINT, "count_constraint")
+        _assign(p1, other_zone, _get_conf("count"), "count_constraint")
         return
 
     if p1_zone in active and p0_zone not in active:
         other_zone = [z for z in active if z != p1_zone][0]
-        _assign(p0, other_zone, CONF_COUNT_CONSTRAINT, "count_constraint")
+        _assign(p0, other_zone, _get_conf("count"), "count_constraint")
         return
 
     # Neither assigned — use Markov priors as tiebreaker
@@ -510,7 +528,7 @@ async def _apply_markov_fallback_async(person: str, candidates: list):
         except Exception:
             pass
 
-    _assign(person, best_zone, CONF_MARKOV_CAP, "markov_prior")
+    _assign(person, best_zone, _get_conf("markov_cap"), "markov_prior")
 
 
 async def _apply_markov_tiebreak(active_zones: list):
@@ -541,11 +559,11 @@ async def _apply_markov_tiebreak(active_zones: list):
         return
     p0, p1 = persons[0], persons[1]
     if z1_score >= z2_score:
-        _assign(p0, z1, CONF_MARKOV_CAP, "markov_tiebreak")
-        _assign(p1, z2, CONF_MARKOV_CAP, "markov_tiebreak")
+        _assign(p0, z1, _get_conf("markov_cap"), "markov_tiebreak")
+        _assign(p1, z2, _get_conf("markov_cap"), "markov_tiebreak")
     else:
-        _assign(p0, z2, CONF_MARKOV_CAP, "markov_tiebreak")
-        _assign(p1, z1, CONF_MARKOV_CAP, "markov_tiebreak")
+        _assign(p0, z2, _get_conf("markov_cap"), "markov_tiebreak")
+        _assign(p1, z1, _get_conf("markov_cap"), "markov_tiebreak")
 
 
 # ── State Triggers ───────────────────────────────────────────────────────────
@@ -571,7 +589,7 @@ async def _on_fp2_change(var_name=None, value=None, old_value=None):
 
     # Debounce: ignore rapid flapping
     last_change = _zone_change_ts.get(zone, 0.0)
-    if now - last_change < MIN_DWELL_SEC and old_value is not None:
+    if now - last_change < _get_min_dwell_sec() and old_value is not None:
         return
 
     async with _lock:
@@ -730,6 +748,8 @@ async def presence_identity_decay_tick():
         floor = _get_confidence_floor()
 
         for person in _get_persons():
+            if person not in _location:
+                continue
             conf = _compute_confidence(person)
             zone = _location[person]["zone"]
 
@@ -789,8 +809,11 @@ async def presence_identity_person_check():
 @time_trigger("startup")  # noqa: F821
 async def presence_identity_startup():
     """Initialize on HA startup."""
-    # Brief delay for entities to settle
-    await asyncio.sleep(5)
+    # Brief delay for entities/SMB mount to settle
+    task.sleep(10)  # noqa: F821
+
+    # Force re-read of entity_config.yaml (cache may be stale from early import)
+    reload_entity_config()
 
     log.info("presence_identity: initializing")  # noqa: F821
 
@@ -832,7 +855,7 @@ async def presence_identity_startup():
             _anchor_solo(solo)
         elif _get_occupancy_mode() == "away":
             for p in _get_persons():
-                _assign(p, "away", CONF_SOLO, "startup_away")
+                _assign(p, "away", _get_conf("solo"), "startup_away")
         elif _get_occupancy_mode() == "dual":
             # Dual mode at startup — can't anchor, start unknown
             # Count constraint might help
@@ -933,7 +956,7 @@ async def presence_identity_force_anchor(person: str = "", zone: str = ""):
         return
 
     async with _lock:
-        _assign(person, zone, CONF_SOLO, "manual_anchor")
+        _assign(person, zone, _get_conf("solo"), "manual_anchor")
         _update_sensors()
 
     log.info(f"presence_identity: force anchored {person} → {zone}")  # noqa: F821

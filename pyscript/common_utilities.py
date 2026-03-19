@@ -126,7 +126,7 @@ def _cache_prepare_db_sync(force: bool = False) -> bool:
     return True
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _prune_expired_sync() -> int:
     """Prune expired entries from the cache database."""
     for attempt in range(2):
@@ -149,7 +149,7 @@ def _prune_expired_sync() -> int:
     return 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_get_sync(key: str) -> str | None:
     """Retrieve the cached value for a key if it exists and has not expired."""
     for attempt in range(2):
@@ -179,7 +179,7 @@ def _cache_get_sync(key: str) -> str | None:
     return None
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_set_sync(key: str, value: str, ttl_seconds: int) -> bool:
     """Persist a cache entry with the provided TTL."""
     for attempt in range(2):
@@ -209,7 +209,7 @@ def _cache_set_sync(key: str, value: str, ttl_seconds: int) -> bool:
     return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_delete_sync(key: str) -> int:
     """Remove the cache entry identified by key if it exists."""
     for attempt in range(2):
@@ -237,22 +237,22 @@ async def _cache_prepare_db(force: bool = False) -> bool:
 
 async def _cache_get(key: str) -> str | None:
     """Retrieve the cached value for a key if it exists and has not expired."""
-    return await asyncio.to_thread(_cache_get_sync, key)
+    return _cache_get_sync(key)
 
 
 async def _cache_set(key: str, value: str, ttl_seconds: int) -> bool:
     """Persist a cache entry with the provided TTL."""
-    return await asyncio.to_thread(_cache_set_sync, key, value, ttl_seconds)
+    return _cache_set_sync(key, value, ttl_seconds)
 
 
 async def _cache_delete(key: str) -> int:
     """Remove the cache entry identified by key if it exists."""
-    return await asyncio.to_thread(_cache_delete_sync, key)
+    return _cache_delete_sync(key)
 
 
 async def _prune_expired() -> int:
     """Async wrapper for pruning expired entries."""
-    return await asyncio.to_thread(_prune_expired_sync)
+    return _prune_expired_sync()
 
 
 @time_trigger("startup")  # noqa: F821
@@ -761,7 +761,7 @@ def _infer_provider(display_model: str) -> str:
     return "unknown"
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _load_agent_model_map_sync() -> tuple[dict, dict]:
     """Read config entries + entity registry to build agent→model and model→provider maps.
     Runs in executor thread — file I/O only, no HA API calls."""
@@ -855,7 +855,7 @@ async def _load_and_cache_model_map() -> None:
     """Load model map from config entries and cache in module globals."""
     global _AGENT_MODEL_MAP, _MODEL_PROVIDER_MAP, _model_map_loaded
     try:
-        llm_map, provider_map = await asyncio.to_thread(_load_agent_model_map_sync)
+        llm_map, provider_map = _load_agent_model_map_sync()
         _AGENT_MODEL_MAP = {"llm": llm_map, "tts": _AGENT_TTS_MAP, "stt": _AGENT_STT_MAP}
         _MODEL_PROVIDER_MAP = provider_map
         _model_map_loaded = True

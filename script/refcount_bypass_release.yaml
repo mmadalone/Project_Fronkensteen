@@ -1,0 +1,152 @@
+# =============================================================================
+# Refcount Bypass — Release (v2.0.0)
+# =============================================================================
+# Generic refcount bypass for any shared boolean toggle. Decrements an HA
+# counter helper. Last release (1→0) turns ON the toggle. Zero JSON parsing.
+#
+# Part of the I-45b refcount bypass system. Pair with refcount_bypass_claim.
+# =============================================================================
+
+blueprint:
+  name: "Refcount Bypass — Release (v2.0.0)"
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/refcount_bypass_release.yaml
+  description: >
+    # Refcount Bypass — Release
+
+
+    Generic refcount bypass for any shared boolean toggle. Decrements an
+    HA `counter` helper. Last release (1→0 transition) turns ON the toggle.
+    Safe to call even if counter is already at 0 (counter `minimum: 0`
+    prevents negative values).
+
+
+    **Usage from automation blueprints:**
+
+    ```yaml
+    - alias: "Script — refcount bypass release"
+      action: script.refcount_bypass_release
+      data:
+        owner: "{{ this.entity_id }}"
+    ```
+
+
+    Create one instance per toggle you want to protect. Default configuration
+    targets `notification_follow_me`. Override `refcount_entity` and `toggle`
+    inputs for other toggles (e.g. ducking).
+
+
+    Pair with **Refcount Bypass — Claim** to complete the claim/release
+    cycle. Deploy a **Refcount Watchdog** to catch crashed automations that
+    never release.
+
+
+    ### Recent changes
+
+    - **v2.0.0:** Replaced JSON owner list (`input_text`) with HA `counter`
+      helper. Atomic increment/decrement, zero Jinja2 JSON parsing, eliminates
+      BRP-WATCHDOG-001 class of bugs. Added optional debug log helper.
+
+    - **v1.0.0:** Initial release — JSON owner list in `input_text`.
+
+  domain: script
+
+  input:
+    refcount_entity:
+      name: "Refcount counter"
+      description: >-
+        The counter entity that tracks active bypass claims.
+        Must have minimum: 0 and step: 1.
+      default: counter.notification_follow_me_bypass_refcount
+      selector:
+        entity:
+          domain: counter
+
+    toggle:
+      name: "Toggle to turn ON"
+      description: >-
+        The input_boolean that gets turned ON on the last release
+        (1→0 transition) and left alone while other claims remain.
+      default: input_boolean.notification_follow_me
+      selector:
+        entity:
+          domain: input_boolean
+
+    debug_log_entity:
+      name: "Debug log helper (optional)"
+      description: >-
+        An input_text entity for owner visibility. Removes releasing
+        entity IDs for debugging. Leave default if not needed.
+      default: input_text.notification_follow_me_bypass_log
+      selector:
+        entity:
+          domain: input_text
+
+fields:
+  owner:
+    description: "Entity ID of the releasing automation (use {{ this.entity_id }})"
+    required: true
+    selector:
+      text: {}
+
+variables:
+  _counter_entity: !input refcount_entity
+  _toggle_entity: !input toggle
+  _log_entity: !input debug_log_entity
+
+sequence:
+  - alias: "Read current count before decrement"
+    variables:
+      _count_before: >-
+        {{ states(_counter_entity) | int(0) }}
+
+  - alias: "Decrement refcount (only if > 0)"
+    if:
+      - condition: template
+        value_template: "{{ _count_before > 0 }}"
+    then:
+      - alias: "Decrement counter"
+        action: counter.decrement
+        target:
+          entity_id: "{{ _counter_entity }}"
+
+      - alias: "Read count after decrement"
+        variables:
+          _count_after: >-
+            {{ states(_counter_entity) | int(0) }}
+
+      - alias: "Last release — turn ON toggle"
+        if:
+          - condition: template
+            value_template: "{{ _count_after == 0 }}"
+        then:
+          - alias: "Turn on protected toggle (1→0 transition)"
+            action: input_boolean.turn_on
+            target:
+              entity_id: "{{ _toggle_entity }}"
+
+  - alias: "Remove owner from debug log"
+    action: input_text.set_value
+    continue_on_error: true
+    target:
+      entity_id: "{{ _log_entity }}"
+    data:
+      value: >-
+        {% set current = states(_log_entity) | default('') %}
+        {% if current in ['unknown', 'unavailable', ''] %}
+          {{ '' }}
+        {% else %}
+          {% set parts = current.split(', ') %}
+          {% set ns = namespace(found=false, result=[]) %}
+          {% for p in parts %}
+            {% if p == owner and not ns.found %}
+              {% set ns.found = true %}
+            {% else %}
+              {% set ns.result = ns.result + [p] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.result | join(', ') }}
+        {% endif %}
+
+mode: queued
+max: 10

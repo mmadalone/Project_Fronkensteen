@@ -19,3 +19,26 @@ notification_follow_me_bypass_refcount:
   initial: 0
   minimum: 0
   step: 1
+
+########################################
+# Away Patterns — Daily Trip Counter (I-40b)
+########################################
+# Per-person daily trip counter. Incremented on each valid arrival
+# (duration >= MIN_AWAY_DURATION_SEC). Reset at daily rebuild (04:15).
+# Used by away_patterns.py for ordinal-aware prediction.
+
+ai_away_trip_count_miquel:
+  name: "AI Away Trip Count - Miquel"
+  icon: mdi:counter
+  initial: 0
+  minimum: 0
+  step: 1
+  restore: true
+
+ai_away_trip_count_jessica:
+  name: "AI Away Trip Count - Jessica"
+  icon: mdi:counter
+  initial: 0
+  minimum: 0
+  step: 1
+  restore: true

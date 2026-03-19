@@ -243,7 +243,7 @@ def _build_summary_line(projects: list) -> str:
     return line
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _scan_project_files(directory: str) -> tuple:
     """Scan directory for .md files and return their contents.
 
@@ -437,9 +437,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
     projects_raw = []
 
     try:
-        projects_raw, scan_error = await task.executor(  # noqa: F821
-            _scan_project_files, PROJECT_DIR,
-        )
+        projects_raw, scan_error = _scan_project_files(PROJECT_DIR)
         if scan_error:
             scan_failed = True
             log.warning(  # noqa: F821

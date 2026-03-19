@@ -141,15 +141,23 @@ template:
               {%- set ns.lines = ns.lines + ['Occupancy: ' ~ occ_text ~ '.'] -%}
             {%- endif -%}
 
-            {# ── AWAY PREDICTION (I-54 — pyscript sensor with full attributes) ── #}
+            {# ── AWAY PREDICTION (I-54 sensor + I-40b multi-trip) ── #}
             {%- if occ == 'away' or occ.startswith('solo_') -%}
               {%- set preds = state_attr('sensor.ai_away_prediction', 'predictions') | default([], true) -%}
               {%- for ap in preds -%}
                 {%- if ap.predicted_return_time | default('') -%}
+                  {%- set trip_note = '' -%}
+                  {%- if ap.trip_ordinal | default(1) | int > 1 -%}
+                    {%- set trip_note = ' (trip #' ~ ap.trip_ordinal ~ ')' -%}
+                  {%- endif -%}
+                  {%- set another_note = '' -%}
+                  {%- if ap.prob_another_trip | default(0) | float > 0.5 -%}
+                    {%- set another_note = ' Likely another trip.' -%}
+                  {%- endif -%}
                   {%- if ap.range_low is defined and ap.range_high is defined and ap.range_low != ap.range_high -%}
-                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.range_low ~ '–' ~ ap.range_high ~ ').'] -%}
+                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ trip_note ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.range_low ~ '–' ~ ap.range_high ~ ').' ~ another_note] -%}
                   {%- else -%}
-                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.confidence | default('low') ~ ').'] -%}
+                    {%- set ns.lines = ns.lines + ['Away: ' ~ ap.person ~ trip_note ~ ' expected back ~' ~ ap.predicted_return_time ~ ' (' ~ ap.confidence | default('low') ~ ').' ~ another_note] -%}
                   {%- endif -%}
                 {%- endif -%}
               {%- endfor -%}
@@ -248,10 +256,11 @@ template:
               {%- set mf_file = mfc.split('|')[0] -%}
               {%- set mf_key = mfc.split('|')[1] -%}
               {%- set ns.lines = ns.lines + [
-                'MUSIC FEEDBACK: You composed "' ~ mf_file ~ '" and it just played. '
-                ~ 'Ask feedback. keep → music_library(action="promote", library_id="' ~ mf_key ~ '"), '
-                ~ 'change → compose_music with new prompt, '
-                ~ 'delete → music_library(action="delete", library_id="' ~ mf_key ~ '").'
+                'MUSIC FEEDBACK SESSION ACTIVE. File: "' ~ mf_file ~ '".\n'
+                ~ 'When user says KEEP/SAVE/LIKE: call music_library(action="promote", library_id="' ~ mf_key ~ '")\n'
+                ~ 'When user says CHANGE/REDO/DIFFERENT: call compose_music with modified prompt\n'
+                ~ 'When user says DELETE/REMOVE/TRASH: call music_library(action="delete", library_id="' ~ mf_key ~ '")\n'
+                ~ 'Do NOT compose new music unless the user explicitly asks for changes.'
               ] -%}
             {%- endif -%}
 
@@ -267,11 +276,11 @@ template:
             {%- set ns = namespace(lines=[]) -%}
 
             {# ── HOUSE MODE ── #}
-            {%- if is_state('input_boolean.bedtime_active', 'on') -%}
+            {%- if is_state('input_boolean.ai_bedtime_active', 'on') -%}
               {%- set mode = 'Bedtime routine active.' -%}
-            {%- elif is_state('input_boolean.bedtime_global_lock', 'on') -%}
+            {%- elif is_state('input_boolean.ai_bedtime_global_lock', 'on') -%}
               {%- set mode = 'Bedtime locked — good night mode.' -%}
-            {%- elif is_state('input_boolean.wake_up_snooze', 'on') -%}
+            {%- elif is_state('input_boolean.ai_wake_up_snooze', 'on') -%}
               {%- set mode = 'Wake-up snoozed.' -%}
             {%- else -%}
               {%- set mode = 'Normal.' -%}
@@ -325,9 +334,22 @@ template:
               {%- set ns.lines = ns.lines + ['Next alarm: ' ~ alarm_lbl ~ '.'] -%}
             {%- endif -%}
 
-            {# ── SCHEDULE — Calendar + Email (Task 18c) ── #}
-            {%- set cal_raw = states('input_text.ai_calendar_today_summary') | default('', true) -%}
+            {# ── SCHEDULE — Calendar + Email (Task 18c + Gap 1 per-person + Gap 2 email stale) ── #}
+            {# Resolve active user for per-person calendar #}
+            {%- set best_u = namespace(slug='', conf=0) -%}
+            {%- for p in states.person -%}
+              {%- set conf_u = state_attr('sensor.ai_location_' ~ p.object_id, 'confidence') | int(0) -%}
+              {%- if conf_u > best_u.conf -%}
+                {%- set best_u.slug = p.object_id -%}
+                {%- set best_u.conf = conf_u -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- set sched_user = best_u.slug if best_u.slug else (states.person | map(attribute='object_id') | first | default('')) -%}
+            {# Per-person helper with shared fallback #}
+            {%- set cal_per = states('input_text.ai_calendar_today_summary_' ~ sched_user) | default('', true) -%}
+            {%- set cal_raw = cal_per if cal_per not in ['', 'none', 'unknown', 'unavailable'] else (states('input_text.ai_calendar_today_summary') | default('', true)) -%}
             {%- set cal_stale = is_state('input_boolean.ai_calendar_stale', 'on') -%}
+            {%- set email_stale = is_state('input_boolean.ai_email_stale', 'on') -%}
             {%- set email_ct = states('input_number.ai_email_priority_count') | int(0) -%}
             {%- set sns = namespace(parts=[]) -%}
             {%- if cal_raw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
@@ -361,7 +383,8 @@ template:
                 {%- set stale_pfx = '(Calendar may be outdated) ' if cal_stale else '' -%}
                 {%- set sns.parts = sns.parts + [stale_pfx ~ 'No more events today'] -%}
               {%- endif -%}
-              {%- set cal_tmrw = states('input_text.ai_calendar_tomorrow_summary') | default('', true) -%}
+              {%- set cal_tmrw_per = states('input_text.ai_calendar_tomorrow_summary_' ~ sched_user) | default('', true) -%}
+              {%- set cal_tmrw = cal_tmrw_per if cal_tmrw_per not in ['', 'none', 'unknown', 'unavailable'] else (states('input_text.ai_calendar_tomorrow_summary') | default('', true)) -%}
               {%- if now().hour >= 20 and cal_tmrw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
                 {%- set first_tmrw = cal_tmrw.split(' | ')[0] -%}
                 {%- if first_tmrw | length >= 6 and first_tmrw[2:3] == ':' -%}
@@ -371,6 +394,9 @@ template:
             {%- endif -%}
             {%- if email_ct > 0 -%}
               {%- set sns.parts = sns.parts + [email_ct ~ ' priority email' ~ ('s' if email_ct > 1 else '')] -%}
+            {%- endif -%}
+            {%- if email_stale -%}
+              {%- set sns.parts = sns.parts + ['(Email may be outdated)'] -%}
             {%- endif -%}
             {%- if sns.parts | length > 0 -%}
               {%- set ns.lines = ns.lines + ['Schedule: ' ~ sns.parts | join('. ') ~ '.'] -%}
@@ -386,7 +412,7 @@ template:
 
             {# ── FOCUS & WELLBEING (Task 20) ── #}
             {%- set ws_hours = states('sensor.workshop_hours_today') | float(0) | round(1) -%}
-            {%- set focus_on = is_state('input_boolean.focus_mode', 'on') -%}
+            {%- set focus_on = is_state('input_boolean.ai_focus_mode', 'on') -%}
             {%- set fns = namespace(parts=[]) -%}
             {%- if ws_hours > 0 -%}
               {%- set fns.parts = fns.parts + [ws_hours ~ 'h workshop today'] -%}
@@ -394,7 +420,7 @@ template:
             {%- if focus_on -%}
               {%- set fns.parts = fns.parts + ['focus mode ON'] -%}
             {%- endif -%}
-            {%- set meal_state = states('input_datetime.last_meal_time') -%}
+            {%- set meal_state = states('input_datetime.ai_last_meal_time') -%}
             {%- if meal_state not in ['unknown', 'unavailable', 'None', ''] -%}
               {%- set meal_diff = ((as_timestamp(now()) - as_timestamp(meal_state, 0)) / 3600) | round(1) -%}
               {%- if meal_diff > 0 -%}
@@ -403,6 +429,33 @@ template:
             {%- endif -%}
             {%- if fns.parts | length > 0 -%}
               {%- set ns.lines = ns.lines + ['Focus: ' ~ fns.parts | join(', ') ~ '.'] -%}
+            {%- endif -%}
+
+            {# ── HISTORY — Pre-computed historical data ── #}
+            {%- set hist = namespace(parts=[]) -%}
+            {%- for p in states.person -%}
+              {%- set slug = p.object_id -%}
+              {%- set hs_raw = states('input_datetime.ai_home_since_' ~ slug) -%}
+              {%- if hs_raw not in ['unknown', 'unavailable', '1970-01-01 00:00:00', '']
+                  and p.state == 'home' -%}
+                {%- set hs_dt = as_local(as_datetime(hs_raw)) -%}
+                {%- set elapsed_s = (now() - hs_dt).total_seconds() -%}
+                {%- if elapsed_s >= 3600 -%}
+                  {%- set dur = (elapsed_s / 3600) | round(0) | int ~ 'h' -%}
+                {%- else -%}
+                  {%- set dur = (elapsed_s / 60) | round(0) | int ~ 'min' -%}
+                {%- endif -%}
+                {%- set hist.parts = hist.parts + [p.name ~ ' home since ' ~ hs_dt.strftime('%-I:%M %p') ~ ' (~' ~ dur ~ ')'] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- set temp_avg = states('sensor.ai_outside_temperature_24h') | default('unknown', true) -%}
+            {%- if temp_avg not in ['unknown', 'unavailable', 'None', ''] -%}
+              {%- set temp_min = state_attr('sensor.ai_outside_temperature_24h', 'min_value') | float(0) | round(0) | int -%}
+              {%- set temp_max = state_attr('sensor.ai_outside_temperature_24h', 'max_value') | float(0) | round(0) | int -%}
+              {%- set hist.parts = hist.parts + ['Temp last 24h: ' ~ temp_min ~ '-' ~ temp_max ~ '°C (avg ' ~ (temp_avg | float(0) | round(0) | int) ~ ')'] -%}
+            {%- endif -%}
+            {%- if hist.parts | length > 0 -%}
+              {%- set ns.lines = ns.lines + ['History: ' ~ hist.parts | join('. ') ~ '.'] -%}
             {%- endif -%}
 
             {# ── PRIVACY GATE (Task 22: dynamic per-person suppression) ── #}

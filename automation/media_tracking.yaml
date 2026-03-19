@@ -1,0 +1,382 @@
+blueprint:
+  name: "Media tracking — Radarr/Sonarr (L1 + L2 + notifications)"
+  author: madalone
+  description: >
+    # Media tracking — Radarr/Sonarr
+
+    Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally
+    sends download notifications. Blueprint owns all triggers and config knobs;
+    pyscript is a stateless service.
+
+    ### Triggers
+    - **Time pattern** — every N hours (configurable)
+    - **Queue change** — when sonarr/radarr queue sensor changes (optional)
+    - **Manual** — when kill switch turns on
+
+    ### Data flow
+    1. Blueprint fires → calls `pyscript.media_promote_now`
+    2. Pyscript fetches APIs → writes L1 helpers + L2 memory
+    3. Blueprint reads response → sends notification if new downloads
+
+    ### Recent changes
+    - **v1:** Initial implementation
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/media_tracking.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① SCHEDULE
+    # ===========================================================================
+    schedule_section:
+      name: "① Schedule"
+      icon: mdi:clock-outline
+      description: >
+        How often to refresh media data. Queue trigger re-promotes when
+        Sonarr/Radarr queue count changes.
+      collapsed: false
+      input:
+        refresh_interval:
+          name: Refresh interval (hours)
+          description: >
+            Hours between automatic refreshes. Lower values = more API calls.
+          default: "6"
+          selector:
+            select:
+              options:
+                - "1"
+                - "2"
+                - "6"
+                - "12"
+                - "24"
+        enable_daily_refresh:
+          name: Daily refresh
+          description: >
+            Refresh media data once per day at a fixed time.
+            Ensures "today" data stays accurate after midnight.
+          default: true
+          selector:
+            boolean: {}
+
+        daily_refresh_time:
+          name: Daily refresh time
+          description: >
+            Time for the daily refresh trigger.
+          default: "00:01:00"
+          selector:
+            time: {}
+
+        queue_trigger:
+          name: Re-promote on queue change
+          description: >
+            Trigger a refresh when the Sonarr or Radarr queue count changes.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ② WINDOWS
+    # ===========================================================================
+    windows_section:
+      name: "② Windows"
+      icon: mdi:calendar-range
+      description: >
+        How far ahead/back to look for upcoming and recent content.
+      collapsed: true
+      input:
+        upcoming_window:
+          name: Upcoming window
+          description: >
+            How far ahead to look for upcoming TV and movies.
+          default: "today"
+          selector:
+            select:
+              options:
+                - label: "Today (1 day)"
+                  value: "today"
+                - label: "Today + tomorrow (2 days)"
+                  value: "tomorrow"
+                - label: "Weekly (7 days)"
+                  value: "weekly"
+        download_window:
+          name: Download window
+          description: >
+            How far back to look for recently downloaded content.
+          default: "daily"
+          selector:
+            select:
+              options:
+                - label: "Daily (24 hours)"
+                  value: "daily"
+                - label: "Weekly (7 days)"
+                  value: "weekly"
+
+    # ===========================================================================
+    # ③ STARTUP
+    # ===========================================================================
+    startup_section:
+      name: "③ Startup"
+      icon: mdi:restart
+      description: >
+        Whether to run a full refresh when Home Assistant starts.
+      collapsed: true
+      input:
+        run_on_start:
+          name: Run on HA start
+          description: >
+            Refresh media data automatically when Home Assistant starts.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ④ L1 CONTEXT
+    # ===========================================================================
+    l1_section:
+      name: "③ L1 context"
+      icon: mdi:brain
+      description: >
+        Whether to write upcoming media info to hot context helpers.
+      collapsed: true
+      input:
+        enable_l1:
+          name: Write to L1 hot context
+          description: >
+            Update input_text helpers that the hot context template reads.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑤ NOTIFICATIONS
+    # ===========================================================================
+    notification_section:
+      name: "④ Notifications"
+      icon: mdi:bell-outline
+      description: >
+        Optional persistent notification when downloads complete.
+      collapsed: true
+      input:
+        notify_downloads:
+          name: Notify on new downloads
+          description: >
+            Send a persistent notification when new downloads are detected.
+          default: false
+          selector:
+            boolean: {}
+        notification_target:
+          name: Notification service
+          description: >
+            The notify entity to send download notifications to.
+            Only used when "Notify on new downloads" is enabled.
+          default: {}
+          selector:
+            entity:
+              filter:
+                domain: notify
+        notification_title:
+          name: Notification title
+          description: >
+            Title for download notifications.
+          default: "Media Downloaded"
+          selector:
+            text:
+              multiline: false
+
+    # ===========================================================================
+    # ⑥ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑥ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+mode: single
+max_exceeded: silent
+
+# ── Variables ──────────────────────────────────────────────────────────────
+
+variables:
+  v_refresh_interval: !input refresh_interval
+  v_enable_daily_refresh: !input enable_daily_refresh
+  v_daily_refresh_time: !input daily_refresh_time
+  v_queue_trigger: !input queue_trigger
+  v_upcoming_window: !input upcoming_window
+  v_download_window: !input download_window
+  v_enable_l1: !input enable_l1
+  v_notify_downloads: !input notify_downloads
+  v_notification_target: !input notification_target
+  v_notification_title: !input notification_title
+  v_run_on_start: !input run_on_start
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+# ── Triggers ──────────────────────────────────────────────────────────────
+
+triggers:
+  # 1. Periodic — every N hours
+  - trigger: time_pattern
+    id: periodic
+    hours: !input refresh_interval
+
+  # 2. Daily — fixed time (default midnight)
+  - trigger: time
+    id: daily
+    at: !input daily_refresh_time
+
+  # 3. Queue change — Sonarr
+  - trigger: state
+    id: queue_sonarr
+    entity_id: sensor.sonarr_queue
+
+  # 4. Queue change — Radarr
+  - trigger: state
+    id: queue_radarr
+    entity_id: sensor.radarr_queue
+
+  # 5. Manual — kill switch turns on
+  - trigger: state
+    id: manual
+    entity_id: input_boolean.ai_media_tracking_enabled
+    to: "on"
+
+  # 6. HA start
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+# ── Conditions ──────────────────────────────────────────────────────────────
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.ai_media_tracking_enabled
+    state: "on"
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'ha_start' or v_run_on_start }}
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'daily' or v_enable_daily_refresh }}
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_media_tracking') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ── Actions ──────────────────────────────────────────────────────────────
+
+actions:
+  # ── Gate: queue triggers need queue_trigger enabled ──
+  - alias: "Gate: queue triggers need queue_trigger enabled"
+    choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - queue_sonarr
+              - queue_radarr
+          - condition: template
+            value_template: "{{ not v_queue_trigger }}"
+        sequence:
+          - alias: "Stop: Queue trigger disabled"
+            stop: "Queue trigger disabled"
+
+  # ── Map windows to days/hours ──
+  - alias: "Set upcoming days, download hours"
+    variables:
+      upcoming_days: >-
+        {{ 7 if v_upcoming_window == 'weekly' else (2 if v_upcoming_window == 'tomorrow' else 1) }}
+      download_hours: >-
+        {{ 168 if v_download_window == 'weekly' else 24 }}
+
+  # ── Call pyscript service ──
+  - alias: "Promote media data from Sonarr/Radarr APIs"
+    action: pyscript.media_promote_now
+    data:
+      upcoming_days: "{{ upcoming_days }}"
+      download_hours: "{{ download_hours }}"
+      write_l1: "{{ v_enable_l1 }}"
+      force: false
+    response_variable: promote_result
+
+  # ── Handle stale data ──
+  - alias: "Handle stale data"
+    if:
+      - condition: template
+        value_template: "{{ promote_result.get('status', '') == 'error' }}"
+    then:
+      - alias: "Flag media data as stale after promotion error"
+        action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ai_media_data_stale
+
+  # ── Download notification ──
+  - alias: "Download notification"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_notify_downloads
+             and (promote_result.get('new_downloads_since_last', 0) | int) > 0
+             and v_notification_target is defined
+             and v_notification_target | length > 0 }}
+    then:
+      - alias: "Notify user about new media downloads"
+        action: persistent_notification.create
+        data:
+          title: "{{ v_notification_title }}"
+          message: >-
+            {{ promote_result.get('recent_summary', 'New media downloaded') }}
+          notification_id: "ai_media_download_complete"

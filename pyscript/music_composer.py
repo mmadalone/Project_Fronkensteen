@@ -244,16 +244,26 @@ def _is_enabled() -> bool:
     return val == "on"
 
 
-def _get_api_key() -> str:
+@pyscript_executor  # noqa: F821
+def _get_api_key_sync(secrets_path: str) -> str:
+    """Read ElevenLabs API key from secrets.yaml. Runs in executor thread."""
+    import yaml as _yaml
+    try:
+        from pathlib import Path as _Path
+        raw = _Path(secrets_path).read_text(encoding="utf-8")
+        secrets = _yaml.safe_load(raw) or {}
+        return secrets.get("elevenlabs_api_key", "")
+    except Exception:
+        return ""
+
+
+async def _get_api_key() -> str:
     """Read ElevenLabs API key from secrets.yaml (cached after first read)."""
     global _api_key_cache
     if _api_key_cache:
         return _api_key_cache
-    try:
-        raw = SECRETS_PATH.read_text(encoding="utf-8")
-        secrets = yaml.safe_load(raw) or {}
-        _api_key_cache = secrets.get("elevenlabs_api_key", "")
-    except Exception:
+    _api_key_cache = _get_api_key_sync(str(SECRETS_PATH))
+    if not _api_key_cache:
         _api_key_cache = ""
     return _api_key_cache
 
@@ -267,8 +277,16 @@ def _cache_key(agent: str, content_type: str, seed: int,
     return f"{agent}_{content_type}_{seed_hex}"
 
 
+@pyscript_executor  # noqa: F821
+def _ensure_dirs_sync(staging: str, production: str) -> None:
+    """Create cache directories if they don't exist. Runs in executor thread."""
+    from pathlib import Path as _Path
+    _Path(staging).mkdir(parents=True, exist_ok=True)
+    _Path(production).mkdir(parents=True, exist_ok=True)
+
+
 def _ensure_dirs() -> None:
-    """Create cache directories if they don't exist."""
+    """Create cache directories if they don't exist (sync fallback for startup)."""
     STAGING_DIR.mkdir(parents=True, exist_ok=True)
     PRODUCTION_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -387,7 +405,7 @@ async def _generate_music_api(
     force_instrumental: bool = True,
 ) -> bytes | None:
     """Call ElevenLabs Music Compose API. Returns audio bytes or None."""
-    api_key = _get_api_key()
+    api_key = await _get_api_key()
     if not api_key:
         log.error("music_composer: ElevenLabs API key not found in secrets.yaml")  # noqa: F821
         return None
@@ -430,7 +448,7 @@ async def _generate_music_api(
 
 async def _generate_sfx_api(prompt: str, duration_s: float = 2.0) -> bytes | None:
     """Call ElevenLabs Sound Generation API. Returns audio bytes or None."""
-    api_key = _get_api_key()
+    api_key = await _get_api_key()
     if not api_key:
         log.error("music_composer: ElevenLabs API key not found in secrets.yaml")  # noqa: F821
         return None
@@ -468,7 +486,7 @@ async def _generate_sfx_api(prompt: str, duration_s: float = 2.0) -> bytes | Non
 
 # ── FluidSynth / MIDI Functions ──────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _check_fluidsynth_sync() -> bool:
     """Check if FluidSynth binary + midiutil are available. BLOCKING — run in executor."""
     try:
@@ -488,11 +506,11 @@ async def _check_fluidsynth() -> bool:
     global _fluidsynth_available
     if _fluidsynth_available is not None:
         return _fluidsynth_available
-    _fluidsynth_available = await task.executor(_check_fluidsynth_sync)  # noqa: F821
+    _fluidsynth_available = _check_fluidsynth_sync()
     return _fluidsynth_available
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _build_midi_bytes(
     agent: str, content_type: str, duration_s: float,
     tempo_shift: float = 1.0, pitch_shift: int = 0,
@@ -630,7 +648,7 @@ def _build_midi_bytes(
     return buf.getvalue()
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _render_midi_to_wav(midi_bytes: bytes, soundfont_path: str, output_path: str) -> bool:
     """Render MIDI bytes to WAV via FluidSynth subprocess. Runs in executor thread.
 
@@ -662,75 +680,342 @@ def _render_midi_to_wav(midi_bytes: bytes, soundfont_path: str, output_path: str
 
 # ── Cache Functions ──────────────────────────────────────────────────────────
 
-def _write_cache(
+
+@pyscript_executor  # noqa: F821
+def _write_cache_sync(
+    audio_bytes: bytes, key: str, target_dir_str: str,
+    metadata_json: str, staging_str: str, production_str: str,
+) -> str:
+    """Write audio + metadata to cache. Runs in executor thread. Returns file path."""
+    from pathlib import Path as _Path
+    import json as _json
+    _Path(staging_str).mkdir(parents=True, exist_ok=True)
+    _Path(production_str).mkdir(parents=True, exist_ok=True)
+    target_dir = _Path(target_dir_str)
+    audio_path = target_dir / f"{key}.mp3"
+    meta_path = target_dir / f"{key}.json"
+    audio_path.write_bytes(audio_bytes)
+    meta_path.write_text(_json.dumps(_json.loads(metadata_json), indent=2))
+    return str(audio_path)
+
+
+@pyscript_executor  # noqa: F821
+def _write_meta_sync(meta_path_str: str, json_str: str) -> None:
+    """Write a JSON metadata file. Runs in executor thread."""
+    from pathlib import Path as _Path
+    _Path(meta_path_str).write_text(json_str)
+
+
+@pyscript_executor  # noqa: F821
+def _read_meta_sync(meta_path_str: str) -> str:
+    """Read a JSON metadata file. Runs in executor thread. Returns JSON string or empty."""
+    from pathlib import Path as _Path
+    p = _Path(meta_path_str)
+    if p.exists():
+        return p.read_text()
+    return ""
+
+
+@pyscript_executor  # noqa: F821
+def _approve_move_sync(
+    staging_str: str, production_str: str,
+    approve_mode: str, agent_filter: str, content_type_filter: str,
+) -> tuple:
+    """Move approved compositions from staging to production. Runs in executor thread.
+
+    Returns (moved_count, skipped_count).
+    """
+    from pathlib import Path as _Path
+    import json as _json
+    import shutil as _shutil
+
+    staging = _Path(staging_str)
+    production = _Path(production_str)
+    moved = 0
+    skipped = 0
+
+    for mp3 in list(staging.glob("*.mp3")):
+        meta_path = mp3.with_suffix(".json")
+        meta = {}
+        if meta_path.exists():
+            try:
+                meta = _json.loads(meta_path.read_text())
+            except (ValueError, OSError):
+                pass
+
+        if approve_mode == "by_agent" and agent_filter:
+            if meta.get("agent", "") != agent_filter:
+                skipped += 1
+                continue
+        elif approve_mode == "by_content_type" and content_type_filter:
+            if meta.get("content_type", "") != content_type_filter:
+                skipped += 1
+                continue
+
+        dest_mp3 = production / mp3.name
+        dest_meta = production / meta_path.name
+        _shutil.move(str(mp3), str(dest_mp3))
+        if meta_path.exists():
+            meta["approved"] = True
+            dest_meta.write_text(_json.dumps(meta, indent=2))
+            meta_path.unlink(missing_ok=True)
+        moved += 1
+
+    return (moved, skipped)
+
+
+@pyscript_executor  # noqa: F821
+def _scan_library_sync(
+    production_str: str, staging_str: str,
+    agent: str, content_type: str, source: str,
+    search: str, limit: int,
+) -> list:
+    """Scan library for compositions with optional filters. Runs in executor thread."""
+    from pathlib import Path as _Path
+    import json as _json
+    from datetime import datetime, timezone
+
+    production = _Path(production_str)
+    production.mkdir(parents=True, exist_ok=True)
+    results = []
+    search_lower = search.lower() if search else ""
+
+    for audio_file in sorted(
+        list(production.glob("*.mp3")) + list(production.glob("*.wav")),
+        key=lambda p: -p.stat().st_mtime,
+    ):
+        meta_path = audio_file.with_suffix(".json")
+        meta = {}
+        if meta_path.exists():
+            try:
+                meta = _json.loads(meta_path.read_text())
+            except (ValueError, OSError):
+                pass
+
+        m_agent = meta.get("agent", "unknown")
+        m_type = meta.get("content_type", "unknown")
+        m_source = meta.get("source", "unknown")
+        m_prompt = meta.get("prompt", "")
+
+        if agent and m_agent != agent:
+            continue
+        if content_type and m_type != content_type:
+            continue
+        if source and m_source != source:
+            continue
+        if search_lower:
+            haystack = f"{m_agent} {m_type} {m_source} {m_prompt}".lower()
+            if search_lower not in haystack:
+                continue
+
+        created_ts = meta.get("created", audio_file.stat().st_mtime)
+        try:
+            created_iso = datetime.fromtimestamp(created_ts, tz=timezone.utc).isoformat()
+        except Exception:
+            created_iso = str(created_ts)
+
+        results.append({
+            "library_id": audio_file.stem,
+            "agent": m_agent,
+            "content_type": m_type,
+            "source": m_source,
+            "duration_ms": meta.get("duration_ms", 0),
+            "created": created_iso,
+            "file_path": str(audio_file),
+            "prompt": (m_prompt[:120] + "...") if len(m_prompt) > 120 else m_prompt,
+            "size_mb": round(audio_file.stat().st_size / (1024 * 1024), 2),
+        })
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+async def _write_cache(
     audio_bytes: bytes, key: str, target_dir: Path,
     metadata: dict,
 ) -> str:
     """Write audio + metadata to cache. Returns file path."""
-    _ensure_dirs()
-    audio_path = target_dir / f"{key}.mp3"
-    meta_path = target_dir / f"{key}.json"
-    audio_path.write_bytes(audio_bytes)
-    meta_path.write_text(json.dumps(metadata, indent=2))
-    return str(audio_path)
+    return _write_cache_sync(
+        audio_bytes, key, str(target_dir),
+        json.dumps(metadata), str(STAGING_DIR), str(PRODUCTION_DIR),
+    )
 
 
-def _find_in_cache(key: str) -> str | None:
-    """Look up a cache key in production (preferred) then staging. Checks .mp3 and .wav."""
+@pyscript_executor  # noqa: F821
+def _count_files_sync(dir_str: str) -> int:
+    """Count .mp3 files in a directory. Runs in executor thread."""
+    from pathlib import Path as _Path
+    d = _Path(dir_str)
+    if d.exists():
+        return len(list(d.glob("*.mp3")))
+    return 0
+
+
+@pyscript_executor  # noqa: F821
+def _library_delete_sync(file_path_str: str) -> None:
+    """Delete audio file + JSON sidecar. Runs in executor thread."""
+    from pathlib import Path as _Path
+    p = _Path(file_path_str)
+    p.unlink(missing_ok=True)
+    p.with_suffix(".json").unlink(missing_ok=True)
+
+
+@pyscript_executor  # noqa: F821
+def _library_promote_sync(
+    key: str, staging_str: str, production_str: str,
+) -> dict:
+    """Move a composition from staging to production. Runs in executor thread.
+
+    Returns dict with status/action/library_id.
+    """
+    from pathlib import Path as _Path
+    import json as _json
+    import shutil as _shutil
+
+    staging = _Path(staging_str)
+    production = _Path(production_str)
+
+    # Check production first — already saved
     for ext in (".mp3", ".wav"):
-        prod = PRODUCTION_DIR / f"{key}{ext}"
+        prod = production / f"{key}{ext}"
+        if prod.exists():
+            return {"status": "ok", "action": "already_saved", "library_id": key}
+
+    # Check staging — move to production
+    for ext in (".mp3", ".wav"):
+        stage = staging / f"{key}{ext}"
+        if stage.exists():
+            dest = production / stage.name
+            _shutil.move(str(stage), str(dest))
+            meta_src = stage.with_suffix(".json")
+            if meta_src.exists():
+                meta = {}
+                try:
+                    meta = _json.loads(meta_src.read_text())
+                except (ValueError, OSError):
+                    pass
+                meta["approved"] = True
+                dest_meta = production / meta_src.name
+                dest_meta.write_text(_json.dumps(meta, indent=2))
+                meta_src.unlink(missing_ok=True)
+            return {"status": "ok", "action": "promoted", "library_id": key}
+
+    return {"status": "error", "error": f"composition '{key}' not found in staging or production"}
+
+
+@pyscript_executor  # noqa: F821
+def _prefix_scan_sync(prefix: str, production_str: str, staging_str: str) -> dict:
+    """Find first file matching prefix in production then staging. Runs in executor thread."""
+    from pathlib import Path as _Path
+    import json as _json
+
+    for dir_str, status in ((production_str, "ok"), (staging_str, "staging")):
+        d = _Path(dir_str)
+        d.mkdir(parents=True, exist_ok=True)
+        matches = sorted(
+            list(d.glob(f"{prefix}*.mp3")) + list(d.glob(f"{prefix}*.wav")),
+            key=lambda p: -p.stat().st_mtime,
+        )
+        if matches:
+            f = matches[0]
+            dur = 0
+            meta_path = f.with_suffix(".json")
+            if meta_path.exists():
+                try:
+                    meta = _json.loads(meta_path.read_text())
+                    dur = int(meta.get("duration_ms", 0))
+                except (ValueError, OSError, TypeError):
+                    pass
+            return {"status": status, "file_path": str(f), "cache_key": f.stem,
+                    "duration_ms": dur}
+
+    return {"status": "not_found", "file_path": "", "cache_key": "", "duration_ms": 0}
+
+
+@pyscript_executor  # noqa: F821
+def _find_in_cache_sync(key: str, production_str: str, staging_str: str) -> str:
+    """Look up a cache key in production then staging. Runs in executor thread."""
+    from pathlib import Path as _Path
+    for ext in (".mp3", ".wav"):
+        prod = _Path(production_str) / f"{key}{ext}"
         if prod.exists():
             return str(prod)
     for ext in (".mp3", ".wav"):
-        stage = STAGING_DIR / f"{key}{ext}"
+        stage = _Path(staging_str) / f"{key}{ext}"
         if stage.exists():
             return str(stage)
-    return None
+    return ""
 
 
-def _read_sidecar_duration(file_path: str) -> int:
-    """Read duration_ms from JSON sidecar. Returns 0 on failure."""
+async def _find_in_cache(key: str) -> str | None:
+    """Look up a cache key in production (preferred) then staging. Checks .mp3 and .wav."""
+    result = _find_in_cache_sync(key, str(PRODUCTION_DIR), str(STAGING_DIR))
+    return result if result else None
+
+
+@pyscript_executor  # noqa: F821
+def _read_sidecar_duration_sync(file_path: str) -> int:
+    """Read duration_ms from JSON sidecar. Runs in executor thread."""
+    from pathlib import Path as _Path
+    import json as _json
     try:
-        meta_path = Path(file_path).with_suffix(".json")
+        meta_path = _Path(file_path).with_suffix(".json")
         if meta_path.exists():
-            meta = json.loads(meta_path.read_text())
+            meta = _json.loads(meta_path.read_text())
             return int(meta.get("duration_ms", 0))
-    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+    except (ValueError, OSError, TypeError):
         pass
     return 0
 
 
-def _cache_inventory() -> dict:
-    """Build cache inventory stats."""
-    _ensure_dirs()
+async def _read_sidecar_duration(file_path: str) -> int:
+    """Read duration_ms from JSON sidecar. Returns 0 on failure."""
+    return _read_sidecar_duration_sync(file_path)
+
+
+@pyscript_executor  # noqa: F821
+def _cache_inventory_sync(staging_str: str, production_str: str) -> dict:
+    """Build cache inventory stats. Runs in executor thread."""
+    from pathlib import Path as _Path
+    import json as _json
+    staging = _Path(staging_str)
+    production = _Path(production_str)
+    staging.mkdir(parents=True, exist_ok=True)
+    production.mkdir(parents=True, exist_ok=True)
     stats = {"total_files": 0, "total_size_mb": 0.0, "by_agent": {}, "by_source": {}}
-    for d in (STAGING_DIR, PRODUCTION_DIR):
+    for d in (staging, production):
         for mp3 in list(d.glob("*.mp3")) + list(d.glob("*.wav")):
             stats["total_files"] += 1
             stats["total_size_mb"] += mp3.stat().st_size / (1024 * 1024)
             meta_path = mp3.with_suffix(".json")
             if meta_path.exists():
                 try:
-                    meta = json.loads(meta_path.read_text())
+                    meta = _json.loads(meta_path.read_text())
                     agent = meta.get("agent", "unknown")
                     source = meta.get("source", "unknown")
                     stats["by_agent"][agent] = stats["by_agent"].get(agent, 0) + 1
                     stats["by_source"][source] = stats["by_source"].get(source, 0) + 1
-                except (json.JSONDecodeError, OSError):
+                except (_json.JSONDecodeError, OSError):
                     pass
     stats["total_size_mb"] = round(stats["total_size_mb"], 2)
     return stats
 
 
-def _evict_cache() -> int:
-    """LRU eviction if cache exceeds size limit. Returns files removed."""
-    try:
-        max_mb = float(state.get("input_number.ai_music_cache_size_mb") or 200)  # noqa: F821
-    except (TypeError, ValueError):
-        max_mb = 200
+async def _cache_inventory() -> dict:
+    """Build cache inventory stats."""
+    return _cache_inventory_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
 
+
+@pyscript_executor  # noqa: F821
+def _evict_cache_sync(production_str: str, max_mb: float) -> int:
+    """LRU eviction if cache exceeds size limit. Runs in executor thread."""
+    from pathlib import Path as _Path
+    import time as _time
+
+    production = _Path(production_str)
     all_files = sorted(
-        list(PRODUCTION_DIR.glob("*.mp3")) + list(PRODUCTION_DIR.glob("*.wav")),
+        list(production.glob("*.mp3")) + list(production.glob("*.wav")),
         key=lambda p: p.stat().st_mtime,
     )
     total = sum([f.stat().st_size for f in all_files]) / (1024 * 1024)
@@ -739,7 +1024,7 @@ def _evict_cache() -> int:
 
     while total > max_mb and all_files:
         oldest = all_files.pop(0)
-        if time.time() - oldest.stat().st_mtime < protect_age:
+        if _time.time() - oldest.stat().st_mtime < protect_age:
             continue
         size_mb = oldest.stat().st_size / (1024 * 1024)
         oldest.unlink(missing_ok=True)
@@ -750,11 +1035,20 @@ def _evict_cache() -> int:
     return removed
 
 
+async def _evict_cache() -> int:
+    """LRU eviction if cache exceeds size limit. Returns files removed."""
+    try:
+        max_mb = float(state.get("input_number.ai_music_cache_size_mb") or 200)  # noqa: F821
+    except (TypeError, ValueError):
+        max_mb = 200
+    return _evict_cache_sync(str(PRODUCTION_DIR), max_mb)
+
+
 # ── Sensor Update ────────────────────────────────────────────────────────────
 
-def _update_cache_sensor() -> None:
+async def _update_cache_sensor() -> None:
     """Push cache stats to sensor."""
-    stats = _cache_inventory()
+    stats = await _cache_inventory()
     state.set(  # noqa: F821
         CACHE_STATS_ENTITY,
         value=str(stats["total_files"]),
@@ -787,55 +1081,77 @@ def _update_budget_sensor() -> None:
 
 # ── SoundFont Catalogue (Phase 1) ────────────────────────────────────────────
 
-def _scan_soundfonts() -> list[dict]:
-    """Scan /config/soundfonts/*.sf2, merge with catalogue YAML overlay."""
-    global _soundfont_catalogue
+@pyscript_executor  # noqa: F821
+def _scan_soundfonts_sync(
+    soundfont_dir: str, catalogue_path: str,
+) -> tuple:
+    """Scan soundfonts and catalogue. Runs in executor thread.
+
+    Returns (catalogue_list, error_msg_or_none).
+    """
+    from pathlib import Path as _Path
+    import yaml as _yaml
+
+    sf_dir = _Path(soundfont_dir)
+    cat_path = _Path(catalogue_path)
 
     # Load optional metadata overlay
-    overlay: dict[str, dict] = {}
-    if SOUNDFONT_CATALOGUE_PATH.exists():
+    overlay = {}
+    error_msg = None
+    if cat_path.exists():
         try:
-            raw = SOUNDFONT_CATALOGUE_PATH.read_text(encoding="utf-8")
-            entries = yaml.safe_load(raw) or []
+            raw = cat_path.read_text(encoding="utf-8")
+            entries = _yaml.safe_load(raw) or []
             for entry in entries:
                 fname = entry.get("filename", "")
                 if fname:
                     overlay[fname] = entry
         except Exception as exc:
-            log.warning("music_composer: failed to load soundfont catalogue: %s", exc)  # noqa: F821
+            error_msg = str(exc)
 
     catalogue = []
-    for sf in sorted(SOUNDFONT_DIR.glob("*.sf2")):
-        size_mb = round(sf.stat().st_size / (1024 * 1024), 1)
-        meta = overlay.get(sf.name, {})
-        # Auto-tier by size if not in overlay
-        if "tier" not in meta:
-            if size_mb < 10:
-                auto_tier = "quick"
-            elif size_mb < 100:
-                auto_tier = "standard"
+    if sf_dir.exists():
+        for sf in sorted(sf_dir.glob("*.sf2")):
+            size_mb = round(sf.stat().st_size / (1024 * 1024), 1)
+            meta = overlay.get(sf.name, {})
+            if "tier" not in meta:
+                if size_mb < 10:
+                    auto_tier = "quick"
+                elif size_mb < 100:
+                    auto_tier = "standard"
+                else:
+                    auto_tier = "premium"
             else:
-                auto_tier = "premium"
-        else:
-            auto_tier = meta["tier"]
+                auto_tier = meta["tier"]
 
-        catalogue.append({
-            "filename": sf.name,
-            "name": meta.get("name", sf.stem),
-            "tier": auto_tier,
-            "size_mb": size_mb,
-            "character": meta.get("character", ""),
-            "best_for": meta.get("best_for", ""),
-            "default_agents": meta.get("default_agents", []),
-        })
+            catalogue.append({
+                "filename": sf.name,
+                "name": meta.get("name", sf.stem),
+                "tier": auto_tier,
+                "size_mb": size_mb,
+                "character": meta.get("character", ""),
+                "best_for": meta.get("best_for", ""),
+                "default_agents": meta.get("default_agents", []),
+            })
 
+    return (catalogue, error_msg)
+
+
+async def _scan_soundfonts() -> list[dict]:
+    """Scan /config/soundfonts/*.sf2, merge with catalogue YAML overlay."""
+    global _soundfont_catalogue
+    catalogue, error_msg = _scan_soundfonts_sync(
+        str(SOUNDFONT_DIR), str(SOUNDFONT_CATALOGUE_PATH),
+    )
+    if error_msg:
+        log.warning("music_composer: failed to load soundfont catalogue: %s", error_msg)  # noqa: F821
     _soundfont_catalogue = catalogue
     return catalogue
 
 
-def _update_soundfont_sensor() -> None:
+async def _update_soundfont_sensor() -> None:
     """Push SoundFont catalogue to sensor entity."""
-    cat = _soundfont_catalogue or _scan_soundfonts()
+    cat = _soundfont_catalogue or await _scan_soundfonts()
     tier_counts = {}
     total_size = 0.0
     for entry in cat:
@@ -879,66 +1195,15 @@ def _enrich_prompt_with_taste(prompt: str) -> str:
 
 # ── Library Management (Phase 2) ────────────────────────────────────────────
 
-def _scan_library(
+async def _scan_library(
     agent: str = "", content_type: str = "", source: str = "",
     search: str = "", limit: int = 50,
 ) -> list[dict]:
     """Scan production dir for compositions with optional filters."""
-    _ensure_dirs()
-    results = []
-    search_lower = search.lower() if search else ""
-
-    for audio_file in sorted(
-        list(PRODUCTION_DIR.glob("*.mp3")) + list(PRODUCTION_DIR.glob("*.wav")),
-        key=lambda p: -p.stat().st_mtime,
-    ):
-        meta_path = audio_file.with_suffix(".json")
-        meta = {}
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        m_agent = meta.get("agent", "unknown")
-        m_type = meta.get("content_type", "unknown")
-        m_source = meta.get("source", "unknown")
-        m_prompt = meta.get("prompt", "")
-
-        # Apply filters
-        if agent and m_agent != agent:
-            continue
-        if content_type and m_type != content_type:
-            continue
-        if source and m_source != source:
-            continue
-        if search_lower:
-            haystack = f"{m_agent} {m_type} {m_source} {m_prompt}".lower()
-            if search_lower not in haystack:
-                continue
-
-        created_ts = meta.get("created", audio_file.stat().st_mtime)
-        try:
-            from datetime import datetime, timezone
-            created_iso = datetime.fromtimestamp(created_ts, tz=timezone.utc).isoformat()
-        except Exception:
-            created_iso = str(created_ts)
-
-        results.append({
-            "library_id": audio_file.stem,
-            "agent": m_agent,
-            "content_type": m_type,
-            "source": m_source,
-            "duration_ms": meta.get("duration_ms", 0),
-            "created": created_iso,
-            "file_path": str(audio_file),
-            "prompt": (m_prompt[:120] + "...") if len(m_prompt) > 120 else m_prompt,
-            "size_mb": round(audio_file.stat().st_size / (1024 * 1024), 2),
-        })
-        if len(results) >= limit:
-            break
-
-    return results
+    return _scan_library_sync(
+        str(PRODUCTION_DIR), str(STAGING_DIR),
+        agent, content_type, source, search, limit,
+    )
 
 
 # ── Services ─────────────────────────────────────────────────────────────────
@@ -1054,7 +1319,7 @@ async def music_compose(
     key = _cache_key(agent, content_type, seed, target_agent)
 
     # Check cache first
-    cached = _find_in_cache(key)
+    cached = await _find_in_cache(key)
     if cached:
         return {"status": "cached", "file_path": cached, "cache_key": key}
 
@@ -1092,7 +1357,7 @@ async def music_compose(
     if target_agent:
         metadata["target_agent"] = target_agent
 
-    file_path = _write_cache(audio, key, target_dir, metadata)
+    file_path = await _write_cache(audio, key, target_dir, metadata)
 
     # Track budget
     _increment_generations()
@@ -1103,8 +1368,8 @@ async def music_compose(
     except Exception:
         pass
 
-    _evict_cache()
-    _update_cache_sensor()
+    await _evict_cache()
+    await _update_cache_sensor()
     _update_budget_sensor()
     _set_result("ok", last_generation=f"{agent}/{content_type}", generation_time_s=gen_time)
 
@@ -1232,26 +1497,24 @@ async def music_compose_local(
     key = _cache_key(agent, content_type, seed)
 
     # Check cache
-    cached = _find_in_cache(key)
+    cached = await _find_in_cache(key)
     if cached:
         return {"status": "cached", "file_path": cached, "cache_key": key}
 
     start = time.time()
 
     # Build MIDI in executor thread
-    midi_bytes = await task.executor(  # noqa: F821
-        _build_midi_bytes, agent, content_type, duration_s,
+    midi_bytes = _build_midi_bytes(
+        agent, content_type, duration_s,
         tempo_shift, pitch_shift, instrument_override,
     )
     if not midi_bytes:
         return {"status": "error", "error": "MIDI generation failed"}
 
     # Render to WAV in executor thread (fluidsynth CLI, not midi2audio)
-    _ensure_dirs()
+    _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
     output_path = str(PRODUCTION_DIR / f"{key}.wav")
-    success = await task.executor(  # noqa: F821
-        _render_midi_to_wav, midi_bytes, sf_path, output_path,
-    )
+    success = _render_midi_to_wav(midi_bytes, sf_path, output_path)
     if not success:
         return {"status": "error", "error": "FluidSynth rendering failed"}
 
@@ -1271,8 +1534,7 @@ async def music_compose_local(
         "render_time_ms": render_time,
         "prompt_hint": prompt_hint,
     }
-    meta_path = PRODUCTION_DIR / f"{key}.json"
-    meta_path.write_text(json.dumps(metadata, indent=2))
+    _write_meta_sync(str(PRODUCTION_DIR / f"{key}.json"), json.dumps(metadata, indent=2))
 
     # Track calls (no cost for local)
     try:
@@ -1282,7 +1544,7 @@ async def music_compose_local(
     except Exception:
         pass
 
-    _update_cache_sensor()
+    await _update_cache_sensor()
     _set_result("ok", last_generation=f"{agent}/{content_type} (local)", render_time_ms=render_time)
 
     result = {
@@ -1410,7 +1672,7 @@ async def music_compose_status() -> dict:
     name: Music Compose Status
     description: Return cache inventory and generation stats.
     """
-    stats = _cache_inventory()
+    stats = await _cache_inventory()
     budget = {
         "used_today": _get_generations_today(),
         "daily_limit": _get_daily_limit(),
@@ -1418,20 +1680,26 @@ async def music_compose_status() -> dict:
     }
     fluidsynth = await _check_fluidsynth()
 
-    staging_files = list(STAGING_DIR.glob("*.mp3")) if STAGING_DIR.exists() else []
-    production_files = list(PRODUCTION_DIR.glob("*.mp3")) if PRODUCTION_DIR.exists() else []
+    stats = await _cache_inventory()
+    staging_count = 0
+    production_count = 0
+    try:
+        staging_count = _count_files_sync(str(STAGING_DIR))
+        production_count = _count_files_sync(str(PRODUCTION_DIR))
+    except Exception:
+        pass
 
     result = {
         "status": "ok",
         "cache": stats,
         "budget": budget,
         "fluidsynth_available": fluidsynth,
-        "staging_count": len(staging_files),
-        "production_count": len(production_files),
+        "staging_count": staging_count,
+        "production_count": production_count,
         "enabled": _is_enabled(),
     }
 
-    _update_cache_sensor()
+    await _update_cache_sensor()
     _update_budget_sensor()
     return result
 
@@ -1469,40 +1737,13 @@ async def music_compose_approve(
         selector:
           text: {}
     """
-    _ensure_dirs()
-    moved = 0
-    skipped = 0
+    _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
+    moved, skipped = _approve_move_sync(
+        str(STAGING_DIR), str(PRODUCTION_DIR),
+        approve_mode, agent_filter, content_type_filter,
+    )
 
-    for mp3 in list(STAGING_DIR.glob("*.mp3")):
-        meta_path = mp3.with_suffix(".json")
-        meta = {}
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # Apply filters
-        if approve_mode == "by_agent" and agent_filter:
-            if meta.get("agent", "") != agent_filter:
-                skipped += 1
-                continue
-        elif approve_mode == "by_content_type" and content_type_filter:
-            if meta.get("content_type", "") != content_type_filter:
-                skipped += 1
-                continue
-
-        # Move to production
-        dest_mp3 = PRODUCTION_DIR / mp3.name
-        dest_meta = PRODUCTION_DIR / meta_path.name
-        shutil.move(str(mp3), str(dest_mp3))
-        if meta_path.exists():
-            meta["approved"] = True
-            dest_meta.write_text(json.dumps(meta, indent=2))
-            meta_path.unlink(missing_ok=True)
-        moved += 1
-
-    _update_cache_sensor()
+    await _update_cache_sensor()
     return {"status": "ok", "moved": moved, "skipped": skipped}
 
 
@@ -1558,46 +1799,31 @@ async def music_compose_get(
     """
     # Direct library_id lookup (bypasses agent/content_type)
     if library_id:
-        found = _find_in_cache(library_id)
+        found = await _find_in_cache(library_id)
         if found:
+            dur = await _read_sidecar_duration(found)
             return {"status": "ok", "file_path": found, "cache_key": library_id,
-                    "duration_ms": _read_sidecar_duration(found)}
+                    "duration_ms": dur}
         return {"status": "not_found", "file_path": "", "cache_key": library_id,
                 "duration_ms": 0}
 
     # If seed specified, look for exact key
     if seed > 0:
         key = _cache_key(agent, content_type, seed, target_agent)
-        found = _find_in_cache(key)
+        found = await _find_in_cache(key)
         if found:
+            dur = await _read_sidecar_duration(found)
             return {"status": "ok", "file_path": found, "cache_key": key,
-                    "duration_ms": _read_sidecar_duration(found)}
+                    "duration_ms": dur}
         return {"status": "not_found", "file_path": "", "cache_key": key,
                 "duration_ms": 0}
 
-    # Otherwise, find any matching file in production
-    _ensure_dirs()
+    # Otherwise, find any matching file in production/staging via executor
     prefix = f"{agent}_{content_type}_"
     if content_type == "stinger" and target_agent:
         prefix = f"{agent}_{target_agent}_stinger_"
-
-    for f in sorted(
-        list(PRODUCTION_DIR.glob(f"{prefix}*.mp3")) + list(PRODUCTION_DIR.glob(f"{prefix}*.wav")),
-        key=lambda p: -p.stat().st_mtime,
-    ):
-        return {"status": "ok", "file_path": str(f), "cache_key": f.stem,
-                "duration_ms": _read_sidecar_duration(str(f))}
-
-    # Check staging as fallback
-    for f in sorted(
-        list(STAGING_DIR.glob(f"{prefix}*.mp3")) + list(STAGING_DIR.glob(f"{prefix}*.wav")),
-        key=lambda p: -p.stat().st_mtime,
-    ):
-        return {"status": "staging", "file_path": str(f), "cache_key": f.stem,
-                "duration_ms": _read_sidecar_duration(str(f))}
-
-    return {"status": "not_found", "file_path": "", "cache_key": "",
-            "duration_ms": 0}
+    result = _prefix_scan_sync(prefix, str(PRODUCTION_DIR), str(STAGING_DIR))
+    return result
 
 
 # ── SoundFont Catalogue Service (Phase 1) ────────────────────────────────────
@@ -1610,7 +1836,7 @@ async def music_soundfont_list() -> dict:
     description: >-
       Return the SoundFont catalogue with metadata for each installed font.
     """
-    cat = _soundfont_catalogue or _scan_soundfonts()
+    cat = _soundfont_catalogue or await _scan_soundfonts()
     return {"status": "ok", "soundfonts": cat, "count": len(cat)}
 
 
@@ -1661,8 +1887,8 @@ async def music_library_list(
             min: 1
             max: 200
     """
-    items = _scan_library(agent=agent, content_type=content_type,
-                          source=source, search=search, limit=limit)
+    items = await _scan_library(agent=agent, content_type=content_type,
+                                source=source, search=search, limit=limit)
     return {"status": "ok", "compositions": items, "count": len(items)}
 
 
@@ -1713,25 +1939,23 @@ async def music_library_play(
     # Resolve file
     target_file = None
     if library_id:
-        for ext in (".mp3", ".wav"):
-            candidate = PRODUCTION_DIR / f"{library_id}{ext}"
-            if candidate.exists():
-                target_file = candidate
-                break
+        found = await _find_in_cache(library_id)
+        if found:
+            target_file = Path(found)
     if not target_file and search:
-        items = _scan_library(search=search, limit=1)
+        items = await _scan_library(search=search, limit=1)
         if items:
             target_file = Path(items[0]["file_path"])
 
-    if not target_file or not target_file.exists():
+    if not target_file:
         return {"status": "not_found", "error": "no matching composition found"}
 
     # Load metadata sidecar for enriched return
     file_meta = {}
-    meta_sidecar = target_file.with_suffix(".json")
-    if meta_sidecar.exists():
+    meta_json = _read_meta_sync(str(target_file.with_suffix(".json")))
+    if meta_json:
         try:
-            file_meta = json.loads(meta_sidecar.read_text())
+            file_meta = json.loads(meta_json)
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -1816,23 +2040,20 @@ async def music_library_delete(
     """
     target_file = None
     if library_id:
-        for ext in (".mp3", ".wav"):
-            candidate = PRODUCTION_DIR / f"{library_id}{ext}"
-            if candidate.exists():
-                target_file = candidate
-                break
+        found = await _find_in_cache(library_id)
+        if found:
+            target_file = Path(found)
     if not target_file and search:
-        items = _scan_library(search=search, limit=1)
+        items = await _scan_library(search=search, limit=1)
         if items:
             target_file = Path(items[0]["file_path"])
 
-    if not target_file or not target_file.exists():
+    if not target_file:
         return {"status": "not_found", "error": "no matching composition found"}
 
     deleted_id = target_file.stem
-    target_file.unlink(missing_ok=True)
-    target_file.with_suffix(".json").unlink(missing_ok=True)
-    _update_cache_sensor()
+    _library_delete_sync(str(target_file))
+    await _update_cache_sensor()
 
     return {"status": "ok", "deleted": deleted_id}
 
@@ -1843,7 +2064,7 @@ async def _music_library_promote(library_id: str = "", search: str = "") -> dict
     If already in production, returns success (idempotent).
     Accepts library_id (cache_key / file stem) or search string.
     """
-    _ensure_dirs()
+    _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
     key = (library_id or "").strip()
 
     # Resolve via search if no direct ID
@@ -1856,36 +2077,13 @@ async def _music_library_promote(library_id: str = "", search: str = "") -> dict
     if not key:
         return {"status": "error", "error": "no library_id or search provided"}
 
-    # Check production first — already saved
-    for ext in (".mp3", ".wav"):
-        prod = PRODUCTION_DIR / f"{key}{ext}"
-        if prod.exists():
-            log.info(f"music_library: promote — {key} already in production")  # noqa: F821
-            return {"status": "ok", "action": "already_saved", "library_id": key}
-
-    # Check staging — move to production
-    for ext in (".mp3", ".wav"):
-        stage = STAGING_DIR / f"{key}{ext}"
-        if stage.exists():
-            dest = PRODUCTION_DIR / stage.name
-            shutil.move(str(stage), str(dest))
-            # Move sidecar metadata too
-            meta_src = stage.with_suffix(".json")
-            if meta_src.exists():
-                meta = {}
-                try:
-                    meta = json.loads(meta_src.read_text())
-                except (json.JSONDecodeError, OSError):
-                    pass
-                meta["approved"] = True
-                dest_meta = PRODUCTION_DIR / meta_src.name
-                dest_meta.write_text(json.dumps(meta, indent=2))
-                meta_src.unlink(missing_ok=True)
-            _update_cache_sensor()
-            log.info(f"music_library: promote — moved {key} to production")  # noqa: F821
-            return {"status": "ok", "action": "promoted", "library_id": key}
-
-    return {"status": "error", "error": f"composition '{key}' not found in staging or production"}
+    result = _library_promote_sync(key, str(STAGING_DIR), str(PRODUCTION_DIR))
+    if result.get("action") == "promoted":
+        await _update_cache_sensor()
+        log.info(f"music_library: promote — moved {key} to production")  # noqa: F821
+    elif result.get("action") == "already_saved":
+        log.info(f"music_library: promote — {key} already in production")  # noqa: F821
+    return result
 
 
 @service(supports_response="only")  # noqa: F821
@@ -1991,13 +2189,13 @@ async def music_library_action(
 @time_trigger("startup")  # noqa: F821
 async def _music_composer_startup():
     """Initialize cache directories, sensors, and SoundFont catalogue on startup."""
-    _ensure_dirs()
+    _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
     _ensure_result_entity_name(force=True)
     _set_result("idle", message="Music composer ready")
-    _update_cache_sensor()
+    await _update_cache_sensor()
     _update_budget_sensor()
-    _scan_soundfonts()
-    _update_soundfont_sensor()
+    await _scan_soundfonts()
+    await _update_soundfont_sensor()
     fs_ok = await _check_fluidsynth()
     log.info(  # noqa: F821
         "music_composer: startup complete, fluidsynth=%s, soundfonts=%d",

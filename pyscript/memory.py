@@ -33,6 +33,9 @@ HOUSEKEEPING_GRACE_MAX_DAYS = 365
 VALUE_PREVIEW_CHARS = 120
 BM25_WEIGHT = 0.5
 MIN_REL_WEIGHT = 0.05
+SEARCH_ENRICH_TOP_N = 3  # Enrich top-N search results with related entries
+SEARCH_ENRICH_MAX_RELATED = 3  # Max related entries appended per search
+SEARCH_ENRICH_MIN_WEIGHT = 0.15  # Min rel weight for search enrichment
 
 _VEC_AVAILABLE = False
 _VEC_DIMENSIONS = 512
@@ -84,6 +87,16 @@ def _ensure_result_entity_name(force: bool = False) -> None:
     global result_entity_name
     if force or not result_entity_name:
         result_entity_name = build_result_entity_name(RESULT_ENTITY)
+
+
+@pyscript_executor  # noqa: F821
+def _read_entity_config_sync(path: str) -> str:
+    """Read entity_config.yaml content. Runs in executor thread. Returns raw string or empty."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except (OSError, IOError):
+        return ""
 
 
 @pyscript_compile  # noqa: F821
@@ -277,7 +290,7 @@ def _init_vec0(conn: sqlite3.Connection, dims: int = 512) -> bool:
         return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _check_vec0_sync() -> bool:
     """Check if vec0.so can be loaded. Called from async context to set _VEC_AVAILABLE."""
     vec_so = Path(f"{VEC0_PATH}.so")
@@ -625,7 +638,7 @@ def _reset_db_ready() -> None:
         _DB_READY = False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_set_db_sync(
     key_norm: str,
     value_norm: str,
@@ -674,7 +687,7 @@ def _memory_set_db_sync(
     return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_key_exists_db_sync(key_norm: str) -> bool:
     """Return True if a memory row already exists for key."""
     for attempt in range(2):
@@ -696,7 +709,7 @@ def _memory_key_exists_db_sync(key_norm: str) -> bool:
     return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_get_db_sync(key_norm: str) -> tuple[str, dict[str, Any] | None]:
     """Fetch a memory by key, updating access time and handling expiry."""
     for attempt in range(2):
@@ -766,7 +779,7 @@ def _vec_knn_search_sync(
         return {}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_search_db_sync(
     query: str, limit: int, query_vec: list[float] | None = None
 ) -> list[dict[str, Any]]:
@@ -964,7 +977,7 @@ def _memory_search_db_sync(
     return []
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_forget_db_sync(key_norm: str) -> int:
     """Delete a memory row by key and return the number of rows removed."""
     for attempt in range(2):
@@ -995,7 +1008,7 @@ def _memory_forget_db_sync(key_norm: str) -> int:
     return 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_purge_expired_db_sync(grace_days: int = 0) -> int:
     """Remove expired rows older than the grace period and report how many were purged."""
     grace = max(int(grace_days), 0)
@@ -1039,7 +1052,7 @@ def _memory_purge_expired_db_sync(grace_days: int = 0) -> int:
     return 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_reindex_fts_db_sync() -> tuple[int, int]:
     """Rebuild the FTS index, returning counts before and after the rebuild."""
     for attempt in range(2):
@@ -1119,7 +1132,7 @@ def _memory_reindex_fts_db_sync() -> tuple[int, int]:
     return 0, 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_health_check_db_sync() -> tuple[int, int, int, int, int, int]:
     """Return basic health counts (total, expired, FTS rows, rel rows, db size bytes, archived) for diagnostics."""
     import os
@@ -1158,7 +1171,7 @@ def _memory_health_check_db_sync() -> tuple[int, int, int, int, int, int]:
     return 0, 0, 0, 0, 0, 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_auto_link_db_sync(
     source_key: str,
     candidates: list[tuple[str, float]],
@@ -1199,7 +1212,7 @@ def _memory_auto_link_db_sync(
     return 0
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_related_db_sync(
     key_norm: str, limit: int, depth: int
 ) -> list[dict[str, Any]]:
@@ -1264,7 +1277,163 @@ def _memory_related_db_sync(
     return []
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
+def _memory_search_enrich_db_sync(
+    source_keys: list[str],
+    exclude_keys: set[str],
+    max_results: int,
+    min_weight: float,
+) -> list[dict[str, Any]]:
+    """Fetch depth-1 related memories for a batch of source keys.
+
+    Returns related entries ordered by weight descending, excluding
+    any key in exclude_keys (the direct search hits).
+    """
+    if not source_keys:
+        return []
+    for attempt in range(2):
+        try:
+            _ensure_db_once(force=attempt == 1)
+            with closing(_get_db_connection()) as conn:
+                cur = conn.cursor()
+                key_ph = ",".join("?" for _ in source_keys)
+                params: list[Any] = list(source_keys) + [min_weight]
+                excl_clause = ""
+                if exclude_keys:
+                    excl_ph = ",".join("?" for _ in exclude_keys)
+                    excl_clause = f" AND r.to_key NOT IN ({excl_ph})"
+                    params.extend(exclude_keys)
+                params.append(max_results)
+
+                rows = cur.execute(
+                    f"""SELECT r.from_key AS related_to,
+                               r.to_key,
+                               r.weight,
+                               r.rel_type,
+                               m.key,
+                               m.value,
+                               m.scope,
+                               m.tags,
+                               m.created_at,
+                               m.last_used_at,
+                               m.expires_at
+                        FROM mem_rel r
+                        JOIN mem m ON m.key = r.to_key
+                        WHERE r.from_key IN ({key_ph})
+                          AND r.weight >= ?
+                          {excl_clause}
+                        ORDER BY r.weight DESC
+                        LIMIT ?""",
+                    params,
+                ).fetchall()
+
+                seen: set[str] = set()
+                results: list[dict[str, Any]] = []
+                for row in rows:
+                    to_key = row["to_key"]
+                    if to_key in seen:
+                        continue
+                    seen.add(to_key)
+                    results.append({
+                        "key": row["key"],
+                        "value": row["value"],
+                        "scope": row["scope"],
+                        "tags": row["tags"],
+                        "created_at": row["created_at"],
+                        "last_used_at": row["last_used_at"],
+                        "expires_at": row["expires_at"],
+                        "match_score": 0.0,
+                        "related": True,
+                        "related_to": row["related_to"],
+                        "rel_weight": row["weight"],
+                        "rel_type": row["rel_type"],
+                    })
+                return results
+        except sqlite3.OperationalError:
+            _reset_db_ready()
+            if attempt == 0:
+                time.sleep(0.1)
+                continue
+            raise
+    return []
+
+
+@pyscript_executor  # noqa: F821
+def _memory_semantic_autolink_db_sync(
+    batch_limit: int,
+    threshold: float,
+) -> dict[str, int]:
+    """Create content_match relationships via vec0 KNN for unlinked embeddings."""
+    if not _VEC_AVAILABLE:
+        return {"linked": 0, "keys_processed": 0}
+    for attempt in range(2):
+        try:
+            _ensure_db_once(force=attempt == 1)
+            with closing(_get_db_connection()) as conn:
+                conn.enable_load_extension(True)
+                conn.load_extension(VEC0_PATH)
+                cur = conn.cursor()
+
+                # Find keys with embeddings but no content_match edges
+                rows = cur.execute(
+                    """SELECT v.key, v.embedding
+                       FROM mem_vec v
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM mem_rel r
+                           WHERE r.from_key = v.key
+                             AND r.rel_type = 'content_match'
+                       )
+                       LIMIT ?""",
+                    (batch_limit,),
+                ).fetchall()
+
+                keys_processed = len(rows)
+                linked = 0
+                now_iso = datetime.now(UTC).isoformat()
+
+                for row in rows:
+                    source_key = row["key"]
+                    embedding_bytes = row["embedding"]
+                    if not embedding_bytes:
+                        continue
+
+                    # Decode embedding from blob to float list
+                    n_floats = len(embedding_bytes) // 4
+                    query_vec = list(struct.unpack(f"<{n_floats}f", embedding_bytes))
+
+                    # Find KNN neighbors (reuse existing function logic)
+                    neighbors = _vec_knn_search_sync(
+                        conn, query_vec, limit=5, threshold=threshold,
+                    )
+                    for neighbor_key, similarity in neighbors.items():
+                        if neighbor_key == source_key:
+                            continue
+                        # Insert bidirectional content_match edges
+                        cur.execute(
+                            """INSERT OR REPLACE INTO mem_rel
+                               (from_key, to_key, weight, rel_type, created_at)
+                               VALUES (?, ?, ?, 'content_match', ?)""",
+                            (source_key, neighbor_key, similarity, now_iso),
+                        )
+                        cur.execute(
+                            """INSERT OR REPLACE INTO mem_rel
+                               (from_key, to_key, weight, rel_type, created_at)
+                               VALUES (?, ?, ?, 'content_match', ?)""",
+                            (neighbor_key, source_key, similarity, now_iso),
+                        )
+                        linked += 1
+                conn.commit()
+                return {"linked": linked, "keys_processed": keys_processed}
+        except sqlite3.OperationalError:
+            _reset_db_ready()
+            if attempt == 0:
+                time.sleep(0.1)
+                continue
+            raise
+    return {"linked": 0, "keys_processed": 0}
+
+
+@pyscript_executor  # noqa: F821
 def _memory_link_db_sync(
     from_key: str,
     to_key: str,
@@ -1300,7 +1469,7 @@ def _memory_link_db_sync(
     return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_prune_orphan_rels_db_sync() -> int:
     """Remove relationships where either key no longer exists in mem."""
     for attempt in range(2):
@@ -1336,8 +1505,7 @@ async def _memory_set_db(
     expires_at: str | None,
 ) -> bool:
     """Async wrapper around _memory_set_db_sync to keep writes off the event loop."""
-    return await asyncio.to_thread(
-        _memory_set_db_sync,
+    return _memory_set_db_sync(
         key_norm,
         value_norm,
         scope_norm,
@@ -1350,39 +1518,39 @@ async def _memory_set_db(
 
 async def _memory_key_exists_db(key_norm: str) -> bool:
     """Async wrapper that checks key existence via _memory_key_exists_db_sync."""
-    return await asyncio.to_thread(_memory_key_exists_db_sync, key_norm)
+    return _memory_key_exists_db_sync(key_norm)
 
 
 async def _memory_get_db(key_norm: str) -> tuple[str, dict[str, Any] | None]:
     """Async wrapper for _memory_get_db_sync handling DB access in a thread."""
-    return await asyncio.to_thread(_memory_get_db_sync, key_norm)
+    return _memory_get_db_sync(key_norm)
 
 
 async def _memory_search_db(
     query: str, limit: int, query_vec: list[float] | None = None
 ) -> list[dict[str, Any]]:
     """Async wrapper that runs _memory_search_db_sync without blocking."""
-    return await asyncio.to_thread(_memory_search_db_sync, query, limit, query_vec)
+    return _memory_search_db_sync(query, limit, query_vec)
 
 
 async def _memory_forget_db(key_norm: str) -> int:
     """Async wrapper for _memory_forget_db_sync."""
-    return await asyncio.to_thread(_memory_forget_db_sync, key_norm)
+    return _memory_forget_db_sync(key_norm)
 
 
 async def _memory_purge_expired_db(grace_days: int = 0) -> int:
     """Async wrapper for the purge helper supporting a grace window."""
-    return await asyncio.to_thread(_memory_purge_expired_db_sync, grace_days)
+    return _memory_purge_expired_db_sync(grace_days)
 
 
 async def _memory_reindex_fts_db() -> tuple[int, int]:
     """Async wrapper rebuilding the FTS index via _memory_reindex_fts_db_sync."""
-    return await asyncio.to_thread(_memory_reindex_fts_db_sync)
+    return _memory_reindex_fts_db_sync()
 
 
 async def _memory_health_check_db() -> tuple[int, int, int, int, int, int]:
     """Async wrapper running the health-check query in a thread."""
-    return await asyncio.to_thread(_memory_health_check_db_sync)
+    return _memory_health_check_db_sync()
 
 
 async def _memory_auto_link_db(
@@ -1392,9 +1560,7 @@ async def _memory_auto_link_db(
     min_weight: float = MIN_REL_WEIGHT,
 ) -> int:
     """Async wrapper for _memory_auto_link_db_sync."""
-    return await asyncio.to_thread(
-        _memory_auto_link_db_sync, source_key, candidates, now_iso, min_weight
-    )
+    return _memory_auto_link_db_sync(source_key, candidates, now_iso, min_weight)
 
 
 async def _memory_auto_link(
@@ -1422,21 +1588,37 @@ async def _memory_related_db(
     key_norm: str, limit: int, depth: int
 ) -> list[dict[str, Any]]:
     """Async wrapper for _memory_related_db_sync."""
-    return await asyncio.to_thread(_memory_related_db_sync, key_norm, limit, depth)
+    return _memory_related_db_sync(key_norm, limit, depth)
+
+
+async def _memory_search_enrich_db(
+    source_keys: list[str],
+    exclude_keys: set[str],
+    max_results: int,
+    min_weight: float,
+) -> list[dict[str, Any]]:
+    """Async wrapper for _memory_search_enrich_db_sync."""
+    return _memory_search_enrich_db_sync(source_keys, exclude_keys, max_results, min_weight)
+
+
+async def _memory_semantic_autolink_db(
+    batch_limit: int,
+    threshold: float,
+) -> dict[str, int]:
+    """Async wrapper for _memory_semantic_autolink_db_sync."""
+    return _memory_semantic_autolink_db_sync(batch_limit, threshold)
 
 
 async def _memory_link_db(
     from_key: str, to_key: str, rel_type: str, now_iso: str
 ) -> bool:
     """Async wrapper for _memory_link_db_sync."""
-    return await asyncio.to_thread(
-        _memory_link_db_sync, from_key, to_key, rel_type, now_iso
-    )
+    return _memory_link_db_sync(from_key, to_key, rel_type, now_iso)
 
 
 async def _memory_prune_orphan_rels_db() -> int:
     """Async wrapper for _memory_prune_orphan_rels_db_sync."""
-    return await asyncio.to_thread(_memory_prune_orphan_rels_db_sync)
+    return _memory_prune_orphan_rels_db_sync()
 
 
 # ── Test Mode ────────────────────────────────────────────────────────────────
@@ -1736,11 +1918,11 @@ async def memory_get(key: str):
 
 
 @service(supports_response="only")  # noqa: F821
-async def memory_search(query: str, limit: int = 5):
+async def memory_search(query: str, limit: int = 5, include_related: bool = True):
     """
     yaml
     name: Memory Search
-    description: Search entries across key/value/tags using FTS; falls back to LIKE if MATCH fails.
+    description: Search entries across key/value/tags using FTS; falls back to LIKE if MATCH fails. Optionally appends graph-connected related entries.
     fields:
       query:
         name: Query
@@ -1758,8 +1940,14 @@ async def memory_search(query: str, limit: int = 5):
           number:
             min: 1
             max: 50
+      include_related:
+        name: Include Related
+        description: Append graph-connected entries to search results (search-time enrichment).
+        default: true
+        selector:
+          boolean:
     """
-    # Returns: {status, op, query, count?, results?, blended?, error?}
+    # Returns: {status, op, query, count?, related_count?, results?, blended?, error?}
     if _is_test_mode():
         log.info("memory [TEST]: would search query=%s", query)  # noqa: F821
         return {"status": "test_mode_skip"}
@@ -1805,6 +1993,48 @@ async def memory_search(query: str, limit: int = 5):
         _set_result("error", op="search", query=query, error=str(e))
         return {"status": "error", "op": "search", "query": query, "error": str(e)}
 
+    # ── Search-time enrichment: append depth-1 related entries ────────────
+    related_entries: list[dict[str, Any]] = []
+    if include_related and results:
+        try:
+            enrich_enabled = True
+            try:
+                raw_en = state.get("input_boolean.ai_memory_search_enrich")  # noqa: F821
+                enrich_enabled = str(raw_en).lower() not in ("off", "false", "0")
+            except (NameError, AttributeError):
+                pass
+
+            if enrich_enabled:
+                try:
+                    raw_max = state.get("input_number.ai_memory_search_enrich_max")  # noqa: F821
+                    max_related = int(float(raw_max)) if raw_max not in (None, "unknown", "unavailable") else SEARCH_ENRICH_MAX_RELATED
+                except (TypeError, ValueError, NameError):
+                    max_related = SEARCH_ENRICH_MAX_RELATED
+                max_related = max(0, min(max_related, 10))
+
+                try:
+                    raw_mw = state.get("input_number.ai_memory_search_enrich_min_weight")  # noqa: F821
+                    enrich_min_weight = float(raw_mw) if raw_mw not in (None, "unknown", "unavailable") else SEARCH_ENRICH_MIN_WEIGHT
+                except (TypeError, ValueError, NameError):
+                    enrich_min_weight = SEARCH_ENRICH_MIN_WEIGHT
+
+                if max_related > 0:
+                    top_n = min(SEARCH_ENRICH_TOP_N, len(results))
+                    source_keys = [r["key"] for r in results[:top_n]]
+                    seen_keys = {r["key"] for r in results}
+
+                    related_entries = await _memory_search_enrich_db(
+                        source_keys=source_keys,
+                        exclude_keys=seen_keys,
+                        max_results=max_related,
+                        min_weight=enrich_min_weight,
+                    )
+        except Exception as enrich_err:
+            log.warning(f"memory_search enrichment failed (non-fatal): {enrich_err}")  # noqa: F821
+
+    # Combine for response
+    all_results = results + related_entries
+
     # Sensor attrs get only summary (full results in service response).
     # This avoids the 16 KB recorder limit and 32 KB event-size cap.
     _set_result(
@@ -1812,14 +2042,16 @@ async def memory_search(query: str, limit: int = 5):
         op="search",
         query=query,
         count=len(results),
-        result_keys=[r.get("key", "") for r in results],
+        related_count=len(related_entries),
+        result_keys=[r.get("key", "") for r in all_results],
     )
     return {
         "status": "ok",
         "op": "search",
         "query": query,
         "count": len(results),
-        "results": results,
+        "related_count": len(related_entries),
+        "results": all_results,
         "blended": query_vec is not None,
     }
 
@@ -1952,6 +2184,84 @@ async def memory_related(key: str, limit: int = 10, depth: int = 1):
         log.error(f"memory_related failed: {e}")  # noqa: F821
         _set_result("error", op="related", key=key_norm, error=str(e))
         return {"status": "error", "op": "related", "key": key_norm, "error": str(e)}
+
+
+@service(supports_response="only")  # noqa: F821
+async def memory_semantic_autolink(batch_size: int = 50, threshold: float = 0.7):
+    """
+    yaml
+    name: Memory Semantic Autolink
+    description: >-
+      Create content_match relationships between semantically similar memories
+      via vec0 KNN. Processes embeddings that have no content_match edges yet.
+    fields:
+      batch_size:
+        name: Batch Size
+        description: Max keys to process per run.
+        default: 50
+        selector:
+          number:
+            min: 10
+            max: 200
+            mode: box
+      threshold:
+        name: Similarity Threshold
+        description: Minimum cosine similarity for content_match edges (0.0-1.0).
+        default: 0.7
+        selector:
+          number:
+            min: 0.5
+            max: 1.0
+            step: 0.05
+            mode: slider
+    """
+    if _is_test_mode():
+        log.info("memory [TEST]: would run semantic autolink")  # noqa: F821
+        return {"status": "test_mode_skip"}
+
+    if not _VEC_AVAILABLE:
+        return {"status": "error", "op": "semantic_autolink", "error": "vec0_not_available"}
+
+    # Read config from helpers with fallback to params
+    try:
+        raw_th = state.get("input_number.ai_memory_semantic_autolink_threshold")  # noqa: F821
+        th = float(raw_th) if raw_th not in (None, "unknown", "unavailable") else threshold
+    except (TypeError, ValueError, NameError):
+        th = threshold
+    th = max(0.5, min(th, 1.0))
+
+    try:
+        raw_bs = state.get("input_number.ai_memory_semantic_autolink_batch")  # noqa: F821
+        bs = int(float(raw_bs)) if raw_bs not in (None, "unknown", "unavailable") else batch_size
+    except (TypeError, ValueError, NameError):
+        bs = batch_size
+    bs = max(10, min(bs, 200))
+
+    try:
+        result = await _memory_semantic_autolink_db(batch_limit=bs, threshold=th)
+        linked = result.get("linked", 0)
+        keys_processed = result.get("keys_processed", 0)
+        if linked:
+            log.info(  # noqa: F821
+                "memory_semantic_autolink: linked=%d from %d keys (threshold=%.2f)",
+                linked, keys_processed, th,
+            )
+        _set_result(
+            "ok",
+            op="semantic_autolink",
+            linked=linked,
+            keys_processed=keys_processed,
+        )
+        return {
+            "status": "ok",
+            "op": "semantic_autolink",
+            "linked": linked,
+            "keys_processed": keys_processed,
+        }
+    except Exception as e:
+        log.error(f"memory_semantic_autolink failed: {e}")  # noqa: F821
+        _set_result("error", op="semantic_autolink", error=str(e))
+        return {"status": "error", "op": "semantic_autolink", "error": str(e)}
 
 
 @service(supports_response="only")  # noqa: F821
@@ -2164,7 +2474,7 @@ async def memory_health_check():
         _VEC_DIMENSIONS = int(float(dim_val)) if dim_val not in (None, "unknown", "unavailable") else 512
     except (TypeError, ValueError):
         _VEC_DIMENSIONS = 512
-    vec_ok = await asyncio.to_thread(_check_vec0_sync)
+    vec_ok = _check_vec0_sync()
     _VEC_AVAILABLE = vec_ok
     if vec_ok:
         log.info("memory.py: sqlite-vec loaded (dimensions=%d)", _VEC_DIMENSIONS)  # noqa: F821
@@ -2248,18 +2558,19 @@ async def memory_health_check():
         )
         # ── Scope options validation (Task 22) ──
         # Warn if discovered persons don't match YAML docstring scope options.
-        # Reads entity_config.yaml directly (bypasses module import cache).
+        # Reads entity_config.yaml via executor (avoids blocking event loop).
         try:
-            import yaml as _yaml
             _discovered = set()
             # Source 1: person.* entities
             for _eid in state.names("person"):  # noqa: F821
                 _discovered.add(_eid.split(".", 1)[1])
             # Source 2: entity_config.yaml persons overlay
-            with open("/config/pyscript/entity_config.yaml") as _f:
-                _ec = _yaml.safe_load(_f) or {}
-            for _name in (_ec.get("persons") or {}):
-                _discovered.add(_name)
+            _ec_raw = _read_entity_config_sync("/config/pyscript/entity_config.yaml")
+            if _ec_raw:
+                import yaml as _yaml
+                _ec = _yaml.safe_load(_ec_raw) or {}
+                for _name in (_ec.get("persons") or {}):
+                    _discovered.add(_name)
             _docstring_persons = {"miquel", "jessica"}  # Static YAML options — HA limitation
             if _discovered and _discovered != _docstring_persons:
                 log.warning(  # noqa: F821
@@ -2314,7 +2625,7 @@ async def memory_daily_housekeeping():
 # ── Memory Auto-Archive (I-42 Phase 2) ───────────────────────────────────────
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_archive_db_sync(
     target_count: int,
     protection_tags: list[str],
@@ -2509,9 +2820,7 @@ async def memory_archive(dry_run: bool = False):
         protection_tags = ["important", "remember", "pinned", "permanent"]
 
     try:
-        result = await asyncio.to_thread(
-            _memory_archive_db_sync, target_count, protection_tags, recency_days, bool(dry_run)
-        )
+        result = _memory_archive_db_sync(target_count, protection_tags, recency_days, bool(dry_run))
         result["status"] = "ok"
         result["op"] = "archive"
         log.info(  # noqa: F821
@@ -2525,7 +2834,7 @@ async def memory_archive(dry_run: bool = False):
         return {"status": "error", "op": "archive", "error": str(e)}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_archive_search_db_sync(
     query: str, limit: int = 20, scope: str = "all"
 ) -> list[dict[str, Any]]:
@@ -2604,16 +2913,14 @@ async def memory_archive_search(query: str = "", limit: int = 20, scope: str = "
     if not q:
         return {"status": "error", "op": "archive_search", "error": "query_empty"}
     try:
-        results = await asyncio.to_thread(
-            _memory_archive_search_db_sync, q, int(limit), scope
-        )
+        results = _memory_archive_search_db_sync(q, int(limit), scope)
         return {"status": "ok", "op": "archive_search", "query": q, "count": len(results), "results": results}
     except Exception as e:
         log.error(f"memory_archive_search failed: {e}")  # noqa: F821
         return {"status": "error", "op": "archive_search", "error": str(e)}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_archive_restore_db_sync(key: str) -> dict[str, Any]:
     """Move an entry from mem_archive back to mem. Returns {restored, key}."""
     for attempt in range(2):
@@ -2680,7 +2987,7 @@ async def memory_archive_restore(key: str = "", reembed: bool = True):
     if not k:
         return {"status": "error", "op": "archive_restore", "error": "key_empty"}
     try:
-        result = await asyncio.to_thread(_memory_archive_restore_db_sync, k)
+        result = _memory_archive_restore_db_sync(k)
         if not result.get("restored"):
             return {"status": "error", "op": "archive_restore", "error": result.get("error", "unknown")}
         # Re-embed if requested and vec is available
@@ -2696,7 +3003,7 @@ async def memory_archive_restore(key: str = "", reembed: bool = True):
         return {"status": "error", "op": "archive_restore", "error": str(e)}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _memory_archive_stats_db_sync() -> dict[str, Any]:
     """Return basic stats for mem_archive."""
     for attempt in range(2):
@@ -2736,7 +3043,7 @@ async def memory_archive_stats():
         return {"status": "test_mode_skip"}
 
     try:
-        stats = await asyncio.to_thread(_memory_archive_stats_db_sync)
+        stats = _memory_archive_stats_db_sync()
         stats["status"] = "ok"
         stats["op"] = "archive_stats"
         return stats

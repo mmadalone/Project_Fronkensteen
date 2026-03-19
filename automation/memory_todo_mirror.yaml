@@ -1,0 +1,250 @@
+blueprint:
+  name: "AI Memory – Todo List Mirror (I-6)"
+  description: |
+    ## Version 1.0
+
+    Bidirectional sync between L2 memory and a native HA todo list.
+
+    **L2→todo:** Mirrors matching memory entries to the todo list.
+    Users can browse memories in the sidebar, companion app, and Assist.
+
+    **todo→L2:** New items added to the todo list (without L2 marker)
+    are automatically created as L2 memory entries on next sync.
+
+    **Completion = Delete:** Checking off a synced item deletes the
+    L2 entry and removes the todo item.
+
+    PREREQUISITES
+    -------------
+    - Pyscript integration with memory.py deployed
+    - Local To-do integration added via UI (Settings → Integrations)
+    - A todo list entity created (e.g. "AI Memory" → todo.ai_memory)
+
+    HOW TO USE
+    ----------
+    1. Add Local To-do integration → create "AI Memory" list
+    2. Create an automation from this blueprint
+    3. Configure filters and sync interval
+    4. Memories appear in your todo list within one sync cycle
+
+  domain: automation
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/memory_todo_mirror.yaml
+
+  input:
+    # =========================================================================
+    # ① CORE
+    # =========================================================================
+    section_core:
+      name: "① Core"
+      icon: mdi:checkbox-marked-outline
+      collapsed: false
+      input:
+        todo_entity:
+          name: "Todo list entity"
+          description: "The todo entity to mirror memories to."
+          selector:
+            entity:
+              domain: todo
+
+        sync_interval:
+          name: "Sync interval (minutes)"
+          description: >-
+            How often to run the sync (time_pattern divisor).
+            /30 = every 30 minutes, /60 = every hour, etc.
+          default: "/30"
+          selector:
+            select:
+              options:
+                - "/5"
+                - "/10"
+                - "/15"
+                - "/30"
+                - "/60"
+
+    # =========================================================================
+    # ② FILTERS
+    # =========================================================================
+    section_filters:
+      name: "② Filters"
+      icon: mdi:filter
+      collapsed: true
+      input:
+        scope_filter:
+          name: "Scope filter"
+          description: "Only sync entries with this scope. 'all' includes everything."
+          default: "all"
+          selector:
+            select:
+              options:
+                - all
+                - user
+                - miquel
+                - jessica
+                - household
+
+        tag_filter:
+          name: "Tag filter"
+          description: "Comma-separated tags. Entry must have at least one. Leave empty for all."
+          default: ""
+          selector:
+            text: {}
+
+        query_filter:
+          name: "Search query"
+          description: "FTS search query. Leave empty to use scope/tag filters only."
+          default: ""
+          selector:
+            text: {}
+
+        max_age_days:
+          name: "Max age (days)"
+          description: "Only sync entries created within this many days. 0 = no limit."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 365
+
+        max_items:
+          name: "Max items"
+          description: "Maximum number of items to sync to the todo list."
+          default: 50
+          selector:
+            number:
+              min: 10
+              max: 200
+
+        include_important:
+          name: "Always include important entries"
+          description: "Always sync entries tagged 'remember' or 'important' regardless of filters."
+          default: true
+          selector:
+            boolean: {}
+
+    # =========================================================================
+    # ③ BIDIRECTIONAL
+    # =========================================================================
+    section_bidi:
+      name: "③ Bidirectional sync"
+      icon: mdi:swap-horizontal
+      collapsed: true
+      input:
+        default_scope:
+          name: "Default scope for user items"
+          description: "Scope assigned when a user-created todo item syncs to L2."
+          default: "user"
+          selector:
+            select:
+              options:
+                - user
+                - miquel
+                - jessica
+                - household
+
+    # =========================================================================
+    # ④ SAFETY
+    # =========================================================================
+    section_safety:
+      name: "④ Safety"
+      icon: mdi:shield
+      collapsed: true
+      input:
+        kill_switch:
+          name: "Kill switch"
+          description: "When ON, sync is disabled."
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+    # =========================================================================
+    # PRIVACY
+    # =========================================================================
+    privacy:
+      name: "Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  todo_entity: !input todo_entity
+  kill_switch: !input kill_switch
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+triggers:
+  - alias: "Scheduled sync"
+    trigger: time_pattern
+    minutes: !input sync_interval
+
+conditions:
+  - alias: "Kill switch check"
+    condition: template
+    value_template: >-
+      {{ kill_switch in ['', none, 'None'] or not is_state(kill_switch, 'on') }}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_memory_todo_mirror') | default('off') -%}
+      {%- if not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_t3_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Run memory↔todo sync"
+    action: pyscript.memory_todo_sync
+    data:
+      todo_entity: !input todo_entity
+      scope_filter: !input scope_filter
+      tag_filter: !input tag_filter
+      query_filter: !input query_filter
+      max_age_days: !input max_age_days
+      max_items: !input max_items
+      include_important: !input include_important
+      default_scope: !input default_scope
+    response_variable: result
+    continue_on_error: true
+
+  - alias: "Log sync result"
+    action: system_log.write
+    data:
+      message: >-
+        memory_todo_mirror: +{{ result.added_to_todo | default(0) }} todo,
+        -{{ result.removed_from_todo | default(0) }} todo,
+        +{{ result.added_to_l2 | default(0) }} L2,
+        -{{ result.deleted_from_l2 | default(0) }} L2
+      level: info
+    continue_on_error: true

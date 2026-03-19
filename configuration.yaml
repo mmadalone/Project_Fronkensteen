@@ -1,0 +1,139 @@
+homeassistant:
+  packages: !include_dir_named packages
+  media_dirs:
+    compositions: /config/www/music_cache/production
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+  extra_module_url:
+    - /local/community/lovelace-card-mod/card-mod.js
+    - /hacsfiles/custom-sidebar/custom-sidebar-yaml.js
+
+automation: !include automations.yaml
+# binary_sensor: !include binary_sensor.yaml
+
+input_boolean: !include helpers_input_boolean.yaml
+input_button:  !include helpers_input_button.yaml
+input_datetime:    !include helpers_input_datetime.yaml
+input_number:  !include helpers_input_number.yaml
+input_select:  !include helpers_input_select.yaml
+input_text:    !include helpers_input_text.yaml
+counter:       !include helpers_counter.yaml
+
+script: !include scripts.yaml
+scene: !include scenes.yaml
+template: !include template.yaml
+
+
+# conversation: !include intents/conversation_intents.yaml
+# intent_script: !include intents/intent_scripts.yaml
+    
+sensor:
+  - platform: time_date
+    display_options:
+      - "time"
+      - "date"
+      - "date_time"
+      - "date_time_utc"
+      - "date_time_iso"
+      - "time_date"
+      - "time_utc"
+
+rest_command:
+  ping_localhost:
+    url: "http://127.0.0.1"
+
+# ---------------------------------------------------------------------------
+# MadTeeVee — PVR channel detection via direct HTTP JSON-RPC
+#
+# Bypasses the Kodi HA integration's unreliable websocket event pipeline.
+# Polls Player.GetItem every 30s over HTTP. State is the channel name when
+# PVR is active, "not_pvr" for other content, "off" when idle/unreachable.
+# ---------------------------------------------------------------------------
+rest:
+  - resource: !secret kodi_madteevee_jsonrpc_url
+    method: POST
+    authentication: basic
+    username: !secret kodi_madteevee_user
+    password: !secret kodi_madteevee_pass
+    headers:
+      Content-Type: "application/json"
+    payload: >-
+      {"jsonrpc":"2.0","id":1,"method":"Player.GetItem","params":{"playerid":1,
+      "properties":["title","channel","channeltype","channelnumber","plot"]}}
+    scan_interval: 30
+    timeout: 5
+    sensor:
+      - name: "MadTeeVee PVR Channel"
+        unique_id: madteevee_pvr_channel_rest
+        icon: mdi:television-guide
+        value_template: >-
+          {% set item = value_json.get('result', {}).get('item', {}) %}
+          {% if item.get('type') == 'channel' %}
+            {{ item.get('channel', '')
+               | regex_replace('\[COLOR [^\]]*\]', '')
+               | regex_replace('\[/COLOR\]', '') | trim }}
+          {% elif item %}
+            not_pvr
+          {% else %}
+            off
+          {% endif %}
+        json_attributes_path: "$.result.item"
+        json_attributes:
+          - title
+          - channeltype
+          - channelnumber
+          - type
+          - plot
+
+# Exclude large, attribute-heavy entities from being recorded to prevent DB bloat and warnings
+recorder:
+  exclude:
+    event_types:
+      - extended_openai_conversation.conversation.finished
+    entities:
+      - sensor.sonarr_shows
+ 
+logger:
+  default: warning
+  logs:
+    custom_components.pyscript.file.music_taste: info
+    custom_components.pyscript.file.duck_manager: info
+    custom_components.pyscript.file.tts_queue: info
+    custom_components.pyscript.file.music_composer: debug
+    custom_components.pyscript.file.email_promote: info
+    custom_components.extended_openai_conversation: debug
+
+pyscript:
+ allow_all_imports: true
+ hass_is_global: true
+ requirements:
+   - midiutil==1.2.1
+
+shell_command:
+  install_openai: "pip install 'openai~=2.21.0'"
+  recompile_vec0: "bash /config/scripts/recompile_vec0.sh"
+
+# Lovelace Dashboards
+lovelace:
+  dashboards:
+    ai-dashboard:
+      mode: yaml
+      title: AI Management
+      icon: mdi:creation
+      filename: ai-dashboard.yaml
+      show_in_sidebar: true
+
+
+# ===== LCARS PANEL — Deep Space One Operations Console =====
+panel_custom:
+  - name: lcars-panel
+    sidebar_title: Deep Space One
+    sidebar_icon: mdi:star-trek
+    url_path: lcars
+    js_url: /local/lcars-panel/lcars-panel.js?v=38
+    config: {}

@@ -1,0 +1,459 @@
+blueprint:
+  name: "Alexa on-demand briefing"
+  author: madalone
+  description: >
+    # Alexa On-Demand Briefing
+
+    Thin orchestration layer triggered by Alexa-exposed input_booleans.
+    Two voice commands ("Alexa, turn on Briefing" / "Alexa, turn on Mail
+    Status") toggle the trigger booleans; the blueprint auto-resets them,
+    determines content mode, manages follow-me refcount bypass, and hands
+    off to `pyscript.proactive_briefing_now` for TTS delivery.
+
+    ### How it works
+
+    1. Alexa toggles an `input_boolean` — blueprint fires immediately.
+    2. Auto-offs the trigger boolean (prevents stuck-ON state).
+    3. Determines content mode: full briefing or mail-only.
+    4. Optionally bypasses notification follow-me via refcount scripts.
+    5. Calls `proactive_briefing_now` with the right params.
+    6. Releases follow-me bypass if claimed.
+
+    ### Design
+
+    Deliberately minimal — pyscript handles TTS routing, agent selection,
+    ducking, and volume internally. The blueprint is pure glue.
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/alexa_on_demand_briefing.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① TRIGGER & CONTENT
+    # ===========================================================================
+    trigger_and_content:
+      name: "① Trigger & content"
+      icon: mdi:microphone-message
+      collapsed: false
+      description: >
+        Alexa-exposed trigger booleans and content configuration.
+      input:
+        trigger_briefing:
+          name: Briefing trigger
+          description: >
+            Alexa-exposed input_boolean for full briefing
+            (e.g. "Alexa, turn on Briefing").
+          selector:
+            entity:
+              domain: input_boolean
+
+        trigger_mail_status:
+          name: Mail status trigger
+          description: >
+            Alexa-exposed input_boolean for mail-only briefing
+            (e.g. "Alexa, turn on Mail Status").
+          selector:
+            entity:
+              domain: input_boolean
+
+        briefing_sections:
+          name: Briefing sections (CSV)
+          description: >
+            Comma-separated sections for the full briefing.
+            Valid: greeting, weather, calendar, email, schedule,
+            household, memory, media_today, media_tomorrow, media_weekly.
+          default: "greeting,weather,calendar,email,schedule,household,memory"
+          selector:
+            text:
+              multiline: false
+
+        mail_prompt:
+          name: Mail-only LLM prompt
+          description: >
+            LLM prompt used for the mail status mode.
+          default: "Summarize my current email status concisely."
+          selector:
+            text:
+              multiline: true
+
+        briefing_prompt:
+          name: Briefing LLM prompt override
+          description: >
+            LLM prompt override for the full briefing. Use {content} for
+            assembled sections and {context} for evaluated context_template.
+            Leave empty for the pyscript default prompt.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        context_template:
+          name: Context template (Jinja2)
+          description: >
+            Jinja2 template evaluated by HA before passing to pyscript.
+            Result is injected into the {context} placeholder in the
+            briefing_prompt.
+          default: ""
+          selector:
+            template: {}
+
+        household_entities:
+          name: Household monitor entities (CSV)
+          description: >
+            Comma-separated entity IDs for the household section
+            (e.g. "climate.workshop_heater,switch.bathroom_fan").
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+    # ===========================================================================
+    # ② DELIVERY
+    # ===========================================================================
+    delivery:
+      name: "② Delivery"
+      icon: mdi:speaker
+      collapsed: false
+      description: >
+        Fallback speaker and TTS volume.
+      input:
+        fallback_speaker:
+          name: Fallback speaker
+          description: >
+            Speaker used when no presence detected or when
+            follow-me bypass is ON.
+          selector:
+            entity:
+              domain: media_player
+
+        tts_volume:
+          name: TTS volume
+          description: >
+            Volume for TTS delivery. 0 = don't change volume
+            (let pyscript handle it).
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ===========================================================================
+    # ③ BYPASS TOGGLES
+    # ===========================================================================
+    bypass_toggles:
+      name: "③ Bypass toggles"
+      icon: mdi:toggle-switch-off
+      collapsed: true
+      description: >
+        Override dispatcher and follow-me routing behaviour.
+      input:
+        bypass_dispatcher:
+          name: Bypass dispatcher
+          description: >
+            When ON, skip agent dispatcher — use the manual pipeline
+            configured in Infrastructure.
+          default: false
+          selector:
+            boolean: {}
+
+        bypass_follow_me:
+          name: Bypass follow-me
+          description: >
+            When ON, skip presence-based routing — always use the
+            fallback speaker directly.
+          default: false
+          selector:
+            boolean: {}
+
+        bypass_claim_script:
+          name: Refcount bypass claim script
+          description: >
+            Script that claims follow-me bypass via refcount.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount bypass release script
+          description: >
+            Script that releases follow-me bypass via refcount.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ④ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "④ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: >
+        Agent dispatch toggle, fallback pipeline, person gate, and privacy.
+      input:
+        use_dispatcher:
+          name: Use agent dispatcher
+          description: >
+            When ON, the dispatcher selects the agent. When OFF (or
+            bypass_dispatcher is ON), uses the configured pipeline.
+          default: true
+          selector:
+            boolean: {}
+
+        conversation_agent:
+          name: Conversation agent (pipeline)
+          description: >
+            Assist pipeline ID used when dispatcher is disabled or bypassed.
+          default: Rick
+          selector:
+            text:
+
+        person_required:
+          name: Require person home
+          description: >
+            When ON, only deliver if at least one listed person is home.
+          default: false
+          selector:
+            boolean: {}
+
+        persons:
+          name: Persons to check
+          description: >
+            Person entities for the person-home gate.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+# ===========================================================================
+# VARIABLES
+# ===========================================================================
+variables:
+  v_trigger_briefing: !input trigger_briefing
+  v_trigger_mail: !input trigger_mail_status
+  v_briefing_sections: !input briefing_sections
+  v_mail_prompt: !input mail_prompt
+  v_briefing_prompt: !input briefing_prompt
+  v_household_entities: !input household_entities
+  v_fallback_speaker: !input fallback_speaker
+  v_tts_volume: !input tts_volume
+  v_bypass_dispatcher: !input bypass_dispatcher
+  v_bypass_follow_me: !input bypass_follow_me
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+  v_use_dispatcher: !input use_dispatcher
+  v_pipeline_name: !input conversation_agent
+  v_person_required: !input person_required
+  v_persons: !input persons
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+  # Evaluate context_template (Jinja2 → string)
+  v_context: >-
+    {% set tpl = context_template | default('') %}
+    {{ tpl if tpl else '' }}
+
+  # Derived variables
+  content_mode: >-
+    {{ 'mail' if trigger.id == 'mail_status' else 'briefing' }}
+
+  briefing_label: >-
+    {% if trigger.id == 'mail_status' %}
+      mail_status
+    {% elif now().hour < 12 %}
+      morning
+    {% elif now().hour < 17 %}
+      afternoon
+    {% else %}
+      evening
+    {% endif %}
+
+  effective_sections: >-
+    {{ 'email' if content_mode == 'mail' else v_briefing_sections }}
+
+  effective_prompt: >-
+    {{ v_mail_prompt if content_mode == 'mail' else v_briefing_prompt }}
+
+  effective_dispatcher: >-
+    {{ v_use_dispatcher and not v_bypass_dispatcher }}
+
+  speaker_override: >-
+    {{ v_fallback_speaker if v_bypass_follow_me | default(false) else '' }}
+
+mode: queued
+max: 3
+max_exceeded: silent
+
+# ===========================================================================
+# TRIGGERS
+# ===========================================================================
+triggers:
+  - id: briefing
+    alias: "Alexa briefing toggle"
+    trigger: state
+    entity_id: !input trigger_briefing
+    to: "on"
+
+  - id: mail_status
+    alias: "Alexa mail status toggle"
+    trigger: state
+    entity_id: !input trigger_mail_status
+    to: "on"
+
+# ===========================================================================
+# CONDITIONS
+# ===========================================================================
+conditions:
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_alexa_on_demand_briefing') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ===========================================================================
+# ACTIONS
+# ===========================================================================
+actions:
+  # ── Step 0: Auto-off the trigger boolean ─────────────────────────────────
+  - alias: "Auto-off trigger boolean"
+    choose:
+      - alias: "Briefing trigger"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'briefing' }}"
+        sequence:
+          - alias: "Turn off briefing trigger boolean"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input trigger_briefing
+      - alias: "Mail status trigger"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'mail_status' }}"
+        sequence:
+          - alias: "Turn off mail status trigger boolean"
+            action: input_boolean.turn_off
+            target:
+              entity_id: !input trigger_mail_status
+
+  # ── Step 1: Person gate (optional) ──────────────────────────────────────
+  - alias: "Person home gate (if enabled)"
+    condition: template
+    value_template: >-
+      {% if not v_person_required %}
+        true
+      {% elif v_persons | default([]) | length == 0 %}
+        true
+      {% else %}
+        {% set ns = namespace(any_home=false) %}
+        {% for p in v_persons %}
+          {% if states(p) == 'home' %}
+            {% set ns.any_home = true %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.any_home }}
+      {% endif %}
+
+  # ── Step 2: Follow-me refcount claim ─────────────────────────────────────
+  - alias: "Set follow me was on"
+    variables:
+      follow_me_was_on: >-
+        {{ v_bypass_follow_me | default(false)
+           and is_state('input_boolean.notification_follow_me', 'on') }}
+
+  - alias: "Bypass follow-me (if configured)"
+    if:
+      - condition: template
+        value_template: "{{ follow_me_was_on }}"
+    then:
+      - alias: "Claim follow-me bypass via refcount"
+        action: "{{ v_bypass_claim }}"
+        continue_on_error: true
+        data:
+          owner: "{{ this.entity_id }}"
+
+  # ── Step 3: Call pyscript.proactive_briefing_now ─────────────────────────
+  - alias: "Deliver briefing via pyscript"
+    action: pyscript.proactive_briefing_now
+    data:
+      briefing_label: "{{ briefing_label | trim }}"
+      sections_override: "{{ effective_sections }}"
+      output_speaker_override: "{{ speaker_override }}"
+      use_dispatcher: "{{ effective_dispatcher }}"
+      pipeline_name: "{{ v_pipeline_name }}"
+      tts_volume: "{{ v_tts_volume }}"
+      briefing_prompt: "{{ effective_prompt }}"
+      extra_context: "{{ v_context }}"
+      household_entities_override: "{{ v_household_entities }}"
+    response_variable: briefing_result
+    continue_on_error: true
+
+  # ── Step 4: Follow-me refcount release ───────────────────────────────────
+  - alias: "Release follow-me bypass (if claimed)"
+    if:
+      - condition: template
+        value_template: "{{ follow_me_was_on }}"
+    then:
+      - alias: "Release follow-me bypass via refcount"
+        action: "{{ v_bypass_release }}"
+        continue_on_error: true
+        data:
+          owner: "{{ this.entity_id }}"

@@ -1,0 +1,738 @@
+blueprint:
+  name: "Calendar-aware wake-up alarm"
+  author: madalone
+  description: >
+    # Calendar-Aware Wake-Up Alarm
+
+    Fires at the dynamically-computed wake time from the bedtime advisor
+    (`input_datetime.ai_predicted_wake_time`). Optionally restricted to
+    workdays only and presence-gated.
+
+    ### How it works
+
+    1. Trigger fires at the predicted wake time (updated every 30 min by
+       `predictive_schedule.py`).
+    2. Checks workday condition (if enabled) and presence duration.
+    3. Selects agent (dispatcher or manual pipeline).
+    4. Optionally bypasses notification follow-me.
+    5. Turns on wake entities, announces via TTS (static or LLM).
+    6. Calls optional wake script for music handoff, curtains, etc.
+    7. Restores follow-me if bypassed.
+
+    ### Design
+
+    Deliberately lean — no snooze/stop cycle. Users who want snooze can
+    chain this with wake-up-guard or a custom wake script. The value here
+    is the **calendar-driven trigger time**.
+
+    ### I-29 integration
+
+    - `ai_predicted_wake_time` is set by `predictive_schedule.py`
+    - `ai_context_work_day_tomorrow` is set by `calendar_promote.py`
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/calendar_alarm.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① SCHEDULE
+    # ===========================================================================
+    schedule:
+      name: "① Schedule"
+      icon: mdi:calendar-clock
+      collapsed: false
+      description: >
+        Wake time source and workday gating.
+      input:
+        wake_time_entity:
+          name: Wake time entity
+          description: >
+            The input_datetime entity that holds the predicted wake time.
+            Updated dynamically by the bedtime advisor.
+          default: input_datetime.ai_predicted_wake_time
+          selector:
+            entity:
+              domain: input_datetime
+
+        workday_only:
+          name: Workdays only
+          description: >
+            When enabled, the alarm only fires if tomorrow is a work day
+            (based on calendar keyword detection).
+          default: true
+          selector:
+            boolean: {}
+
+        workday_entity:
+          name: Workday entity
+          description: >
+            The input_boolean that indicates whether tomorrow is a work day.
+            Set automatically by calendar_promote.py.
+          default: input_boolean.ai_context_work_day_tomorrow
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ② PRESENCE
+    # ===========================================================================
+    presence:
+      name: "② Presence"
+      icon: mdi:motion-sensor
+      collapsed: true
+      description: >
+        Optional presence gating — only fire if someone has been home.
+      input:
+        presence_sensors:
+          name: Presence sensors
+          description: >
+            One or more binary sensors that must ALL be ON for at least the
+            configured minimum minutes. Leave empty to skip presence check.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              domain: binary_sensor
+
+        presence_min_minutes:
+          name: Minimum presence duration (minutes)
+          description: >
+            How many minutes ALL presence sensors must have been continuously
+            ON before the alarm fires. Uses last_changed for accuracy.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 120
+              unit_of_measurement: min
+              mode: slider
+
+    # ===========================================================================
+    # ③ WAKE ACTIONS
+    # ===========================================================================
+    wake_actions:
+      name: "③ Wake actions"
+      icon: mdi:lightbulb-on
+      collapsed: true
+      description: >
+        Devices and scripts to activate at wake time.
+      input:
+        wake_script:
+          name: Wake-up script
+          description: >
+            Optional script for extended wake routines (music handoff,
+            curtains, coffee machine, etc.). Called after TTS announcement.
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        wake_entities:
+          name: Wake-up entities (lights/switches)
+          description: >
+            Optional lights or switches to turn on when the alarm fires.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              domain:
+                - light
+                - switch
+
+    # ===========================================================================
+    # ④ TTS & VOICE
+    # ===========================================================================
+    tts_voice:
+      name: "④ TTS & voice output"
+      icon: mdi:account-voice
+      collapsed: true
+      description: >
+        TTS output configuration and wake message.
+      input:
+        satellite_entity:
+          name: Assist Satellite
+          description: >
+            Assist Satellite entity for TTS announcements.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        tts_output_player:
+          name: Media player for TTS
+          description: >
+            Speaker or speaker group where TTS will play.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        wake_message:
+          name: Static wake-up message
+          description: >
+            Message text when LLM is disabled or LLM call fails.
+          default: "Good morning. Time to get up."
+          selector:
+            text:
+              multiline: true
+
+        use_llm:
+          name: Generate message with LLM
+          description: >
+            If enabled, generates a context-aware morning message using the
+            conversation agent. Falls back to static message on failure.
+          default: false
+          selector:
+            boolean: {}
+
+        llm_wake_prompt:
+          name: LLM wake-up prompt
+          description: >
+            Prompt sent to the conversation agent for LLM-generated messages.
+          default: >-
+            Generate a brief, friendly good-morning wake-up message. Mention
+            the time and any notable events today if available. Keep it under
+            30 seconds of speech.
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ⑤ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑤ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: >
+        Agent selection, follow-me bypass, and pipeline config.
+      input:
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically.
+            When disabled, uses the Voice Assistant below.
+          default: true
+          selector:
+            boolean: {}
+
+        conversation_agent:
+          name: Voice Assistant
+          description: >
+            The Voice Assistant (Assist Pipeline) used when dispatcher is
+            disabled.
+          default: Rick
+          selector:
+            text:
+
+        bypass_follow_me:
+          name: Bypass Notification Follow-Me
+          description: >
+            Temporarily pause notification follow-me during the wake-up
+            sequence to prevent notifications from interrupting the alarm.
+          default: true
+          selector:
+            boolean: {}
+
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        bypass_claim_script:
+          name: Refcount claim script
+          description: >
+            Script entity that registers a bypass claim. Create from the
+            Refcount Bypass — Claim blueprint.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount release script
+          description: >
+            Script entity that releases a bypass claim. Create from the
+            Refcount Bypass — Release blueprint.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ⑥ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑥ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t1"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑦ MUSIC    # ===========================================================================
+    music:
+      name: "⑦ Music"
+      icon: mdi:alarm-note
+      description: >
+        Play a wake-up melody before the alarm TTS. Requires compositions
+        in the production cache (generate via batch or weekly refresh).
+      collapsed: true
+      input:
+        wake_melody_enabled:
+          name: Play wake-up melody before alarm
+          description: >
+            Play a personalized wake-up melody before the TTS alarm.
+            Uses the agent's musical identity.
+          default: false
+          selector:
+            boolean: {}
+        wake_melody_agent:
+          name: Agent for wake melody
+          description: >
+            Which agent's musical style to use for the melody.
+            Leave empty to use the dispatched agent's style.
+            (e.g. rick, quark, deadpool, kramer, portuondo)
+          default: ""
+          selector:
+            text:
+        wake_melody_volume:
+          name: Wake melody volume
+          description: "Volume for the wake-up melody playback."
+          default: 0.3
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+        wake_melody_source:
+          name: Melody source
+          description: >
+            auto = play cached API melody if available, local FluidSynth fallback.
+            fluidsynth = always use local synthesis (free, instant).
+          default: auto
+          selector:
+            select:
+              options:
+                - label: "Auto (cached API melody, local fallback)"
+                  value: auto
+                - label: "FluidSynth only (free, instant)"
+                  value: fluidsynth
+        wake_melody_library_id_override:
+          name: Tune override (library ID)
+          description: >
+            Play a specific composition by library ID, bypassing auto-resolution.
+            Leave empty for automatic wake melody selection.
+          default: ""
+          selector:
+            text: {}
+        wake_melody_delay_after:
+          name: Pause after melody (seconds)
+          description: >
+            Seconds to wait after the wake melody before the alarm continues.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: "s"
+        wake_melody_fallback_url:
+          name: Fallback audio URL
+          description: >
+            Static audio URL to play if the library is empty and compose is off.
+            Leave empty to skip music silently.
+          default: ""
+          selector:
+            text: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_wake_time_entity: !input wake_time_entity
+  v_workday_only: !input workday_only
+  v_workday_entity: !input workday_entity
+  v_presence_sensors: !input presence_sensors
+  v_presence_min_minutes: !input presence_min_minutes
+  v_wake_script: !input wake_script
+  v_wake_entities: !input wake_entities
+  v_satellite_entity: !input satellite_entity
+  v_tts_output_player: !input tts_output_player
+  v_use_llm: !input use_llm
+  v_llm_wake_prompt: !input llm_wake_prompt
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_pipeline_name: !input conversation_agent
+  v_bypass_follow_me: !input bypass_follow_me
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+  # Music  v_wake_melody_enabled: !input wake_melody_enabled
+  v_wake_melody_agent: !input wake_melody_agent
+  v_wake_melody_volume: !input wake_melody_volume
+  v_wake_melody_source: !input wake_melody_source
+  v_wake_melody_library_id: !input wake_melody_library_id_override
+  v_wake_melody_delay_after: !input wake_melody_delay_after
+  v_wake_melody_fallback_url: !input wake_melody_fallback_url
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+triggers:
+  - alias: "Calendar-driven wake time"
+    id: calendar_wake
+    trigger: time
+    at: !input wake_time_entity
+
+conditions:
+  # Workday gate: if workday_only is true, check workday entity is ON
+  - alias: "Workday gate (if enabled)"
+    condition: template
+    value_template: >-
+      {% if v_workday_only %}
+        {{ is_state(v_workday_entity, 'on') }}
+      {% else %}
+        true
+      {% endif %}
+
+  # Presence gate: if sensors configured, all must have been ON for min_minutes
+  - alias: "Presence gate (if configured)"
+    condition: template
+    value_template: >-
+      {% set sensors = expand(v_presence_sensors | default([])) %}
+      {% if sensors | length == 0 %}
+        true
+      {% else %}
+        {% set min_secs = (v_presence_min_minutes | int(0)) * 60 %}
+        {% set ns = namespace(ok=true) %}
+        {% for s in sensors %}
+          {% if s.state != 'on'
+             or (now() - s.last_changed).total_seconds() < min_secs %}
+            {% set ns.ok = false %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.ok }}
+      {% endif %}
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_calendar_alarm') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  # ── Save follow-me state and bypass if configured ──────────────────────
+  - alias: "Set follow me was on"
+    variables:
+      follow_me_was_on: >-
+        {{ v_bypass_follow_me | default(false)
+           and is_state('input_boolean.notification_follow_me', 'on') }}
+
+  - alias: "Bypass follow-me (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Claim follow-me bypass via refcount"
+            action: "{{ v_bypass_claim }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+  # ── Agent selection — dispatcher > manual ──────────────────────────────
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for calendar alarm"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "proactive_wakeup"
+              intent_text: "calendar wake-up alarm"
+              skip_continuity: true
+            continue_on_error: true
+
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve manual pipeline for calendar alarm"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ── Turn on wake entities ──────────────────────────────────────────────
+  - alias: "Turn on wake entities (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (v_wake_entities | default([])) | length > 0 }}"
+        sequence:
+          - alias: "Turn on wake-up lights and switches"
+            action: homeassistant.turn_on
+            target:
+              entity_id: !input wake_entities
+            continue_on_error: true
+
+  # ── Prepare wake message ───────────────────────────────────────────────
+  - alias: "Prepare wake-up message (static fallback)"
+    variables:
+      wake_message: !input wake_message
+
+  - alias: "Generate wake-up text via LLM (if enabled)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ v_use_llm and (dispatch_agent | default('') | string | length > 0) }}
+        sequence:
+          - alias: "Call conversation.process for wake message"
+            action: conversation.process
+            data:
+              agent_id: "{{ dispatch_agent }}"
+              text: "{{ v_llm_wake_prompt | default('') | string }}"
+            response_variable: wake_llm
+            continue_on_error: true
+
+          - alias: "Extract LLM response (fall back to static)"
+            variables:
+              wake_message: >-
+                {% set speech = (wake_llm | default({}))
+                    .get('response', {})
+                    .get('speech', {})
+                    .get('plain', {})
+                    .get('speech', '') %}
+                {{ speech if speech | length > 0 else wake_message }}
+
+  # ── Wake-up melody ──────────────────────────────────────
+  - alias: "Play wake-up melody before alarm"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_wake_melody_enabled | bool(false) }}"
+        sequence:
+          - alias: "Determine melody agent"
+            variables:
+              _melody_agent: >-
+                {{ v_wake_melody_agent if v_wake_melody_agent | length > 0
+                   else dispatch_persona | default('rick') }}
+          - alias: "Wake melody — 3-tier resolve"
+            choose:
+              # ── Tier 1: explicit library ID override ──
+              - alias: "Tier 1 — library ID override"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ (v_wake_melody_library_id | default('')) | length > 0 }}
+                sequence:
+                  - alias: "Play library composition by ID"
+                    action: pyscript.music_library_play
+                    data:
+                      library_id: "{{ v_wake_melody_library_id }}"
+                      player: "{{ speaker_entity | default('') }}"
+                      volume: "{{ v_wake_melody_volume | float(0.3) }}"
+                    continue_on_error: true
+                  - delay:
+                      seconds: "{{ v_wake_melody_delay_after | int(2) }}"
+              # ── Tier 2: compose-get + local fallback ──
+              - alias: "Tier 2 — compose cache / FluidSynth"
+                conditions:
+                  - condition: template
+                    value_template: "{{ true }}"
+                sequence:
+                  - alias: "Try to resolve melody from cache"
+                    action: pyscript.music_compose_get
+                    response_variable: melody_result
+                    data:
+                      agent: "{{ _melody_agent }}"
+                      content_type: wake_melody
+                    continue_on_error: true
+                  - alias: "Generate local fallback if not cached and source allows"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ (melody_result | default({})).get('status', '') == 'not_found'
+                                 and v_wake_melody_source | default('auto') in ['auto', 'fluidsynth'] }}
+                        sequence:
+                          - action: pyscript.music_compose_local
+                            response_variable: melody_result
+                            data:
+                              agent: "{{ _melody_agent }}"
+                              content_type: wake_melody
+                              duration_s: 30
+                            continue_on_error: true
+                  - alias: "Play melody if available"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ (melody_result | default({})).get('file_path', '') | length > 0 }}
+                        sequence:
+                          - action: pyscript.tts_queue_speak
+                            data:
+                              media_file: "{{ melody_result.file_path }}"
+                              target: "{{ speaker_entity | default('') }}"
+                              volume_level: "{{ v_wake_melody_volume | float(0.3) }}"
+                              priority: 2
+                            continue_on_error: true
+                          - delay:
+                              seconds: "{{ v_wake_melody_delay_after | int(2) }}"
+            # ── Default: fallback URL ──
+            default:
+              - alias: "Tier 3 — fallback audio URL"
+                choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (v_wake_melody_fallback_url | default('')) | length > 0 }}
+                    sequence:
+                      - alias: "Play fallback URL on speaker"
+                        action: media_player.play_media
+                        target:
+                          entity_id: "{{ speaker_entity | default('') }}"
+                        data:
+                          media_content_id: "{{ v_wake_melody_fallback_url }}"
+                          media_content_type: music
+                          announce: true
+                        continue_on_error: true
+                      - delay:
+                          seconds: "{{ v_wake_melody_delay_after | int(2) }}"
+
+  # ── TTS announcement ──────────────────────────────────────────────────
+  - alias: "Wake-up TTS announcement"
+    choose:
+      - alias: "Via Assist Satellite (if configured)"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ (v_satellite_entity | default('')) | length > 0 }}
+        sequence:
+          - alias: "Announce via satellite"
+            action: assist_satellite.announce
+            target:
+              entity_id: !input satellite_entity
+            data:
+              message: "{{ wake_message }}"
+      - alias: "Via TTS queue (if media player configured)"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ (v_tts_output_player | default('')) | length > 0 }}
+        sequence:
+          - alias: "TTS via queue"
+            action: pyscript.tts_queue_speak
+            response_variable: _tts
+            data:
+              text: "{{ wake_message }}"
+              voice: "{{ dispatch_voice | default('') }}"
+              priority: 1
+              target_mode: explicit
+              target: "{{ v_tts_output_player }}"
+
+  # ── Post-interaction whisper ───────────────────────────────────────────
+  - alias: "Whisper — update self-awareness"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona | default('rick') }}"
+      user_query: "Delivered calendar wake-up alarm"
+      source: "automation"
+    continue_on_error: true
+
+  # ── Call wake script (if configured) ───────────────────────────────────
+  - alias: "Run wake-up script (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (v_wake_script | default('')) | length > 0 }}"
+        sequence:
+          - alias: "Execute wake-up script for extended routine"
+            action: script.turn_on
+            target:
+              entity_id: !input wake_script
+
+  # ── Restore follow-me ─────────────────────────────────────────────────
+  - alias: "Restore follow-me (if bypassed)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass via refcount"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"

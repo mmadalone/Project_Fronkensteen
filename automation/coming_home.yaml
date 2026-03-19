@@ -1,0 +1,812 @@
+blueprint:
+  name: "Coming home – AI welcome"
+  author: madalone
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/coming_home-header.jpeg)
+
+    # Coming home – AI welcome
+
+    Triggers when a person arrives home, waits for entrance occupancy to
+    confirm physical presence (GPS alone isn't reliable), resets speakers by
+    power-cycling switches, activates temporary helper switches, generates an
+    AI greeting via a conversation agent, then starts an Assist conversation
+    on Voice PE satellites. Includes GPS-bounce cooldown, timeout handling on
+    every wait, and guaranteed cleanup of temporary switches on all exit paths.
+
+    **Note:** Uses `mode: restart` — if a second person arrives while the first
+    flow is running, the first run is cancelled and temporary switches may
+    remain ON until the new run completes its cleanup.
+
+    ### Recent changes
+    - **v4.8:** Audit fix — fixed leading whitespace in `person_name` template
+      (switched to `{%- -%}` whitespace control), added `choose` guards on
+      `conversation.process` and `assist_satellite.start_conversation` to match
+      the defensive pattern used for switch entities.
+    - **v4.7:** Audit fix — added "Required." to `entrance_sensor` and
+      `conversation_agent` descriptions for clarity (advisory, §3.3).
+    - **v4.6:** Audit fix — bumped `min_version` from 2024.10.0 to 2025.4.0
+      (`assist_satellite.start_conversation` requires ≥ 2025.4) (AP-22),
+      added `source_url` for GitHub "Check for updates" support.
+  domain: automation
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/coming_home.yaml"
+  homeassistant:
+    min_version: "2025.4.0"
+  input:
+    # ===========================================================================
+    # ① DETECTION & TRIGGERS
+    # ===========================================================================
+    detection:
+      name: "① Detection & triggers"
+      icon: mdi:motion-sensor
+      collapsed: false
+      description: >-
+        Configure how arrival is detected and how aggressively GPS bounces
+        are filtered.
+      input:
+        person_entities:
+          name: Persons
+          description: >-
+            Person entities whose home/not_home state transition triggers this
+            automation. When any selected person arrives home, the flow runs.
+            The triggering person's friendly name is used in the AI greeting
+            unless overridden by the arrival names field below. At least one
+            person entity is required — the automation cannot fire without it.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+        person_names:
+          name: Arrival names (optional)
+          description: >-
+            Custom names to use in the AI greeting. One name per line. When
+            provided, these override the person entity friendly names in the
+            greeting prompt. Useful when the arriving party includes people
+            without HA person entities (partner, guest, frequent visitor).
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        entrance_sensor:
+          name: Entrance occupancy sensor
+          description: >-
+            Required. Binary sensor that confirms physical presence at the
+            entrance. The automation won't proceed on GPS alone — it waits
+            for this sensor to trigger before resetting speakers or greeting.
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class: occupancy
+
+        entrance_wait_timeout:
+          name: Entrance wait timeout
+          description: >-
+            How long to wait for the entrance sensor after the GPS state
+            changes to "home". If nobody is detected within this window,
+            the automation aborts cleanly (likely a GPS bounce).
+          default: "0:02:00"
+          selector:
+            duration: {}
+
+        cooldown_seconds:
+          name: Cooldown (seconds)
+          description: >-
+            Minimum seconds between runs to suppress GPS bounce re-triggers.
+            If the automation ran within this window, the condition block
+            skips execution entirely.
+          default: 900
+          selector:
+            number:
+              min: 60
+              max: 3600
+              unit_of_measurement: seconds
+
+    # ===========================================================================
+    # ② DEVICE PREPARATION
+    # ===========================================================================
+    preparation:
+      name: "② Device preparation"
+      icon: mdi:cog-refresh
+      collapsed: true
+      description: >-
+        Switches to power-cycle (reset speakers/audio chains) and temporary
+        helper switches to activate during the arrival flow.
+      input:
+        reset_switches:
+          name: Reset switches (optional)
+          description: >-
+            Switches to power-cycle (OFF → delay → ON) to reset speakers or
+            audio chains before the greeting plays. Clears stale Bluetooth
+            connections and audio routing issues. Leave empty to skip the
+            power-cycle step entirely.
+          default: []
+          selector:
+            entity:
+              domain: switch
+              multiple: true
+
+        reset_switch_delay:
+          name: Reset delay
+          description: >-
+            Pause between turning reset switches OFF and back ON. Increase
+            if your speakers need more time to fully power down before
+            reconnecting.
+          default: "0:00:02"
+          selector:
+            duration: {}
+
+        arrival_switches:
+          name: Temporary switches (optional)
+          description: >-
+            Switch entities to activate during the arrival flow (e.g., helper
+            booleans, relay flags). They are turned ON when the flow starts
+            and guaranteed to turn OFF on every exit path — including
+            timeouts and aborts. Leave empty to skip.
+          default: []
+          selector:
+            entity:
+              domain: switch
+              multiple: true
+
+    # ===========================================================================
+    # ③ AI CONVERSATION
+    # ===========================================================================
+    conversation:
+      name: "③ AI conversation"
+      icon: mdi:robot-outline
+      collapsed: true
+      description: >-
+        Conversation agent, greeting prompt, and satellite targeting for
+        the AI-generated welcome interaction.
+      input:
+        conversation_agent:
+          name: Voice Assistant
+          description: >-
+            Required. The Assist Pipeline (Voice Assistant) used for the
+            arrival greeting. The pipeline bundles the conversation agent,
+            TTS engine, and TTS voice. When the dispatcher is enabled, this
+            selection is overridden automatically.
+          default: Rick
+          selector:
+            text:
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+        ai_greeting_prompt:
+          name: AI greeting prompt
+          description: >-
+            Prompt sent to the conversation agent to generate the first spoken
+            line. Use {{ person_name }} to insert the arriving person's name.
+            Keep it focused — one instruction, one expected output format.
+          default: >-
+            {{ person_name }} has just arrived home and walked through the
+            entrance. Generate ONE short, snarky greeting that directly
+            addresses {{ person_name }} and invites them to choose between
+            the workshop lights, the living room lights, or both. Do NOT
+            control any devices in this response. Just return the line you
+            would say.
+          selector:
+            text:
+              multiline: true
+
+        assist_satellites:
+          name: Assist satellites
+          description: >-
+            Voice PE or Assist satellite entities that should speak the
+            AI-generated greeting and handle the follow-up conversation.
+            Multiple satellites can be targeted for whole-house announcements.
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: assist_satellite
+
+    # ===========================================================================
+    # ④ CLEANUP & TIMING
+    # ===========================================================================
+    cleanup:
+      name: "④ Cleanup & timing"
+      icon: mdi:broom
+      collapsed: true
+      description: >-
+        Post-conversation delay before temporary switches are turned off.
+      input:
+        post_conversation_delay:
+          name: Post-conversation delay
+          description: >-
+            How long to wait after starting the Assist conversation before
+            turning off temporary switches. Set this long enough for the
+            user to finish interacting with the agent.
+          default: "0:01:00"
+          selector:
+            duration: {}
+
+    # ===========================================================================
+    # ⑤ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑤ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >-
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
+          default: "miquel"
+          selector:
+            text:
+
+    # ===========================================================================
+    # ⑥ ARRIVAL MUSIC    # ===========================================================================
+    arrival_music:
+      name: "⑥ Arrival music"
+      icon: mdi:music-note
+      collapsed: true
+      description: >-
+        Play the dispatched agent's theme music before the AI greeting.
+        Uses cached library compositions (instant, free).
+      input:
+        enable_arrival_music:
+          name: Enable arrival theme
+          description: >
+            When enabled, plays the dispatched agent's theme (5s) from the
+            music library before the AI greeting. Sets the tone for the
+            welcome interaction.
+          default: false
+          selector:
+            boolean: {}
+
+        arrival_music_agent:
+          name: Theme agent
+          description: >
+            Which agent's theme to use. Empty = use dispatched agent.
+            (e.g. rick, quark, deadpool, kramer, portuondo)
+          default: ""
+          selector:
+            text:
+
+        arrival_music_content_type:
+          name: Content type
+          description: >
+            Which library tune to play. "theme" for agent identity,
+            "chime" for a short notification sound.
+          default: theme
+          selector:
+            select:
+              options:
+                - theme
+                - chime
+                - stinger
+
+        arrival_music_player:
+          name: Music output player
+          description: >
+            Speaker for the theme music. Leave empty to skip playback
+            (e.g. if satellites handle audio).
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        compose_arrival_if_missing:
+          name: Compose if missing
+          description: >
+            Generate a theme via FluidSynth if not in the library.
+          default: true
+          selector:
+            boolean: {}
+
+        arrival_library_id_override:
+          name: Tune override (library ID)
+          description: >
+            Play a specific composition by library ID, bypassing auto-resolution.
+            Browse IDs via Developer Tools → pyscript.music_library_list.
+            Leave empty for automatic selection based on agent + content type.
+          default: ""
+          selector:
+            text: {}
+
+        arrival_music_volume:
+          name: Music volume
+          description: >
+            Volume for composed tune playback (0.0–1.0). 0 = keep current volume.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        arrival_delay_after:
+          name: Pause after tune (seconds)
+          description: >
+            Seconds to wait after the tune finishes before the greeting.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: "s"
+
+        arrival_fallback_media_url:
+          name: Fallback audio URL
+          description: >
+            Static audio URL to play if the library is empty and compose is off.
+            Leave empty to skip music silently.
+          default: ""
+          selector:
+            text: {}
+
+    # ===========================================================================
+    # ⑦ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑦ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+trigger_variables:
+  cooldown_seconds: !input cooldown_seconds
+
+variables:
+  person_names_raw: !input person_names
+  reset_switches_list: !input reset_switches
+  arrival_switches_list: !input arrival_switches
+  v_pipeline_name: !input conversation_agent
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  assist_satellites_target: !input assist_satellites
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  person_name: >-
+    {%- set custom = person_names_raw | string | trim -%}
+    {%- if custom != '' -%}
+      {{ custom.split('\n') | map('trim') | reject('equalto', '') | join(' and ') }}
+    {%- elif trigger is defined and trigger.entity_id is defined -%}
+      {{ state_attr(trigger.entity_id, 'friendly_name') | default('someone') }}
+    {%- else -%}
+      someone
+    {%- endif -%}
+
+triggers:
+  - alias: "Person arrives home — GPS state changes to home"
+    trigger: state
+    entity_id: !input person_entities
+    from: not_home
+    to: home
+
+conditions:
+  - alias: "GPS bounce protection — skip if automation ran recently"
+    condition: template
+    value_template: >-
+      {{ (now() - (this.attributes.last_triggered
+         | default(as_datetime('2000-01-01'), true)))
+         .total_seconds() > (cooldown_seconds | int(900)) }}
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_coming_home') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  - alias: "Restart-safe cleanup — turn off stale arrival switches from interrupted runs"
+    choose:
+      - alias: "Arrival switches are configured"
+        conditions:
+          - condition: template
+            value_template: "{{ arrival_switches_list | length > 0 }}"
+        sequence:
+          - alias: "Turn off stale temporary switches from previous interrupted run"
+            action: switch.turn_off
+            target:
+              entity_id: "{{ arrival_switches_list }}"
+            continue_on_error: true
+
+  - alias: "Check if entrance sensor is already triggered (skip wait if so)"
+    if:
+      - condition: state
+        entity_id: !input entrance_sensor
+        state: "on"
+    then: []
+    else:
+      - alias: "Wait for entrance occupancy — GPS alone isn't reliable enough"
+        wait_for_trigger:
+          - trigger: state
+            entity_id: !input entrance_sensor
+            to: "on"
+        timeout: !input entrance_wait_timeout
+        continue_on_timeout: true
+
+      - alias: "Handle entrance timeout — clean up if nobody physically arrived"
+        if:
+          - condition: template
+            value_template: "{{ not wait.completed }}"
+        then:
+          - alias: "Stop: Entrance sensor timed out — nobody showed up. Aborting."
+            stop: "Entrance sensor timed out — nobody showed up. Aborting."
+
+  - alias: "Reset speakers — power-cycle to clear stale connections (optional, skipped if no switches configured)"
+    choose:
+      - alias: "Reset switches are configured"
+        conditions:
+          - condition: template
+            value_template: "{{ reset_switches_list | length > 0 }}"
+        sequence:
+          - alias: "Reset speakers — power-cycle OFF to clear stale connections"
+            action: switch.turn_off
+            target:
+              entity_id: "{{ reset_switches_list }}"
+            continue_on_error: true
+
+          - alias: "Wait for speaker hardware to fully power down"
+            delay: !input reset_switch_delay
+
+          - alias: "Reset speakers — power-cycle back ON"
+            action: switch.turn_on
+            target:
+              entity_id: "{{ reset_switches_list }}"
+            continue_on_error: true
+
+  - alias: "Activate temporary switches for arrival flow (optional, skipped if none configured)"
+    choose:
+      - alias: "Arrival switches are configured"
+        conditions:
+          - condition: template
+            value_template: "{{ arrival_switches_list | length > 0 }}"
+        sequence:
+          - alias: "Turn on temporary switches"
+            action: switch.turn_on
+            target:
+              entity_id: "{{ arrival_switches_list }}"
+
+  - alias: "Check if entrance already cleared (skip wait if so)"
+    if:
+      - condition: state
+        entity_id: !input entrance_sensor
+        state: "off"
+    then: []
+    else:
+      - alias: "Wait for entrance to clear — person moved past the door"
+        wait_for_trigger:
+          - trigger: state
+            entity_id: !input entrance_sensor
+            to: "off"
+        timeout: !input entrance_wait_timeout
+        continue_on_timeout: true
+
+      - alias: "Handle entrance-clear timeout — clean up and abort"
+        if:
+          - condition: template
+            value_template: "{{ not wait.completed }}"
+        then:
+          - alias: "Clean up temporary switches before aborting"
+            choose:
+              - alias: "Arrival switches are configured"
+                conditions:
+                  - condition: template
+                    value_template: "{{ arrival_switches_list | length > 0 }}"
+                sequence:
+                  - alias: "Turn off temporary arrival switches before aborting"
+                    action: switch.turn_off
+                    target:
+                      entity_id: "{{ arrival_switches_list }}"
+          - alias: "Stop: Entrance never cleared — aborting and cleaning up."
+            stop: "Entrance never cleared — aborting and cleaning up."
+
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for arrival greeting"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: ""
+              intent_text: "coming home greeting"
+              skip_continuity: true
+            continue_on_error: true
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve manual pipeline for arrival greeting"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ── Play arrival theme before greeting ───────────────────────────
+  - alias: "Play agent arrival theme"
+    variables:
+      v_enable_arrival_music: !input enable_arrival_music
+      v_arrival_music_agent: !input arrival_music_agent
+      v_arrival_music_type: !input arrival_music_content_type
+      v_arrival_music_player: !input arrival_music_player
+      v_compose_arrival_if_missing: !input compose_arrival_if_missing
+      v_arrival_library_id: !input arrival_library_id_override
+      v_arrival_volume: !input arrival_music_volume
+      v_arrival_delay_after: !input arrival_delay_after
+      v_arrival_fallback_url: !input arrival_fallback_media_url
+  - alias: "Arrival music gate"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_enable_arrival_music
+             and v_arrival_music_player | default('') | length > 0 }}
+    then:
+      - alias: "3-tier music resolution"
+        choose:
+          # ── Tier 1: explicit library ID override ──
+          - alias: "Tier 1 — play specific library ID"
+            conditions:
+              - condition: template
+                value_template: "{{ v_arrival_library_id | length > 0 }}"
+            sequence:
+              - action: pyscript.music_library_play
+                data:
+                  library_id: "{{ v_arrival_library_id }}"
+                  player: "{{ v_arrival_music_player }}"
+                  volume: "{{ v_arrival_volume | float(0) }}"
+                continue_on_error: true
+              - delay:
+                  seconds: "{{ v_arrival_delay_after | int(5) }}"
+
+          # ── Tier 2: auto-resolve from library / compose if missing ──
+          - alias: "Tier 2 — auto-resolve agent theme"
+            conditions:
+              - condition: template
+                value_template: "{{ v_arrival_library_id | length == 0 }}"
+            sequence:
+              - alias: "Look up agent theme in library"
+                action: pyscript.music_compose_get
+                response_variable: arrival_theme
+                data:
+                  agent: "{{ v_arrival_music_agent if v_arrival_music_agent else dispatch_persona | default('rick') }}"
+                  content_type: "{{ v_arrival_music_type }}"
+                continue_on_error: true
+
+              - alias: "Play theme or compose if missing"
+                choose:
+                  - alias: "Theme found"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (arrival_theme | default({})).get('status', '') in ['ok', 'staging'] }}
+                    sequence:
+                      - if:
+                          - condition: template
+                            value_template: "{{ v_arrival_volume | float(0) > 0 }}"
+                        then:
+                          - action: media_player.volume_set
+                            target:
+                              entity_id: "{{ v_arrival_music_player }}"
+                            data:
+                              volume_level: "{{ v_arrival_volume | float(0) }}"
+                            continue_on_error: true
+                      - action: media_player.play_media
+                        target:
+                          entity_id: "{{ v_arrival_music_player }}"
+                        data:
+                          media_content_id: >-
+                            {{ (arrival_theme | default({})).get('file_path', '') | replace('/config/www/', '/local/') }}
+                          media_content_type: "music"
+                          announce: true
+                        continue_on_error: true
+                      - delay:
+                          seconds: "{{ v_arrival_delay_after | int(5) }}"
+
+                  - alias: "Theme not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (arrival_theme | default({})).get('status', '') == 'not_found'
+                             and v_compose_arrival_if_missing }}
+                    sequence:
+                      - action: pyscript.music_compose_local
+                        response_variable: local_arrival
+                        data:
+                          agent: "{{ v_arrival_music_agent if v_arrival_music_agent else dispatch_persona | default('rick') }}"
+                          content_type: "{{ v_arrival_music_type }}"
+                          duration_s: 5.0
+                        continue_on_error: true
+                      - if:
+                          - condition: template
+                            value_template: >-
+                              {{ (local_arrival | default({})).get('status', '') == 'ok' }}
+                        then:
+                          - if:
+                              - condition: template
+                                value_template: "{{ v_arrival_volume | float(0) > 0 }}"
+                            then:
+                              - action: media_player.volume_set
+                                target:
+                                  entity_id: "{{ v_arrival_music_player }}"
+                                data:
+                                  volume_level: "{{ v_arrival_volume | float(0) }}"
+                                continue_on_error: true
+                          - action: media_player.play_media
+                            target:
+                              entity_id: "{{ v_arrival_music_player }}"
+                            data:
+                              media_content_id: >-
+                                {{ (local_arrival | default({})).get('file_path', '') | replace('/config/www/', '/local/') }}
+                              media_content_type: "music"
+                              announce: true
+                            continue_on_error: true
+                          - delay:
+                              seconds: "{{ v_arrival_delay_after | int(5) }}"
+
+                # ── Tier 3 (default): fallback static URL ──
+                default:
+                  - alias: "Fallback — play static audio"
+                    if:
+                      - condition: template
+                        value_template: "{{ v_arrival_fallback_url | length > 0 }}"
+                    then:
+                      - action: media_player.play_media
+                        target:
+                          entity_id: "{{ v_arrival_music_player }}"
+                        data:
+                          media_content_id: "{{ v_arrival_fallback_url }}"
+                          media_content_type: "music"
+                          announce: true
+                        continue_on_error: true
+                      - delay:
+                          seconds: "{{ v_arrival_delay_after | int(5) }}"
+
+  - alias: "Generate AI greeting via conversation agent (optional, skipped if no agent configured)"
+    choose:
+      - alias: "Conversation agent is configured"
+        conditions:
+          - condition: template
+            value_template: "{{ dispatch_agent | default('') | string | length > 0 }}"
+        sequence:
+          - alias: "Generate AI greeting via conversation agent"
+            action: conversation.process
+            response_variable: ai_greeting
+            data:
+              agent_id: "{{ dispatch_agent }}"
+              text: !input ai_greeting_prompt
+            continue_on_error: true
+
+  - alias: "Extract greeting text with fallback if LLM failed"
+    variables:
+      welcome_line: >-
+        {% set fallback = "Yo " ~ person_name ~ ", you're back. Workshop, living room, or both?" %}
+        {% set resp = (ai_greeting | default({})) %}
+        {% set speech_obj = resp.get('response', {}).get('speech', {}).get('plain', {}) %}
+        {{ speech_obj.get('speech', '') | default(fallback, true) }}
+
+  - alias: "Start Assist conversation on satellites (optional, skipped if no satellites configured)"
+    choose:
+      - alias: "Assist satellites are configured"
+        conditions:
+          - condition: template
+            value_template: "{{ assist_satellites_target | default({}) | length > 0 }}"
+        sequence:
+          - alias: "Start Assist conversation on satellites — agent handles the rest"
+            action: assist_satellite.start_conversation
+            target: !input assist_satellites
+            data:
+              preannounce: true
+              start_message: "{{ welcome_line }}"
+              extra_system_prompt: >-
+                {{ person_name }} just arrived home and heard: "{{ welcome_line }}".
+                This is an arrival conversation. Help them set up their lights, TV,
+                and music as per your rules.
+            continue_on_error: true
+
+  - alias: "Whisper — update self-awareness"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "Greeted {{ person_name }} on arrival home"
+      source: "automation"
+    continue_on_error: true
+
+  - alias: "Log greeting attempt for troubleshooting silent satellite failures"
+    action: logbook.log
+    data:
+      name: "Coming Home"
+      message: "Arrival greeting sent for {{ person_name }}: {{ welcome_line[:80] }}"
+      entity_id: !input entrance_sensor
+    continue_on_error: true
+
+  - alias: "Post-conversation cooldown before cleanup"
+    delay: !input post_conversation_delay
+
+  - alias: "Clean up — turn off all temporary switches (optional, skipped if none configured)"
+    choose:
+      - alias: "Arrival switches are configured"
+        conditions:
+          - condition: template
+            value_template: "{{ arrival_switches_list | length > 0 }}"
+        sequence:
+          - alias: "Turn off temporary arrival switches (final cleanup)"
+            action: switch.turn_off
+            target:
+              entity_id: "{{ arrival_switches_list }}"
+
+mode: restart

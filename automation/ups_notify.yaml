@@ -1,0 +1,164 @@
+blueprint:
+  name: "UPS – Notify on power events (NUT status sensor)"
+  author: madalone
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ups_notify-header.jpeg)
+
+    # UPS – Notify on power events
+
+    Send notifications when your UPS switches to battery power, when
+    utility power returns, and when the UPS battery is low. Uses the
+    NUT status sensor (e.g. sensor.madups_status, values like
+    'OL', 'OB DISCHRG', 'OL CHRG').
+
+    ### Recent changes
+    - **v2:** Full style guide compliance — modern syntax, template safety, aliases
+    - **v1:** Initial version
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/ups_notify.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① UPS SENSORS
+    # ===========================================================================
+    ups_sensors:
+      name: "① UPS sensors"
+      icon: mdi:battery-charging
+      collapsed: false
+      description: Select the NUT integration sensors for UPS status and battery level.
+      input:
+        ups_status:
+          name: UPS status sensor
+          description: >
+            Sensor from the NUT integration that reports UPS status
+            (e.g. sensor.madups_status). Values typically contain:
+            OL = On line (mains), OB = On battery, LB = Low battery.
+          default:
+          selector:
+            entity:
+              domain: sensor
+
+        ups_battery_percent:
+          name: UPS battery percentage
+          description: >
+            Sensor that reports the UPS battery charge in percent
+            (e.g. sensor.madups_battery_charge).
+          default:
+          selector:
+            entity:
+              domain: sensor
+
+    # ===========================================================================
+    # ② THRESHOLDS & NOTIFICATIONS
+    # ===========================================================================
+    thresholds_notifications:
+      name: "② Thresholds & notifications"
+      icon: mdi:bell-alert
+      collapsed: true
+      description: Battery warning level and notification target.
+      input:
+        low_battery_percent:
+          name: Low battery warning threshold (%)
+          description: >
+            When the battery drops below this value while on battery, send
+            a low-battery warning. NUT itself will still handle the actual
+            host shutdown based on its own config.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 100
+              step: 1
+              unit_of_measurement: "%"
+
+        notify_service:
+          name: Notification service
+          description: >
+            Home Assistant notify service to use, e.g.
+            notify.mobile_app_your_device. No native HA selector exists
+            for notify services, so this is a free-text field.
+          default:
+          selector:
+            text:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  notify_svc: !input notify_service
+  ups_status_entity: !input ups_status
+  ups_batt_entity: !input ups_battery_percent
+
+triggers:
+  - alias: "UPS status changed (OL/OB/CHRG transitions)"
+    id: status_change
+    trigger: state
+    entity_id: !input ups_status
+
+  - alias: "Battery dropped below low-battery threshold"
+    id: low_battery
+    trigger: numeric_state
+    entity_id: !input ups_battery_percent
+    below: !input low_battery_percent
+
+
+actions:
+  - alias: "Resolve current UPS state into variables"
+    variables:
+      current_status: "{{ states(ups_status_entity) | default('unknown') }}"
+      previous_status: "{{ trigger.from_state.state if trigger.from_state is defined and trigger.from_state is not none else '' }}"
+      batt_pct: "{{ states(ups_batt_entity) | default('0') }}"
+
+  - alias: "Route notification based on event type"
+    choose:
+      - alias: "Power outage — UPS went on battery (status contains OB)"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'status_change'
+                 and 'OB' in current_status }}
+        sequence:
+          - alias: "Notify — power outage, UPS on battery"
+            action: "{{ notify_svc }}"
+            continue_on_error: true
+            data:
+              title: "Power outage: UPS on battery"
+              message: >-
+                Mains power is out. UPS switched to battery.
+                Current charge: {{ batt_pct }}%.
+
+      - alias: "Power restored — UPS back on mains (was OB, now not)"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'status_change'
+                 and 'OB' in previous_status
+                 and 'OB' not in current_status }}
+        sequence:
+          - alias: "Notify — power restored"
+            action: "{{ notify_svc }}"
+            continue_on_error: true
+            data:
+              title: "Power restored"
+              message: >-
+                Utility power has returned. UPS is back on mains.
+                Battery now at {{ batt_pct }}%.
+
+      - alias: "Battery low while on battery — NUT shutdown may follow"
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'low_battery' }}"
+          - condition: template
+            value_template: >-
+              {{ 'OB' in (states(ups_status_entity) | default('unknown')) }}
+        sequence:
+          - alias: "Notify — battery critically low"
+            action: "{{ notify_svc }}"
+            continue_on_error: true
+            data:
+              title: "UPS battery low"
+              message: >-
+                UPS battery is low ({{ batt_pct }}%).
+                System will shut down soon according to NUT settings.

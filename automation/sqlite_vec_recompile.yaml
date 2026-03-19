@@ -1,0 +1,156 @@
+# =============================================================================
+# sqlite-vec Recompile (v1.0.0) — I-2a
+# =============================================================================
+# When HA Core updates, the Alpine base image (and its SQLite version) may
+# change, making the compiled vec0.so incompatible. This blueprint detects
+# HA Core updates and triggers a recompile if vec0.so no longer loads.
+#
+# Requires: SSH addon for shell command execution.
+# =============================================================================
+
+blueprint:
+  name: "sqlite-vec Recompile (v1.0.0)"
+  author: madalone
+  description: >
+    # sqlite-vec Recompile (I-2a)
+
+
+    Monitors Home Assistant Core updates and recompiles `vec0.so` if the
+    sqlite-vec extension becomes incompatible after an update.
+
+
+    **How it works:**
+
+    1. Triggers when `update.home_assistant_core_update` state changes
+       (after an update is installed)
+
+    2. Runs `pyscript.memory_vec_health_check` to test-load vec0.so
+
+    3. If the health check fails, executes a shell command to recompile
+       from source
+
+    4. Sends a notification with success/failure status
+
+
+    ### Requirements
+
+    - SSH addon installed and running
+
+    - `shell_command.recompile_vec0` configured in configuration.yaml
+
+    - `/config/scripts/recompile_vec0.sh` present
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/sqlite_vec_recompile.yaml
+
+  input:
+    # ===========================================================================
+    # ① Core
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:database-refresh
+      description: Notification target and kill switch.
+      collapsed: false
+      input:
+        notification_target:
+          name: Notification Target
+          description: >-
+            Mobile device to notify about recompile results.
+            Example: notify.mobile_app_iphone
+          default: ""
+          selector:
+            text:
+
+        kill_switch:
+          name: Kill Switch
+          description: >-
+            Boolean to disable without removing the automation.
+            ON = recompile disabled.
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+triggers:
+  - trigger: state
+    entity_id: update.home_assistant_core_update
+    to: "off"
+    # "off" = update no longer available = just installed
+
+variables:
+  v_kill_switch: !input kill_switch
+
+conditions:
+  # Kill switch check
+  - alias: "Kill switch gate"
+    condition: template
+    value_template: >-
+      {% if v_kill_switch in ['', none, 'None'] or v_kill_switch is mapping %}
+        true
+      {% else %}
+        {{ not is_state(v_kill_switch, 'on') }}
+      {% endif %}
+
+actions:
+  # Step 1: Wait for HA to stabilize after update
+  - alias: "Wait 2 minutes"
+    delay:
+      minutes: 2
+
+  # Step 2: Health check
+  - alias: "Test-load vec0.so"
+    action: pyscript.memory_vec_health_check
+    response_variable: health
+
+  # Step 3: If healthy, done
+  - alias: "Check health result"
+    if:
+      - condition: template
+        value_template: "{{ health.vec_available | default(false) }}"
+    then:
+      - alias: "Notify — vec0 still compatible"
+        action: !input notification_target
+        continue_on_error: true
+        data:
+          title: "sqlite-vec OK"
+          message: "vec0.so loaded successfully after HA Core update."
+          data:
+            tag: sqlite-vec-recompile
+      - alias: "Stop: vec0 still compatible"
+        stop: "vec0 still compatible"
+
+  # Step 4: Recompile
+  - alias: "Recompile vec0.so via shell"
+    action: shell_command.recompile_vec0
+    continue_on_error: true
+
+  # Step 5: Re-check
+  - alias: "Wait 10 seconds"
+    delay:
+      seconds: 10
+  - alias: "Re-test vec0.so after recompile"
+    action: pyscript.memory_vec_health_check
+    response_variable: recheck
+
+  # Step 6: Notify result
+  - alias: "Notify recompile result"
+    action: !input notification_target
+    continue_on_error: true
+    data:
+      title: >-
+        sqlite-vec {{ 'Recompiled' if recheck.vec_available | default(false) else 'FAILED' }}
+      message: >-
+        {% if recheck.vec_available | default(false) %}
+          vec0.so recompiled successfully after HA Core update.
+          Dimensions: {{ recheck.dimensions | default('?') }}
+        {% else %}
+          vec0.so recompile FAILED after HA Core update.
+          Error: {{ recheck.error | default('unknown') }}
+          Semantic search is disabled until manually resolved.
+        {% endif %}
+      data:
+        tag: sqlite-vec-recompile
+        persistent: true
+
+mode: single

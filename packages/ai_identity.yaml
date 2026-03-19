@@ -6,7 +6,7 @@
 #   sensor.identity_confidence_miquel       — 0–100 confidence score (current max 100)
 #   sensor.identity_confidence_jessica      — 0–100 confidence score (current max 70)
 #   sensor.occupancy_mode                   — solo_{slug} | dual | away | guest (Task 22: dynamic)
-#   input_boolean.guest_mode                — manual override, forces all scores to 0
+#   input_boolean.ai_guest_mode                — manual override, forces all scores to 0
 #   input_boolean.ai_sustained_solo_zone    — set by automation after 10 min sustained
 #   input_boolean.ai_wifi_stale_jessica     — WiFi stale flag (zeroes Jessica WiFi signal)
 #   input_number.ai_wifi_stale_timeout      — tunable timeout for WiFi staleness (5-60 min)
@@ -18,11 +18,11 @@
 #   GPS Companion App     — device_tracker.madoppo (Miquel only; Jessica TBD)
 #   FP2 mmWave zones      — 7 binary_sensors (anonymous, inferred via solo occupancy)
 #
-# Scoring:
-#   WiFi home              = 40 pts  (Jessica: zeroed when WiFi stale flag is on)
-#   GPS home               = 30 pts  (Miquel only)
-#   FP2 solo infer         = 20 pts  (single phone on WiFi + any FP2 zone active)
-#   Sustained solo zone    = 10 pts  (solo WiFi + exactly 1 FP2 zone for 10+ min)
+# Scoring (weights configurable via input_number.ai_wifi_score_* helpers):
+#   WiFi home              = primary pts   (Jessica: zeroed when WiFi stale flag is on)
+#   GPS home               = secondary pts (Miquel only)
+#   FP2 solo infer         = tertiary pts  (single phone on WiFi + any FP2 zone active)
+#   Sustained solo zone    = quaternary pts (solo WiFi + exactly 1 FP2 zone for 10+ min)
 #   WiFi stale (Jessica)   =  0 pts  (WiFi home + no FP2 for N min → zero WiFi signal)
 #   Guest mode ON          =  0 pts  (hard override, no exceptions)
 #
@@ -91,7 +91,7 @@ template:
           {{ states('device_tracker.oppo_a60')
              not in ['unavailable', 'unknown'] }}
         state: >-
-          {%- if is_state('input_boolean.guest_mode', 'on') -%}
+          {%- if is_state('input_boolean.ai_guest_mode', 'on') -%}
           0
           {%- else -%}
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
@@ -107,10 +107,14 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = m_wifi and not j_wifi -%}
           {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
-          {{ (40 if m_wifi else 0)
-          + (30 if m_gps else 0)
-          + (20 if solo and fp2_on else 0)
-          + (10 if solo and sustained else 0) }}
+          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
+          {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(30) -%}
+          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
+          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
+          {{ (w1 if m_wifi else 0)
+          + (w2 if m_gps else 0)
+          + (w3 if solo and fp2_on else 0)
+          + (w4 if solo and sustained else 0) }}
           {%- endif -%}
 
       # ── JESSICA CONFIDENCE ────────────────────────────────────────────────
@@ -125,7 +129,7 @@ template:
           {{ states('device_tracker.oppo_a38')
              not in ['unavailable', 'unknown'] }}
         state: >-
-          {%- if is_state('input_boolean.guest_mode', 'on') -%}
+          {%- if is_state('input_boolean.ai_guest_mode', 'on') -%}
           0
           {%- else -%}
           {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
@@ -141,9 +145,12 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = j_wifi and not m_wifi -%}
           {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
-          {{ (40 if j_wifi and not stale else 0)
-          + (20 if solo and fp2_on else 0)
-          + (10 if solo and sustained else 0) }}
+          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
+          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
+          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
+          {{ (w1 if j_wifi and not stale else 0)
+          + (w3 if solo and fp2_on else 0)
+          + (w4 if solo and sustained else 0) }}
           {%- endif -%}
 
       # ── OCCUPANCY MODE (Task 22: dynamic from person.* entities) ──────────
@@ -155,7 +162,7 @@ template:
         availability: >-
           {{ states.person | list | length > 0 }}
         state: >-
-          {%- if is_state('input_boolean.guest_mode', 'on') -%}
+          {%- if is_state('input_boolean.ai_guest_mode', 'on') -%}
           guest
           {%- else -%}
           {%- set ns = namespace(home=[]) -%}

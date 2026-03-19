@@ -9,6 +9,8 @@
 #   input_number.ai_away_travel_buffer_minutes — calendar fusion buffer
 #   input_number.ai_away_flap_debounce_seconds — WiFi flap debounce (G14)
 #   input_number.ai_away_prediction_update_minutes — periodic update interval (G8)
+#   input_number.ai_away_ordinal_min_samples — ordinal filtering threshold (I-40b)
+#   counter.ai_away_trip_count_{slug} — per-person daily trip counter (I-40b)
 #   sensor.ai_away_prediction — pyscript sensor with full attributes (I-54)
 #   input_text.ai_away_prediction_accuracy — rolling MAE (G12)
 #   input_datetime.ai_away_departed_{slug} — per-person departure timestamp (Task 22)
@@ -26,7 +28,7 @@
 #   Departure debounced via ai_away_flap_debounce_seconds (G14)
 #
 # Time trigger (pyscript):
-#   Daily rebuild at 04:15 AM
+#   Daily rebuild at 04:15 AM (includes trip counter reset — I-40b)
 #   Periodic prediction update while away (G8)
 #
 # Dependencies:
@@ -34,8 +36,10 @@
 #   pyscript/memory.py (L2 memory)
 #   packages/ai_identity.yaml (sensor.occupancy_mode)
 #   packages/ai_test_harness.yaml (test mode toggle)
+#   helpers_counter.yaml (trip counters — I-40b)
 #
 # I-40a hardening: G1–G12, G14 (2026-03-12)
+# I-40b multi-trip: ordinal tracking, enriched samples, ordinal gate (2026-03-18)
 # Deployed: 2026-03-12
 # =============================================================================
 

@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import build_result_entity_name, load_entity_config, reload_entity_config
 
 # =============================================================================
 # Presence Pattern Extraction — Task 15 of Voice Context Architecture
@@ -160,7 +160,7 @@ def _resolve_metadata_ids(entity_map: dict = None) -> dict[int, str]:
         return {row[0]: entity_map[row[1]] for row in cursor}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _extract_data_sync(lookback_days: int, transition_window_sec: int = 300, entity_map: dict = None) -> dict[str, Any]:
     """Extract zone transitions and dwell times from recorder DB.
 
@@ -658,7 +658,7 @@ async def presence_extract_transitions(
     filtered_entities = {k: v for k, v in _get_fp2_entities().items() if _is_zone_enabled(v)}
 
     try:
-        data = await asyncio.to_thread(_extract_data_sync, days, _get_transition_window_sec(), filtered_entities)
+        data = _extract_data_sync(days, _get_transition_window_sec(), filtered_entities)
     except Exception as exc:
         log.error(f"presence: extraction failed: {exc}")  # noqa: F821
         _set_result("error", op="extract", error=str(exc))
@@ -822,7 +822,7 @@ async def presence_rebuild_patterns():
 
         # Step 2: Extract fresh data from recorder (only enabled zones)
         filtered_entities = {k: v for k, v in _get_fp2_entities().items() if _is_zone_enabled(v)}
-        data = await asyncio.to_thread(_extract_data_sync, days, _get_transition_window_sec(), filtered_entities)
+        data = _extract_data_sync(days, _get_transition_window_sec(), filtered_entities)
         transitions = data["transitions"]
         dwells = data["dwells"]
         zones_seen = data["zones_seen"]
@@ -1010,6 +1010,9 @@ async def _daily_rebuild():
 @time_trigger("startup")  # noqa: F821
 async def _startup():
     """Initialize on startup: set entity name, load cache from L2."""
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     _ensure_result_entity_name(force=True)
     _set_result("ok", op="startup", message="initializing")
 

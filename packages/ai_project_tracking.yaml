@@ -7,6 +7,9 @@
 # Deployed: 2026-03-11
 # =============================================================================
 
+# Pyscript-created sensor (project_promote.py via state.set):
+#   sensor.ai_project_promotion_status — last sync result, project counts by status
+
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
 
 # input_text: moved to helpers_input_text.yaml (C5 consolidation)

@@ -51,9 +51,28 @@ from shared_utils import build_result_entity_name
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_dedup_status"
-CLEANUP_MAX_AGE_HOURS = 48  # Safety net: purge dedup entries older than this
 
 result_entity_name: dict[str, str] = {}
+
+
+def _helper_int(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
+def _helper_str(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
 
 
 def _ensure_result_entity_name(force: bool = False) -> None:
@@ -841,7 +860,8 @@ async def dedup_daily_housekeeping():
     except Exception as exc:
         log.error(f"dedup housekeeping: counter reset failed: {exc}")  # noqa: F821
 
-    # Purge stale dedup entries (older than 48h — max TTL is 24h + buffer)
+    # Purge stale dedup entries (older than cleanup_hours — max TTL is 24h + buffer)
+    cleanup_max_age = _helper_int("input_number.ai_dedup_cleanup_hours", 48)
     entries = await _l2_search("dedup announcement", limit=50)
     deleted = 0
     now_iso = datetime.now(UTC).isoformat()
@@ -852,7 +872,7 @@ async def dedup_daily_housekeeping():
         if not key.startswith("announced_"):
             continue
         created_at = entry.get("created_at", "")
-        if _is_older_than_hours(created_at, CLEANUP_MAX_AGE_HOURS, now_iso):
+        if _is_older_than_hours(created_at, cleanup_max_age, now_iso):
             if await _l2_forget(key):
                 deleted += 1
 

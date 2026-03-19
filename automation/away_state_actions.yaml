@@ -1,0 +1,458 @@
+blueprint:
+  name: "Away state actions (I-40)"
+  author: madalone
+  description: >
+    # Away State Actions
+
+    Per-person automation that fires on departure, arrival, predicted pre-return,
+    and extended away events. Uses the I-40 away prediction engine for pre-return
+    timing.
+
+    ### Trigger types
+
+    1. **Departure** — device_tracker goes `not_home` (with configurable debounce delay)
+    2. **Arrival** — device_tracker returns `home`
+    3. **Pre-return** — fires N minutes before the predicted return time
+    4. **Extended away** — fires after N minutes away with no return
+
+    ### Example instances
+
+    - "Away Energy Saver" — departure: eco mode + lights off; pre-return: heating boost; arrival: welcome scene
+    - "Away Security" — departure: arm alarm; arrival: disarm
+    - "Away Notification" — extended_away: push notification after 4+ hours
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/away_state_actions.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① TRACKING
+    # ===========================================================================
+    tracking:
+      name: "① Tracking"
+      icon: mdi:map-marker-account
+      collapsed: false
+      description: >
+        Which person to track and kill switch.
+      input:
+        person_tracker:
+          name: Person tracker
+          description: >
+            The device_tracker entity for the person to monitor.
+          selector:
+            entity:
+              domain: device_tracker
+
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch. Automation only fires when this is ON.
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ② DEPARTURE
+    # ===========================================================================
+    departure:
+      name: "② Departure"
+      icon: mdi:exit-run
+      collapsed: true
+      description: >
+        Actions to run when the tracked person leaves home.
+      input:
+        departure_delay_minutes:
+          name: Departure delay (minutes)
+          description: >
+            Wait this many minutes after device_tracker goes not_home before
+            firing departure actions. Debounces WiFi flapping and router reboots.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: min
+
+        departure_actions:
+          name: Departure actions
+          description: >
+            Actions to run on departure (e.g., lights off, thermostat eco, security arm).
+            Leave empty to skip.
+          default: []
+          selector:
+            action: {}
+
+    # ===========================================================================
+    # ③ ARRIVAL
+    # ===========================================================================
+    arrival:
+      name: "③ Arrival"
+      icon: mdi:home-import-outline
+      collapsed: true
+      description: >
+        Actions to run when the tracked person returns home.
+      input:
+        arrival_actions:
+          name: Arrival actions
+          description: >
+            Actions to run on arrival (e.g., welcome scene, disarm alarm).
+            Leave empty to skip.
+          default: []
+          selector:
+            action: {}
+
+    # ===========================================================================
+    # ④ PRE-RETURN
+    # ===========================================================================
+    pre_return:
+      name: "④ Pre-Return"
+      icon: mdi:home-clock
+      collapsed: true
+      description: >
+        Actions to run before the predicted return time. Uses the I-40 away
+        prediction engine.
+      input:
+        pre_return_actions:
+          name: Pre-return actions
+          description: >
+            Actions to run before predicted return (e.g., heating, lights, music).
+            Leave empty to skip.
+          default: []
+          selector:
+            action: {}
+
+        pre_return_minutes:
+          name: Pre-return lead time (minutes)
+          description: >
+            Fire pre-return actions this many minutes before the predicted return.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 120
+              unit_of_measurement: min
+
+        pre_return_min_confidence:
+          name: Minimum confidence
+          description: >
+            Only fire pre-return actions if the prediction confidence is at least
+            this level.
+          default: "medium"
+          selector:
+            select:
+              options:
+                - label: "Low"
+                  value: "low"
+                - label: "Medium"
+                  value: "medium"
+                - label: "High"
+                  value: "high"
+
+        pre_return_use_range:
+          name: "Pre-Return: Use Prediction Range"
+          description: >
+            When enabled, pre-return actions fire based on the earliest predicted
+            return (range_low) instead of the point estimate. This gives earlier
+            warning but may fire when the person hasn't actually started heading home.
+            Default: off (use point estimate, same as before).
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑤ EXTENDED AWAY
+    # ===========================================================================
+    extended_away:
+      name: "⑤ Extended Away"
+      icon: mdi:timer-alert-outline
+      collapsed: true
+      description: >
+        Actions to run after the person has been away for an extended period.
+      input:
+        extended_away_actions:
+          name: Extended away actions
+          description: >
+            Actions to run after extended absence (e.g., notification, deep eco mode).
+            Leave empty to skip.
+          default: []
+          selector:
+            action: {}
+
+        extended_away_minutes:
+          name: Extended away threshold (minutes)
+          description: >
+            Fire extended away actions after this many minutes of absence.
+          default: 240
+          selector:
+            number:
+              min: 30
+              max: 1440
+              unit_of_measurement: min
+
+    # ===========================================================================
+    # ⑥ ANNOUNCEMENTS
+    # ===========================================================================
+    announcements:
+      name: "⑥ Announcements"
+      icon: mdi:bullhorn
+      collapsed: true
+      description: >
+        Optional TTS announcements for departure and arrival.
+      input:
+        announce_departure:
+          name: Announce departure
+          description: >
+            Speak a TTS message when the person departs.
+          default: false
+          selector:
+            boolean: {}
+
+        announce_arrival:
+          name: Announce arrival
+          description: >
+            Speak a TTS message when the person arrives, including away duration.
+          default: false
+          selector:
+            boolean: {}
+
+        tts_speaker:
+          name: TTS speaker
+          description: >
+            Media player for TTS announcements.
+          default: {}
+          selector:
+            entity:
+              domain: media_player
+
+        departure_message:
+          name: Departure message
+          description: >
+            TTS message on departure. Use `{{ person }}` for the person's name.
+          default: "{{ person }} has left home."
+          selector:
+            text:
+              multiline: true
+
+        arrival_message:
+          name: Arrival message
+          description: >
+            TTS message on arrival. Use `{{ person }}` and `{{ duration }}` for
+            the person's name and away duration in minutes.
+          default: "{{ person }} is back after {{ duration }} minutes."
+          selector:
+            text:
+              multiline: true
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  v_tracker: !input person_tracker
+  v_enable: !input enable_toggle
+  v_dep_delay: !input departure_delay_minutes
+  v_dep_actions: !input departure_actions
+  v_arr_actions: !input arrival_actions
+  v_pre_actions: !input pre_return_actions
+  v_pre_minutes: !input pre_return_minutes
+  v_pre_confidence: !input pre_return_min_confidence
+  v_pre_use_range: !input pre_return_use_range
+  v_ext_actions: !input extended_away_actions
+  v_ext_minutes: !input extended_away_minutes
+  v_announce_dep: !input announce_departure
+  v_announce_arr: !input announce_arrival
+  v_tts_speaker: !input tts_speaker
+  v_dep_message: !input departure_message
+  v_arr_message: !input arrival_message
+  v_person: >-
+    {% set tracker_person = {
+      'device_tracker.oppo_a60': 'Miquel',
+      'device_tracker.oppo_a38': 'Jessica'
+    } %}
+    {{ tracker_person.get(v_tracker, v_tracker.split('.')[-1] | title) }}
+  v_person_lower: "{{ v_person | lower }}"
+  v_confidence_map:
+    low: 1
+    medium: 2
+    high: 3
+
+triggers:
+  # ── Departure trigger (with debounce delay) ──
+  - id: departure
+    trigger: state
+    entity_id: !input person_tracker
+    to: "not_home"
+    for:
+      minutes: !input departure_delay_minutes
+
+  # ── Arrival trigger ──
+  - id: arrival
+    trigger: state
+    entity_id: !input person_tracker
+    to: "home"
+
+  # ── Pre-return check (every 5 min while away) ──
+  - id: pre_return_check
+    trigger: time_pattern
+    minutes: "/5"
+
+  # ── Extended away trigger ──
+  - id: extended_away
+    trigger: state
+    entity_id: !input person_tracker
+    to: "not_home"
+    for:
+      minutes: !input extended_away_minutes
+
+conditions:
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+actions:
+  - alias: "Choose action path"
+    choose:
+      # ══════════════════════════════════════════════════════════════════════
+      # DEPARTURE
+      # ══════════════════════════════════════════════════════════════════════
+      - conditions:
+          - condition: trigger
+            id: departure
+        sequence:
+          # ── TTS announcement ──
+          - alias: "TTS announcement"
+            if:
+              - condition: template
+                value_template: "{{ v_announce_dep }}"
+            then:
+              - alias: "Announce departure via TTS"
+                action: tts.speak
+                continue_on_error: true
+                target:
+                  entity_id: "{{ v_tts_speaker }}"
+                data:
+                  message: "{{ v_dep_message }}"
+
+          # ── Departure actions ──
+          - alias: "Departure actions"
+            if:
+              - condition: template
+                value_template: "{{ v_dep_actions | length > 0 }}"
+            then: !input departure_actions
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ARRIVAL
+      # ══════════════════════════════════════════════════════════════════════
+      - conditions:
+          - condition: trigger
+            id: arrival
+        sequence:
+          # ── Calculate away duration ──
+          - alias: "Set v dep entity, v dep ts, v duration"
+            variables:
+              v_dep_entity: "input_datetime.ai_away_departed_{{ v_person_lower }}"
+              v_dep_ts: >-
+                {% set dep = states(v_dep_entity) %}
+                {% if dep not in ['unknown', 'unavailable', '', '1970-01-01 00:00:00'] %}
+                  {{ as_timestamp(dep, 0) }}
+                {% else %}
+                  0
+                {% endif %}
+              v_duration: >-
+                {% if v_dep_ts | float > 0 %}
+                  {{ ((as_timestamp(now()) - v_dep_ts | float) / 60) | int }}
+                {% else %}
+                  0
+                {% endif %}
+
+          # ── TTS announcement ──
+          - alias: "TTS announcement"
+            if:
+              - condition: template
+                value_template: "{{ v_announce_arr }}"
+            then:
+              - alias: "Set person, duration"
+                variables:
+                  person: "{{ v_person }}"
+                  duration: "{{ v_duration }}"
+              - alias: "Announce arrival with away duration via TTS"
+                action: tts.speak
+                continue_on_error: true
+                target:
+                  entity_id: "{{ v_tts_speaker }}"
+                data:
+                  message: "{{ v_arr_message }}"
+
+          # ── Arrival actions ──
+          - alias: "Arrival actions"
+            if:
+              - condition: template
+                value_template: "{{ v_arr_actions | length > 0 }}"
+            then: !input arrival_actions
+
+      # ══════════════════════════════════════════════════════════════════════
+      # PRE-RETURN CHECK
+      # ══════════════════════════════════════════════════════════════════════
+      - conditions:
+          - condition: trigger
+            id: pre_return_check
+          - condition: state
+            entity_id: !input person_tracker
+            state: "not_home"
+          - condition: template
+            value_template: "{{ v_pre_actions | length > 0 }}"
+        sequence:
+          - alias: "Set v away raw"
+            variables:
+              v_away_raw: "{{ states('input_text.ai_away_prediction_raw') }}"
+          - condition: template
+            value_template: >-
+              {% if v_away_raw in ['', 'unknown', 'unavailable', 'None'] or '{' not in v_away_raw %}
+                false
+              {% else %}
+                {% set data = v_away_raw | from_json %}
+                {% set preds = data.predictions | default([data]) %}
+                {% set my_pred = preds | selectattr('person', 'eq', v_person_lower) | list %}
+                {% if my_pred | length == 0 %}
+                  false
+                {% else %}
+                  {% set pred = my_pred[0] %}
+                  {% set conf = pred.confidence | default('low') %}
+                  {% set conf_level = v_confidence_map.get(conf, 0) %}
+                  {% set min_level = v_confidence_map.get(v_pre_confidence, 2) %}
+                  {% if conf_level < min_level %}
+                    false
+                  {% else %}
+                    {% set return_time = pred.predicted_return_time | default('') %}
+                    {% if return_time == '' %}
+                      false
+                    {% else %}
+                      {% if v_pre_use_range and pred.range_low is defined and pred.range_low != '' %}
+                        {% set use_time = pred.range_low %}
+                      {% else %}
+                        {% set use_time = return_time %}
+                      {% endif %}
+                      {% set parts = use_time.split(':') %}
+                      {% set return_hour = parts[0] | int + parts[1] | int / 60.0 %}
+                      {% set now_hour = now().hour + now().minute / 60.0 %}
+                      {% set minutes_until = ((return_hour - now_hour) * 60) | int %}
+                      {{ 0 < minutes_until <= v_pre_minutes | int }}
+                    {% endif %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+          - !input pre_return_actions
+
+      # ══════════════════════════════════════════════════════════════════════
+      # EXTENDED AWAY
+      # ══════════════════════════════════════════════════════════════════════
+      - conditions:
+          - condition: trigger
+            id: extended_away
+        sequence:
+          - alias: "Check length condition"
+            if:
+              - condition: template
+                value_template: "{{ v_ext_actions | length > 0 }}"
+            then: !input extended_away_actions

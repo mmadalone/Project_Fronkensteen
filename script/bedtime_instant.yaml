@@ -1,0 +1,325 @@
+blueprint:
+  name: "Voice – Bedtime Instant Shutdown (tool script)"
+  description: |
+    ## Version 1.0
+
+    SCRIPT TOOL: Instant bedtime sequence — announce, stop TV, play audiobook,
+    warn before lights-off, turn off lights, say goodnight.
+
+    Full staggered shutdown in one script call. Configure speakers, media,
+    timing, lights, and messages via blueprint inputs.
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/bedtime_instant.yaml
+
+  input:
+    speakers:
+      name: "① Speakers"
+      icon: mdi:speaker
+      collapsed: false
+      input:
+        tts_entity:
+          name: "TTS entity"
+          description: "TTS engine for announcements."
+          selector:
+            entity:
+              domain: tts
+
+        announcement_player:
+          name: "Announcement speaker"
+          description: "Media player for the initial bedtime announcement."
+          selector:
+            entity:
+              domain: media_player
+
+        announcement_volume:
+          name: "Announcement volume"
+          description: "Volume for the announcement speaker."
+          default: 1.0
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+
+        audiobook_player:
+          name: "Audiobook speaker"
+          description: "Media player for audiobook playback and warning/goodnight messages."
+          selector:
+            entity:
+              domain: media_player
+
+    media:
+      name: "② Media"
+      icon: mdi:book-open-page-variant
+      collapsed: false
+      input:
+        tv_entity:
+          name: "TV media player"
+          description: "Media player entity to stop (e.g. Kodi). Leave empty to skip."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tv_power_script:
+          name: "TV power-off script (optional)"
+          description: "Script to call to power off the TV. Leave empty to skip."
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        audiobook_media_id:
+          name: "Audiobook media ID"
+          description: "Music Assistant media ID for the audiobook."
+          default: "library://audiobook/86"
+          selector:
+            text: {}
+
+        audiobook_volume:
+          name: "Audiobook volume"
+          description: "Volume level for audiobook playback."
+          default: 0.3
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+
+    timing:
+      name: "③ Timing"
+      icon: mdi:timer
+      collapsed: true
+      input:
+        announcement_delay:
+          name: "Delay after announcement (seconds)"
+          description: "Seconds between announcement and TV shutdown."
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 30
+
+        lights_off_delay:
+          name: "Lights-off delay (minutes)"
+          description: "Minutes between audiobook start and lights off."
+          default: 7
+          selector:
+            number:
+              min: 1
+              max: 60
+
+    devices:
+      name: "④ Devices to turn off"
+      icon: mdi:lightbulb-off
+      collapsed: true
+      input:
+        lights_off_targets:
+          name: "Lights/switches to turn off"
+          description: "Entities to turn off when the timer expires."
+          selector:
+            target:
+              entity:
+                domain:
+                  - switch
+                  - light
+
+    messages:
+      name: "⑤ Messages"
+      icon: mdi:message-text
+      collapsed: true
+      input:
+        announcement_message:
+          name: "Bedtime announcement"
+          description: "Initial announcement message."
+          default: "That's it, I'm shutting everything down, and putting you to bed!"
+          selector:
+            text:
+              multiline: true
+
+        warning_message:
+          name: "Lights-off warning"
+          description: "Message before lights go out."
+          default: "You have seven minutes til lights out."
+          selector:
+            text:
+              multiline: true
+
+        goodnight_message:
+          name: "Goodnight message"
+          description: "Final message after lights are off."
+          default: "Good night!"
+          selector:
+            text: {}
+
+    # =========================================================================
+    # ⑥ INFRASTRUCTURE
+    # =========================================================================
+    infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: input_boolean.ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+variables:
+  tts_entity: !input tts_entity
+  announcement_player: !input announcement_player
+  announcement_volume: !input announcement_volume
+  audiobook_player: !input audiobook_player
+  tv_entity: !input tv_entity
+  tv_power_script: !input tv_power_script
+  audiobook_media_id: !input audiobook_media_id
+  audiobook_volume: !input audiobook_volume
+  announcement_delay: !input announcement_delay
+  lights_off_delay: !input lights_off_delay
+  lights_off_targets: !input lights_off_targets
+  announcement_message: !input announcement_message
+  warning_message: !input warning_message
+  goodnight_message: !input goodnight_message
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+
+sequence:
+  - alias: "1) Set announcement volume"
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ announcement_player }}"
+    data:
+      volume_level: "{{ announcement_volume }}"
+
+  - alias: "Update duck snapshot if active (announcement)"
+    if:
+      - condition: template
+        value_template: >-
+          {{ is_state(v_duck_guard, 'on')
+             and is_state(v_ducking_flag, 'on') }}
+    then:
+      - alias: "Sync duck snapshot with announcement volume"
+        action: pyscript.duck_manager_update_snapshot
+        data:
+          entity_id: "{{ announcement_player }}"
+          volume_level: "{{ announcement_volume }}"
+        continue_on_error: true
+
+  - alias: "2) Announce bedtime"
+    action: tts.speak
+    target:
+      entity_id: "{{ tts_entity }}"
+    data:
+      cache: true
+      media_player_entity_id: "{{ announcement_player }}"
+      message: "{{ announcement_message }}"
+
+  - alias: "3) Wait for announcement to finish"
+    delay:
+      seconds: "{{ announcement_delay | int(5) }}"
+
+  - alias: "4) Stop TV (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ tv_entity not in ['', none, 'None', 'unknown'] }}"
+        sequence:
+          - alias: "Stop TV media"
+            action: media_player.media_stop
+            target:
+              entity_id: "{{ tv_entity }}"
+            continue_on_error: true
+
+  - alias: "5) TV power off script (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ tv_power_script not in ['', none, 'None', 'unknown'] }}"
+        sequence:
+          - alias: "Run TV power-off script"
+            action: script.turn_on
+            target:
+              entity_id: "{{ tv_power_script }}"
+            continue_on_error: true
+
+  - alias: "6) Set audiobook volume"
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ audiobook_player }}"
+    data:
+      volume_level: "{{ audiobook_volume }}"
+
+  - alias: "Update duck snapshot if active (audiobook)"
+    if:
+      - condition: template
+        value_template: >-
+          {{ is_state(v_duck_guard, 'on')
+             and is_state(v_ducking_flag, 'on') }}
+    then:
+      - alias: "Sync duck snapshot with audiobook volume"
+        action: pyscript.duck_manager_update_snapshot
+        data:
+          entity_id: "{{ audiobook_player }}"
+          volume_level: "{{ audiobook_volume }}"
+        continue_on_error: true
+
+  - alias: "7) Play audiobook"
+    action: music_assistant.play_media
+    target:
+      entity_id: "{{ audiobook_player }}"
+    data:
+      media_id: "{{ audiobook_media_id }}"
+      media_type: audiobook
+      enqueue: replace
+    continue_on_error: true
+
+  - alias: "8) Seek to start"
+    action: media_player.media_seek
+    target:
+      entity_id: "{{ audiobook_player }}"
+    data:
+      seek_position: 2
+    continue_on_error: true
+
+  - alias: "9) Warn about lights-off"
+    action: tts.speak
+    target:
+      entity_id: "{{ tts_entity }}"
+    data:
+      cache: true
+      media_player_entity_id: "{{ audiobook_player }}"
+      message: "{{ warning_message }}"
+
+  - alias: "10) Wait for lights-off timer"
+    delay:
+      minutes: "{{ lights_off_delay | int(7) }}"
+
+  - alias: "11) Turn off lights/switches"
+    action: homeassistant.turn_off
+    target: "{{ lights_off_targets }}"
+    continue_on_error: true
+
+  - alias: "12) Say goodnight"
+    action: tts.speak
+    target:
+      entity_id: "{{ tts_entity }}"
+    data:
+      cache: true
+      media_player_entity_id: "{{ audiobook_player }}"
+      message: "{{ goodnight_message }}"

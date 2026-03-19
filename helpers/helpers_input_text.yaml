@@ -253,6 +253,31 @@ ai_calendar_tomorrow_summary:
   max: 255
   icon: mdi:calendar-arrow-right
 
+# ── Per-Person Calendar (Gap 1: identity-aware hot context) ──────
+ai_calendar_today_summary_miquel:
+  name: "AI Calendar Today Summary (Miquel)"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-account
+
+ai_calendar_tomorrow_summary_miquel:
+  name: "AI Calendar Tomorrow Summary (Miquel)"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-account
+
+ai_calendar_today_summary_jessica:
+  name: "AI Calendar Today Summary (Jessica)"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-account-outline
+
+ai_calendar_tomorrow_summary_jessica:
+  name: "AI Calendar Tomorrow Summary (Jessica)"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-account-outline
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context (Layer 1)
 # ═══════════════════════════════════════════════════════════════════
@@ -734,3 +759,156 @@ ai_weather_tomorrow_summary:
   name: "AI weather tomorrow summary"
   icon: mdi:weather-partly-cloudy
   max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promote — Email Entity Configuration
+# ═══════════════════════════════════════════════════════════════════
+
+ai_imap_sensor_entity:
+  name: "Email IMAP Sensor Entity"
+  icon: mdi:email-search-outline
+  max: 100
+  initial: "sensor.gmail_messages"
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_calendar_promote — Calendar Entity Configuration
+# ═══════════════════════════════════════════════════════════════════
+
+ai_calendar_main:
+  name: "Calendar Main Entity"
+  icon: mdi:calendar
+  max: 100
+
+ai_calendar_holidays:
+  name: "Calendar Holidays Entity"
+  icon: mdi:calendar-star
+  max: 100
+
+ai_calendar_birthdays:
+  name: "Calendar Birthdays Entity"
+  icon: mdi:cake-variant
+  max: 100
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_music_taste — Music Entity Configuration
+# ═══════════════════════════════════════════════════════════════════
+
+ai_spotifyplus_entity:
+  name: "SpotifyPlus Media Player Entity"
+  icon: mdi:spotify
+  max: 100
+
+ai_music_players:
+  name: "Music Assistant Players (CSV)"
+  icon: mdi:speaker-multiple
+  max: 255
+
+ai_spotify_pull_cron:
+  name: "Spotify Pull Schedule (cron)"
+  icon: mdi:clock-outline
+  max: 50
+  initial: "0 4 * * *"
+
+ai_music_aggregate_cron:
+  name: "Music Aggregate Schedule (cron)"
+  icon: mdi:clock-outline
+  max: 50
+  initial: "30 4 * * *"
+
+# ── VSynced Speaker Groups (duck_manager) ───────────────────────────────────
+# CSV lists of media_player entity IDs per zone, read by duck_manager.py
+# for volume-synchronised ducking. Populated from tts_speaker_config.json.
+
+ai_vsync_workshop_players:
+  name: "VSynced Speakers – Workshop (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.workshop_sonos"
+
+ai_vsync_workshop_alexa:
+  name: "VSynced Speakers – Workshop (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_living_room_players:
+  name: "VSynced Speakers – Living Room (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.ha_voice_pe_living_room_quark_esp"
+
+ai_vsync_living_room_alexa:
+  name: "VSynced Speakers – Living Room (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_main_room_players:
+  name: "VSynced Speakers – Main Room (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.workshop_sonos"
+
+ai_vsync_main_room_alexa:
+  name: "VSynced Speakers – Main Room (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_bed_players:
+  name: "VSynced Speakers – Bed (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.workshop_sonos"
+
+ai_vsync_bed_alexa:
+  name: "VSynced Speakers – Bed (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_kitchen_players:
+  name: "VSynced Speakers – Kitchen (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.workshop_sonos"
+
+ai_vsync_kitchen_alexa:
+  name: "VSynced Speakers – Kitchen (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_bathroom_players:
+  name: "VSynced Speakers – Bathroom (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.bathroom_sonos"
+
+ai_vsync_bathroom_alexa:
+  name: "VSynced Speakers – Bathroom (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_lobby_players:
+  name: "VSynced Speakers – Lobby (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.workshop_sonos"
+
+ai_vsync_lobby_alexa:
+  name: "VSynced Speakers – Lobby (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+ai_vsync_shower_players:
+  name: "VSynced Speakers – Shower (Players)"
+  icon: mdi:speaker-group
+  max: 255
+  initial: "media_player.bathroom_sonos"
+
+ai_vsync_shower_alexa:
+  name: "VSynced Speakers – Shower (Alexa)"
+  icon: mdi:speaker-group
+  max: 255
+
+notification_follow_me_last_post_time:
+  name: "Notification Follow-Me Last Post Time"
+  icon: mdi:clock-digital
+  max: 20
+  initial: "0"

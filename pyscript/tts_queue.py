@@ -42,13 +42,7 @@ from shared_utils import build_result_entity_name
 CACHE_DIR = Path("/config/www/tts_cache")
 HA_TTS_DIR = Path("/config/tts")
 RESULT_ENTITY = "sensor.ai_tts_queue_status"
-PLAYBACK_BUFFER = 0.5
-PLAYBACK_POLL_INTERVAL = 0.25    # seconds between state checks
-PLAYBACK_MAX_TIMEOUT = 30.0      # fallback max wait
-POST_PLAYBACK_BUFFER = 0.3       # hardware lag after entity goes idle
-PLAYBACK_SETTLE_DELAY = 0.3      # wait for speaker to enter 'playing'
-MAX_AMBIENT_QUEUE = 3
-DEFAULT_DURATION = 5.0
+PLAYBACK_SETTLE_DELAY = 0.3      # hardware timing — keep as constant
 
 PRIORITY_EMERGENCY = 0
 PRIORITY_ALERT = 1
@@ -56,42 +50,65 @@ PRIORITY_NORMAL = 2
 PRIORITY_LOW = 3
 PRIORITY_AMBIENT = 4
 
-# ── Hardcoded Fallbacks (used only when helpers + registry are empty) ─────────
-_FALLBACK_ZONE_SPEAKER_MAP = {
-    "workshop":    ["media_player.workshop_sonos"],
-    "living_room": ["media_player.ha_voice_pe_living_room_quark_esp"],
-    "main_room":   ["media_player.workshop_sonos"],
-    "bed":         ["media_player.bathroom_sonos"],
-    "kitchen":     ["media_player.workshop_sonos"],
-    "bathroom":    ["media_player.bathroom_sonos"],
-    "lobby":       ["media_player.workshop_sonos"],
-    "shower":      ["media_player.bathroom_sonos"],
-}
 
-_FALLBACK_ZONE_PRIORITY = [
-    "workshop", "living_room", "main_room", "kitchen",
-    "bathroom", "bed", "lobby", "shower",
-]
+# ── Helper-reading utilities ─────────────────────────────────────────────────
 
-_FALLBACK_ALL_SPEAKERS = [
-    "media_player.workshop_sonos",
-    "media_player.ha_voice_pe_living_room_quark_esp",
-    "media_player.bathroom_sonos",
-]
+def _helper_float(entity_id: str, default: float) -> float:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return float(val)
+    except Exception:
+        pass
+    return default
 
-# I-33 Phase 2: Voice entity → agent name mapping (for per-agent TTS tracking)
-_VOICE_AGENT_MAP = {
-    "tts.elevenlabs_text_to_speech": "rick",
-    "tts.elevenlabs_quark_text_to_speech": "quark",
-    "tts.elevenlabs_kramer_text_to_speech": "kramer",
-    "tts.deepee_text_to_speech": "deadpool",
-    "tts.dr_portuondo_text_to_speech": "portuondo",
-    "tts.elevenlabs_custom_tts": "custom",
-}
+def _helper_int(entity_id: str, default: int) -> int:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
 
-# I-46: ElevenLabs voice set + fallback TTS
-_ELEVENLABS_VOICES = set(_VOICE_AGENT_MAP.keys())
-FALLBACK_TTS_VOICE = "tts.home_assistant_cloud"
+def _helper_str(entity_id: str, default: str) -> str:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
+
+
+# ── Dynamic constants (read from helpers, with safe defaults) ────────────────
+
+def _get_playback_buffer(): return _helper_float("input_number.ai_tts_playback_buffer", 0.5)
+def _get_poll_interval(): return _helper_float("input_number.ai_tts_poll_interval", 0.25)
+def _get_max_timeout(): return _helper_float("input_number.ai_tts_max_timeout", 30.0)
+def _get_post_buffer(): return _helper_float("input_number.ai_tts_post_buffer", 0.3)
+def _get_max_ambient(): return _helper_int("input_number.ai_tts_max_ambient", 3)
+def _get_default_duration(): return _helper_float("input_number.ai_tts_default_duration", 5.0)
+def _get_fallback_tts_voice(): return _helper_str("input_text.ai_default_tts_voice", "tts.home_assistant_cloud")
+
+
+# ── Dynamic voice/agent utilities (replace hardcoded maps) ───────────────────
+
+def _is_elevenlabs_voice(voice: str) -> bool:
+    return "elevenlabs" in (voice or "").lower()
+
+def _voice_to_agent(voice: str) -> str:
+    """Extract agent name from TTS entity naming convention."""
+    if not voice:
+        return "unknown"
+    parts = voice.replace("tts.", "").split("_")
+    # Convention: tts.elevenlabs_{name}_text_to_speech
+    for i, p in enumerate(parts):
+        if p == "text" and i > 0:
+            name = parts[i-1] if parts[i-1] != "elevenlabs" else parts[0]
+            if name not in ("text", "to", "speech", "tts"):
+                return name
+    return "unknown"
 
 # ── Tool-narration sanitization patterns ────────────────────────────────────
 # LLMs sometimes narrate their tool calls instead of executing silently.
@@ -103,102 +120,126 @@ _TOOL_FUNC_NAMES = (
     "email_clear_count|focus_guard_mark_meal|focus_guard_snooze|"
     "schedule_optimal_timing|memory_related|memory_link|memory_archive_search"
 )
-_SANITIZE_PATTERNS = [
-    # "I'll call execute_services" / "using the memory_tool function now" / etc.
-    re.compile(
-        r"(?:i(?:'ll| will| am going to| need to)?|let me|calling|using"
-        r"(?:\s+the)?)\s+(?:call(?:ing)?|us(?:e|ing)|invok(?:e|ing)|"
-        r"runn?(?:ing)?|execut(?:e|ing)|trigger(?:ing)?)"
-        r"(?:\s+the)?\s+(?:" + _TOOL_FUNC_NAMES + r")\b[^.!?]*[.!?]?",
-        re.IGNORECASE,
-    ),
-    # "Calling handoff_agent..." / "Using web_search now..."
-    re.compile(
-        r"\b(?:calling|using|invoking|running|executing|triggering)"
-        r"(?:\s+the)?\s+(?:" + _TOOL_FUNC_NAMES + r")\b[^.!?]*[.!?]?",
-        re.IGNORECASE,
-    ),
-    # Bare function names spoken mid-sentence: "...the execute_services to..."
-    re.compile(
-        r"\b(?:" + _TOOL_FUNC_NAMES + r")\s*(?:function|tool|service)?\b",
-        re.IGNORECASE,
-    ),
-    # JSON object fragments: {"key": "value", ...}
-    re.compile(r'\{[^{}]*"[^"]*"\s*:\s*[^{}]*\}'),
-    # Stray parameter-like fragments: param_name="value"
-    re.compile(r'\b\w+_\w+\s*=\s*"[^"]*"'),
-    # ── Entity ID leakage ─────────────────────────────────────────────────
-    # HA entity IDs spoken aloud: "light.living_room", "input_boolean.ai_foo"
-    re.compile(
-        r'\b(?:light|switch|sensor|binary_sensor|media_player|input_boolean'
-        r'|input_number|input_select|input_text|input_datetime|input_button'
-        r'|script|automation|climate|cover|fan|lock|vacuum|person|zone'
-        r'|weather|calendar|camera|number|select|button|timer|counter'
-        r'|group|scene|remote|siren|update|event|text|image|notify'
-        r'|device_tracker|tts|stt|assist_satellite|conversation'
-        r'|pyscript)\.[a-z][a-z0-9_]*\b',
-        re.IGNORECASE,
-    ),
-    # ── Parameter / schema narration ──────────────────────────────────────
-    # "with target quark and reason user_request"
-    re.compile(
-        r'\bwith\s+(?:target|reason|operation|action_type|agent_name'
-        r'|topic|query|key|value|scope|category|user|clip)\s+'
-        r'(?:"[^"]*"|[a-z_]+)\b[^.!?]*[.!?]?',
-        re.IGNORECASE,
-    ),
-    # "the parameters are..." / "passing parameters..."
-    re.compile(
-        r'\b(?:the\s+)?(?:parameters?|arguments?|payload|schema|spec)\s+'
-        r'(?:are|is|include|contain|being|were|was)\b[^.!?]*[.!?]?',
-        re.IGNORECASE,
-    ),
-    # "function call" / "tool call" / "service call" narration
-    re.compile(
-        r'\b(?:function|tool|service)\s+(?:call(?:ed|ing|s)?|definition'
-        r'|schema|spec|invocation|execution|result)\b[^.!?]*[.!?]?',
-        re.IGNORECASE,
-    ),
-    # "type: object" / "type: string" — YAML schema fragments
-    re.compile(
-        r'\btype:\s*(?:object|string|array|integer|boolean|number)\b',
-        re.IGNORECASE,
-    ),
-    # ── Email / web artifact catch-all (Layer 3 sanitization) ────────────
-    # URLs: http(s), ftp, mailto, bare www
-    re.compile(r'https?://[^\s<>")\]]+', re.IGNORECASE),
-    re.compile(r'ftp://[^\s<>")\]]+', re.IGNORECASE),
-    re.compile(r'mailto:[^\s<>")\]]+', re.IGNORECASE),
-    re.compile(r'\bwww\.[^\s<>")\]]+', re.IGNORECASE),
-    # Tracking query parameters (?utm_source=..., &fbclid=..., etc.)
-    re.compile(r'[?&](?:utm_\w+|fbclid|gclid|mc_[a-z]+|_hsenc|_hsmi|oly_\w+|vero_\w+|s_cid|mkt_tok)=[^\s&]*', re.IGNORECASE),
-    # Email headers narrated verbatim
-    re.compile(r'\b(?:Content-Type|Content-Transfer-Encoding|Content-Disposition|MIME-Version|charset|boundary)\s*[:=][^\n.!?]*[.!?]?', re.IGNORECASE),
-    # Base64 blobs (40+ chars, stricter than Layer 1)
-    re.compile(r'[A-Za-z0-9+/=]{40,}'),
-    # Hex color codes (#FFFFFF, #FFF)
-    re.compile(r'#[0-9a-fA-F]{6}\b'),
-    re.compile(r'#[0-9a-fA-F]{3}\b'),
-    # CSS property:value pairs
-    re.compile(r'\b(?:font-family|font-size|line-height|color|background-color|background|display|margin|padding|border|text-align|text-decoration|vertical-align|width|height|max-width|min-width)\s*:\s*[^;}{.!?]+[;]?', re.IGNORECASE),
-    # Footer phrases
-    re.compile(r'\b(?:unsubscribe|privacy\s+policy|all\s+rights\s+reserved|view\s+in\s+(?:your\s+)?browser)\b[^.!?]*[.!?]?', re.IGNORECASE),
-    re.compile(r'\bcopyright\s+(?:©\s*)?\d{4}[^.!?]*[.!?]?', re.IGNORECASE),
-    re.compile(r'©\s*\d{4}[^.!?]*[.!?]?'),
-    re.compile(r'\bsent\s+from\s+my\s+(?:iphone|ipad|galaxy|android|samsung)\b[^.!?]*[.!?]?', re.IGNORECASE),
-    # Empty parentheses left from stripped URLs
-    re.compile(r'\(\s*\)'),
-]
+_SANITIZE_PATTERNS = None
+
+
+@pyscript_compile  # noqa: F821
+def _build_sanitize_patterns():
+    """Build sanitize patterns using native Python (re.compile blocked in sandbox)."""
+    import re as _re
+    func_names = _TOOL_FUNC_NAMES
+    return [
+        # "I'll call execute_services" / "using the memory_tool function now" / etc.
+        _re.compile(
+            r"(?:i(?:'ll| will| am going to| need to)?|let me|calling|using"
+            r"(?:\s+the)?)\s+(?:call(?:ing)?|us(?:e|ing)|invok(?:e|ing)|"
+            r"runn?(?:ing)?|execut(?:e|ing)|trigger(?:ing)?)"
+            r"(?:\s+the)?\s+(?:" + func_names + r")\b[^.!?]*[.!?]?",
+            _re.IGNORECASE,
+        ),
+        # "Calling handoff_agent..." / "Using web_search now..."
+        _re.compile(
+            r"\b(?:calling|using|invoking|running|executing|triggering)"
+            r"(?:\s+the)?\s+(?:" + func_names + r")\b[^.!?]*[.!?]?",
+            _re.IGNORECASE,
+        ),
+        # Bare function names spoken mid-sentence: "...the execute_services to..."
+        _re.compile(
+            r"\b(?:" + func_names + r")\s*(?:function|tool|service)?\b",
+            _re.IGNORECASE,
+        ),
+        # JSON object fragments: {"key": "value", ...}
+        _re.compile(r'\{[^{}]*"[^"]*"\s*:\s*[^{}]*\}'),
+        # Stray parameter-like fragments: param_name="value"
+        _re.compile(r'\b\w+_\w+\s*=\s*"[^"]*"'),
+        # ── Entity ID leakage ─────────────────────────────────────────────────
+        # HA entity IDs spoken aloud: "light.living_room", "input_boolean.ai_foo"
+        _re.compile(
+            r'\b(?:light|switch|sensor|binary_sensor|media_player|input_boolean'
+            r'|input_number|input_select|input_text|input_datetime|input_button'
+            r'|script|automation|climate|cover|fan|lock|vacuum|person|zone'
+            r'|weather|calendar|camera|number|select|button|timer|counter'
+            r'|group|scene|remote|siren|update|event|text|image|notify'
+            r'|device_tracker|tts|stt|assist_satellite|conversation'
+            r'|pyscript)\.[a-z][a-z0-9_]*\b',
+            _re.IGNORECASE,
+        ),
+        # ── Parameter / schema narration ──────────────────────────────────────
+        # "with target quark and reason user_request"
+        _re.compile(
+            r'\bwith\s+(?:target|reason|operation|action_type|agent_name'
+            r'|topic|query|key|value|scope|category|user|clip)\s+'
+            r'(?:"[^"]*"|[a-z_]+)\b[^.!?]*[.!?]?',
+            _re.IGNORECASE,
+        ),
+        # "the parameters are..." / "passing parameters..."
+        _re.compile(
+            r'\b(?:the\s+)?(?:parameters?|arguments?|payload|schema|spec)\s+'
+            r'(?:are|is|include|contain|being|were|was)\b[^.!?]*[.!?]?',
+            _re.IGNORECASE,
+        ),
+        # "function call" / "tool call" / "service call" narration
+        _re.compile(
+            r'\b(?:function|tool|service)\s+(?:call(?:ed|ing|s)?|definition'
+            r'|schema|spec|invocation|execution|result)\b[^.!?]*[.!?]?',
+            _re.IGNORECASE,
+        ),
+        # "type: object" / "type: string" — YAML schema fragments
+        _re.compile(
+            r'\btype:\s*(?:object|string|array|integer|boolean|number)\b',
+            _re.IGNORECASE,
+        ),
+        # ── Email / web artifact catch-all (Layer 3 sanitization) ────────────
+        # URLs: http(s), ftp, mailto, bare www
+        _re.compile(r'https?://[^\s<>")\]]+', _re.IGNORECASE),
+        _re.compile(r'ftp://[^\s<>")\]]+', _re.IGNORECASE),
+        _re.compile(r'mailto:[^\s<>")\]]+', _re.IGNORECASE),
+        _re.compile(r'\bwww\.[^\s<>")\]]+', _re.IGNORECASE),
+        # Tracking query parameters (?utm_source=..., &fbclid=..., etc.)
+        _re.compile(r'[?&](?:utm_\w+|fbclid|gclid|mc_[a-z]+|_hsenc|_hsmi|oly_\w+|vero_\w+|s_cid|mkt_tok)=[^\s&]*', _re.IGNORECASE),
+        # Email headers narrated verbatim
+        _re.compile(r'\b(?:Content-Type|Content-Transfer-Encoding|Content-Disposition|MIME-Version|charset|boundary)\s*[:=][^\n.!?]*[.!?]?', _re.IGNORECASE),
+        # Base64 blobs (40+ chars, stricter than Layer 1)
+        _re.compile(r'[A-Za-z0-9+/=]{40,}'),
+        # Hex color codes (#FFFFFF, #FFF)
+        _re.compile(r'#[0-9a-fA-F]{6}\b'),
+        _re.compile(r'#[0-9a-fA-F]{3}\b'),
+        # CSS property:value pairs
+        _re.compile(r'\b(?:font-family|font-size|line-height|color|background-color|background|display|margin|padding|border|text-align|text-decoration|vertical-align|width|height|max-width|min-width)\s*:\s*[^;}{.!?]+[;]?', _re.IGNORECASE),
+        # Footer phrases
+        _re.compile(r'\b(?:unsubscribe|privacy\s+policy|all\s+rights\s+reserved|view\s+in\s+(?:your\s+)?browser)\b[^.!?]*[.!?]?', _re.IGNORECASE),
+        _re.compile(r'\bcopyright\s+(?:©\s*)?\d{4}[^.!?]*[.!?]?', _re.IGNORECASE),
+        _re.compile(r'©\s*\d{4}[^.!?]*[.!?]?'),
+        _re.compile(r'\bsent\s+from\s+my\s+(?:iphone|ipad|galaxy|android|samsung)\b[^.!?]*[.!?]?', _re.IGNORECASE),
+        # Empty parentheses left from stripped URLs
+        _re.compile(r'\(\s*\)'),
+        # ── Whitespace / punctuation cleanup (moved from bare re.sub calls) ──
+        _re.compile(r'\s{2,}'),
+        _re.compile(r'^[,;.\s]+'),
+    ]
+
+
+@pyscript_compile  # noqa: F821
+def _sanitize_tool_narration_compiled(text: str, patterns: list) -> str:
+    """Apply sanitize patterns and clean up whitespace (native Python)."""
+    # All patterns except the last two are content patterns
+    # Last two are: multi-space collapse and leading-punctuation strip
+    content_patterns = patterns[:-2]
+    ws_pattern = patterns[-2]
+    lead_pattern = patterns[-1]
+    for pat in content_patterns:
+        text = pat.sub("", text)
+    text = ws_pattern.sub(" ", text).strip()
+    text = lead_pattern.sub("", text).strip()
+    return text or None
 
 
 def _sanitize_tool_narration(text: str) -> str:
     """Strip leaked tool/function narration from LLM speech text."""
-    for pat in _SANITIZE_PATTERNS:
-        text = pat.sub("", text)
-    # Collapse leftover whitespace / orphaned punctuation
-    text = re.sub(r'\s{2,}', ' ', text).strip()
-    text = re.sub(r'^[,;.\s]+', '', text).strip()
-    return text or None
+    global _SANITIZE_PATTERNS
+    if _SANITIZE_PATTERNS is None:
+        _SANITIZE_PATTERNS = _build_sanitize_patterns()
+    return _sanitize_tool_narration_compiled(text, _SANITIZE_PATTERNS)
 
 # ── Dynamic Speaker Cache ────────────────────────────────────────────────────
 # Populated lazily from: helper JSON → fallback.
@@ -236,7 +277,7 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
 SPEAKER_CONFIG_FILE = "/config/pyscript/tts_speaker_config.json"
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _load_speaker_config_sync(config_file: str) -> dict:
     """Load zone→speaker map from JSON config file (sync).
 
@@ -261,11 +302,11 @@ def _load_speaker_config_sync(config_file: str) -> dict:
 
 
 async def _load_speaker_config(config_file: str) -> dict:
-    """Async wrapper — runs file I/O in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(_load_speaker_config_sync, config_file)
+    """Async wrapper — @pyscript_executor handles thread dispatch."""
+    return _load_speaker_config_sync(config_file)
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _write_speaker_config_sync(config_file: str, zone_speaker_map: dict) -> bool:
     """Write zone→speaker map to JSON config file, preserving speaker_options (sync)."""
     import json as _json
@@ -288,14 +329,14 @@ def _write_speaker_config_sync(config_file: str, zone_speaker_map: dict) -> bool
 
 
 async def _write_speaker_config(config_file: str, zone_speaker_map: dict) -> bool:
-    """Async wrapper — runs file I/O in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(_write_speaker_config_sync, config_file, zone_speaker_map)
+    """Async wrapper — @pyscript_executor handles thread dispatch."""
+    return _write_speaker_config_sync(config_file, zone_speaker_map)
 
 
 ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _discover_speakers_from_registry_sync(registry_file: str) -> dict:
     """Read HA entity registry storage file for media_player speakers with area_id (sync).
 
@@ -325,8 +366,8 @@ def _discover_speakers_from_registry_sync(registry_file: str) -> dict:
 
 
 async def _discover_speakers_from_registry(registry_file: str) -> dict:
-    """Async wrapper — runs file I/O in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(_discover_speakers_from_registry_sync, registry_file)
+    """Async wrapper — @pyscript_executor handles thread dispatch."""
+    return _discover_speakers_from_registry_sync(registry_file)
 
 
 async def _rebuild_speaker_config() -> dict:
@@ -360,19 +401,18 @@ async def _rebuild_speaker_config() -> dict:
         else:
             merged[area_id] = speakers
 
-    # 4. If nothing at all, seed from fallback (but don't write fallback
-    #    to disk — avoids overwriting a good config if both reads failed)
+    # 4. If nothing at all, log error and return empty
+    #    (no hardcoded fallback — config file or registry must provide data)
     if not merged:
-        merged = dict(_FALLBACK_ZONE_SPEAKER_MAP)
-        log.warning(  # noqa: F821
-            "tts_queue: rebuild produced empty config, "
-            "using fallback (not writing to disk)"
+        log.error(  # noqa: F821
+            "tts_queue: rebuild produced empty config — "
+            "no speakers in registry or config file"
         )
         _speaker_cache = None
         return {
-            "status": "fallback", "op": "rebuild_speaker_config",
+            "status": "empty", "op": "rebuild_speaker_config",
             "existing_zones": 0, "discovered_zones": 0,
-            "merged_zones": len(merged), "written": False,
+            "merged_zones": 0, "written": False,
         }
 
     # 5. Write back (only when we have real data)
@@ -409,8 +449,8 @@ def _normalize_speaker(s: str) -> str:
 async def _ensure_speaker_cache() -> None:
     """Lazy-load speaker/zone mappings.
 
-    Priority: helper JSON override → hardcoded fallback.
-    Zone priority from helper CSV → hardcoded fallback.
+    Priority: JSON config file → entity registry discovery.
+    Zone priority from helper CSV → derived from zone_speaker_map keys.
     FP2 zones auto-discovered from zone_speaker_map keys.
     """
     global _speaker_cache
@@ -418,32 +458,15 @@ async def _ensure_speaker_cache() -> None:
         return
 
     try:
-        # 1. Try reading zone→speaker from input_select helpers (dashboard)
-        helper_map = {}
-        for zone in _FALLBACK_ZONE_SPEAKER_MAP:
-            helper = f"input_select.ai_tts_speaker_{zone}"
-            try:
-                val = state.get(helper)  # noqa: F821
-                if val and val not in ("unknown", "unavailable", "", "none"):
-                    helper_map[zone] = [_normalize_speaker(val)]
-            except Exception:
-                pass
+        # 1. Load zone→speaker from JSON config file
+        zone_speaker_map = await _load_speaker_config(SPEAKER_CONFIG_FILE)
 
-        # 2. If helpers populated, use them; else fall back to JSON file
-        if helper_map:
-            zone_speaker_map = helper_map
-            log.info(  # noqa: F821
-                f"tts_queue: loaded {len(helper_map)} zone→speaker from dashboard helpers"
-            )
-        else:
-            zone_speaker_map = await _load_speaker_config(SPEAKER_CONFIG_FILE)
-
-        # 3. Fallback: if still empty, use hardcoded defaults
+        # 2. If still empty, log error — no hardcoded fallback
         if not zone_speaker_map:
-            zone_speaker_map = dict(_FALLBACK_ZONE_SPEAKER_MAP)
-            log.info(  # noqa: F821
-                "tts_queue: no helper speaker mappings, "
-                "using hardcoded fallback"
+            log.error(  # noqa: F821
+                "tts_queue: no speaker mappings found in config file — "
+                "run tts_rebuild_speaker_config or populate "
+                "tts_speaker_config.json"
             )
 
         # 3. Load zone priority order from helper CSV
@@ -455,7 +478,8 @@ async def _ensure_speaker_cache() -> None:
                 z.strip() for z in priority_raw.split(",") if z.strip()
             ]
         else:
-            zone_priority = list(_FALLBACK_ZONE_PRIORITY)
+            # Derive from zone_speaker_map keys if no helper
+            zone_priority = list(zone_speaker_map.keys()) if zone_speaker_map else []
 
         # 4. Build FP2 zone entities from map keys
         fp2_zones = {
@@ -471,7 +495,10 @@ async def _ensure_speaker_cache() -> None:
                     seen[s] = True
         all_speakers = list(seen.keys())
         if not all_speakers:
-            all_speakers = list(_FALLBACK_ALL_SPEAKERS)
+            log.error(  # noqa: F821
+                "tts_queue: no speakers discovered — "
+                "all_speakers is empty"
+            )
 
         _speaker_cache = {
             "zone_speaker_map": zone_speaker_map,
@@ -490,23 +517,20 @@ async def _ensure_speaker_cache() -> None:
             f"tts_queue: speaker cache load failed: {exc}"
         )
         _speaker_cache = {
-            "zone_speaker_map": dict(_FALLBACK_ZONE_SPEAKER_MAP),
-            "zone_priority": list(_FALLBACK_ZONE_PRIORITY),
-            "fp2_zone_entities": {
-                f"binary_sensor.fp2_presence_sensor_{z}": z
-                for z in _FALLBACK_ZONE_SPEAKER_MAP
-            },
-            "all_speakers": list(_FALLBACK_ALL_SPEAKERS),
+            "zone_speaker_map": {},
+            "zone_priority": [],
+            "fp2_zone_entities": {},
+            "all_speakers": [],
         }
 
 
 # ── Cache Functions ───────────────────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_key_sync(text: str, voice: str) -> str:
     return hashlib.sha256(f"{voice}:{text}".encode("utf-8")).hexdigest()[:16]
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_check_sync(key: str) -> dict | None:
     mp3 = CACHE_DIR / f"{key}.mp3"
     meta = CACHE_DIR / f"{key}.json"
@@ -529,7 +553,7 @@ def _cache_save_sync(key: str, source_path: str, duration: float, hint: str) -> 
     except OSError:
         return False
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_cleanup_daily_sync() -> int:
     removed = 0
     today = datetime.now().date()
@@ -549,7 +573,7 @@ def _cache_cleanup_daily_sync() -> int:
             continue
     return removed
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_cleanup_expired_sync(max_age_days: int = 30, static_max_age_days: int = 90) -> int:
     removed = 0
     now = datetime.now()
@@ -575,7 +599,7 @@ def _cache_cleanup_expired_sync(max_age_days: int = 30, static_max_age_days: int
             continue
     return removed
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _cache_evict_by_size_sync(max_size_mb: int = 500, protect_age_hours: float = 1.0) -> int:
     """LRU eviction: remove oldest cache entries when total size exceeds cap."""
     if not CACHE_DIR.exists():
@@ -622,7 +646,7 @@ def _cache_evict_by_size_sync(max_size_mb: int = 500, protect_age_hours: float =
             continue
     return evicted
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _ha_tts_cleanup_sync(max_age_days: int = 30, protect_age_hours: float = 1.0) -> int:
     """Age-based cleanup of HA's native TTS cache (/config/tts/).
     No metadata files — uses file mtime for age determination."""
@@ -644,7 +668,7 @@ def _ha_tts_cleanup_sync(max_age_days: int = 30, protect_age_hours: float = 1.0)
             continue
     return removed
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _try_populate_cache_sync(text: str, voice: str, key: str, hint: str) -> bool:
     """Find TTS output in HA's cache (/config/tts/) and copy to our cache."""
     import hashlib as _hl
@@ -667,27 +691,27 @@ def _try_populate_cache_sync(text: str, voice: str, key: str, hint: str) -> bool
     return _cache_save_sync(key, source, duration, hint)
 
 async def _cache_key(text, voice):
-    return await asyncio.to_thread(_cache_key_sync, text, voice)
+    return _cache_key_sync(text, voice)
 async def _cache_check(key):
-    return await asyncio.to_thread(_cache_check_sync, key)
+    return _cache_check_sync(key)
 async def _cache_save(key, source_path, duration, hint):
     return await asyncio.to_thread(_cache_save_sync, key, source_path, duration, hint)
 async def _try_populate_cache(text, voice, key, hint):
-    return await asyncio.to_thread(_try_populate_cache_sync, text, voice, key, hint)
+    return _try_populate_cache_sync(text, voice, key, hint)
 async def _cache_cleanup_daily():
-    return await asyncio.to_thread(_cache_cleanup_daily_sync)
+    return _cache_cleanup_daily_sync()
 async def _cache_cleanup_expired(max_age_days=30, static_max_age_days=90):
-    return await asyncio.to_thread(_cache_cleanup_expired_sync, max_age_days, static_max_age_days)
+    return _cache_cleanup_expired_sync(max_age_days, static_max_age_days)
 async def _cache_evict_by_size(max_size_mb=500, protect_age_hours=1.0):
-    return await asyncio.to_thread(_cache_evict_by_size_sync, max_size_mb, protect_age_hours)
+    return _cache_evict_by_size_sync(max_size_mb, protect_age_hours)
 async def _ha_tts_cleanup(max_age_days=30, protect_age_hours=1.0):
-    return await asyncio.to_thread(_ha_tts_cleanup_sync, max_age_days, protect_age_hours)
+    return _ha_tts_cleanup_sync(max_age_days, protect_age_hours)
 
 
 # ── Speaker Resolution ────────────────────────────────────────────────────────
 
 def _get_default_speaker() -> str:
-    """Return the configured default speaker, or first from config, or hardcoded."""
+    """Return the configured default speaker, or first from config."""
     try:
         default = state.get("input_text.ai_default_speaker")  # noqa: F821
         if default and default not in ("unknown", "unavailable", ""):
@@ -696,7 +720,11 @@ def _get_default_speaker() -> str:
         pass
     if _speaker_cache and _speaker_cache["all_speakers"]:
         return _speaker_cache["all_speakers"][0]
-    return _FALLBACK_ALL_SPEAKERS[0]
+    log.error(  # noqa: F821
+        "tts_queue: no default speaker available — "
+        "speaker cache empty and input_text.ai_default_speaker not set"
+    )
+    return "media_player.unknown"
 
 
 async def _resolve_speaker(target_mode: str, target: str | None) -> str | list[str]:
@@ -800,14 +828,15 @@ async def _play_tts(
             service.call("tts", "speak", **kwargs)  # noqa: F821
         except Exception as e:
             # ── T24-1a: ElevenLabs outage fallback → HA Cloud ──
-            if voice in _ELEVENLABS_VOICES:
+            if _is_elevenlabs_voice(voice):
+                fallback_voice = _get_fallback_tts_voice()
                 log.warning(  # noqa: F821
                     f"tts_queue: ElevenLabs failed for {s} ({e}), "
-                    f"retrying with {FALLBACK_TTS_VOICE}"
+                    f"retrying with {fallback_voice}"
                 )
                 try:
                     service.call("tts", "speak",  # noqa: F821
-                                 entity_id=FALLBACK_TTS_VOICE,
+                                 entity_id=fallback_voice,
                                  media_player_entity_id=s,
                                  message=text)
                 except Exception as e2:
@@ -860,8 +889,8 @@ def _is_speaker_playing(entity_id: str) -> bool:
 
 
 def _get_playback_timeout() -> float:
-    """Return playback timeout constant (30s)."""
-    return PLAYBACK_MAX_TIMEOUT
+    """Return playback timeout from helper (default 30s)."""
+    return _get_max_timeout()
 
 
 async def _wait_for_playback_done(speaker) -> None:
@@ -884,7 +913,7 @@ async def _wait_for_playback_done(speaker) -> None:
     else:
         # Speaker never entered 'playing' — post-buffer and return
         if not _preempted:
-            await asyncio.sleep(POST_PLAYBACK_BUFFER)
+            await asyncio.sleep(_get_post_buffer())
         return
 
     # Phase 2: Poll — wait for speaker(s) to leave 'playing' state
@@ -902,7 +931,7 @@ async def _wait_for_playback_done(speaker) -> None:
         if not any_playing:
             timed_out = False
             break
-        await asyncio.sleep(PLAYBACK_POLL_INTERVAL)
+        await asyncio.sleep(_get_poll_interval())
 
     if timed_out:
         log.warning(  # noqa: F821
@@ -912,7 +941,7 @@ async def _wait_for_playback_done(speaker) -> None:
 
     # Phase 3: Post-buffer — hardware audio lag after entity goes idle
     if not _preempted:
-        await asyncio.sleep(POST_PLAYBACK_BUFFER)
+        await asyncio.sleep(_get_post_buffer())
 
 
 def _increment_counter(entity_id: str) -> None:
@@ -928,7 +957,7 @@ def _increment_counter(entity_id: str) -> None:
     if _budget_save_counter >= 10:
         _budget_save_counter = 0
         try:
-            task.executor(_budget_save_to_l2)  # noqa: F821
+            task.create(_budget_save_to_l2())  # noqa: F821
         except Exception:
             pass
 
@@ -1023,7 +1052,7 @@ async def _process_queue() -> None:
                             else:
                                 await _wait_for_playback_done(speaker)
                     else:
-                        await asyncio.sleep(PLAYBACK_BUFFER)
+                        await asyncio.sleep(_get_playback_buffer())
             except Exception as e:
                 log.error(f"tts_queue playback error: {e}")  # noqa: F821
     finally:
@@ -1099,7 +1128,7 @@ async def _play_item(item: dict) -> None:
             pass
 
     # ── I-46: ElevenLabs credit gate + budget fallback TTS swap ──
-    if voice and voice in _ELEVENLABS_VOICES:
+    if voice and _is_elevenlabs_voice(voice):
         try:
             fallback_on = state.get("input_boolean.ai_budget_fallback_active") == "on"  # noqa: F821
             credits_low = False
@@ -1113,10 +1142,10 @@ async def _play_item(item: dict) -> None:
                 credits_low = credits <= floor
             if fallback_on or credits_low:
                 original_voice = voice
-                voice = FALLBACK_TTS_VOICE
+                voice = _get_fallback_tts_voice()
                 item["voice"] = voice
                 log.info(  # noqa: F821
-                    f"tts_queue: I-46 TTS swap {original_voice} → {FALLBACK_TTS_VOICE} "
+                    f"tts_queue: I-46 TTS swap {original_voice} → {voice} "
                     f"(fallback={'on' if fallback_on else 'off'}, credits_low={credits_low})"
                 )
         except Exception:
@@ -1130,7 +1159,7 @@ async def _play_item(item: dict) -> None:
 
     # I-33 Phase 2: Per-agent TTS tracking
     try:
-        tts_agent = _VOICE_AGENT_MAP.get(voice, "unknown") if voice else "unknown"
+        tts_agent = _voice_to_agent(voice) if voice else "unknown"
         service.call(  # noqa: F821
             "pyscript", "budget_track_call",
             service_type="tts",
@@ -1187,12 +1216,13 @@ async def _play_item(item: dict) -> None:
                               volume_level=volume_level, announce=announce)
             chime_dur = item.get("chime_duration_ms", 0)
             if chime_dur > 0:
-                wait_s = (chime_dur / 1000.0) + POST_PLAYBACK_BUFFER
+                post_buf = _get_post_buffer()
+                wait_s = (chime_dur / 1000.0) + post_buf
                 log.debug("tts_queue: chime wait %.2fs (duration=%dms + buffer=%.1fs)",  # noqa: F821
-                          wait_s, chime_dur, POST_PLAYBACK_BUFFER)
+                          wait_s, chime_dur, post_buf)
                 await asyncio.sleep(wait_s)
             else:
-                await asyncio.sleep(POST_PLAYBACK_BUFFER)
+                await asyncio.sleep(_get_post_buffer())
 
         if media_file:
             await _play_media(speaker=speaker, media_path=media_file,
@@ -1514,7 +1544,7 @@ async def tts_queue_speak(
 
         if priority == PRIORITY_AMBIENT:
             ambient_count = _queue_count_by_priority_sync(PRIORITY_AMBIENT)
-            if ambient_count >= MAX_AMBIENT_QUEUE:
+            if ambient_count >= _get_max_ambient():
                 log.debug(f"tts_queue: ambient dropped ({ambient_count} in queue)")  # noqa: F821
                 return {"status": "dropped", "op": "tts_queue_speak",
                         "reason": "ambient_queue_full"}

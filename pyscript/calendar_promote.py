@@ -17,6 +17,7 @@ from shared_utils import (
     get_person_config,
     get_person_slugs,
     load_entity_config,
+    reload_entity_config,
 )
 
 # =============================================================================
@@ -54,24 +55,43 @@ from shared_utils import (
 # Deployed: 2026-03-02
 # =============================================================================
 
-_DEFAULT_CALENDAR_MAIN = "calendar.miquel_angel_cano_gmail_com"
-_DEFAULT_CALENDAR_HOLIDAYS = "calendar.holidays_in_spain"
-_DEFAULT_CALENDAR_BIRTHDAYS = "calendar.birthdays"
 RESULT_ENTITY = "sensor.ai_calendar_promotion_status"
-PROMOTE_CACHE_TTL = 300  # 5 min — debounce rapid state-change triggers
+
+
+def _helper_int(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
+def _helper_str(entity_id, default):
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return str(val)
+    except Exception:
+        pass
+    return default
 
 
 def _get_calendar_entities() -> tuple[str, str, str]:
-    """Read calendar entities from config file."""
+    """Read calendar entities: helper first → entity_config fallback → log error if empty."""
     cfg = load_entity_config()
     cals = cfg.get("calendars", {})
-    if cals:
-        return (
-            cals.get("main", _DEFAULT_CALENDAR_MAIN),
-            cals.get("holidays", _DEFAULT_CALENDAR_HOLIDAYS),
-            cals.get("birthdays", _DEFAULT_CALENDAR_BIRTHDAYS),
-        )
-    return _DEFAULT_CALENDAR_MAIN, _DEFAULT_CALENDAR_HOLIDAYS, _DEFAULT_CALENDAR_BIRTHDAYS
+    main = cals.get("main", "") if cals else ""
+    holidays = cals.get("holidays", "") if cals else ""
+    birthdays = cals.get("birthdays", "") if cals else ""
+    if not main and not holidays and not birthdays:
+        log.error("cal_promote: no calendar entities in entity_config.yaml")  # noqa: F821
+    return (
+        main or "calendar.miquel_angel_cano_gmail_com",
+        holidays or "calendar.holidays_in_spain",
+        birthdays or "calendar.birthdays",
+    )
 
 
 # ── Module-Level State ───────────────────────────────────────────────────────
@@ -80,7 +100,6 @@ _promote_cache: dict[str, Any] = {}
 _calendar_triggers = []        # factory-created trigger references (keep alive)
 result_entity_name: dict[str, str] = {}
 _consecutive_failures: int = 0
-_FAILURE_NOTIFY_THRESHOLD: int = 3
 
 
 # ── Entity Name Helpers (pattern from notification_dedup.py) ─────────────────
@@ -536,11 +555,12 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
     tomorrow_str = tomorrow.strftime("%Y-%m-%d")
 
     # ── Cache check (debounce rapid triggers) ──
+    cache_ttl = _helper_int("input_number.ai_calendar_promote_ttl", 300)
     if (not force
             and not test_mode
             and _promote_cache.get("date") == today_str
             and (time.time() - _promote_cache.get("fetched_at", 0))
-                < PROMOTE_CACHE_TTL):
+                < cache_ttl):
         return {
             "status": "ok", "op": "promote",
             "skipped": True, "reason": "cache_valid",
@@ -621,7 +641,8 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
             f"preserving existing L2 data (failures={_consecutive_failures})"
         )
         # ── T24-3b: Persistent notification after repeated failures ──
-        if _consecutive_failures >= _FAILURE_NOTIFY_THRESHOLD:
+        failure_threshold = _helper_int("input_number.ai_calendar_failure_threshold", 3)
+        if _consecutive_failures >= failure_threshold:
             try:
                 service.call(  # noqa: F821
                     "persistent_notification", "create",
@@ -732,6 +753,16 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
         _update_helper(
             "input_text.ai_calendar_tomorrow_summary", tomorrow_helper,
         )
+
+        # ── Per-person L1 helpers (Gap 1: identity-aware hot context) ──
+        for slug in get_person_slugs():
+            _update_helper(
+                f"input_text.ai_calendar_today_summary_{slug}", today_helper,
+            )
+            _update_helper(
+                f"input_text.ai_calendar_tomorrow_summary_{slug}", tomorrow_helper,
+            )
+
         _update_last_sync()
         _set_stale_flag(False)
 
@@ -875,6 +906,10 @@ async def calendar_promote_now(force: bool = False):
 @time_trigger("startup")  # noqa: F821
 async def calendar_promote_startup():
     """Initialize status sensor and run initial promotion."""
+    # Wait for SMB mount + force re-read of entity_config.yaml
+    task.sleep(10)  # noqa: F821
+    reload_entity_config()
+
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")
 

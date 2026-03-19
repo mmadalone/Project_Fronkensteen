@@ -1,0 +1,80 @@
+blueprint:
+  name: "Wake-up music – Alexa"
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/wakeup_music_alexa.yaml
+  description: >
+    ![Wake-up music Alexa header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_music_alexa-header.jpeg)
+
+    # Wake-up music – Alexa
+
+    Plays wake-up music on an Alexa device using
+    `alexa_devices.send_text_command`. Sends two text commands in
+    sequence: one to set volume, one to start a song or playlist.
+
+    ### Recent changes
+
+    - **v2.1:** Audit remediation — bumped `min_version` to 2024.10.0,
+      added `version` metadata, `continue_on_error` on both steps,
+      `default` on device input for collapsible section.
+
+    - **v2:** Modernised syntax (`action:`), added aliases, collapsible
+    input section, header image, metadata fields, `min_version`.
+
+    - **v1:** Initial version.
+
+  domain: script
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① ALEXA DEVICE & COMMANDS
+    # =========================================================================
+    alexa_device_commands:
+      name: "① Alexa device & commands"
+      icon: mdi:amazon
+      description: Select the Alexa device and the text commands to send.
+      collapsed: false
+      input:
+        alexa_device:
+          name: Alexa device
+          description: Alexa / Echo device to control.
+          default: ""
+          selector:
+            device:
+              integration: alexa_devices
+
+        volume_command:
+          name: Volume command
+          description: >-
+            Text command sent to set volume before playback.
+            Example: "set volume to 10".
+          default: "set volume to 10"
+          selector:
+            text: {}
+
+        song_command:
+          name: Song / playlist command
+          description: >-
+            Text command sent to start music.
+            Example: "play Mark on the bus by the Beastie Boys".
+          default: "play Mark on the bus by the Beastie Boys"
+          selector:
+            text: {}
+
+mode: single
+
+sequence:
+  - alias: "Set wake-up volume via Alexa text command"
+    action: alexa_devices.send_text_command
+    data:
+      device_id: !input alexa_device
+      text_command: !input volume_command
+    continue_on_error: true
+
+  - alias: "Start wake-up music via Alexa text command"
+    action: alexa_devices.send_text_command
+    data:
+      device_id: !input alexa_device
+      text_command: !input song_command
+    continue_on_error: true

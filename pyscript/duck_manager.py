@@ -34,24 +34,12 @@ from shared_utils import build_result_entity_name, parse_csv_helper
 
 RESULT_ENTITY = "sensor.ai_duck_manager_status"
 SNAPSHOT_FILE = Path("/config/pyscript/duck_snapshot.json")
-
-_DEFAULT_DUCK_GROUP = (
-    "madteevee,alexa,ha_voice_pe_living_room_quark_esp,"
-    "miquel_s_2nd_echo_pop,workshop_ma,ha_voice_pe_workshop_rick_esp,"
-    "40pfs6009_12,home_assistant_voice_living_room_media_player_esp"
-)
-_DEFAULT_ANNOUNCE_PLAYERS = (
-    "home_assistant_voice_living_room_media_player_esp,"
-    "home_assistant_voice_workshop_media_player_esp"
-)
-_DEFAULT_DUCK_SATELLITES = (
-    "assist_satellite.home_assistant_voice_0905c5_assist_satellite,"
-    "assist_satellite.home_assistant_voice_0a0109_assist_satellite"
-)
+_SPEAKER_CONFIG_FILE = Path("/config/pyscript/tts_speaker_config.json")
 
 # ── State ─────────────────────────────────────────────────────────────────────
 _satellite_triggers = []       # holds factory-created trigger references (keep alive)
 _sessions: dict = {}           # session_id → {source, detail, created_at}
+_sessions_lock = asyncio.Lock()
 _volume_snapshot: dict = {}    # entity_id → original_volume
 _was_playing: dict = {}        # I-39: entity_id → True (media paused during duck)
 _user_adjusted_during_duck: set = set()  # I-22: entities user adjusted while ducked
@@ -83,6 +71,28 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
         log.warning(f"duck_manager: state.set failed: {exc}")  # noqa: F821
 
 
+# ── Typed Helper Readers ──────────────────────────────────────────────────────
+
+def _helper_float(entity_id: str, default: float) -> float:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return float(val)
+    except Exception:
+        pass
+    return default
+
+
+def _helper_int(entity_id: str, default: int) -> int:
+    try:
+        val = state.get(entity_id)  # noqa: F821
+        if val and val not in ("unknown", "unavailable", ""):
+            return int(float(val))
+    except Exception:
+        pass
+    return default
+
+
 # ── Helper Getters ────────────────────────────────────────────────────────────
 
 def _is_enabled() -> bool:
@@ -93,45 +103,36 @@ def _is_enabled() -> bool:
 
 
 def _get_duck_group() -> list:
-    return parse_csv_helper("input_text.ai_duck_group", "media_player.")
+    speakers = parse_csv_helper("input_text.ai_duck_group", "media_player.")
+    if not speakers:
+        log.error("duck_manager: duck group helper is empty")  # noqa: F821
+    return speakers
 
 
 def _get_announcement_players() -> list:
-    return parse_csv_helper("input_text.ai_duck_announcement_players", "media_player.")
+    speakers = parse_csv_helper("input_text.ai_duck_announcement_players", "media_player.")
+    if not speakers:
+        log.error("duck_manager: announcement players helper is empty")  # noqa: F821
+    return speakers
 
 
 def _get_duck_satellites() -> list:
-    return parse_csv_helper("input_text.ai_duck_satellites", "assist_satellite.")
+    satellites = parse_csv_helper("input_text.ai_duck_satellites", "assist_satellite.")
+    if not satellites:
+        log.error("duck_manager: duck satellites helper is empty")  # noqa: F821
+    return satellites
 
 
 def _get_duck_volume() -> float:
-    try:
-        val = float(state.get("input_number.ai_tts_duck_volume") or 0.1)  # noqa: F821
-        if 0 <= val <= 1:
-            return val
-    except Exception:
-        pass
-    return 0.1
+    return _helper_float("input_number.ai_duck_volume", 0.1)
 
 
 def _get_announcement_volume() -> float:
-    try:
-        val = float(state.get("input_number.ai_tts_announcement_volume") or 0.5)  # noqa: F821
-        if 0 <= val <= 1:
-            return val
-    except Exception:
-        pass
-    return 0.5
+    return _helper_float("input_number.ai_duck_announce_volume", 0.5)
 
 
 def _get_watchdog_timeout() -> float:
-    try:
-        val = float(state.get("input_number.ai_duck_watchdog_timeout") or 120)  # noqa: F821
-        if 5 <= val <= 600:
-            return val
-    except Exception:
-        pass
-    return 120.0
+    return float(_helper_int("input_number.ai_duck_watchdog_timeout", 120))
 
 
 def _get_restore_mode() -> str:
@@ -145,34 +146,16 @@ def _get_restore_mode() -> str:
 
 
 def _get_restore_fixed_delay() -> float:
-    try:
-        val = float(state.get("input_number.ai_tts_restore_fixed_delay") or 0.5)  # noqa: F821
-        if 0.5 <= val <= 25:
-            return val
-    except Exception:
-        pass
-    return 0.5
+    return _helper_float("input_number.ai_duck_restore_delay", 0.5)
 
 
 def _get_restore_timeout() -> float:
-    try:
-        val = float(state.get("input_number.ai_tts_restore_timeout") or 25)  # noqa: F821
-        if 5 <= val <= 25:
-            return val
-    except Exception:
-        pass
-    return 25.0
+    return _helper_float("input_number.ai_duck_restore_timeout", 25.0)
 
 
 def _get_restore_post_buffer() -> float:
     """Post-playback buffer: HA entity goes idle before ESP finishes audio."""
-    try:
-        val = float(state.get("input_number.ai_tts_restore_post_buffer") or 5.0)  # noqa: F821
-        if 0 <= val <= 15:
-            return val
-    except Exception:
-        pass
-    return 5.0
+    return _helper_float("input_number.ai_duck_post_buffer", 5.0)
 
 
 def _get_duck_behavior() -> str:
@@ -208,19 +191,31 @@ def _get_allow_manual_override() -> bool:
 
 # ── Volume Buddy Fallback ────────────────────────────────────────────────────
 
-_VSYNC_GROUPS = ("living_room", "workshop")
+
+@pyscript_compile  # noqa: F821
+def _load_vsync_zones(path: str) -> list:
+    """Load zone names from tts_speaker_config.json (runs outside sandbox)."""
+    import json as _json
+    try:
+        with open(path, "r") as f:
+            cfg = _json.loads(f.read())
+        # Drill into zone_speaker_map to get actual zone names
+        if isinstance(cfg, dict) and "zone_speaker_map" in cfg:
+            zsm = cfg["zone_speaker_map"]
+            return list(zsm.keys()) if isinstance(zsm, dict) else []
+        # Fallback: treat top-level keys as zones (flat config format)
+        return list(cfg.keys()) if isinstance(cfg, dict) else []
+    except Exception:
+        return []
 
 
-_VSYNC_FALLBACKS = {
-    "living_room": {
-        "players": "alexa,ha_voice_pe_living_room_quark_esp",
-        "alexa": "alexa",
-    },
-    "workshop": {
-        "players": "miquel_s_echo_pop,miquel_s_2nd_echo_pop,workshop_ma,ha_voice_pe_workshop_rick_esp",
-        "alexa": "miquel_s_echo_pop,miquel_s_2nd_echo_pop",
-    },
-}
+def _get_vsync_groups() -> list:
+    """Discover vsync zone names dynamically from speaker config or helpers."""
+    zones = _load_vsync_zones(str(_SPEAKER_CONFIG_FILE))
+    if zones:
+        return zones
+    log.warning("duck_manager: no zones found in speaker config — falling back to empty")  # noqa: F821
+    return []
 
 
 def _get_volume_buddies() -> dict:
@@ -228,26 +223,21 @@ def _get_volume_buddies() -> dict:
 
     For each vsync group, Alexa devices are unreliable reporters.
     Their buddy is the first non-Alexa member in the same group.
-    Falls back to hardcoded defaults if helpers are empty (startup race).
+    Logs an error if helpers are empty (no hardcoded fallbacks).
     """
     buddies = {}
-    for group_name in _VSYNC_GROUPS:
+    for group_name in _get_vsync_groups():
         players = parse_csv_helper(
             f"input_text.ai_vsync_{group_name}_players", "media_player."
         )
         alexa_list = parse_csv_helper(
             f"input_text.ai_vsync_{group_name}_alexa", "media_player."
         )
-        # Fallback to hardcoded defaults if helpers are empty
-        fb = _VSYNC_FALLBACKS.get(group_name, {})
-        if not players and fb.get("players"):
-            players = [
-                f"media_player.{s.strip()}" for s in fb["players"].split(",") if s.strip()
-            ]
-        if not alexa_list and fb.get("alexa"):
-            alexa_list = [
-                f"media_player.{s.strip()}" for s in fb["alexa"].split(",") if s.strip()
-            ]
+        if not players:
+            log.error(  # noqa: F821
+                f"duck_manager: vsync group {group_name} players helper is empty"
+            )
+            continue
         alexa_set = set(alexa_list)
         # First non-Alexa player is the buddy for all Alexa devices in this group
         buddy = None
@@ -327,7 +317,7 @@ def _get_satellite_name(entity_id: str) -> str:
 
 # ── Snapshot Persistence (file-based) ─────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _save_snapshot_sync(snapshot: dict, path: str) -> bool:
     import json as _json
     try:
@@ -338,7 +328,7 @@ def _save_snapshot_sync(snapshot: dict, path: str) -> bool:
         return False
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _load_snapshot_sync(path: str) -> dict:
     import json as _json
     try:
@@ -348,7 +338,7 @@ def _load_snapshot_sync(path: str) -> dict:
         return {}
 
 
-@pyscript_compile  # noqa: F821
+@pyscript_executor  # noqa: F821
 def _clear_snapshot_sync(path: str) -> None:
     import os
     try:
@@ -359,15 +349,15 @@ def _clear_snapshot_sync(path: str) -> None:
 
 async def _save_snapshot():
     data = {"volumes": dict(_volume_snapshot), "was_playing": dict(_was_playing)}
-    await asyncio.to_thread(_save_snapshot_sync, data, str(SNAPSHOT_FILE))
+    _save_snapshot_sync(data, str(SNAPSHOT_FILE))
 
 
 async def _load_snapshot():
-    return await asyncio.to_thread(_load_snapshot_sync, str(SNAPSHOT_FILE))
+    return _load_snapshot_sync(str(SNAPSHOT_FILE))
 
 
 async def _clear_snapshot():
-    await asyncio.to_thread(_clear_snapshot_sync, str(SNAPSHOT_FILE))
+    _clear_snapshot_sync(str(SNAPSHOT_FILE))
 
 
 # ── Core Duck / Restore ───────────────────────────────────────────────────────
@@ -394,7 +384,7 @@ def _capture_and_duck(skip_duck_entity: str = "") -> None:
     # Set ducking flag FIRST — blocks volume_sync before any volume changes
     try:
         service.call("input_boolean", "turn_on",  # noqa: F821
-                     entity_id="input_boolean.ducking_flag")
+                     entity_id="input_boolean.ai_ducking_flag")
     except Exception:
         pass
 
@@ -628,7 +618,7 @@ async def _restore_and_verify() -> None:
         log.warning("duck_manager: nothing to restore (empty snapshot)")  # noqa: F821
         try:
             service.call("input_boolean", "turn_off",  # noqa: F821
-                         entity_id="input_boolean.ducking_flag")
+                         entity_id="input_boolean.ai_ducking_flag")
         except Exception:
             pass
         return
@@ -678,7 +668,7 @@ async def _restore_and_verify() -> None:
     # Clear ducking flag
     try:
         service.call("input_boolean", "turn_off",  # noqa: F821
-                     entity_id="input_boolean.ducking_flag")
+                     entity_id="input_boolean.ai_ducking_flag")
     except Exception:
         pass
 
@@ -710,7 +700,7 @@ async def _add_session(source: str, detail: str = "") -> str:
     ts = int(time.time() * 1000)
     session_id = f"{source}_{detail}_{ts}" if detail else f"{source}_{ts}"
 
-    with _lock:
+    async with _sessions_lock:
         is_first = len(_sessions) == 0
         _sessions[session_id] = {
             "source": source,
@@ -727,25 +717,25 @@ async def _add_session(source: str, detail: str = "") -> str:
         skip = detail if source == "tts_queue" else ""
         _capture_and_duck(skip_duck_entity=skip)
 
-    _update_status()
+    await _update_status()
     return session_id
 
 
-def _remove_session(session_id: str) -> bool:
+async def _remove_session(session_id: str) -> bool:
     """Remove a session. Returns True if this was the last session."""
-    with _lock:
+    async with _sessions_lock:
         _sessions.pop(session_id, None)
         return len(_sessions) == 0
 
 
-def _clear_all_sessions() -> None:
+async def _clear_all_sessions() -> None:
     global _sessions
-    with _lock:
+    async with _sessions_lock:
         _sessions = {}
 
 
-def _update_status() -> None:
-    with _lock:
+async def _update_status() -> None:
+    async with _sessions_lock:
         count = len(_sessions)
         sources = list(set([s["source"] for s in _sessions.values()]))
     _set_result(
@@ -796,11 +786,11 @@ async def _on_satellite_change(var_name=None, value=None, old_value=None):
                 f"duck_manager: satellite {_get_satellite_name(var_name)} went "
                 f"{new_val} during duck — cleaning up session {sid}"
             )
-            is_last = _remove_session(sid)
+            is_last = await _remove_session(sid)
             if is_last:
                 await _restore_and_verify()
                 await _clear_snapshot()
-            _update_status()
+            await _update_status()
         return
 
     # Ignore transitions FROM unavailable/unknown (boot-up)
@@ -811,7 +801,9 @@ async def _on_satellite_change(var_name=None, value=None, old_value=None):
 
     if old_val == "idle" and new_val != "idle":
         # Satellite woke up → duck (but only one session per satellite)
-        if var_name in _sat_sessions and _sat_sessions[var_name] in _sessions:
+        async with _sessions_lock:
+            already_active = var_name in _sat_sessions and _sat_sessions[var_name] in _sessions
+        if already_active:
             log.info(  # noqa: F821
                 f"duck_manager: satellite {sat_name} re-activated — "
                 f"session {_sat_sessions[var_name]} still active, skipping"
@@ -851,11 +843,11 @@ async def _on_satellite_change(var_name=None, value=None, old_value=None):
         if not all_idle:
             sid = _sat_sessions.pop(var_name, None)
             if sid:
-                is_last = _remove_session(sid)
+                is_last = await _remove_session(sid)
                 if is_last:
                     await _restore_and_verify()
                     await _clear_snapshot()
-                _update_status()
+                await _update_status()
             return
 
         # All satellites idle — wait for announcements to finish
@@ -865,16 +857,16 @@ async def _on_satellite_change(var_name=None, value=None, old_value=None):
         for sat_e in list(_sat_sessions):
             sid = _sat_sessions.pop(sat_e, None)
             if sid:
-                _remove_session(sid)
+                await _remove_session(sid)
 
         # If no sessions remain, restore
-        with _lock:
+        async with _sessions_lock:
             remaining = len(_sessions)
         if remaining == 0:
             await _restore_and_verify()
             await _clear_snapshot()
 
-        _update_status()
+        await _update_status()
         log.info(  # noqa: F821
             f"duck_manager: all satellites idle → restored "
             f"(remaining={remaining})"
@@ -962,7 +954,7 @@ async def duck_manager_restore(session_id: str = "",
         return {"status": "error", "op": "duck_manager_restore",
                 "error": "session_id required"}
 
-    is_last = _remove_session(session_id)
+    is_last = await _remove_session(session_id)
 
     if is_last:
         if wait_for_playback:
@@ -970,7 +962,7 @@ async def duck_manager_restore(session_id: str = "",
         await _restore_and_verify()
         await _clear_snapshot()
 
-    _update_status()
+    await _update_status()
     return {
         "status": "ok",
         "op": "duck_manager_restore",
@@ -990,11 +982,11 @@ async def duck_manager_force_restore():
         log.info("duck_manager [TEST]: would force-restore all sessions")  # noqa: F821
         return {"status": "test_mode_skip"}
 
-    _clear_all_sessions()
+    await _clear_all_sessions()
     _sat_sessions.clear()
     await _restore_and_verify()
     await _clear_snapshot()
-    _update_status()
+    await _update_status()
     log.warning("duck_manager: FORCE RESTORE — all sessions cleared")  # noqa: F821
     return {"status": "ok", "op": "duck_manager_force_restore"}
 
@@ -1010,12 +1002,12 @@ async def duck_manager_status():
         log.info("duck_manager [TEST]: would return status info")  # noqa: F821
         return {"status": "test_mode_skip"}
 
-    with _lock:
+    async with _sessions_lock:
         sessions_copy = dict(_sessions)
 
     flag = "unknown"
     try:
-        flag = state.get("input_boolean.ducking_flag") or "unknown"  # noqa: F821
+        flag = state.get("input_boolean.ai_ducking_flag") or "unknown"  # noqa: F821
     except Exception:
         pass
 
@@ -1116,7 +1108,7 @@ async def duck_manager_update_snapshot(entity_id: str = "",
                 "error": "entity_id and volume_level required"}
 
     # Not currently ducking — nothing to update
-    with _lock:
+    async with _sessions_lock:
         active = len(_sessions) > 0
 
     if not active:
@@ -1152,7 +1144,7 @@ async def _duck_watchdog():
     now = time.time()
     stale = []
 
-    with _lock:
+    async with _sessions_lock:
         for sid, info in _sessions.items():
             age = now - info["created_at"]
             if age > timeout:
@@ -1166,11 +1158,11 @@ async def _duck_watchdog():
         f"force-restoring"
     )
 
-    _clear_all_sessions()
+    await _clear_all_sessions()
     _sat_sessions.clear()
     await _restore_and_verify()
     await _clear_snapshot()
-    _update_status()
+    await _update_status()
 
     try:
         detail_str = ", ".join(
@@ -1211,18 +1203,15 @@ async def _duck_manager_startup():
         await _restore_and_verify()
 
     # Clear stale state
-    _clear_all_sessions()
+    await _clear_all_sessions()
     _sat_sessions.clear()
     await _clear_snapshot()
 
     try:
         service.call("input_boolean", "turn_off",  # noqa: F821
-                     entity_id="input_boolean.ducking_flag")
+                     entity_id="input_boolean.ai_ducking_flag")
     except Exception:
         pass
-
-    # Set default helper values if empty
-    await _init_helper_defaults()
 
     # Register satellite triggers dynamically from helper
     global _satellite_triggers
@@ -1235,23 +1224,3 @@ async def _duck_manager_startup():
 
     _set_result("idle", op="startup", sessions=0, snapshot_entries=0)
     log.info("duck_manager.py loaded — idle")  # noqa: F821
-
-
-async def _init_helper_defaults():
-    """Set default values for helpers if they are empty/unknown."""
-    helpers = [
-        ("input_text.ai_duck_group", _DEFAULT_DUCK_GROUP),
-        ("input_text.ai_duck_announcement_players", _DEFAULT_ANNOUNCE_PLAYERS),
-        ("input_text.ai_duck_satellites", _DEFAULT_DUCK_SATELLITES),
-    ]
-    for entity_id, default in helpers:
-        try:
-            val = state.get(entity_id)  # noqa: F821
-            if not val or val in ("unknown", "unavailable", ""):
-                service.call("input_text", "set_value",  # noqa: F821
-                             entity_id=entity_id, value=default)
-                log.info(  # noqa: F821
-                    f"duck_manager: set default for {entity_id}"
-                )
-        except Exception:
-            pass

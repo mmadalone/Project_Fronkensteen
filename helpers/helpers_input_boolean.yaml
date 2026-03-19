@@ -5,12 +5,12 @@
 # Ducking / music control
 ########################################
 
-music_follow_me:
+ai_music_follow_me:
   name: music_follow_me
   icon: mdi:speaker
   initial: true
 
-ducking_flag:
+ai_ducking_flag:
   name: ducking flag
   icon: mdi:duck
   initial: false
@@ -19,12 +19,12 @@ ducking_flag:
 # Wake-up controls
 ########################################
 
-wake_up_snooze:
+ai_wake_up_snooze:
   name: Wake-up snooze
   icon: mdi:bed-clock
   initial: false
 
-wake_up_stop:
+ai_wake_up_stop:
   name: Wake-up stop
   icon: mdi:account-clock
   initial: false
@@ -57,47 +57,47 @@ lcars_vertical:
 # Bedtime negotiator (Global state + toggles)
 ########################################
 
-bedtime_active:
+ai_bedtime_active:
   name: Bedtime negotiator active
   icon: mdi:bed-clock
   initial: false
 
-bedtime_global_lock:
+ai_bedtime_global_lock:
   name: Bedtime negotiator global lock
   icon: mdi:lock
   initial: false
 
-bedtime_waiting_for_reply:
+ai_bedtime_waiting_for_reply:
   name: Bedtime negotiator waiting for reply
   icon: mdi:account-voice
   initial: false
 
-bedtime_debug:
+ai_bedtime_debug:
   name: Bedtime negotiator debug
   icon: mdi:bug
   initial: false
 
-bedtime_log_tts_payload:
+ai_bedtime_log_tts_payload:
   name: Log bedtime TTS payload
   icon: mdi:text-to-speech
   initial: false
 
-bedtime_log_llm_prompt:
+ai_bedtime_log_llm_prompt:
   name: Log bedtime LLM prompt summary
   icon: mdi:brain
   initial: false
 
-bedtime_opening_llm_enabled:
+ai_bedtime_opening_llm_enabled:
   name: Enable LLM opening line
   icon: mdi:comment-text-outline
   initial: true
 
-bedtime_allow_shutdown_actions:
+ai_bedtime_allow_shutdown_actions:
   name: Allow shutdown actions
   icon: mdi:power
   initial: true
 
-bedtime_allow_time_talk:
+ai_bedtime_allow_time_talk:
   name: Allow time-based comments
   icon: mdi:clock-outline
   initial: true
@@ -249,6 +249,21 @@ ai_email_promotion_enabled:
   name: "AI Email Promotion Enabled"
   icon: mdi:email-check
 
+# Gap 2: Email stale flag (mirrors ai_calendar_stale pattern).
+# Set ON when IMAP sensor is unavailable or hasn't changed in N minutes.
+ai_email_stale:
+  name: "AI Email Data Stale"
+  initial: false
+  icon: mdi:email-alert
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_entity_history — Entity History Query (Gap 3)
+# ═══════════════════════════════════════════════════════════════════
+ai_entity_history_enabled:
+  name: "AI Entity History - Enabled"
+  initial: true
+  icon: mdi:history
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_embedding — Semantic Search & Memory Lifecycle
 # ═══════════════════════════════════════════════════════════════════
@@ -266,6 +281,21 @@ ai_memory_auto_archive:
   initial: true
   icon: mdi:archive-check
 
+# ── Search-time enrichment (auto-relationships Option A) ────────
+# Append graph-connected entries to memory search results.
+ai_memory_search_enrich:
+  name: "AI Memory - Search Enrichment"
+  initial: true
+  icon: mdi:graph-outline
+
+# ── Semantic autolink (vec0 content_match) ──────────────────────
+# Nightly creation of content_match edges via vec0 KNN similarity.
+# OFF by default — opt-in since it has embedding cost implications.
+ai_memory_semantic_autolink:
+  name: "AI Memory - Semantic Autolink"
+  initial: false
+  icon: mdi:vector-link
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_escalation — Escalation Follow-Through
 # ═══════════════════════════════════════════════════════════════════
@@ -279,8 +309,8 @@ ai_escalation_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # Voice-activated DND. When ON, suppresses all non-calendar nudges.
 # Can be set by voice: "I need to focus" / "Focus mode on"
-# Auto-expires after focus_mode_max_hours via pyscript cron.
-focus_mode:
+# Auto-expires after ai_focus_mode_max_hours via pyscript cron.
+ai_focus_mode:
   name: "Focus Mode"
   icon: mdi:head-lightbulb
 
@@ -325,7 +355,7 @@ ai_focus_meal_ask_eaten:
 # ═══════════════════════════════════════════════════════════════════
 # ai_identity — Identity Confidence
 # ═══════════════════════════════════════════════════════════════════
-guest_mode:
+ai_guest_mode:
   name: "Guest Mode"
   initial: false
   icon: mdi:account-question
@@ -586,3 +616,16 @@ ai_interview_mode:
   name: "AI Interview Mode"
   initial: false
   icon: mdi:clipboard-account
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_whisper — Agent Whisper Network (moved from ai_whisper.yaml, C3)
+# ═══════════════════════════════════════════════════════════════════
+ai_whisper_enabled:
+  name: "AI Whisper - Enabled"
+  initial: true
+  icon: mdi:ear-hearing
+
+ai_whisper_mood_detection:
+  name: "AI Whisper - Mood Detection"
+  initial: true
+  icon: mdi:emoticon-outline
