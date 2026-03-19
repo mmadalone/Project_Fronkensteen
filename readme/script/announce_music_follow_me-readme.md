@@ -1,6 +1,6 @@
 # Announce Music Follow Me -- TTS (v2.0)
 
-![Announce Music Follow Me](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce-music-follow-me-header.jpeg)
+![Announce Music Follow Me](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/announce-music-follow-me-header.jpeg)
 
 Script blueprint that announces via TTS where the music was moved for the "Music Assistant -- Follow Me" automation. A simpler alternative to the LLM variant -- supports static default messages and random message pools with fun Rick/Quark-style personality. Works with any TTS engine and includes optional volume control.
 

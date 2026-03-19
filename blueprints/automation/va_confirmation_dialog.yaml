@@ -18,7 +18,7 @@ blueprint:
     ### Recent changes
     - **v1:** Initial version
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/va_confirmation_dialog.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/va_confirmation_dialog.yaml
   homeassistant:
     min_version: "2024.10.0"
 

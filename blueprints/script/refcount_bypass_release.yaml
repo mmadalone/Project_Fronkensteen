@@ -10,7 +10,7 @@
 blueprint:
   name: "Refcount Bypass — Release (v2.0.0)"
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/refcount_bypass_release.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/refcount_bypass_release.yaml
   description: >
     # Refcount Bypass — Release
 

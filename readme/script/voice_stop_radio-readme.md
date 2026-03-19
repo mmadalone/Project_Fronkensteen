@@ -1,6 +1,6 @@
 # Voice -- Stop Radio (Music Assistant)
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_stop_radio-header.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_stop_radio-header.jpeg)
 
 LLM tool wrapper that stops or pauses Music Assistant "radio" playback. This script triggers the "Voice -- Active Media Controls" automation with `command = "stop_radio"`, which pauses all players designated as radio sources. Designed as a voice-agent tool for targeted radio control without affecting other media.
 

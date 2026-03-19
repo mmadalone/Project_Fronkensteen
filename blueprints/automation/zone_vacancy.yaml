@@ -15,7 +15,7 @@ blueprint:
     reports "off" for a configurable delay. If the sensor goes back to "on"
     during the delay, the trigger is automatically cancelled.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/zone_vacancy.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/zone_vacancy.yaml
 
   input:
     presence_sensor:

@@ -1,6 +1,6 @@
 # Music Assistant -- Local LLM Enhanced Voice Support
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/mass_llm_enhanced_assist-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/mass_llm_enhanced_assist-header.jpeg)
 
 Uses an LLM conversation agent to parse voice commands into structured media queries, then plays them via Music Assistant. Supports area-based and player-based targeting with automatic fallback to a default player, player blacklisting with optional divert, URI shortcuts for direct playlist/station mapping, and playback verification. Originally from the Music Assistant project, with style-guide fixes and enhancements by madalone.
 

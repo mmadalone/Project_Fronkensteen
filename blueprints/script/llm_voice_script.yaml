@@ -1,7 +1,7 @@
 blueprint:
   name: LLM Script for Music Assistant voice requests (modified)
   source_url: https://github.com/music-assistant/voice-support/blob/main/llm-script-blueprint/llm_voice_script.yaml
-  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_voice_script-header.jpeg)
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/llm_voice_script-header.jpeg)
 
 
     ![Image](https://github.com/music-assistant/voice-support/blob/main/assets/music-assistant.png?raw=true)

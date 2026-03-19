@@ -21,7 +21,7 @@ blueprint:
     ### Recent changes
     - **v1:** Initial implementation
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/media_tracking.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/media_tracking.yaml
   homeassistant:
     min_version: "2024.10.0"
 

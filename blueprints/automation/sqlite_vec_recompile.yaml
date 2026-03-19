@@ -41,7 +41,7 @@ blueprint:
     - `/config/scripts/recompile_vec0.sh` present
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/sqlite_vec_recompile.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/sqlite_vec_recompile.yaml
 
   input:
     # ===========================================================================

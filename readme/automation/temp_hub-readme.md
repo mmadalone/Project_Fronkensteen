@@ -1,6 +1,6 @@
 # Temperature hub -- cooling fan per device
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/temp_hub-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/temp_hub-header.jpeg)
 
 Generic temperature-based cooling controller. Monitors one temperature sensor and turns a smart plug (fan) ON when it exceeds a high threshold and OFF again when it drops below a lower threshold. Uses hysteresis to avoid flapping. If the sensor becomes unavailable or unknown, the fan is turned OFF as a safety fallback. Create one automation instance per device (e.g. media center, Raspberry Pi, NAS).
 

@@ -2,7 +2,7 @@ blueprint:
   name: Announce Music Follow Me (TTS, LLM)
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce_music_follow_me_llm-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/announce_music_follow_me_llm-header.jpeg)
 
     # Announce Music Follow Me (TTS, LLM)
 
@@ -53,7 +53,7 @@ blueprint:
     - **v1 (2026-02-14):** Initial version
 
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/announce_music_follow_me_llm.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/announce_music_follow_me_llm.yaml
   homeassistant:
     min_version: "2024.10.0"
 

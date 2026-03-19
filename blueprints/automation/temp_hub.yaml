@@ -2,7 +2,7 @@ blueprint:
   name: "Temperature hub – cooling fan per device"
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/temp_hub-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/temp_hub-header.jpeg)
 
     # Temperature hub – cooling fan per device
 
@@ -19,7 +19,7 @@ blueprint:
     - **v2:** Full style guide compliance — modern syntax, aliases, collapsible sections
     - **v1:** Initial version
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/temp_hub.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/temp_hub.yaml
   homeassistant:
     min_version: "2024.10.0"
 

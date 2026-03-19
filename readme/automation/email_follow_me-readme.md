@@ -1,6 +1,6 @@
 # Email Follow-Me
 
-![Email Follow-Me header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/email-follow-me-header.jpeg)
+![Email Follow-Me header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/email-follow-me-header.jpeg)
 
 When a new email arrives via the IMAP integration, this blueprint determines which room you're in via FP2 presence sensors, routes to the nearest voice satellite, and has a conversation agent summarize who emailed and what it's about -- completely hands-free. Includes blocked-sender filtering, keyword-based whitelist or blacklist, configurable cooldown, quiet hours, DND respect, attachment detection, UID-based deduplication, unread email reminders with LLM escalation, and sender alias mapping.
 

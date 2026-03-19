@@ -21,7 +21,7 @@ blueprint:
       prompts for nudge and congrats, presence sensor selector
     - **v1:** Initial blueprint — replaces package ai_phone_charge_reminder.yaml
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/phone_charge_reminder.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/phone_charge_reminder.yaml
   homeassistant:
     min_version: "2024.10.0"
 

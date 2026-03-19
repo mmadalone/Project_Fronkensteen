@@ -1,6 +1,6 @@
 # Voice -- Active Media Controls (Kodi / MA / SpotifyPlus / Alexa / etc.)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_active_media_controls.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_active_media_controls.jpeg)
 
 Centralized voice media control automation. It does not listen to voice directly -- instead, thin wrapper scripts (created from companion script blueprints) call this automation with a `command` variable. This pattern keeps all logic in one place while giving the LLM agent clean, single-purpose tools to call. Supports three commands: `pause_active`, `stop_radio`, and `shut_up`.
 

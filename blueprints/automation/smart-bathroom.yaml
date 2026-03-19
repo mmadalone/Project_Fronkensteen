@@ -1,7 +1,7 @@
 blueprint:
   name: "🚽💡 Smart Bathroom Occupancy Light Control (Door + Shower Zone Optional)"
   author: Murat Çeşmecioğlu (modified by Madalone & Miquel)
-  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/smart-bathroom-header.jpeg)
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/smart-bathroom-header.jpeg)
 
     # Smart Bathroom Occupancy Light Control
 
@@ -24,7 +24,7 @@ blueprint:
 
     - **v1:** Initial version (Murat Çeşmecioğlu, modified by Madalone)'
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/smart-bathroom.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/smart-bathroom.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

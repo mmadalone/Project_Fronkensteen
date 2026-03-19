@@ -1,6 +1,6 @@
 # Notification Follow-Me (v3.18.0)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/notification-follow-me-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
 
 When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or any selected app), this blueprint determines which room you are in via FP2 presence sensors, routes to the nearest voice satellite, and has a conversation agent summarize the message -- completely hands-free. Uses the Android Companion App's `last_notification` sensor as the data source. Includes blocked-sender filtering, cooldown, quiet hours, DND respect, media message detection, unread message reminders, agent randomization, contact history, ringer-aware volume control, and multi-player ducking.
 

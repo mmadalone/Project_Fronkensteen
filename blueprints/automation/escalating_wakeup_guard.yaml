@@ -1,7 +1,7 @@
 blueprint:
   name: "Escalating wake-up guard – inverted presence"
   author: madalone
-  description: '![Escalating wake-up guard](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/escalating_wakeup_guard-header.jpg)
+  description: '![Escalating wake-up guard](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/escalating_wakeup_guard-header.jpg)
 
     # Escalating wake-up guard – inverted presence
 
@@ -42,7 +42,7 @@ blueprint:
       lights, volume restore), aliases on flash delays, DRY comments on
       duplicated activity-sensor template'
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/escalating_wakeup_guard.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/escalating_wakeup_guard.yaml
   homeassistant:
     min_version: "2024.6.0"
   input:

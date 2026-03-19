@@ -1,6 +1,6 @@
 # Alexa Presence-Aware Radio Stop -- Music Assistant
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/alexa_presence_radio_stop-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_presence_radio_stop-header.jpeg)
 
 Say "stop the music" (or any phrase you configure) to any Alexa device in your home. Home Assistant stops all configured Music Assistant players, or -- with presence-aware mode enabled -- only the player in the room where you currently have presence. Companion blueprint to the Alexa Presence-Aware Radio blueprint for a complete voice-controlled radio system.
 

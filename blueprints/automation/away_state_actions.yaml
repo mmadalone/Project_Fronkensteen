@@ -22,7 +22,7 @@ blueprint:
     - "Away Notification" — extended_away: push notification after 4+ hours
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/away_state_actions.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/away_state_actions.yaml
   homeassistant:
     min_version: 2024.10.0
 

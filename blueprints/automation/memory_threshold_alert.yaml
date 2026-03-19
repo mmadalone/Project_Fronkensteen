@@ -39,7 +39,7 @@ blueprint:
     Part of I-42: Memory Lifecycle Policy (Phase 1 — monitoring).
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/memory_threshold_alert.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/memory_threshold_alert.yaml
   homeassistant:
     min_version: "2024.10.0"
 

@@ -16,7 +16,7 @@ blueprint:
     and L1 helpers for voice agent awareness. Fires persistent notifications
     on sync failure or project status changes.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/project_sync.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/project_sync.yaml
   author: madalone
 
   input:

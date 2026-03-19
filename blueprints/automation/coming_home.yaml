@@ -2,7 +2,7 @@ blueprint:
   name: "Coming home – AI welcome"
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/coming_home-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/coming_home-header.jpeg)
 
     # Coming home – AI welcome
 
@@ -28,7 +28,7 @@ blueprint:
       (`assist_satellite.start_conversation` requires ≥ 2025.4) (AP-22),
       added `source_url` for GitHub "Check for updates" support.
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/coming_home.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/coming_home.yaml"
   homeassistant:
     min_version: "2025.4.0"
   input:

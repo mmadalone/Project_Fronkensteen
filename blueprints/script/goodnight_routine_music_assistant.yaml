@@ -2,7 +2,7 @@ blueprint:
   name: "Goodnight Routine – Bedtime Negotiator (Music Assistant)"
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_routine_music_assistant-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_routine_music_assistant-header.jpeg)
 
     # Goodnight Routine – Bedtime Negotiator (Music Assistant)
 
@@ -37,7 +37,7 @@ blueprint:
       blocks music), source_url + min_version + header image added.
 
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/goodnight_routine_music_assistant.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/goodnight_routine_music_assistant.yaml
   homeassistant:
     min_version: "2024.10.0"
 

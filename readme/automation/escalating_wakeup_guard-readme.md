@@ -1,6 +1,6 @@
 # Escalating Wake-Up Guard -- Inverted Presence
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/escalating_wakeup_guard-header.jpg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/escalating_wakeup_guard-header.jpg)
 
 Multi-stage escalation alarm that uses inverted presence logic: instead of checking if you are in bed, it checks whether you have gotten up by monitoring non-bedroom activity sensors. No activity detected = still asleep = escalate further. Designed as Layer 2 behind `llm_alarm.yaml`. Volume and brightness interpolate smoothly from start to end values across a configurable number of stages (1-6). Lights, music, and LLM messages are all optional.
 

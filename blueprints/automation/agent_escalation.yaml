@@ -40,7 +40,7 @@ blueprint:
     prompt_barrage, run_script.  Per-satellite instance with independent
     probability and cooldown.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/agent_escalation.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/agent_escalation.yaml
 
   input:
     # ===========================================================================

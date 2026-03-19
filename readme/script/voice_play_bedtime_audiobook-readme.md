@@ -1,6 +1,6 @@
 # Voice -- Play Bedtime Audiobook (Music Assistant)
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_play_bedtime_audiobook.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_play_bedtime_audiobook.jpeg)
 
 LLM tool wrapper that plays an audiobook (or other media type) via Music Assistant on a designated player at a configurable volume. Designed as a voice-agent tool script -- the LLM passes title, player, and optional volume at runtime via fields. Instantiate once per use-case (e.g. one for audiobooks, one for podcasts) with different defaults, then register each instance as an LLM tool.
 

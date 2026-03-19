@@ -15,7 +15,7 @@ blueprint:
     ### Recent changes
     - **v1:** Initial blueprint — replaces package ai_sleep_lights.yaml
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/sleep_lights.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/sleep_lights.yaml
   homeassistant:
     min_version: "2024.10.0"
 

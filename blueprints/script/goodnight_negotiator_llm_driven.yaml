@@ -2,7 +2,7 @@ blueprint:
   name: "Goodnight LLM Negotiator (agent personas + stage modes + fallbacks)"
   author: madalone
   description: |
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_negotiator_llm_driven-header.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_llm_driven-header.jpeg)
 
     v2.0.0 — Full Rules of Acquisition compliance pass.
 
@@ -16,7 +16,7 @@ blueprint:
     - Music will NOT start unless explicitly confirmed when Stage 3 mode = ask.
     - If Music Assistant queues but stays paused/idle, the script will issue media_play as fallback.
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/goodnight_negotiator_llm_driven.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/goodnight_negotiator_llm_driven.yaml
   homeassistant:
     min_version: "2024.10.0"
 

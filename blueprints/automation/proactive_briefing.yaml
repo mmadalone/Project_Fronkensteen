@@ -23,7 +23,7 @@ blueprint:
     ### Recent changes
     - **v1:** Merge of morning + slot blueprints into universal design
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/proactive_briefing.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/proactive_briefing.yaml
   homeassistant:
     min_version: "2024.10.0"
 

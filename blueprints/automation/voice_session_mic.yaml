@@ -21,7 +21,7 @@ blueprint:
     to finish, plays media (music compositions), then opens mic for feedback
     via continuous conversation loop.
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/voice_session_mic.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/voice_session_mic.yaml
   domain: automation
   homeassistant:
     min_version: "2024.10.0"

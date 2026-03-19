@@ -1,6 +1,6 @@
 # Goodnight Routine -- Bedtime Negotiator (Music Assistant)
 
-![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_routine_music_assistant-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_routine_music_assistant-header.jpeg)
 
 Interactive voice-driven goodnight routine with multi-stage negotiation. Uses `assist_satellite.ask_question` for conversational YES/NO flow on a Voice PE satellite. Three stages: device shutdown, IR device control, and music/bedtime story -- each with fully editable messages that can optionally source text from `input_text` helpers for AI-refreshed content. Four music modes: single preset, multi-preset choice, dynamic input_text URI, or free-text voice search via Music Assistant.
 

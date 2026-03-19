@@ -1,10 +1,10 @@
 blueprint:
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/speaker_volume_sync.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/speaker_volume_sync.yaml
   name: "Speaker Volume Sync"
   author: madalone
   description: |
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/alexa_ma_volume_sync_blueprint-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_ma_volume_sync_blueprint-header.jpeg)
 
     # Sync volume between grouped media players
 

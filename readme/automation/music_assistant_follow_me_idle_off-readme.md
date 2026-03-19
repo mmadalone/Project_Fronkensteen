@@ -1,6 +1,6 @@
 # Music Assistant -- Follow Me (idle OFF + optional auto-ON)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/music_assistant_follow_me_idle_off-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/music_assistant_follow_me_idle_off-header.jpeg)
 
 Manages a follow-me toggle (`input_boolean`) for Music Assistant. Automatically turns the toggle OFF when all monitored players have been idle for a configurable duration, and optionally turns it back ON when any player starts playing. Designed as a companion to the multi-room follow-me blueprint that performs the actual queue transfers.
 

@@ -5,7 +5,7 @@ blueprint:
     local MIDI rendering. The voice agent passes prompt, player, and options at
     runtime via fields. Instantiate once, register as an LLM tool.
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_compose_music.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_compose_music.yaml
   domain: script
   homeassistant:
     min_version: "2024.10.0"

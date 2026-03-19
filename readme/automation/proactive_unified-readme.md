@@ -1,6 +1,6 @@
 # Proactive -- Unified presence engine
 
-![Proactive Unified](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_llm_sensors-header.jpeg)
+![Proactive Unified](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_llm_sensors-header.jpeg)
 
 Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `proactive_llm_sensors.yaml` (LLM + sensors + weekends) into a single blueprint using the full voice infrastructure layer. Supports two message modes: **template** (reads from input_text helpers) and **llm** (generates via conversation agent). Budget gate automatically forces template mode when LLM budget drops below 60%.
 

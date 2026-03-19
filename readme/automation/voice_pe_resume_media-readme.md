@@ -1,6 +1,6 @@
 # Voice PE -- Resume Media After Conversation
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_pe_resume_media-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_pe_resume_media-header.jpeg)
 
 Resumes playback only on the media players that were actually playing before a Home Assistant Voice PE conversation started. Designed to pair with a companion automation that detects active players, stores their state in `input_boolean` helpers, and pauses or ducks those players during the conversation. This blueprint handles only the resume-after-conversation part.
 

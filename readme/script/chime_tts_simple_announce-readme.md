@@ -1,6 +1,6 @@
 # Chime TTS -- Simple Announce (Quark edition)
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/chime_tts_simple_announce-header.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/chime_tts_simple_announce-header.jpeg)
 
 Generic Chime TTS script blueprint that plays a chime followed by a TTS announcement on selected media players via the `chime_tts.say` service. Create one script instance per voice persona, then call it from any automation or blueprint as a reusable building block.
 

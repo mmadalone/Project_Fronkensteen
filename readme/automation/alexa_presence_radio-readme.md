@@ -1,6 +1,6 @@
 # Alexa Presence-Aware Radio -- Music Assistant
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/alexa_presence_radio-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_presence_radio-header.jpeg)
 
 Say a single phrase to any Alexa device in your home. Home Assistant determines which room you are in using presence sensors and plays the configured radio station (or other media) on that room's Music Assistant speaker. One voice command, one Alexa routine, any Echo -- HA handles the room detection. Supports up to 10 additional zone mappings, Follow-Me interlock, and post-play verification.
 

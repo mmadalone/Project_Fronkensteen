@@ -1,6 +1,6 @@
 # Wake-Up Guard -- Mobile Snooze/Stop Handler
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_guard_mobile_notify-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_guard_mobile_notify-header.jpeg)
 
 Handles Snooze and Stop actions for the Wake-Up Guard automation. Reacts to Companion app notification actions (`GUARD_SNOOZE` / `GUARD_STOP`) or the snooze/stop `input_boolean` helpers being turned ON (e.g., from a dashboard button). Turns on the matching toggle so the main wake-up blueprint takes the right branch, then immediately stops TTS and optionally music players.
 

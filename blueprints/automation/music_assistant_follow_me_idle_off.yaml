@@ -2,7 +2,7 @@ blueprint:
   name: Music Assistant – Follow Me (idle OFF + optional auto-ON)
   author: madalone
   description: |
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/music_assistant_follow_me_idle_off-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/music_assistant_follow_me_idle_off-header.jpeg)
 
     ## Music Assistant – Manage Follow Me toggle
 
@@ -58,7 +58,7 @@ blueprint:
     - **v1:** Initial version
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/music_assistant_follow_me_idle_off.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/music_assistant_follow_me_idle_off.yaml
 
   input:
     # ===========================================================================

@@ -1,6 +1,6 @@
-# Casa Madalone — Home Assistant Configuration
+# Project Fronkensteen — Casa Madalone Home Assistant Configuration
 
-![Casa Madalone](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/casa-madalone-header.jpeg)
+![Project Fronkensteen](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/project-fronkensteen-header.jpeg)
 
 A fully AI-assisted smart home running on Home Assistant, featuring five custom voice assistants with distinct personalities, a three-layer context memory system, presence-based audio routing, predictive scheduling, and a bedtime negotiation system that argues with you about going to sleep. Because apparently that's what we're doing with technology now.
 

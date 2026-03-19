@@ -1,6 +1,6 @@
 # Bedtime Routine -- LLM-Driven Goodnight (Audiobook)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_routine-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_routine-header.jpeg)
 
 Fully LLM-orchestrated bedtime wind-down with audiobook playback via Music Assistant. Conversational modes (curated/freeform/both) use multi-turn LLM dialogue on Assist satellites for audiobook selection. Preset mode plays a configured URI directly -- no conversation, maximum efficiency. All modes: stops the TV, kills lights (except the living room lamp), runs a countdown timer, waits for the bathroom occupancy guard to clear, then turns off the final lamp.
 

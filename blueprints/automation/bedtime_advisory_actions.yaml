@@ -19,7 +19,7 @@ blueprint:
     - Speak a gentle TTS reminder
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/bedtime_advisory_actions.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_advisory_actions.yaml
   homeassistant:
     min_version: 2024.10.0
 

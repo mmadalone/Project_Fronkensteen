@@ -2,7 +2,7 @@ blueprint:
   name: "Wake-up guard – Snooze/Stop with TTS & mobile"
   author: madalone
   description: >
-    ![Wake-up guard header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wake-up-guard-header.jpg)
+    ![Wake-up guard header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wake-up-guard-header.jpg)
 
     # Wake-up guard
 
@@ -35,7 +35,7 @@ blueprint:
       Added selector documentation comments.
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/wake-up-guard.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/wake-up-guard.yaml
   homeassistant:
     min_version: 2024.10.0
 

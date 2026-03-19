@@ -1,6 +1,6 @@
 # Proactive Bedtime Escalation (v1.7)
 
-![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_bedtime_escalation-header.jpeg)
+![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_bedtime_escalation-header.jpeg)
 
 Unified presence-based escalation blueprint with inline bedtime routine. Combines a proactive LLM nag layer with a multi-stage escalation engine that culminates in an autonomous bedtime routine -- audiobook (Music Assistant) or Kodi playback. Presence in a configured area triggers LLM-generated spoken messages, with each successive nag advancing the escalation stage, adjusting tone and assertiveness via stage-specific prompts.
 

@@ -1,6 +1,6 @@
 # Voice -- Kodi play content
 
-![Voice -- Kodi play content](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_kodi_play_content-header.jpeg)
+![Voice -- Kodi play content](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_kodi_play_content-header.jpeg)
 
 Universal Kodi content router. Accepts a content type and content identifier, determines the correct playback method, and fires it. Handles direct file playback (movies, episodes), plugin/favourite URIs via JSON-RPC `Player.Open`, and TV show continuation with automatic next-unwatched-episode resolution. Designed as a tool script for LLM conversation agents but works from any automation, script call, or dashboard button.
 

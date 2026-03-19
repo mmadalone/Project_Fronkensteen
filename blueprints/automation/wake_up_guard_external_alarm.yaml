@@ -1,11 +1,11 @@
 blueprint:
   name: "Wake-Up Guard – External Alarm Trigger (Android / Alexa / etc.)"
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/wake_up_guard_external_alarm.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/wake_up_guard_external_alarm.yaml
   homeassistant:
     min_version: "2024.10.0"
   description: >-
-    ![Wake-Up Guard header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wake_up_guard_external_alarm-header.jpeg)
+    ![Wake-Up Guard header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wake_up_guard_external_alarm-header.jpeg)
 
 
     Triggers your wake-up script based on an external alarm-time sensor,

@@ -1,6 +1,6 @@
 # Rick wake-up helper -- TTS + Alexa music
 
-![Rick wake-up helper](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/rickyellsplusalexa-header.jpeg)
+![Rick wake-up helper](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/rickyellsplusalexa-header.jpeg)
 
 A reusable script blueprint that does two things in sequence: first, it uses your TTS entity to make "Rick" (or the dispatched persona) speak a wake-up message on a chosen media player; then, after a configurable delay, it sends text commands to an Alexa device to set volume and start a song, playlist, or station. Call this script from any automation -- morning routines, pomodoro overruns, idle-too-long reminders, bedtime nudges.
 

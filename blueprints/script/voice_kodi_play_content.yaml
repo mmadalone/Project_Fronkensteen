@@ -1,8 +1,8 @@
 blueprint:
   name: "Voice — Kodi play content"
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_kodi_play_content.yaml
-  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_kodi_play_content-header.jpeg)
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_kodi_play_content.yaml
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_kodi_play_content-header.jpeg)
 
     # Voice — Kodi play content
 

@@ -2,7 +2,7 @@ blueprint:
   name: Music Assistant – Follow me (multi-room advanced)
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/music_assistant_follow_me_multi_room_advanced-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/music_assistant_follow_me_multi_room_advanced-header.jpeg)
 
     # Music Assistant – Follow me (multi-room advanced)
 
@@ -40,7 +40,7 @@ blueprint:
       changelog.
 
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/music_assistant_follow_me_multi_room_advanced.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/music_assistant_follow_me_multi_room_advanced.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

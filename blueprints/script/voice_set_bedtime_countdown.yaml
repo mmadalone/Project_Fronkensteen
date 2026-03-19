@@ -2,7 +2,7 @@
 blueprint:
   name: "Voice — Set bedtime countdown"
   description: >
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_set_bedtime_countdown-header.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_set_bedtime_countdown-header.jpeg)
 
 
     LLM tool wrapper: sets the bedtime countdown duration on an input_number
@@ -14,7 +14,7 @@ blueprint:
     Instantiate once per bedtime blueprint instance, then register as an
     LLM tool on the relevant conversation agent.
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_set_bedtime_countdown.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_set_bedtime_countdown.yaml
   homeassistant:
     min_version: "2024.10.0"
 

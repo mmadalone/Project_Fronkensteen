@@ -1,6 +1,6 @@
 # Announce Music Follow Me (TTS, LLM)
 
-![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce_music_follow_me_llm-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/announce_music_follow_me_llm-header.jpeg)
 
 Script blueprint that announces via TTS where the music was moved for a "music follow me" automation. Supports three message strategies: static default, random message pool, and LLM-generated context-aware announcements. When the LLM path is active, the conversation agent receives playback context (track name, artist, radio station) to produce relevant commentary.
 

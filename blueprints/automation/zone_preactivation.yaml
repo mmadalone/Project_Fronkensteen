@@ -22,7 +22,7 @@ blueprint:
     - "Workshop Climate" — predicted→workshop → start heater 5 min early
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/zone_preactivation.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/zone_preactivation.yaml
   homeassistant:
     min_version: 2024.10.0
 

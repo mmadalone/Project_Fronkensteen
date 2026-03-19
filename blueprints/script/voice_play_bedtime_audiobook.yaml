@@ -1,7 +1,7 @@
 blueprint:
   name: "Voice — Play bedtime audiobook (Music Assistant)"
   description: >
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_play_bedtime_audiobook.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_play_bedtime_audiobook.jpeg)
 
 
     LLM tool wrapper: plays an audiobook (or other media type) via Music Assistant
@@ -13,7 +13,7 @@ blueprint:
     Instantiate once per use-case (e.g. one for audiobooks, one for podcasts)
     with different defaults, then register each instance as an LLM tool.
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_play_bedtime_audiobook.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_play_bedtime_audiobook.yaml
   domain: script
   homeassistant:
     min_version: "2024.10.0"

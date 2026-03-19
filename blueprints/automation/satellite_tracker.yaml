@@ -16,7 +16,7 @@ blueprint:
     Tracks when a satellite starts responding and stores its entity_id
     in input_text.ai_last_satellite. Create one instance per satellite.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/satellite_tracker.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/satellite_tracker.yaml
 
   input:
     # ===========================================================================

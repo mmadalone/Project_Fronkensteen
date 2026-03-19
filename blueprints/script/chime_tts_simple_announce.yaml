@@ -1,7 +1,7 @@
 blueprint:
   name: "Chime TTS – Simple Announce (Quark edition)"
   description: >
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/chime_tts_simple_announce-header.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/chime_tts_simple_announce-header.jpeg)
 
     v2.0 — Generic Chime TTS script blueprint. Plays a chime followed by TTS
     on selected media players via the chime_tts.say service. Use as a building
@@ -9,7 +9,7 @@ blueprint:
     persona, then call it from anywhere.
   domain: script
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/chime_tts_simple_announce.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/chime_tts_simple_announce.yaml
   homeassistant:
     min_version: "2024.10.0"
 

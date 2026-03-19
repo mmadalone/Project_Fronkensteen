@@ -1,6 +1,6 @@
 # Goodnight LLM Negotiator (agent personas + stage modes + fallbacks)
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_negotiator_llm_driven-header.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_llm_driven-header.jpeg)
 
 LLM-driven goodnight routine with resilient satellite handling. Uses conversation agents for all prompts and responses, with per-stage mode control (ask/just_do/skip) and per-stage fallback policies for voice failures. Persona comes from Home Assistant conversation agents via Assist Pipelines, with optional custom opening/closing prompts. Music will NOT start unless explicitly confirmed when Stage 3 mode is set to ask.
 

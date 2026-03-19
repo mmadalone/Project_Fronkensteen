@@ -1,9 +1,9 @@
 blueprint:
   name: Automation trigger monitor (multi)
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/automation_trigger_mon-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/automation_trigger_mon-header.jpeg)
 
     Writes a line to Home Assistant's system_log whenever any of the selected
     automations is triggered. Optionally logs the states of extra entities

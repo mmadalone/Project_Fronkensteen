@@ -13,7 +13,7 @@ blueprint:
     ### Recent changes
     - **v1:** Initial blueprint — replaces 3 automations from ai_sleep_detection.yaml
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/sleep_detection.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/sleep_detection.yaml
   homeassistant:
     min_version: "2024.10.0"
 

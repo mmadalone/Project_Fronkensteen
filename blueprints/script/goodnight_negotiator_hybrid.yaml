@@ -1,7 +1,7 @@
 blueprint:
   name: "Goodnight Negotiator (Hybrid) v8.8.0"
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
 
 
     Hybrid bedtime script with optional staged confirmations (TV/devices + lights/devices
@@ -22,7 +22,7 @@ blueprint:
       `music_assistant.play_media` directly (no `music_assistant.search`).
     - Provide your Music Assistant config_entry_id (see Developer Tools or the MA URL).
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/goodnight_negotiator_hybrid.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/goodnight_negotiator_hybrid.yaml
   domain: script
   input:
     core_routing:

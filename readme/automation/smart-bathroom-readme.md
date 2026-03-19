@@ -1,6 +1,6 @@
 # Smart Bathroom Occupancy Light Control (Door + Shower Zone Optional)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/smart-bathroom-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/smart-bathroom-header.jpeg)
 
 Occupancy-aware bathroom light with optional door sensor and shower zone support. Enable toggles to activate optional sensors -- disabled sensors are ignored in all logic. When the shower zone is active (e.g. Aqara FP2 zone), the light stays on even if the main motion sensor clears behind a glass shower door. Uses a 7-branch state machine to handle all combinations of door, motion, and shower zone events.
 

@@ -1,6 +1,6 @@
 # Voice -- Pause Active Media (tool script)
 
-![Voice -- Pause Active Media](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_media_pause.jpeg)
+![Voice -- Pause Active Media](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_media_pause.jpeg)
 
 Pauses the currently active media player. This script is a thin wrapper around the "Voice -- Active Media Controls" automation blueprint -- it passes the `pause_active` command via `automation.trigger`, keeping all player priority logic centralized in the automation. Expose this script as a tool for your LLM conversation agent so users can say "pause" and the right player stops.
 

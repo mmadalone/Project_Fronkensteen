@@ -2,11 +2,11 @@ blueprint:
   name: Voice PE – Resume media after conversation
   domain: automation
   author: Miquel Madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/
   homeassistant:
     min_version: "2024.10.0"
   description: >
-    ![Voice PE Resume Media](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_pe_resume_media-header.jpeg)
+    ![Voice PE Resume Media](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_pe_resume_media-header.jpeg)
 
 
     # RESUME MEDIA AFTER A HOME ASSISTANT VOICE PE CONVERSATION

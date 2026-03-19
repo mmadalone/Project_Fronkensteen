@@ -1,6 +1,6 @@
 # Proactive -- Presence-Based Last Call
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_last_call-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_last_call-header.jpeg)
 
 Speaks a single, AI-generated "last call" message when presence is detected in an area during an allowed time window. Optionally runs an external script after the announcement (e.g. turn off lights, TV, start audio). Uses the AI agent dispatcher or a manually selected pipeline to generate and deliver the message via TTS. Intentionally has no once-per-window cooldown -- if presence is lost and re-detected, the announcement fires again.
 

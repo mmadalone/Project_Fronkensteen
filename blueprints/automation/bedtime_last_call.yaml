@@ -1,12 +1,12 @@
 blueprint:
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/bedtime_last_call.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_last_call.yaml
   name: "Proactive – Presence-based Last Call (announcement + optional script)"
   author: madalone
   homeassistant:
     min_version: "2024.10.0"
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_last_call-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_last_call-header.jpeg)
 
     # Proactive – Presence-based Last Call
 

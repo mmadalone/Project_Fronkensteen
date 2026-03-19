@@ -53,7 +53,7 @@ blueprint:
     embedding batch run — no special wiring needed.
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/interaction_summarizer.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/interaction_summarizer.yaml
 
   input:
     # ===========================================================================

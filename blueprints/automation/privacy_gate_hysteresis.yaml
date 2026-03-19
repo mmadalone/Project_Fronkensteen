@@ -22,7 +22,7 @@ blueprint:
     Create one instance per person per tier (6 total).
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/privacy_gate_hysteresis.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/privacy_gate_hysteresis.yaml
   homeassistant:
     min_version: 2024.10.0
 

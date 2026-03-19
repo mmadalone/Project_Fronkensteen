@@ -45,7 +45,7 @@ blueprint:
 
   domain: script
   author: Madalone + Assistant
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_memory_semantic_search.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_memory_semantic_search.yaml
 
   input:
     # =========================================================================

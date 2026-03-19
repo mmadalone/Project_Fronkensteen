@@ -1,6 +1,6 @@
 # Voice -- Set Bedtime Countdown
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_set_bedtime_countdown-header.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_set_bedtime_countdown-header.jpeg)
 
 LLM tool wrapper that sets the bedtime countdown duration on an `input_number` helper. Designed as a voice-agent tool script -- the conversation agent calls this during bedtime negotiation to adjust how many minutes remain before the lamp turns off. Values outside the configured min/max range are silently clamped.
 

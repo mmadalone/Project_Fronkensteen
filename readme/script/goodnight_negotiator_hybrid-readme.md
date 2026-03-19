@@ -1,6 +1,6 @@
 # Goodnight Negotiator (Hybrid) v8.8.0
 
-![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
 
 Hybrid bedtime script with multi-stage voice negotiation. Combines LLM-generated conversational prompts with structured yes/no confirmation flow via `assist_satellite.ask_question`. Three independently configurable stages: TV/IR devices, lights/devices, and Music Assistant bedtime audio. Stage 3 features Music Assistant search with LLM-driven category classification, late-night bias, and fallback category offers.
 

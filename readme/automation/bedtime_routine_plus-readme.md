@@ -1,6 +1,6 @@
 # Bedtime Routine Plus -- LLM-Driven Goodnight (Kodi)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_routine_plus-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_routine_plus-header.jpeg)
 
 Fully LLM-orchestrated bedtime wind-down with Kodi media playback. The TV stays ON -- Kodi plays movies, TV shows, or favourites selected via LLM conversation or preset configuration. Library pre-fetch injects the full Kodi catalog into the LLM context for intelligent content selection. Conversational modes (curated/freeform/both) use multi-turn satellite dialogue. Preset mode plays fixed content directly -- no conversation, maximum efficiency. Sleepy TV detection skips content switching if bedtime media is already playing.
 

@@ -1,7 +1,7 @@
 blueprint:
   name: Voice – Shut Up (pause all media) (tool script)
   description: |
-    ![Voice Shut Up](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_shut_up-header.jpeg)
+    ![Voice Shut Up](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_shut_up-header.jpeg)
 
     SCRIPT TOOL: "Shut up" – pause ALL playing media players.
 
@@ -118,7 +118,7 @@ blueprint:
 
   domain: script
   author: Madalone + Assistant
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_shut_up.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_shut_up.yaml
 
   input:
     section_core:

@@ -1,7 +1,7 @@
 blueprint:
   name: "Proactive Bedtime Escalation (v1.7) — Presence-based nags with inline bedtime routine"
   author: madalone
-  description: '![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_bedtime_escalation-header.jpeg)
+  description: '![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_bedtime_escalation-header.jpeg)
 
     # Proactive Bedtime Escalation
 
@@ -75,9 +75,9 @@ blueprint:
       bedtime_routine v4.2.1, and bedtime_routine_plus into a single file
       with multi-stage escalation engine
 
-    [Full changelog →](https://github.com/mmadalone/HA-Master-Repo)'
+    [Full changelog →](https://github.com/mmadalone/Project_Fronkensteen)'
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/proactive_bedtime_escalation.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/proactive_bedtime_escalation.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

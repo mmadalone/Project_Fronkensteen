@@ -1,7 +1,7 @@
 blueprint:
   name: Announce Music Follow Me – TTS (v2.0)
   description: |
-    ![Announce Music Follow Me](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/announce-music-follow-me-header.jpeg)
+    ![Announce Music Follow Me](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/announce-music-follow-me-header.jpeg)
 
     ## Announce Music Follow Me – TTS
 
@@ -28,7 +28,7 @@ blueprint:
     - **v1.0** — Initial release.
 
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/announce_music_follow_me.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/announce_music_follow_me.yaml
   homeassistant:
     min_version: 2024.6.0
 

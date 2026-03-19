@@ -1,6 +1,6 @@
 # Wake-Up Alarm -- LLM Context
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_alarm-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/llm_alarm-header.jpeg)
 
 Time-based alarm that fires on selected weekdays, optionally generates a wake-up message via a conversation agent with live sensor context, speaks it over TTS, and supports one snooze cycle with mobile notification controls. After the snooze/stop window expires, an optional music script launches post-alarm audio. Volume is set before the announcement and restored on every exit path. Designed as Layer 1 of a two-layer wake-up system (pair with `escalating_wakeup_guard.yaml` as Layer 2).
 

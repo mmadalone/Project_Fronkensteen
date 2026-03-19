@@ -1,6 +1,6 @@
 # Wake-up Music -- Music Assistant (Simple)
 
-![Wake-up music MA header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_music_ma-header.jpeg)
+![Wake-up music MA header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_music_ma-header.jpeg)
 
 Simple helper script: set volume, clear queue, and play one item on a Music Assistant player. Supports configurable enqueue mode and radio mode for continuous playback. No post-playback logic -- handle that with a separate automation if needed. Includes duck guard integration to keep volume snapshots accurate during active ducking.
 

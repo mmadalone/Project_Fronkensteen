@@ -1,6 +1,6 @@
 # Automation Trigger Monitor (Multi)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/automation_trigger_mon-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/automation_trigger_mon-header.jpeg)
 
 Writes a line to Home Assistant's system log whenever any of the selected automations is triggered. Optionally logs the states of extra entities (e.g., presence sensors) at the moment of the trigger. Useful for debugging automation timing, understanding trigger sources, and correlating automation fires with sensor states.
 

@@ -23,7 +23,7 @@ blueprint:
     - "Morning Routine Step 2 — Coffee" — turn on coffee maker at step 2
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/routine_stage_actions.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/routine_stage_actions.yaml
   homeassistant:
     min_version: 2024.10.0
 

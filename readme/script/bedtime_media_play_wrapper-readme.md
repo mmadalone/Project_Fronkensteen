@@ -1,6 +1,6 @@
 # Bedtime Media Play Wrapper -- Music Assistant
 
-![Bedtime Media Play Wrapper header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_media_play_wrapper-header.jpeg)
+![Bedtime Media Play Wrapper header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_media_play_wrapper-header.jpeg)
 
 Wrapper script to play bedtime media (especially audiobooks) via Music Assistant. Always targets the passed-in MA media_player, so bedtime blueprints can pass their selected player directly. Supports optional volume, shuffle, and enqueue control with duck guard integration.
 

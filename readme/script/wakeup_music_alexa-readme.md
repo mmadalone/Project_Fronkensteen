@@ -1,6 +1,6 @@
 # Wake-up Music -- Alexa
 
-![Wake-up music Alexa header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_music_alexa-header.jpeg)
+![Wake-up music Alexa header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_music_alexa-header.jpeg)
 
 Plays wake-up music on an Alexa device using `alexa_devices.send_text_command`. Sends two text commands in sequence: one to set volume, one to start a song or playlist. Simple and effective -- no Music Assistant or Spotify integration required, just the Alexa Devices integration.
 

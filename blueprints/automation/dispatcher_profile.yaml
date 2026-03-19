@@ -19,7 +19,7 @@ blueprint:
     (HA startup or manual button press), pushes all values into the
     dispatcher's helpers and reloads the routing cache.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/dispatcher_profile.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/dispatcher_profile.yaml
   author: madalone
 
   input:

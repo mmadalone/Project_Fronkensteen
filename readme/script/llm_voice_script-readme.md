@@ -1,6 +1,6 @@
 # LLM Script for Music Assistant voice requests (modified)
 
-![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/llm_voice_script-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/llm_voice_script-header.jpeg)
 
 ![Image](https://github.com/music-assistant/voice-support/blob/main/assets/music-assistant.png?raw=true)
 

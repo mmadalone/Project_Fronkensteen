@@ -1,6 +1,6 @@
 # Music Assistant -- Follow me (multi-room advanced)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/music_assistant_follow_me_multi_room_advanced-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/music_assistant_follow_me_multi_room_advanced-header.jpeg)
 
 Presence-driven follow-me for Music Assistant queues across multiple zones. Transfers the active queue to whichever room you walk into, with priority ordering, anti-flicker, cooldown, playback protection, source-occupied detection, optional pre/post announcements, and a TTS duration filter to ignore short clips. Supports separate TTS speakers for pre- and post-transfer announcements to avoid collisions with music playback.
 

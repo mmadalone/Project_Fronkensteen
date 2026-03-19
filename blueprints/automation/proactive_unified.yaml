@@ -1,7 +1,7 @@
 blueprint:
   name: "Proactive – Unified presence engine"
   author: madalone
-  description: '![Proactive Unified](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/proactive_llm_sensors-header.jpeg)
+  description: '![Proactive Unified](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_llm_sensors-header.jpeg)
 
     # Proactive – Unified presence engine
 
@@ -32,7 +32,7 @@ blueprint:
     - Budget gate and identity gate conditions added
     - Bedtime skip condition added'
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/proactive_unified.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/proactive_unified.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

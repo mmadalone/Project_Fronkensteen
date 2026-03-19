@@ -2,12 +2,12 @@ blueprint:
   domain: automation
   name: Music Assistant – Local LLM Enhanced Voice Support
   author: Music Assistant Project (style-guide fixes by madalone)
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/mass_llm_enhanced_assist_blueprint_en.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/mass_llm_enhanced_assist_blueprint_en.yaml
   # Version: 19 — tracked in description changelog, not as a key
   # (HA blueprint schema does not allow 'version' as a top-level key)
   # Upstream ref:
   # https://github.com/music-assistant/voice-support/blob/main/llm-enhanced-local-assist-blueprint/mass_llm_enhanced_assist_blueprint_en.yaml
-  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/mass_llm_enhanced_assist-header.jpeg)
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/mass_llm_enhanced_assist-header.jpeg)
 
     # Play media using voice commands with LLM assistance
 

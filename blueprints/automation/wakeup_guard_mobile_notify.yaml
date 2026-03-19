@@ -3,7 +3,7 @@ blueprint:
   author: madalone
   homeassistant:
     min_version: "2024.10.0"
-  description: '![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_guard_mobile_notify-header.jpeg)
+  description: '![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_guard_mobile_notify-header.jpeg)
 
     # Wake-up guard – mobile Snooze/Stop handler
 
@@ -26,7 +26,7 @@ blueprint:
     - **v1:** Initial version'
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/wakeup_guard_mobile_notify.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/wakeup_guard_mobile_notify.yaml
 
   input:
     # ===========================================================================

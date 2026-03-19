@@ -46,7 +46,7 @@ blueprint:
     gpt-4o-mini tier). Kill switch disables all summarization.
 
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/contact_history_summarizer.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/contact_history_summarizer.yaml
 
   input:
     # ===========================================================================

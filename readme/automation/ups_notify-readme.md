@@ -1,6 +1,6 @@
 # UPS -- Notify on power events (NUT status sensor)
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/ups_notify-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ups_notify-header.jpeg)
 
 Sends notifications when your UPS switches to battery power, when utility power returns, and when the UPS battery is critically low. Uses the NUT integration status sensor (e.g. `sensor.madups_status`) to detect power transitions (OL/OB/CHRG) and a battery percentage sensor for low-charge warnings.
 

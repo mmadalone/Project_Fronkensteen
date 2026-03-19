@@ -1,7 +1,7 @@
 blueprint:
   name: Rick wake-up helper – TTS + Alexa music (v2.0)
   description: |
-    ![Rick wake-up helper](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/rickyellsplusalexa-header.jpeg)
+    ![Rick wake-up helper](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/rickyellsplusalexa-header.jpeg)
 
     ## Rick wake-up helper – TTS + Alexa music
 
@@ -27,7 +27,7 @@ blueprint:
     - **v1.0** — Initial release.
 
   domain: script
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/rickyellsplusalexa.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/rickyellsplusalexa.yaml
 
   input:
     dispatcher_settings:

@@ -7,7 +7,7 @@
 blueprint:
   name: "Bedtime routine – LLM-driven goodnight (Audiobook)"
   author: madalone
-  description: '![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/bedtime_routine-header.jpeg)
+  description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_routine-header.jpeg)
 
     # Bedtime routine – LLM-driven goodnight (Audiobook)
 
@@ -57,7 +57,7 @@ blueprint:
     - **v4:** Preset audiobook mode — direct URI play, media pause-with-fallback,
     settling-in and final-goodnight contextual TTS slots'
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/bedtime_routine.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_routine.yaml
   homeassistant:
     min_version: "2024.10.0"
   input:

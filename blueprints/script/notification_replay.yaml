@@ -15,7 +15,7 @@ blueprint:
   description: >
     # Notification Replay
 
-    ![Notification Replay header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/notification_replay-header.jpeg)
+    ![Notification Replay header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification_replay-header.jpeg)
 
     Replays the last phone notification on demand — same pipeline as
     Notification Follow-Me minus the trigger, cooldown, and filtering gates.
@@ -71,7 +71,7 @@ blueprint:
       sub-scripts would add indirection without readability benefit.
 
   domain: script
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/script/notification_replay.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/notification_replay.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

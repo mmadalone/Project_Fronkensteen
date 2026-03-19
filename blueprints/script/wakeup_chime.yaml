@@ -1,13 +1,13 @@
 blueprint:
   name: Wake-up chime
   description: |
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_chime-header.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_chime-header.jpeg)
     Plays a simple chime sound on a media_player before it starts yelling.
     v1.1.0 — Style guide compliance pass (AP-06, BP-1, VER-2).
 
   domain: script
   author: madalone
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/wakeup_chime.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/wakeup_chime.yaml
 
   homeassistant:
     min_version: "2024.10.0"

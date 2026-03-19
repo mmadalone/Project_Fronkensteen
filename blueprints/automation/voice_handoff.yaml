@@ -28,7 +28,7 @@ blueprint:
     Optionally plays farewell (TTS) and greeting (satellite), then
     reopens the mic.
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/voice_handoff.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/voice_handoff.yaml
 
   input:
     # ===========================================================================

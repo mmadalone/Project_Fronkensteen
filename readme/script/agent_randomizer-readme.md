@@ -1,6 +1,6 @@
 # Agent Randomizer
 
-![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/agent_randomizer-header.jpeg)
+![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/agent_randomizer-header.jpeg)
 
 Script blueprint that returns a random Voice Assistant (Assist Pipeline) from a configurable pool of up to 10 slots. Each slot carries a pipeline ID and optional display name with aliases. Supports a dispatcher mode that bypasses randomization entirely and delegates persona selection to the AI dispatcher. Empty slots are filtered out automatically -- fill any combination you need.
 

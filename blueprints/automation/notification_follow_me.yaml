@@ -14,7 +14,7 @@ blueprint:
   name: "Notification Follow-Me (v3.18.0)"
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/notification-follow-me-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
 
     # Notification Follow-Me
 
@@ -46,7 +46,7 @@ blueprint:
     - **v3.16.0:** Four-branch R3c: unconfigured backwards-compat, per-app eviction, unrelated-app pass
 
   domain: automation
-  source_url: "https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/notification_follow_me.yaml"
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/notification_follow_me.yaml"
   homeassistant:
     min_version: "2024.10.0"
 

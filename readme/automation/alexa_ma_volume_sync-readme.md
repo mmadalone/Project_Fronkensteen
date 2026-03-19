@@ -1,6 +1,6 @@
 # Alexa / Music Assistant Volume Sync
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/alexa_ma_volume_sync_blueprint-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_ma_volume_sync_blueprint-header.jpeg)
 
 Keeps the volume of paired media players in sync -- bidirectionally. Change the volume on either device and its partner follows. Supports two sync modes: **Paired** (1:1 by list order) and **Group** (all devices sync together). Includes mute sync, duck guard integration with I-22 manual override support, and ESP boot protection for Voice PE satellites.
 

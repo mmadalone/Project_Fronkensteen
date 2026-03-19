@@ -1,6 +1,6 @@
 # Voice -- Shut Up (Pause All Media)
 
-![Voice Shut Up](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_shut_up-header.jpeg)
+![Voice Shut Up](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_shut_up-header.jpeg)
 
 LLM tool wrapper that pauses all currently playing media players. This script triggers the "Voice -- Active Media Controls" automation with `command = "shut_up"`, which finds all candidate players in state `playing` and pauses them. From the LLM's perspective, this is a single-purpose tool: "pause everything that is currently playing sound."
 

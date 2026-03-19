@@ -1,6 +1,6 @@
 # Wake-Up Guard -- External Alarm Trigger
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wake_up_guard_external_alarm-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wake_up_guard_external_alarm-header.jpeg)
 
 Triggers a wake-up script based on an external alarm-time sensor, such as an Android phone's next alarm (`sensor.<phone>_next_alarm`) or an Alexa Media Player next alarm. Optionally fires some minutes before the alarm instead of exactly at the alarm time. Designed to hook into an existing wake-up script that handles the actual routine (lights, music, TTS).
 

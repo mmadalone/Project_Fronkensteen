@@ -1,6 +1,6 @@
 # Wake-up guard -- Snooze/Stop with TTS & mobile
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wake-up-guard-header.jpg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wake-up-guard-header.jpg)
 
 Time-based wake-up automation with bed/workshop presence conditions, TTS announcements (static or LLM-generated), one snooze, mobile push with Snooze/Stop buttons, optional Assist Satellite TTS interrupt, and a music handoff script. Fires at a configured time on selected weekdays, verifies the user is actually in bed, and runs a snooze/stop flow before handing off to wake-up music.
 

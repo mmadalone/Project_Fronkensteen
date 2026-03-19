@@ -2,7 +2,7 @@ blueprint:
   name: "UPS – Notify on power events (NUT status sensor)"
   author: madalone
   description: >
-    ![Image](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/ups_notify-header.jpeg)
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ups_notify-header.jpeg)
 
     # UPS – Notify on power events
 
@@ -15,7 +15,7 @@ blueprint:
     - **v2:** Full style guide compliance — modern syntax, template safety, aliases
     - **v1:** Initial version
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/ups_notify.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/ups_notify.yaml
   homeassistant:
     min_version: "2024.10.0"
 

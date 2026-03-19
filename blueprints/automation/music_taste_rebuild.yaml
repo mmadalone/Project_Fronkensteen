@@ -6,7 +6,7 @@ blueprint:
     unified taste profile on sensor.ai_music_taste_status. Optionally
     generates an LLM genre/style summary (no artist names).
   domain: automation
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/automation/music_taste_rebuild.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/music_taste_rebuild.yaml
   input:
     # ===========================================================================
     # ① Core

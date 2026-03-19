@@ -1,6 +1,6 @@
 # Coming Home -- AI Welcome
 
-![header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/coming_home-header.jpeg)
+![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/coming_home-header.jpeg)
 
 Triggers when a person arrives home, waits for entrance occupancy to confirm physical presence (GPS alone is not reliable), resets speakers by power-cycling switches, activates temporary helper switches, generates an AI greeting via a conversation agent, then starts an Assist conversation on Voice PE satellites. Includes GPS-bounce cooldown, timeout handling on every wait, and guaranteed cleanup of temporary switches on all exit paths.
 

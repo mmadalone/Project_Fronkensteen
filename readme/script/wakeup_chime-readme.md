@@ -1,6 +1,6 @@
 # Wake-up Chime
 
-![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/wakeup_chime-header.jpeg)
+![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/wakeup_chime-header.jpeg)
 
 Plays a simple chime sound on a media player before the wake-up sequence starts yelling. A minimal helper script -- one action, one player, one sound file. Designed to be called from wake-up automations as a gentle audio cue before TTS or music kicks in.
 

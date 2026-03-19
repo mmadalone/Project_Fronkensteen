@@ -3,7 +3,7 @@ blueprint:
   description: |
     ## Version 2.0
 
-    ![Header](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_stop_radio-header.jpeg)
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_stop_radio-header.jpeg)
 
     SCRIPT TOOL: Stop/pause Music Assistant "radio" playback.
 
@@ -73,7 +73,7 @@ blueprint:
 
   domain: script
   author: Madalone + Assistant
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_stop_radio.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_stop_radio.yaml
 
   input:
     section_core:

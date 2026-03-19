@@ -1,7 +1,7 @@
 blueprint:
   name: "Voice – Pause Active Media (tool script)"
   description: |
-    ![Voice – Pause Active Media](https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/voice_media_pause.jpeg)
+    ![Voice – Pause Active Media](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_media_pause.jpeg)
 
     SCRIPT TOOL: Pause the currently "active" media player.
 
@@ -84,7 +84,7 @@ blueprint:
 
   domain: script
   author: Madalone + Assistant
-  source_url: https://github.com/mmadalone/HA-Master-Repo/blob/main/script/voice_media_pause.yaml
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_media_pause.yaml
 
   input:
     # =========================================================================

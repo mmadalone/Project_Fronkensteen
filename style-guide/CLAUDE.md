@@ -3,13 +3,13 @@
 ## Project Paths
 - PROJECT_DIR: /Users/madalone/_Claude Projects/HA Master Style Guide/
 - HA_CONFIG: /Users/madalone/Library/Containers/nz.co.pixeleyes.AutoMounter/Data/Mounts/Home Assistant/SMB/config/
-- GIT_REPO: /Users/madalone/_Claude Projects/HA-Master-Repo/
-- GIT_REPO_URL: https://github.com/mmadalone/HA-Master-Repo/
-- HEADER_IMG: /Users/madalone/_Claude Projects/HA-Master-Repo/images/header/
-- HEADER_IMG_RAW: https://raw.githubusercontent.com/mmadalone/HA-Master-Repo/main/images/header/
-- README_AUTO_DIR: /Users/madalone/_Claude Projects/HA-Master-Repo/readme/automation/
-- README_SCRI_DIR: /Users/madalone/_Claude Projects/HA-Master-Repo/readme/script/
-- README_TEMPL_DIR: /Users/madalone/_Claude Projects/HA-Master-Repo/readme/template/
+- GIT_REPO: /Users/madalone/_Claude Projects/Project_Fronkensteen/
+- GIT_REPO_URL: https://github.com/mmadalone/Project_Fronkensteen/
+- HEADER_IMG: /Users/madalone/_Claude Projects/Project_Fronkensteen/images/header/
+- HEADER_IMG_RAW: https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/
+- README_AUTO_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/automation/
+- README_SCRI_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/script/
+- README_TEMPL_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/template/
 - IMG_PREMISES: Rick & Quark series episode premise based off the blueprint features; Rick & Morty (Adult Swim cartoon) episode premise based off the blueprint features
 
 All edits happen in PROJECT_DIR and HA_CONFIG — never directly in GIT_REPO.
