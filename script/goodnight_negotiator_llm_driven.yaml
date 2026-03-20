@@ -124,8 +124,8 @@ blueprint:
           name: TTS output volume (optional)
           description: >-
             Volume level (0.0–1.0) to set on the satellite speaker before
-            TTS. Set to 0 to disable — the speaker plays at whatever
-            volume it is already at.
+            TTS announcements. Only raises volume — if the speaker is
+            already louder, it stays where it is. Set to 0 to disable.
           default: 0.0
           selector:
             number:
@@ -614,10 +614,13 @@ sequence:
     delay:
       seconds: "{{ speech_guard_delay | int(0) }}"
 
-  - alias: "Set satellite volume before first announce"
+  - alias: "Set satellite volume before first announce (only raise)"
     if:
       - condition: template
-        value_template: "{{ tts_output_vol | float(0) > 0 }}"
+        value_template: >-
+          {% set target = tts_output_vol | float(0) %}
+          {% set current = state_attr(sat, 'volume_level') | float(0) %}
+          {{ target > 0 and target > current }}
     then:
       - alias: "Set satellite volume for TTS playback"
         action: media_player.volume_set

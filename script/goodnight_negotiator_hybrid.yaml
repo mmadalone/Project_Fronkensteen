@@ -129,6 +129,20 @@ blueprint:
               step: 1
               unit_of_measurement: s
 
+        tts_output_volume:
+          name: TTS output volume (optional)
+          description: >-
+            Volume level (0.0–1.0) to set on the satellite speaker before
+            TTS announcements. Only raises volume — if the speaker is
+            already louder, it stays where it is. Set to 0 to disable.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
     custom_phrases:
       name: "③ Custom Phrases"
       icon: mdi:message-text-outline
@@ -774,6 +788,7 @@ sequence:
       use_dispatcher: !input use_dispatcher
       v_dispatcher_enabled: !input dispatcher_enabled
       sat: !input satellite_entity
+      tts_output_vol: !input tts_output_volume
 
       # express mode & timing
       express: !input express_mode
@@ -1011,6 +1026,25 @@ sequence:
           dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
           dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
           dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ---------------------------------------------------------------------
+  # TTS volume (only raise, never lower)
+  # ---------------------------------------------------------------------
+  - alias: "Set satellite volume before first announce (only raise)"
+    if:
+      - condition: template
+        value_template: >-
+          {% set target = tts_output_vol | float(0) %}
+          {% set current = state_attr(sat, 'volume_level') | float(0) %}
+          {{ target > 0 and target > current }}
+    then:
+      - alias: "Set satellite volume for TTS playback"
+        action: media_player.volume_set
+        continue_on_error: true
+        target:
+          entity_id: "{{ sat }}"
+        data:
+          volume_level: "{{ tts_output_vol | float(0) }}"
 
   # ---------------------------------------------------------------------
   # opening line
