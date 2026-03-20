@@ -450,8 +450,8 @@ template:
             {%- endfor -%}
             {%- set temp_avg = states('sensor.ai_outside_temperature_24h') | default('unknown', true) -%}
             {%- if temp_avg not in ['unknown', 'unavailable', 'None', ''] -%}
-              {%- set temp_min = state_attr('sensor.ai_outside_temperature_24h', 'min_value') | float(0) | round(0) | int -%}
-              {%- set temp_max = state_attr('sensor.ai_outside_temperature_24h', 'max_value') | float(0) | round(0) | int -%}
+              {%- set temp_min = states('sensor.ai_outside_temperature_24h_min') | float(0) | round(0) | int -%}
+              {%- set temp_max = states('sensor.ai_outside_temperature_24h_max') | float(0) | round(0) | int -%}
               {%- set hist.parts = hist.parts + ['Temp last 24h: ' ~ temp_min ~ '-' ~ temp_max ~ '°C (avg ' ~ (temp_avg | float(0) | round(0) | int) ~ ')'] -%}
             {%- endif -%}
             {%- if hist.parts | length > 0 -%}

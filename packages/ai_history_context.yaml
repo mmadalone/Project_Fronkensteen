@@ -9,9 +9,11 @@
 # statistics (numeric aggregation). Auto-updating, zero pyscript.
 #
 # Sensors created:
-#   sensor.ai_home_time_today_miquel   — hours home today (person.miquel)
-#   sensor.ai_home_time_today_jessica  — hours home today (person.jessica)
-#   sensor.ai_outside_temperature_24h  — mean temp 24h (attrs: min_value, max_value)
+#   sensor.ai_home_time_today_miquel       — hours home today (person.miquel)
+#   sensor.ai_home_time_today_jessica      — hours home today (person.jessica)
+#   sensor.ai_outside_temperature_24h      — mean temp 24h
+#   sensor.ai_outside_temperature_24h_min  — min temp 24h
+#   sensor.ai_outside_temperature_24h_max  — max temp 24h
 # =============================================================================
 
 sensor:
@@ -35,12 +37,31 @@ sensor:
     end: "{{ now() }}"
 
   # ── Temperature range last 24h ────────────────────────────────────
-  # State = mean. Attributes include min_value, max_value, count.
+  # Three sensors: mean (state), min, max. HA statistics platform
+  # no longer exposes min/max as attributes — separate sensors required.
   - platform: statistics
     name: "AI Outside Temperature 24h"
     unique_id: ai_outside_temperature_24h
     entity_id: sensor.weather_temperature
     state_characteristic: mean
+    max_age:
+      hours: 24
+    precision: 1
+
+  - platform: statistics
+    name: "AI Outside Temperature 24h Min"
+    unique_id: ai_outside_temperature_24h_min
+    entity_id: sensor.weather_temperature
+    state_characteristic: value_min
+    max_age:
+      hours: 24
+    precision: 1
+
+  - platform: statistics
+    name: "AI Outside Temperature 24h Max"
+    unique_id: ai_outside_temperature_24h_max
+    entity_id: sensor.weather_temperature
+    state_characteristic: value_max
     max_age:
       hours: 24
     precision: 1

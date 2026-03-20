@@ -57,6 +57,43 @@
         response_variable: _function_result
 
 - spec:
+    name: web_search
+    description: >-
+      Use this function to search the web for current information,
+      news, weather, sports scores, or anything the user asks about
+      that requires up-to-date information from the internet.
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The search query to look up on the web
+      required:
+        - query
+  function:
+    type: rest
+    resource: "https://google.serper.dev/search"
+    method: POST
+    headers:
+      X-API-KEY: "628ed8dd04da05b96e7299edeb133714b9fa3ea8"
+      Content-Type: "application/json"
+    payload: '{"q": "{{query}}", "num": 5}'
+    value_template: >-
+      {% set results = [] %}
+      {% for item in value_json.get("organic", [])[:5] %}
+        {% set results = results + [item.get("title", "") ~ ": " ~ item.get("snippet", "") ~ " (" ~ item.get("link", "") ~ ")"] %}
+      {% endfor %}
+      {% if value_json.get("answerBox") %}
+        Answer: {{ value_json.answerBox.get("answer", value_json.answerBox.get("snippet", "")) }}
+        ---
+      {% endif %}
+      {% if value_json.get("knowledgeGraph") %}
+        {{ value_json.knowledgeGraph.get("title", "") }}: {{ value_json.knowledgeGraph.get("description", "") }}
+        ---
+      {% endif %}
+      {{ results | join("\n") }}
+
+- spec:
     name: execute_services
     description: Use this function to execute service of devices in Home Assistant.
     parameters:
