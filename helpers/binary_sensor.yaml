@@ -1,0 +1,31 @@
+- platform: group
+  name: "Bathroom presence"
+  unique_id: bathroom_presence
+  device_class: occupancy
+  entities:
+    - binary_sensor.shower
+    - binary_sensor.sink
+    - binary_sensor.toilet
+
+- platform: group
+  name: "Living room presence"
+  unique_id: livingroom_presence
+  device_class: occupancy
+  entities:
+    - binary_sensor.livingroom
+
+- platform: group
+  name: "House activity"
+  unique_id: house_activity
+  device_class: occupancy
+  entities:
+    - binary_sensor.bathroom_presence
+    - binary_sensor.main_room_presence
+    - binary_sensor.bed
+
+- platform: group
+  name: "Workshop"
+  unique_id: workshop_presence
+  device_class: occupancy
+  entities:
+    - binary_sensor.workshop

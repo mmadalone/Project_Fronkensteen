@@ -178,7 +178,7 @@ This style guide is ~126K tokens across 10 files (plus master index). **Never lo
 2. Drop §2 (Versioning details) — keep the checklist habit, skip re-reading the protocol.
 3. Drop §13 (Troubleshooting) — load on demand only when something breaks.
 4. Drop §12 (Communication Style) — you already know how to talk like Quark, dammit.
-5. **Never drop** §1.1–1.8 (core rules), §10 (anti-patterns), or the task-specific pattern doc.
+5. **Never drop** §1.1–1.8 (core rules), §1.15 (research-first), §10 (anti-patterns), or the task-specific pattern doc.
 
 **Context window conservation — keep context lean:**
 - **Never echo back file contents** after reading them. Summarize what you found or reference specific line numbers — don't paste it back.
@@ -376,6 +376,20 @@ If a session exceeds ~15 substantive exchanges on a single task without shipping
 - §11.6 — Checkpointing before complex builds (§1.14.2 is the post-build counterpart)
 - §11.8 — Crash recovery (build logs absorb §1.14.2's state checkpoint for multi-step builds)
 - §11.9 — Convergence criteria (§1.14.6's turn threshold complements the "when to stop" rules)
+
+### 1.15 Research-first mandate (MANDATORY)
+
+Before proposing or generating ANY solution — whether in plan mode or direct implementation:
+
+1. **Search official documentation** — HA docs, integration-specific docs (Extended OpenAI, MA, ESPHome, pyscript, etc.). Use web search to verify the approach works on current HA versions.
+2. **Check community sources** — HA Community forums, GitHub issues, and discussions for tried-and-tested solutions with reported success. Prefer approaches others have validated over novel inventions.
+3. **Audit the codebase** — Search `HA_CONFIG` and `PROJECT_DIR` for existing implementations, helper patterns, and architectural conventions. Never propose a new utility when one already exists. Flag opportunities for consolidation.
+4. **No hacky workarounds** — If the only path forward is a workaround, say so explicitly: what's being worked around, why no clean solution exists, and what the risks are. Never present a workaround as a proper solution.
+5. **Flag breaking changes in the plan** — Any change that alters existing behavior (entity renames, service signature changes, data flow modifications, removed features) must be called out with a `⚠️ BREAKING:` prefix and impact assessment before implementation begins.
+
+**Why this exists:** Without this gate, the default behavior is to jump straight to code generation using plausible-but-unverified approaches. This leads to solutions that look correct but use undocumented parameters, ignore community-known pitfalls, or duplicate existing code.
+
+**This section is non-negotiable.** It applies in all three operational modes (BUILD, TROUBLESHOOT, AUDIT) and cannot be dropped under token budget pressure (§1.9).
 
 ---
 

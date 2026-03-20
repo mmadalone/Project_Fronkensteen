@@ -93,6 +93,7 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.memory_embed` | Generate + store embedding for single memory entry | Maintenance, debugging |
 | `pyscript.memory_embed_batch` | Batch-embed memories missing vectors | `embedding_batch.yaml` nightly job |
 | `pyscript.memory_semantic_search` | Pure KNN semantic search by meaning | Agent context enrichment, debugging |
+| `pyscript.memory_semantic_autolink` | Create `content_match` edges via vec0 KNN for unlinked embeddings | `embedding_batch.yaml` v2.0.0 nightly job |
 | `pyscript.memory_vec_health_check` | Test-load vec0.so, report status | `sqlite_vec_recompile.yaml` |
 | `pyscript.llm_task_call` | Budget-aware LLM chat via ha_text_ai | I-3 summarization (future), any background LLM task |
 | `pyscript.llm_direct_embed` | Budget-aware embedding generation via OpenAI API | memory_embed, memory_semantic_search |
@@ -143,6 +144,34 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.proactive_build_briefing` | Assemble morning briefing content from all layers | proactive_briefing_morning, proactive_briefing_slot |
 | `pyscript.proactive_briefing_now` | Full briefing delivery pipeline — assemble, select agent, reformulate, speak | proactive_briefing_morning, proactive_briefing_slot |
 | `pyscript.calendar_promote_now` | Promote Google Calendar events to L2 memory | Calendar sync automation |
+
+**Music Composition Services** (`music_composer.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.music_compose` | Compose via ElevenLabs API (external) | `voice_compose_music.yaml` (auto/elevenlabs path) |
+| `pyscript.music_compose_local` | Compose via FluidSynth (local MIDI→WAV) | `voice_compose_music.yaml` (fluidsynth path) |
+| `pyscript.music_compose_approve` | Move all staging compositions to production (batch) | Admin/dashboard — bulk approval |
+| `pyscript.music_compose_get` | Resolve composition by agent/type or library_id | Chime/stinger resolution in notification/email blueprints |
+| `pyscript.music_library_action` | Router for LLM music library tool — list, play, delete, promote, list_soundfonts | **Wired:** LLM tool `music_library` |
+| `pyscript.music_soundfont_list` | List available SoundFont instruments | **Wired:** LLM tool `music_library(list_soundfonts)` |
+
+**Voice Session Services** (`voice_session.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.voice_session_wait_audio` | Wait for satellite/speaker to finish playing audio (dual-signal: event + state) | `voice_session_mic.yaml` (step 3) |
+| `pyscript.voice_session_open_mic` | Single mic open via `start_conversation` with echo guard | `voice_session_mic.yaml` (single-mic path) |
+| `pyscript.voice_session_continuous` | Hot-context continuous conversation — announce media, open mic once, monitor for idle/stop/pending | `voice_session_mic.yaml` (continuous path) |
+| `pyscript.voice_session_request` | Write JSON to `ai_voice_session_pending` to trigger post-pipeline automation | `voice_compose_music.yaml` (step 5) |
+| `pyscript.voice_session_rediscover` | Re-scan entity registry for satellite device mappings | Admin — after adding/removing satellites |
+
+**Voice Handoff Services** (`voice_handoff.py`)
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `pyscript.voice_handoff` | Full handoff sequence — farewell, pipeline switch, greeting, continuous conversation | `voice_handoff.yaml` |
+| `pyscript.voice_handoff_restore` | Restore original pipeline after handoff timeout | `voice_handoff.yaml` (auto-restore) |
 
 **Configuration Services** (`sleep_config.py`)
 

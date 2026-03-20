@@ -1,5 +1,7 @@
 # CLI Claude — Base Project Instructions
 
+> **!! ACTION ITEMS from 2026-03-16 deep audit (Grade: B-).** Read `_build_logs/2026-03-16_codebase_grade_action_items.md` before starting new features. Critical: run test plan, verify 4 untested deployments, address bedtime_routine divergence.
+
 ## Project Paths
 - PROJECT_DIR: /Users/madalone/_Claude Projects/HA Master Style Guide/
 - HA_CONFIG: /Users/madalone/Library/Containers/nz.co.pixeleyes.AutoMounter/Data/Mounts/Home Assistant/SMB/config/
@@ -24,6 +26,25 @@ The HA Master Style Guide is referred to as the **"Rules of Acquisition"** throu
 Key sections:
 - **§1:** Core philosophy — always load the minimum sections needed for the task
 - **§2.3:** QA checklist — use as a pre-flight checklist
+
+## Operational Mode (MANDATORY — Every HA Task)
+
+At the start of every HA-related task:
+
+1. **Identify the mode** — Match the user's request against the operational mode table in `ha_style_guide_project_instructions.md` (BUILD / TROUBLESHOOT / AUDIT). If ambiguous, default to BUILD.
+2. **Load the right docs** — Use the task routing table in the master index to load only the style guide sections needed for the identified mode and task type.
+3. **Auto-escalate** — If a TROUBLESHOOT session requires editing files to fix the issue, escalate to BUILD mode BEFORE the first edit: load remaining BUILD-mode docs, run `ha_create_checkpoint`, and stay in BUILD mode for the rest of the session.
+4. **Never skip mode identification.** Don't jump straight to coding without determining which mode applies and which docs to load.
+
+## Research & Solution Quality (MANDATORY — Every Task)
+
+Before proposing or implementing ANY solution:
+
+1. **Research first** — Search official HA docs, integration docs, and community forums (HA Community, GitHub issues) for proven solutions with reported success. Use web search tools. Don't invent approaches when documented ones exist.
+2. **Codebase check** — Search the existing codebase for duplicates, related implementations, and reusable patterns before proposing new code. Propose architectural improvements where relevant.
+3. **No hacky solutions** — Only use tried-and-tested approaches. If the only available solution is a workaround, flag it explicitly and explain why no clean solution exists.
+4. **Preserve working logic** — Improve upon existing patterns; never silently alter working behavior.
+5. **Flag breaking changes** — Any change that alters existing behavior, renames entities, changes service signatures, or modifies data flow MUST be explicitly called out in the plan with impact assessment.
 
 ## Helper Files
 

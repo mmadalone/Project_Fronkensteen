@@ -132,7 +132,7 @@ When a conversation spans multiple exchanges (bedtime negotiator, coming-home fl
 **Practical sizing for Extended OpenAI Conversation:**
 - A PERMISSIONS table with 10 devices ≈ 300–500 tokens. 30 devices ≈ 1,000–1,500 tokens.
 - Each exposed tool/function adds ~100–200 tokens for its schema.
-- GPT-4o/4.1 context: 128K tokens. GPT-3.5-turbo: 16K. Local models via compatible API: varies wildly (check your model card).
+- Llama 4 Maverick (current default): 1M tokens. Claude Opus 4.6 (Portuondo Standard): 1M tokens. Local models via compatible API: varies wildly (check your model card).
 - **Rule of thumb:** If your system prompt + tool schemas exceed 20% of the model's context window, you're eating into conversation depth. A 3,000-token system prompt on a 128K model is fine; the same prompt on a 4K model is a disaster.
 - To check token count: paste your full system prompt into [OpenAI's tokenizer](https://platform.openai.com/tokenizer) or use `tiktoken` locally.
 
@@ -418,24 +418,39 @@ Two variants exist per persona:
 - **standard** — all non-bedtime interactions. Tools: execute_service(s), memory_tool, web_search, pause_media, shut_up, stop_radio
 - **bedtime** — sleep transition, audiobook, countdown. Tools: execute_service(s), memory_tool, web_search, audiobook, countdown, skip
 
-**Current agents (8 total = 4 personas × 2 variants):**
+**Current agents (21 total = 5 personas × 4 variants + 1 Therapy):**
 
-| Persona | Standard | Bedtime |
+| Persona | Standard | Bedtime | Music Compose | Music Transfer |
 |---------|----------|---------|
-| Rick Sanchez | `conversation.rick_standard` | `conversation.rick_bedtime` |
-| Quark | `conversation.quark_standard` | `conversation.quark_bedtime` |
-| Deadpool | `conversation.deadpool_standard` | `conversation.deadpool_bedtime` |
-| Kramer | `conversation.kramer_standard` | `conversation.kramer_bedtime` |
+| Rick Sanchez | `conversation.rick_standard` | `conversation.rick_bedtime` | `conversation.rick_music_compose` | `conversation.rick_music_transfer` |
+| Quark | `conversation.quark_standard` | `conversation.quark_bedtime` | `conversation.quark_music_compose` | `conversation.quark_music_transfer` |
+| Deadpool | `conversation.deadpool_standard` | `conversation.deadpool_bedtime` | `conversation.deadpool_music_compose` | `conversation.deadpool_music_transfer` |
+| Kramer | `conversation.kramer_standard` | `conversation.kramer_bedtime` | `conversation.kramer_music_compose` | `conversation.kramer_music_transfer` |
 
-**Why two variants, not one?** Bedtime has genuinely different tools (audiobook, countdown) and safety concerns (user is falling asleep). All other context differences (time of day, presence, media state) are handled by `sensor.ai_hot_context` injection — no separate agent needed.
+**Why four variants?** Each variant has a genuinely different tool set that justifies a separate conversation agent:
+- **Standard:** Full general-purpose tool set (execute_services, web_search, memory, handoff, escalation, focus guard, etc.)
+- **Bedtime:** Sleep-specific tools (audiobook, countdown, skip) + safety concerns (user is falling asleep)
+- **Music Compose:** Composition tools (compose_music, music_library) + per-persona musical identity. Reached via `handoff_agent` with `variant: "music compose"`.
+- **Music Transfer:** Library management tools (music_library, web_search, execute_services) + per-persona library context. Reached via `handoff_agent` with `variant: "music transfer"`.
+- **Therapy** (Portuondo only): Memory-focused tools (memory_tool, memory_related, save_user_preference). Reactive-only handoff — no proactive routing during sessions.
 
-**Why not per-scenario agents?** Scenarios like "coming home" or "proactive announcement" inject their context via `extra_system_prompt` to the same standard agent. The per-scenario agent model (which would produce O(personas × scenarios) agents) was explicitly rejected in favor of L1 hot context injection. Only bedtime's different tool set justifies a separate variant.
+All other context differences (time of day, presence, media state, scenario) are handled by `sensor.ai_hot_context` injection — no separate agent needed.
+
+**Why not per-scenario agents?** Scenarios like "coming home" or "proactive announcement" inject their context via `extra_system_prompt` to the same standard agent. The per-scenario agent model (which would produce O(personas × scenarios) agents) was explicitly rejected in favor of L1 hot context injection. Only different tool sets justify separate variants.
+
+**Variant discovery:** The dispatcher auto-discovers variants from HA pipeline display names. Any pipeline named `"<Persona> - <Variant>"` auto-registers. No hardcoded allowlist — adding a new variant type is just creating a pipeline in the HA UI.
 
 Each agent's system prompt is configured in the Extended OpenAI Conversation integration UI. The agent is assigned to an Assist Pipeline (Settings → Voice Assistants), which handles wake word → STT → agent → TTS routing.
 
 **Invalid — don't do this:**
-- ~~`Rick - Coming Home`~~ — "Coming Home" is a scenario. Inject via `extra_system_prompt`.
+- ~~`Rick - Coming Home`~~ — "Coming Home" is a scenario, not a different tool set. Inject via `extra_system_prompt`.
 - ~~Creating a separate agent per room~~ — Use `extra_system_prompt` to inject room context.
+
+**Valid variant pipelines** (different tool sets):
+- `Rick - Bedtime` — audiobook/countdown tools
+- `Rick - Music Compose` — compose_music/music_library tools + Rick's musical identity
+- `Rick - Music Transfer` — music_library/web_search tools + Rick's library voice
+- `Doctor Portuondo - Therapy` — memory/preference tools + reactive-only handoff
 
 ### 8.5 Multi-agent coordination
 When multiple agents exist (Rick, Quark, Deadpool, Kramer), they operate independently — each agent has its own system prompt, tools, and conversation history.
@@ -561,7 +576,7 @@ Conversation agents don't exist in a vacuum — when used with voice assistants,
 - `assist_satellite.start_conversation` uses the satellite's assigned pipeline — you cannot override the agent per-call. If your flow needs a different agent, either switch the pipeline first or use `conversation.process` with explicit `agent_id` and handle TTS output yourself.
 
 **Implications for agent design:**
-- **Don't create per-scenario agent instances** (e.g., a separate "Coming Home" agent). Instead, use the persona's standard agent and inject scenario context via `extra_system_prompt`. Bedtime is the only variant that justifies a separate agent (different tool set) — see §8.4.
+- **Don't create per-scenario agent instances** (e.g., a separate "Coming Home" agent). Instead, use the persona's standard agent and inject scenario context via `extra_system_prompt`. Only different tool sets justify separate variants (Bedtime, Music Compose, Music Transfer, Therapy) — see §8.4.
 - **TTS is not the agent's job.** The agent returns text; the pipeline's TTS engine converts it to speech. Don't include TTS-specific instructions (speed, pitch) in the agent prompt — those belong in the TTS engine or ESPHome config.
 - **The agent doesn't know which satellite it's on** unless you tell it via `extra_system_prompt`. If room-aware behavior matters ("dim the lights" should mean *this room's* lights), the blueprint must inject the satellite's location into the prompt.
 

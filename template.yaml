@@ -1,0 +1,124 @@
+- sensor:
+    - name: "Sonarr Disk Space in Terabytes"
+      unique_id: sonarr_disk_space_tb
+      unit_of_measurement: "TB"
+      state: >
+        {% set gigabytes = states('sensor.sonarr_disk_space') | float(0) %}
+        {{ (gigabytes / 1024) | round(2) }}
+
+    - name: "Radarr Disk Space in Terabytes"
+      unique_id: radarr_disk_space_tb
+      unit_of_measurement: "TB"
+      state: >
+        {% set gigabytes = states('sensor.radarr_disk_space_movies') | float(0) %}
+        {{ (gigabytes / 1024) | round(2) }}
+
+    - name: "OpenWrt Router Data Received in GB"
+      unique_id: openwrt_data_received_gb
+      unit_of_measurement: "GB"
+      state: >
+        {% set megabytes = states('sensor.openwrt_router_data_received') | float(0) %}
+        {{ (megabytes / 1024) | round(2) }}
+
+    - name: "OpenWrt Router Data Sent in GB"
+      unique_id: openwrt_data_sent_gb
+      unit_of_measurement: "GB"
+      state: >
+        {% set megabytes = states('sensor.openwrt_router_data_sent') | float(0) %}
+        {{ (megabytes / 1024) | round(2) }}
+        
+    - name: "HA Voice 01 FW Auto"
+      unique_id: ha_voice_01_fw_auto
+      state: >
+         {{ 'yes' if state_attr('update.ha_voice_01_firmware', 'auto_update') else 'no' }}
+    - name: "HA Voice 01 FW Updating"
+      unique_id: ha_voice_01_fw_updating
+      state: >
+          {{ 'yes' if state_attr('update.ha_voice_01_firmware', 'in_progress') else 'no' }}
+    
+    - name: "HA Voice 02 FW Auto"
+      unique_id: ha_voice_02_fw_auto
+      state: >
+          {{ 'yes' if state_attr('update.ha_voice_2_firmware', 'auto_update') else 'no' }}
+    
+    - name: "HA Voice 02 FW Updating"
+      unique_id: ha_voice_02_fw_updating
+      state: >
+          {{ 'yes' if state_attr('update.ha_voice_2_firmware', 'in_progress') else 'no' }}
+
+    - name: "MadTeeVee Now Playing"
+      unique_id: madteevee_now_playing
+      icon: mdi:television-classic
+      state: >-
+        {% set mp = 'media_player.madteevee' %}
+        {% set s = states(mp) %}
+        {% if s not in ['playing', 'paused'] %}
+          off
+        {% else %}
+          {% set type = state_attr(mp, 'media_content_type') | default('unknown') %}
+          {% set title = state_attr(mp, 'media_title') | default('')
+             | regex_replace('\\[COLOR [^\\]]*\\]', '')
+             | regex_replace('\\[/COLOR\\]', '') | trim %}
+          {% set series = state_attr(mp, 'media_series_title') | default('') %}
+          {% set season = state_attr(mp, 'media_season') | default('') %}
+          {% set episode = state_attr(mp, 'media_episode') | default('') %}
+          {% if type == 'tvshow' %}
+            Series: {{ series }} - S{{ '%02d' | format(season | int(0)) }}E{{ '%02d' | format(episode | int(0)) }} - {{ title }}
+          {% elif type == 'movie' %}
+            Movie: {{ title }}
+          {% elif type == 'video' %}
+            {% set ch = states('sensor.madteevee_pvr_channel') | default('') %}
+            {% if ch not in ['', 'off', 'not_pvr', 'unknown', 'unavailable'] %}Live TV: {{ title }} ({{ ch }}){% else %}Live TV: {{ title }}{% endif %}
+          {% else %}
+            {{ title }}
+          {% endif %}
+        {% endif %}
+      attributes:
+        media_category: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}unknown
+          {% else %}
+            {% set type = state_attr('media_player.madteevee', 'media_content_type') | default('unknown') %}
+            {% if type == 'tvshow' %}series
+            {% elif type == 'movie' %}movie
+            {% elif type == 'video' %}live_tv
+            {% else %}{{ type }}{% endif %}
+          {% endif %}
+        media_title: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('media_player.madteevee', 'media_title') | default('')
+             | regex_replace('\\[COLOR [^\\]]*\\]', '')
+             | regex_replace('\\[/COLOR\\]', '') | trim }}{% endif %}
+        series_title: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('media_player.madteevee', 'media_series_title') | default('') }}{% endif %}
+        season: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('media_player.madteevee', 'media_season') | default('') }}{% endif %}
+        episode: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('media_player.madteevee', 'media_episode') | default('') }}{% endif %}
+        player_state: >-
+          {{ states('media_player.madteevee') }}
+        pvr_channel: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}
+            {% set ch = states('sensor.madteevee_pvr_channel') | default('') %}
+            {{ ch if ch not in ['off', 'not_pvr', 'unknown', 'unavailable'] else '' }}
+          {% endif %}
+        pvr_channel_number: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('sensor.madteevee_pvr_channel', 'channelnumber') | default('') }}{% endif %}
+        pvr_programme: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}
+            {% set t = state_attr('sensor.madteevee_pvr_channel', 'title') | default('') %}
+            {{ t | regex_replace('\\[COLOR [^\\]]*\\]', '')
+                 | regex_replace('\\[/COLOR\\]', '') | trim }}
+          {% endif %}
+        plot: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}
+            {% set p = state_attr('sensor.madteevee_pvr_channel', 'plot') | default('') %}
+            {% set p = p | regex_replace('\\[COLOR [^\\]]*\\]', '') | regex_replace('\\[/COLOR\\]', '') | trim %}
+            {{ p[:500] if p else '' }}
+          {% endif %}

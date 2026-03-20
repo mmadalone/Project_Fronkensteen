@@ -1,0 +1,4 @@
+ai_handoff_processing:
+  icon: mdi:account-switch
+  initial: false
+  name: AI Handoff - Processing

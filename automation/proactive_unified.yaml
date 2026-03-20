@@ -746,6 +746,20 @@ blueprint:
             entity:
               domain: input_boolean
 
+        identity_confidence_threshold:
+          name: "Identity confidence threshold"
+          description: >-
+            Minimum identity confidence score (pts) required from at least
+            one known user before the automation will speak. Set to 0 to
+            disable the identity gate entirely.
+          default: 50
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: pts
+
         bedtime_active_entity:
           name: "Bedtime active entity"
           description: >-
@@ -777,6 +791,7 @@ variables:
   v_pipeline_name: !input conversation_agent
   use_dispatcher: !input use_dispatcher
   v_dispatcher_enabled: !input dispatcher_enabled
+  v_identity_threshold: !input identity_confidence_threshold
   v_bedtime_active: !input bedtime_active_entity
   tts_output_vol: !input tts_output_volume
   tts_collision_mode: !input tts_collision_mode
@@ -997,14 +1012,19 @@ conditions:
     value_template: >-
       {{ not is_state(v_bedtime_active, 'on') }}
 
-  # ── Identity gate — at least one known user with confidence >= 50 ───────
+  # ── Identity gate — at least one known user with confidence >= threshold ─
   - condition: template
     alias: "Identity confidence gate"
     value_template: >-
-      {% set m = states('sensor.identity_confidence_miquel') %}
-      {% set j = states('sensor.identity_confidence_jessica') %}
-      {{ [m | int(0) if m not in ['unknown', 'unavailable'] else 0,
-          j | int(0) if j not in ['unknown', 'unavailable'] else 0] | max >= 50 }}
+      {% set threshold = v_identity_threshold | int(50) %}
+      {% if threshold <= 0 %}
+        true
+      {% else %}
+        {% set m = states('sensor.identity_confidence_miquel') %}
+        {% set j = states('sensor.identity_confidence_jessica') %}
+        {{ [m | int(0) if m not in ['unknown', 'unavailable'] else 0,
+            j | int(0) if j not in ['unknown', 'unavailable'] else 0] | max >= threshold }}
+      {% endif %}
 
   # ── Day-of-week gating ────────────────────────────────────────────────
   - condition: template

@@ -200,7 +200,63 @@ micro_wake_word:
 
 **Dynamic model control (ESPHome 2025.5+).** Wake word models can be enabled/disabled at runtime via `micro_wake_word.enable_model` and `micro_wake_word.disable_model` actions, and HA can change the active on-device wake word via the satellite configuration API. The `on_wake_word_detected` automation hook provides the detected wake word phrase as a variable for routing.
 
+**Wake word cutoff tuning.** Custom wake word models embed default `probability_cutoff` and `sliding_window_size` values. These can be overridden at runtime via `on_boot` lambdas using `id(model_id).set_probability_cutoff(value)` where value is 0-255 (maps to 0.0-1.0 probability). Use this when a model false-triggers on phrases spoken during continuous conversation (e.g., "keep it" triggering "Yo Rick" at 0.97 cutoff). Recommended: match all custom wake words to the strictest model's settings (0.99 = 252/255). Example:
+```yaml
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          id(stop).set_probability_cutoff(191);   // 0.75
+          id(yo_rick).set_probability_cutoff(252); // 0.99
+```
+
 **Microphone gain factor.** Since ESPHome 2025.5, the microphone subsystem was refactored. If your microphone was previously configured for 32 bits per sample, add `gain_factor: 4` to `voice_assistant:` to match previous behavior.
+
+### Voice Assistant Event Hooks + Self-Healing (I-56)
+
+The `voice_assistant:` block on each satellite includes event hooks and self-healing for pipeline errors:
+
+```yaml
+globals:
+  - id: dup_wake_retries
+    type: int
+    initial_value: '0'
+
+voice_assistant:
+  noise_suppression_level: 2
+  auto_gain: 31 dbfs
+
+  on_error:          # Self-healing: duplicate_wake_up recovery
+    - homeassistant.event:
+        event: esphome.voice_error
+        data:
+          satellite: ${name}
+          error_code: !lambda 'return code;'
+          error_message: !lambda 'return message;'
+    - if:
+        condition:
+          lambda: 'return code == "duplicate_wake_up_detected" && id(dup_wake_retries) < 3;'
+        then:
+          - lambda: 'id(dup_wake_retries)++;'
+          - delay: 2s
+          - voice_assistant.start_continuous:
+
+  on_start:          # Reset retry counter on successful pipeline
+    - lambda: 'id(dup_wake_retries) = 0;'
+
+  on_idle:           # "Speaker done" signal (best available on Voice PE)
+    - homeassistant.event:
+        event: esphome.voice_tts_done
+        data:
+          satellite: ${name}
+```
+
+**Key constraints:**
+- `on_tts_stream_end` requires a `speaker` component — Voice PE uses `media_player` instead, so this trigger is **not available**. Use `on_idle` as the closest signal.
+- `on_error` receives `code` (string) and `message` (string) as lambda variables.
+- `voice_assistant.start_continuous` restarts the voice assistant in continuous conversation mode after a delay — handles AEC flush time.
+- Max 3 retries prevents infinite loops if the error persists.
 
 ### Current Config Issues to Note
 
@@ -341,7 +397,7 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 **Supporting infrastructure:** 17 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config).
 
 **Three-layer memory architecture:**
-- **L1 (Hot Context):** `sensor.ai_hot_context` — real-time template sensor injected into every agent's system prompt. Time, presence, media, weather, schedule, mood, focus mode, budget.
+- **L1 (Hot Context):** `sensor.ai_hot_context` — real-time template sensor injected into every agent's system prompt. Time, presence, media, weather, schedule, mood, focus mode, budget, history (home-since durations, temperature ranges).
 - **L2 (Warm Memory):** SQLite+FTS5 via `pyscript.memory_*` services. Persistent facts, preferences, interaction logs, routine patterns. ~200ms query.
 - **L3 (Cold Context):** Google Calendar, Gmail IMAP. Promoted to L2 by automation (daily sync + event triggers) for fast agent access.
 
@@ -786,6 +842,8 @@ All new blueprints MUST use `pyscript.tts_queue_speak` instead of direct `tts.sp
 - `chime_duration_ms` — duration of the chime in milliseconds. When provided, the queue waits `(duration / 1000) + POST_PLAYBACK_BUFFER` before starting TTS. When 0 or omitted, falls back to `POST_PLAYBACK_BUFFER` only (0.3s). Blueprints should resolve duration from `music_compose_get` (returns `duration_ms` from JSON sidecar metadata) rather than hardcoding delays.
 
 **Migration note:** Existing blueprints using direct `tts.speak` should be migrated to `tts_queue_speak` when next edited. No dedicated migration pass needed — update on touch.
+
+> **Lesson learned (v3.19.0):** Per [official HA docs](https://www.home-assistant.io/integrations/squeezebox/), `tts.speak` **automatically sets `announce: true` internally** — it is NOT a valid data key. Valid `tts.speak` data fields: `message`, `media_player_entity_id`, `language`, `cache`, `options`. Passing `"announce": true` in a `tts_data` dict causes `extra keys not allowed @ data['announce']` and silently kills TTS. This broke all TTS delivery in `notification_follow_me` and `email_follow_me` — all 6 `tts.speak` call sites across both blueprints were migrated to `tts_queue_speak` (which accepts `announce` as an explicit parameter). **Reminder:** `tts_queue_speak` has `supports_response="only"` — every caller MUST include `response_variable`.
 
 #### Pattern 4: Dedup-Gated Announcements (for proactive/ambient blueprints)
 
@@ -1457,7 +1515,14 @@ These are the ones that'll bite you in the ass if you're not careful:
 
 7. **`continue_on_timeout: true` on every wait** (AP-04) — With explicit timeout handlers that clean up state.
 
-8. **One agent per persona, deliberate wake word mapping** — Each persona (Rick, Quark) gets one agent with one pipeline. Map wake words to the correct pipeline so "Hey Rick" routes to Rick's agent and "Hey Quark" routes to Quark's. Scenario-specific context (arrival, bedtime, proactive) is injected via `extra_system_prompt` — never create separate agents per scenario (§8.4). If running dual personas on one satellite (supported since HA 2025.10), map each wake word to a dedicated pipeline. **Clarification:** "one agent per persona" limits agent *count*, not tool *sources*. A single `Rick - Extended` agent can use exposed scripts AND MCP-provided tools simultaneously (§8.3.3). The rule prevents scenario-based agent explosion (O(personas×scenarios)), not multi-tool diversity.
+8. **LLM tool-call narration leak** — LLMs (Llama 4 Maverick, Gemini 2.5 Flash) sometimes return raw function call syntax or tool arguments in `message.content`, which gets spoken via TTS. A 3-layer sanitizer in `conversation.py` (`_sanitize_for_speech()`) catches this:
+   - **Layer 1:** Entire response is a bare function call (`function_name(args)`) → returns `None`
+   - **Layer 2:** Response contains known function names (dynamically resolved from configured tools) → strips them
+   - **Layer 3:** Orphaned keyword arguments without function name (`action="promote", library_id="foo")`) → strips `key="value"` sequences
+
+   **WARNING:** This is a custom patch to `custom_components/extended_openai_conversation/conversation.py`. It gets overwritten on integration updates — re-apply after updating Extended OpenAI Conversation. Backup at `GIT_REPO/archive/conversation.py.bak.*`.
+
+9. **One agent per persona, deliberate wake word mapping** — Each persona (Rick, Quark) gets one agent with one pipeline. Map wake words to the correct pipeline so "Hey Rick" routes to Rick's agent and "Hey Quark" routes to Quark's. Scenario-specific context (arrival, bedtime, proactive) is injected via `extra_system_prompt` — never create separate agents per scenario (§8.4). If running dual personas on one satellite (supported since HA 2025.10), map each wake word to a dedicated pipeline. **Clarification:** "one agent per persona" limits agent *count*, not tool *sources*. A single `Rick - Extended` agent can use exposed scripts AND MCP-provided tools simultaneously (§8.3.3). The rule prevents scenario-based agent explosion (O(personas×scenarios)), not multi-tool diversity.
 
 ---
 

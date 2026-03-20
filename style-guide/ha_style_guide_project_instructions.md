@@ -128,6 +128,7 @@ The section numbers are preserved across files for cross-referencing.
   - §1.12 — Directive precedence — when MANDATORYs conflict
   - §1.13 — Available tools and when to use them (MANDATORY) — §1.13.1 file ops, §1.13.2 HA ops, §1.13.3 known quirks, §1.13.4 decision rules
   - §1.14 — Session discipline and context hygiene — §1.14.1 ship it or lose it, §1.14.2 post-task state checkpoint, §1.14.3 reference don't repeat, §1.14.4 artifact-first, §1.14.5 trim your toolkit, §1.14.6 session scoping
+  - §1.15 — Research-first mandate (MANDATORY) — research docs, forums, and codebase before proposing
 - **§2** — Git Versioning (Mandatory)
   - §2.1 — Scope — what gets versioned
   - §2.2 — Git workflow (checkpoint → edit → commit)

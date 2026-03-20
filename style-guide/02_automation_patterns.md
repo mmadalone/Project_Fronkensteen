@@ -45,11 +45,12 @@ Section 5 — Error handling, modes, timeouts, triggers, GPS bounce, helpers, ar
 | `duck_refcount_watchdog` | Safety net for duck refcount system | — |
 | `email_follow_me` | Email notification follow-me routing | agent_dispatch, agent_whisper |
 | `email_priority_filter` | IMAP to pyscript priority pipeline | email_promote_process |
-| `embedding_batch` | Nightly batch embedding for L2 semantic search (I-2) | memory_embed_batch |
+| `embedding_batch` | Nightly batch embedding + semantic autolink for L2 search (I-2, v2.0.0) | memory_embed_batch, memory_semantic_autolink |
 | `escalating_wakeup_guard` | Escalating wake-up with inverted presence | agent_dispatch, agent_whisper, tts_queue_speak |
 | `interaction_summarizer` | Nightly interaction log compression (I-3) | summarize_interactions |
 | `memory_todo_mirror` | Bidirectional L2↔todo list sync (I-6) | memory_todo_sync |
 | `voice_handoff` | Voice-initiated agent switching per satellite (I-24) | agent_dispatch (Priority 0) |
+| `voice_session_mic` | Post-pipeline playback + feedback mic control (I-56) | voice_session_continuous, voice_session_wait_audio |
 | `llm_alarm` | Wake-up alarm with LLM context | agent_dispatch, agent_whisper, tts_queue_speak |
 | `mass_llm_enhanced_assist_blueprint_en` | MA local LLM enhanced voice support | agent_dispatch |
 | `meal_detection` | Passive kitchen presence meal logging | meal_passive_log |
@@ -304,7 +305,7 @@ automation:
 
 4. **`queued` mode**: Triggers queue up and execute in order. **Important:** Conditions are evaluated at **trigger time** (when the event enters the queue), NOT at execution time (when the queued run starts). This means a condition might pass when queued but the world may have changed by the time it actually runs. Default `max` is 10.
 
-5. **`parallel` mode**: Multiple instances run simultaneously. Default `max` is 10. Be extremely careful with shared state — two parallel runs can race each other when reading/writing helpers.
+5. **`parallel` mode**: Multiple instances run simultaneously. Default `max` is 10. Be extremely careful with shared state — two parallel runs can race each other when reading/writing helpers. **Dedup pattern for parallel mode:** If a condition gate checks state that's written AFTER the gated action (e.g., checking a ledger that's updated post-TTS), both parallel runs will pass before either writes → both execute. Fix: write the dedup marker IMMEDIATELY after the check passes (first-writer-wins), not after the action completes. Use a dedicated `input_text` helper for the marker, not the same entity that serves other purposes. See `notification_follow_me.yaml` §2c/§2c-W (v3.19.0) for a working example.
 
 6. **`max` and `max_exceeded`**: For `queued` and `parallel` modes, you can set `max:` to limit concurrent/queued runs. When exceeded, the behavior depends on `max_exceeded:` which defaults to `warning` (logs a warning). Set to `silent` to drop silently, or to any valid log severity level: `debug`, `info`, `warning` (default), `error`, `critical`.
 

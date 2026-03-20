@@ -200,6 +200,8 @@ triggers:
     to: "on"
 ```
 
+**When `from:`/`to:` isn't an option:** Some sensors (e.g., Android Companion App `last_notification`) carry meaningful data in attributes (`post_time`) while the state text may repeat across different notifications (e.g., "📷 Photo"). Adding `from:`/`to:` would break the trigger. In these cases, add a **post-trigger dedup gate** that compares a unique attribute (like `post_time`) against previously processed values — see `notification_follow_me.yaml` §2c (v3.19.0) for an example using the ledger as the dedup source.
+
 **"Action succeeds but device doesn't respond"**
 
 Symptom: Trace shows green (success) on the action, but the physical device didn't do anything.
