@@ -359,8 +359,12 @@ triggers:
     event_type: ai_conversation_response_ready
     id: voice
   # Notifications — from notification_follow_me + email_promote.
+  # Triggers after TTS playback completes (not when queued) to prevent
+  # banter from talking over the notification on a different speaker.
   - trigger: event
-    event_type: ai_notification_delivered
+    event_type: tts_queue_item_completed
+    event_data:
+      completed: true
     id: notification
 
 variables:

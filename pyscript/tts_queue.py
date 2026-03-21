@@ -1053,6 +1053,23 @@ async def _process_queue() -> None:
                                 await _wait_for_playback_done(speaker)
                     else:
                         await asyncio.sleep(_get_playback_buffer())
+
+                # ── Fire completion event for downstream coordination ──
+                # Re-read preemption flag (may have changed during wait)
+                if not item.get("test_mode"):
+                    with _queue_lock:
+                        _final_preempted = _preempted
+                    _meta = dict(item.get("metadata") or {})
+                    # Strip reserved keys to prevent overwrites
+                    for _rk in ("completed", "priority", "speaker"):
+                        _meta.pop(_rk, None)
+                    event.fire(  # noqa: F821
+                        "tts_queue_item_completed",
+                        completed=not _final_preempted,
+                        priority=item.get("priority", 3),
+                        speaker=str(item.get("resolved_speaker") or ""),
+                        **_meta,
+                    )
             except Exception as e:
                 log.error(f"tts_queue playback error: {e}")  # noqa: F821
     finally:
@@ -1414,6 +1431,7 @@ async def tts_queue_speak(
     voice_id: str = "",
     restore_volume: bool = False,
     volume_restore_delay: int = 8,
+    metadata=None,
 ):
     """
     yaml
@@ -1530,6 +1548,15 @@ async def tts_queue_speak(
           number:
             min: 1
             max: 30
+      metadata:
+        name: Metadata
+        description: >-
+          Caller metadata dict passed through to the tts_queue_item_completed
+          event after playback finishes. Enables downstream coordination
+          (e.g. reactive banter waits for notification TTS to complete).
+        required: false
+        selector:
+          object:
     """
     # Returns: {status, op, queue_length?, priority?, speaker?, preempted?, test_mode?, cache_hit?, cache_key?, error?, reason?}  # noqa: E501
     if _is_test_mode():
@@ -1591,6 +1618,8 @@ async def tts_queue_speak(
                 f"resolved_speaker is list: {resolved_speaker}"
             )
 
+        _parsed_meta = metadata if isinstance(metadata, dict) else {}
+
         item = {
             "text": text or None, "voice": voice or None,
             "priority": priority, "cache": cache,
@@ -1603,6 +1632,7 @@ async def tts_queue_speak(
             "voice_id": voice_id or None,
             "restore_volume": restore_volume, "volume_restore_delay": volume_restore_delay,
             "test_mode": test_mode, "added_at": time.time(),
+            "metadata": _parsed_meta,
         }
 
         queue_len = _queue_add_sync(item)

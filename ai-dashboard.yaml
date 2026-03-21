@@ -292,6 +292,11 @@ views:
         name: Wake-Up Snooze
       - entity: input_boolean.ai_wake_up_stop
         name: Wake-Up Stop
+    - type: markdown
+      title: Recent Topics
+      content: >-
+        {{ state_attr('sensor.ai_recent_topics', 'context')
+           | default('No recent topics.', true) }}
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1451,6 +1456,8 @@ views:
         name: Max Auto Keywords
       - entity: input_number.ai_whisper_keyword_cooldown
         name: Keyword Cooldown (sec)
+      - entity: input_number.ai_whisper_topic_history_count
+        name: Topic History Count
   - type: vertical-stack
     cards:
     - type: markdown
@@ -2399,6 +2406,24 @@ views:
         tap_action:
           action: perform-action
           perform_action: pyscript.memory_delete
+      - type: button
+        name: Relations
+        icon: mdi:graph-outline
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_related_browse
+    - type: markdown
+      title: Related Entries
+      content: >-
+        {% if state_attr('sensor.ai_memory_related_browse', 'results_md') %}
+        **Key:** {{ state_attr('sensor.ai_memory_related_browse', 'key') }} |
+        **Related:** {{ state_attr('sensor.ai_memory_related_browse', 'count') }}
+
+
+        {{ state_attr('sensor.ai_memory_related_browse', 'results_md') }}
+        {% else %}
+        _Tap Relations after loading a key to see graph connections._
+        {% endif %}
   - type: vertical-stack
     cards:
     - type: markdown
@@ -2457,6 +2482,21 @@ views:
           attribute: rel_count
           name: Relations
           icon: mdi:graph-outline
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: db_size_mb
+          name: DB Size (MB)
+          icon: mdi:harddisk
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: archived_count
+          name: Archived
+          icon: mdi:archive
+        - type: attribute
+          entity: sensor.memory_result
+          attribute: threshold_exceeded
+          name: Threshold Exceeded
+          icon: mdi:alert
         - type: attribute
           entity: sensor.memory_result
           attribute: op
@@ -2520,3 +2560,58 @@ views:
         name: Similarity Threshold
       - entity: input_number.ai_memory_semantic_autolink_batch
         name: Batch Size
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Archive Browser
+
+
+        Search and restore archived memory entries. Archived entries were
+
+        moved from active memory by the auto-archive lifecycle. Copy a key
+
+        from results, paste into the Editor key field, and tap Restore.'
+    - type: entities
+      title: Archive Search
+      entities:
+      - entity: input_text.ai_memory_archive_search_query
+        name: Archive Query
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Search Archive
+        icon: mdi:archive-search
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_archive_browse
+        icon_height: 40px
+      - type: button
+        name: Run Archive Now
+        icon: mdi:archive-arrow-down
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_archive
+          data:
+            dry_run: false
+        icon_height: 40px
+      - type: button
+        name: Restore Entry
+        icon: mdi:archive-arrow-up
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.memory_archive_restore
+        icon_height: 40px
+    - type: markdown
+      title: Archive Results
+      content: >-
+        {% if state_attr('sensor.ai_memory_archive_browse', 'results_md') %}
+        **Query:** {{ state_attr('sensor.ai_memory_archive_browse', 'query')
+        }} | **Results:** {{ state_attr('sensor.ai_memory_archive_browse',
+        'count') }}
+
+
+        {{ state_attr('sensor.ai_memory_archive_browse', 'results_md') }}
+        {% else %}
+        _Tap "Search Archive" with an empty query to see stats, or enter a
+        query to search._
+        {% endif %}

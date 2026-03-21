@@ -51,6 +51,7 @@ from shared_utils import build_result_entity_name
 RESULT_ENTITY = "sensor.ai_whisper_status"
 PIPELINE_FILE = "/config/.storage/assist_pipeline.pipelines"
 KNOWN_VARIANTS = {"standard", "bedtime"}
+RECENT_TOPICS_ENTITY = "sensor.ai_recent_topics"
 
 # ── Dynamic Cache ────────────────────────────────────────────────────────────
 _cache: dict | None = None
@@ -584,6 +585,125 @@ async def _auto_update_keywords(agent: str, topic_slug: str, source: str = "user
         )
 
 
+# ── Recent Topic History (C7) ────────────────────────────────────────────────
+
+@pyscript_executor  # noqa: F821
+def _query_recent_topics_db(limit):
+    """Direct DB query for recent whisper topics, ordered by recency."""
+    import sqlite3 as _sqlite3
+    from contextlib import closing as _closing
+
+    try:
+        with _closing(_sqlite3.connect("/config/memory.db")) as conn:
+            conn.row_factory = _sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT key, value, tags, created_at
+                FROM mem
+                WHERE key LIKE 'whisper\\_topic\\_%' ESCAPE '\\'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@pyscript_compile  # noqa: F821
+def _format_recent_topics_sync(results, limit):
+    """Filter, deduplicate, and format L2 topic entries."""
+    import re as _re
+    from datetime import datetime as _dt, timezone as _tz
+
+    now = _dt.now(_tz.utc)
+    seen_slugs = set()
+    topics = []
+
+    for entry in results:
+        key = entry.get("key", "")
+        tags = entry.get("tags", "")
+        value = entry.get("value", "")
+        created = entry.get("created_at", "")
+
+        # Only process topic entries
+        if not key.startswith("whisper_topic_") and not key.startswith("whisper:topic:"):
+            continue
+
+        # Skip automation/system sourced
+        if "source_automation" in tags or "source_system" in tags:
+            continue
+
+        # Extract slug from key
+        slug = _re.sub(r'^whisper[:_]topic[:_]', '', key)
+        if slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+
+        # Extract agent from value: "User discussed X with {agent} at HH:MM"
+        agent_match = _re.search(r'with (\w+) at', value)
+        agent = agent_match.group(1) if agent_match else "unknown"
+
+        # Relative time
+        try:
+            ts = _dt.fromisoformat(created.replace("Z", "+00:00"))
+            delta = now - ts
+            mins = int(delta.total_seconds() / 60)
+            if mins < 1:
+                ago = "just now"
+            elif mins < 60:
+                ago = f"{mins}m ago"
+            elif mins < 1440:
+                ago = f"{mins // 60}h ago"
+            else:
+                ago = f"{mins // 1440}d ago"
+        except (ValueError, TypeError):
+            ago = ""
+
+        topics.append({
+            "topic": slug.replace("_", " "),
+            "agent": agent.title(),
+            "ago": ago,
+            "time": created
+        })
+
+        if len(topics) >= limit:
+            break
+
+    return topics
+
+
+@pyscript_compile  # noqa: F821
+def _build_topic_context_str(topics):
+    """Build compact multi-line string for hot context injection."""
+    if not topics:
+        return ""
+    lines = ["Recent topics:"]
+    for t in topics:
+        line = f"- {t['topic']} ({t['agent']}, {t['ago']})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+async def _refresh_recent_topics():
+    """Query L2 for recent user-sourced topics, update sensor."""
+    limit = int(float(state.get("input_number.ai_whisper_topic_history_count") or 5))  # noqa: F821
+    results = await _query_recent_topics_db(limit * 3)
+    # Filter: user-sourced only, deduplicate by slug, take limit
+    topics = _format_recent_topics_sync(results, limit)
+    context_str = _build_topic_context_str(topics)
+    state.set(  # noqa: F821
+        RECENT_TOPICS_ENTITY,
+        value=str(len(topics)),
+        new_attributes={
+            "context": context_str,
+            "topics": topics,
+            "friendly_name": "AI Recent Topics",
+            "icon": "mdi:history"
+        })
+
+
 # ── Test Mode ────────────────────────────────────────────────────────────────
 
 def _is_test_mode() -> bool:
@@ -846,6 +966,11 @@ async def agent_whisper(
             await _auto_update_keywords(agent, topic_slug, source=source)
         except Exception as exc:
             log.warning(f"agent_whisper: keyword update error (non-fatal): {exc}")  # noqa: F821
+        # C7: Refresh topic history sensor
+        try:
+            await _refresh_recent_topics()
+        except Exception:
+            pass
 
     # ── 5. UPDATE SELF-AWARENESS HELPERS (fire-and-forget) ──
     if not test_mode and topic_slug and source == "user":
@@ -1520,6 +1645,12 @@ async def agent_interaction_log(
         except Exception:
             pass
 
+    # C7: Refresh topic history sensor after topic write
+    try:
+        await _refresh_recent_topics()
+    except Exception:
+        pass
+
     elapsed = round((time.monotonic() - t_start) * 1000, 1)
 
     result = {
@@ -1593,6 +1724,11 @@ async def agent_whisper_startup():
                 "icon": "mdi:swap-horizontal",
             },
         )
+    except Exception:
+        pass
+    # C7: Populate topic history sensor on startup
+    try:
+        await _refresh_recent_topics()
     except Exception:
         pass
     log.info("agent_whisper.py loaded — whisper network idle")  # noqa: F821

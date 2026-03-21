@@ -703,6 +703,11 @@ ai_memory_edit_scope:
   max: 50
   icon: mdi:account-group
 
+ai_memory_archive_search_query:
+  name: "Memory Archive Search Query"
+  icon: mdi:archive-search
+  max: 255
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_tts_queue — TTS Queue Manager
 # ═══════════════════════════════════════════════════════════════════

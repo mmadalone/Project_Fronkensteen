@@ -2985,6 +2985,12 @@ async def memory_archive_restore(key: str = "", reembed: bool = True):
 
     k = (key or "").strip()
     if not k:
+        # C4: Fall back to editor helper for dashboard button
+        try:
+            k = state.get("input_text.ai_memory_edit_key").strip()  # noqa: F821
+        except (TypeError, AttributeError, NameError):
+            k = ""
+    if not k:
         return {"status": "error", "op": "archive_restore", "error": "key_empty"}
     try:
         result = _memory_archive_restore_db_sync(k)
@@ -3055,6 +3061,8 @@ async def memory_archive_stats():
 # ── Memory Browse (Dashboard) ────────────────────────────────────────────────
 
 BROWSE_SENSOR = "sensor.ai_memory_browse"
+ARCHIVE_BROWSE_SENSOR = "sensor.ai_memory_archive_browse"
+RELATED_BROWSE_SENSOR = "sensor.ai_memory_related_browse"
 
 
 @service(supports_response="only")  # noqa: F821
@@ -3131,6 +3139,153 @@ async def memory_browse(query: str = "", limit: int = 10):
     state.set(BROWSE_SENSOR, value="ok",  # noqa: F821
               new_attributes={"friendly_name": "Memory Browse", "query": q, "count": len(results), "results_md": md})
     return {"status": "ok", "op": "browse", "query": q, "count": len(results)}
+
+
+# ── C4: Archive & Relationship Browse (Dashboard) ────────────────────────────
+
+@service(supports_response="optional")  # noqa: F821
+async def memory_archive_browse(query: str = "", limit: int = 10):
+    """
+    yaml
+    name: Memory Archive Browse
+    description: >-
+      Search archived memory and write formatted results to
+      sensor.ai_memory_archive_browse for dashboard display.
+      If query is empty, shows archive stats.
+    fields:
+      query:
+        name: Query
+        description: Search term. If empty, reads from dashboard helper.
+        required: false
+        selector:
+          text:
+      limit:
+        name: Limit
+        description: Max results.
+        default: 10
+        selector:
+          number:
+            min: 1
+            max: 25
+    """
+    if _is_test_mode():
+        log.info("memory [TEST]: would archive_browse query=%s", query)  # noqa: F821
+        return {"status": "test_mode_skip"}
+
+    q = query.strip() if query else ""
+    if not q:
+        try:
+            q = state.get("input_text.ai_memory_archive_search_query").strip()  # noqa: F821
+        except (TypeError, AttributeError, NameError):
+            q = ""
+    if not q:
+        # Show archive stats when no query
+        try:
+            stats = _memory_archive_stats_db_sync()
+            count = stats.get("count", 0)
+            oldest = stats.get("oldest_archived") or ""
+            newest = stats.get("newest_archived") or ""
+            md = f"**Archive:** {count} entries"
+            if oldest and newest:
+                md += f" ({oldest[:10]} — {newest[:10]})"
+            md += "\n\n_Enter a query above to search archived entries._"
+        except Exception:
+            md = "_Enter a query above to search archived entries._"
+        state.set(ARCHIVE_BROWSE_SENSOR, value="idle",  # noqa: F821
+                  new_attributes={"friendly_name": "Archive Browse", "query": "", "count": 0, "results_md": md})
+        return {"status": "ok", "op": "archive_browse", "query": "", "count": 0}
+
+    lim = max(1, min(25, int(limit)))
+    try:
+        results = _memory_archive_search_db_sync(q, lim, "all")
+    except Exception as e:
+        log.error(f"memory_archive_browse failed: {e}")  # noqa: F821
+        state.set(ARCHIVE_BROWSE_SENSOR, value="error",  # noqa: F821
+                  new_attributes={"friendly_name": "Archive Browse", "query": q, "count": 0, "results_md": f"**Error:** {e}"})
+        return {"status": "error", "op": "archive_browse", "query": q, "error": str(e)}
+
+    if not results:
+        md = f"_No archived entries matching '{q}'._"
+    else:
+        lines = []
+        for r in results:
+            key = r.get("key", "?")
+            val = r.get("value", "")
+            scope = r.get("scope", "")
+            archived_at = (r.get("archived_at") or "")[:10]
+            preview = (val[:120] + "…") if len(val) > 120 else val
+            lines.append(f"**{key}** `{scope}` archived {archived_at}")
+            lines.append(f"> {preview}")
+            lines.append("")
+        md = "\n".join(lines)
+
+    state.set(ARCHIVE_BROWSE_SENSOR, value="ok",  # noqa: F821
+              new_attributes={"friendly_name": "Archive Browse", "query": q, "count": len(results), "results_md": md})
+    return {"status": "ok", "op": "archive_browse", "query": q, "count": len(results)}
+
+
+@service(supports_response="optional")  # noqa: F821
+async def memory_related_browse(key: str = ""):
+    """
+    yaml
+    name: Memory Related Browse
+    description: >-
+      Show related entries for a key, write formatted results to
+      sensor.ai_memory_related_browse for dashboard display.
+      If key is empty, reads from the Editor key helper.
+    fields:
+      key:
+        name: Key
+        description: The key to find relations for. If empty, reads from Editor.
+        required: false
+        selector:
+          text:
+    """
+    if _is_test_mode():
+        log.info("memory [TEST]: would related_browse key=%s", key)  # noqa: F821
+        return {"status": "test_mode_skip"}
+
+    k = key.strip() if key else ""
+    if not k:
+        try:
+            k = state.get("input_text.ai_memory_edit_key").strip()  # noqa: F821
+        except (TypeError, AttributeError, NameError):
+            k = ""
+    if not k:
+        state.set(RELATED_BROWSE_SENSOR, value="empty",  # noqa: F821
+                  new_attributes={"friendly_name": "Related Entries", "key": "", "count": 0,
+                                  "results_md": "_Enter a key in the Editor and tap Relations._"})
+        return {"status": "ok", "op": "related_browse", "key": "", "count": 0}
+
+    k_norm = _normalize_key(k)
+    try:
+        results = await _memory_related_db(k_norm, limit=10, depth=1)
+    except Exception as e:
+        log.error(f"memory_related_browse failed: {e}")  # noqa: F821
+        state.set(RELATED_BROWSE_SENSOR, value="error",  # noqa: F821
+                  new_attributes={"friendly_name": "Related Entries", "key": k, "count": 0,
+                                  "results_md": f"**Error:** {e}"})
+        return {"status": "error", "op": "related_browse", "key": k, "error": str(e)}
+
+    if not results:
+        md = f"_No related entries for '{k}'._"
+    else:
+        lines = []
+        for r in results:
+            rel_key = r.get("key", "?")
+            rel_type = r.get("rel_type", "?")
+            weight = r.get("weight", 0)
+            val = r.get("value", "")
+            preview = (val[:100] + "…") if len(val) > 100 else val
+            lines.append(f"**{rel_key}** — {rel_type} (w={weight:.2f})")
+            lines.append(f"> {preview}")
+            lines.append("")
+        md = "\n".join(lines)
+
+    state.set(RELATED_BROWSE_SENSOR, value="ok",  # noqa: F821
+              new_attributes={"friendly_name": "Related Entries", "key": k, "count": len(results),
+                              "results_md": md})
+    return {"status": "ok", "op": "related_browse", "key": k, "count": len(results)}
 
 
 # ── Memory Editor Services (Dashboard V2.1) ──────────────────────────────────

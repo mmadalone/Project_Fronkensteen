@@ -1639,6 +1639,15 @@ ai_whisper_keyword_cooldown:
   mode: slider
   unit_of_measurement: s
 
+ai_whisper_topic_history_count:
+  name: "Whisper - Topic History Count"
+  icon: mdi:format-list-numbered
+  min: 1
+  max: 15
+  step: 1
+  initial: 5
+  mode: slider
+
 ai_conversation_history_retention_days:
   name: AI Conversation History Retention (days)
   icon: mdi:calendar-clock

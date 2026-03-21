@@ -46,7 +46,7 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.dispatcher_add_keyword` | Add a keyword to an agent's routing keywords | Dashboard/admin — keyword management |
 | `pyscript.dispatcher_remove_keyword` | Remove a keyword from an agent's routing keywords | Dashboard/admin — keyword management |
 | `pyscript.dispatcher_clear_auto_keywords` | Clear all auto (non-manual) keywords from an agent | Dashboard/admin — keyword maintenance |
-| `pyscript.agent_whisper` | Post-interaction logging — writes mood, topic, interaction log to L2 memory (zero LLM calls) | Any blueprint with LLM conversation (post-interaction hook) |
+| `pyscript.agent_whisper` | Post-interaction logging — writes mood, topic, interaction log to L2 memory (zero LLM calls). Updates `sensor.ai_recent_topics` with rolling topic history (C7). | Any blueprint with LLM conversation (post-interaction hook) |
 | `pyscript.agent_whisper_context` | Pre-interaction context retrieval — searches L2 for recent whisper entries from OTHER agents | Any blueprint with LLM conversation (pre-interaction context) |
 
 **TTS & Audio Services** (`tts_queue.py`, `duck_manager.py`, `volume_sync.py`)
@@ -82,6 +82,8 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.memory_reindex_fts` | Rebuild full-text search index | Maintenance automation |
 | `pyscript.memory_health_check` | Check L2 memory database health | Monitoring/dashboard |
 | `pyscript.memory_browse` | Search and write results to sensor for dashboard display | Dashboard memory browser |
+| `pyscript.memory_archive_browse` | Search archived entries or show stats → `sensor.ai_memory_archive_browse` (C4) | Dashboard archive browser |
+| `pyscript.memory_related_browse` | Show relationship graph for a key → `sensor.ai_memory_related_browse` (C4) | Dashboard relationship browser |
 | `pyscript.memory_edit` | Read key/value/tags from dashboard helpers, call memory_set | Dashboard memory editor |
 | `pyscript.memory_delete` | Read key from dashboard helper, call memory_forget | Dashboard memory editor |
 | `pyscript.memory_load` | Load memory entry into dashboard edit fields | Dashboard memory editor |
@@ -98,7 +100,7 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.llm_task_call` | Budget-aware LLM chat via ha_text_ai | I-3 summarization (future), any background LLM task |
 | `pyscript.llm_direct_embed` | Budget-aware embedding generation via OpenAI API | memory_embed, memory_semantic_search |
 | `pyscript.summarize_interactions` | Batch-compress whisper interaction logs into per-agent summaries | `interaction_summarizer.yaml` nightly job |
-| `memory_context_refresh` (auto) | Writes recent summaries/mood/topics to `sensor.ai_memory_context` every 15 min + startup | Hot context injection (I-4) — not a callable service |
+| `memory_context_refresh` (auto) | Writes recent summaries/mood to `sensor.ai_memory_context` every 15 min + startup | Hot context injection (I-4) — not a callable service. Topics now handled by C7 `sensor.ai_recent_topics` (instant updates via `agent_whisper.py`). |
 | `pyscript.memory_todo_sync` | Bidirectional sync between L2 memory and HA todo list | `memory_todo_mirror.yaml` scheduled job (I-6) |
 
 **Notification & Dedup Services** (`notification_dedup.py`, `email_promote.py`)

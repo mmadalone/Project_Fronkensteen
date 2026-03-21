@@ -467,7 +467,7 @@ When multiple agents exist (Rick, Quark, Deadpool, Kramer), they operate indepen
 
 - **`agent_dispatcher.py`** — 6-level routing: explicit name → wake word → continuity → topic keywords → time-of-day era → random fallback. Reads from `assist_pipeline.pipelines` for persona discovery.
 - **`voice_handoff.yaml`** — Voice-initiated agent switching blueprint (I-24). LLM tool sets flag → blueprint switches satellite pipeline → greeting → mic reopen. Per-satellite, chainable. Supersedes the archived `agent_handoff.py`.
-- **`agent_whisper.py`** — Records interactions to L2 memory. Detects mood via keyword matching (zero LLM calls). Auto-updates dispatcher topic keywords from conversation content.
+- **`agent_whisper.py`** — Records interactions to L2 memory. Detects mood via keyword matching (zero LLM calls). Auto-updates dispatcher topic keywords from conversation content. Maintains rolling topic history in `sensor.ai_recent_topics` (C7) — agents see recent conversation topics with agent attribution and relative time.
 
 These are documented in `voice_context_architecture.md`. The blueprint-level patterns below remain valid for understanding the coordination concepts and for setups that don't use pyscript orchestration.
 

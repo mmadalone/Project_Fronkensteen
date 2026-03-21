@@ -379,7 +379,7 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 |--------|---------|-------------|
 | `agent_dispatcher.py` | 7-level persona routing (P0: handoff intent → wake word → continuity → keywords → era → preference → random). Alias support via `input_text.ai_handoff_persona_aliases`. | `pyscript.agent_dispatch` |
 | `voice_handoff.yaml` | Voice-initiated agent switching blueprint (I-24). LLM tool sets flag → blueprint switches satellite pipeline → greeting → mic reopen. Per-satellite, chainable. Supersedes archived `agent_handoff.py`. | Blueprint (trigger: `input_text.ai_handoff_pending`) |
-| `agent_whisper.py` | Interaction logging to L2, mood detection, auto-keyword learning | `pyscript.agent_whisper` |
+| `agent_whisper.py` | Interaction logging to L2, mood detection, auto-keyword learning, rolling topic history (C7: `sensor.ai_recent_topics`) | `pyscript.agent_whisper` |
 | `memory.py` | L2 persistent memory (SQLite+FTS5, auto-relationships, scoped by user) | `pyscript.memory_set/get/search` |
 | `tts_queue.py` | Centralized TTS with priority levels (0-4), cache tiers, presence-aware routing | `pyscript.tts_queue_speak` |
 | `duck_manager.py` | Reference-counted volume ducking, crash-safe snapshots | `pyscript.duck_manager_duck/restore` |

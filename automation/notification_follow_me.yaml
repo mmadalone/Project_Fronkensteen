@@ -3211,6 +3211,11 @@ actions:
                           volume_level: "{{ tts_output_vol | float(0) }}"
                           announce: "{{ tts_announce | bool(false) }}"
                           priority: 3
+                          metadata:
+                            agent_name: "{{ dispatch_persona | default('rick') }}"
+                            message: "{{ _safe_announcement[:200] }}"
+                            topic: "notification"
+                            source: "notification_follow_me"
                 default:
                   # ── Non-stinger path — tts_queue_speak without chime ──
                   - alias: "TTS speak via tts_queue (no stinger)"
@@ -3225,15 +3230,11 @@ actions:
                       volume_level: "{{ tts_output_vol | float(0) }}"
                       announce: "{{ tts_announce | bool(false) }}"
                       priority: 3
-
-              # ── Banter hook: notify reactive banter that a notification was delivered ──
-              - alias: "8b · Fire notification delivered event (banter)"
-                event: ai_notification_delivered
-                event_data:
-                  agent_name: "{{ dispatch_persona | default('rick') }}"
-                  message: "{{ _safe_announcement[:200] }}"
-                  topic: "notification"
-                  source: "notification_follow_me"
+                      metadata:
+                        agent_name: "{{ dispatch_persona | default('rick') }}"
+                        message: "{{ _safe_announcement[:200] }}"
+                        topic: "notification"
+                        source: "notification_follow_me"
             else:
               - alias: "8-skip · Log satellite unreachable (credits protected)"
                 action: system_log.write

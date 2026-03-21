@@ -578,6 +578,7 @@ async def dedup_announce(
     chime_path: str = "",
     restore_volume: bool = False,
     volume_restore_delay: int = 8,
+    metadata=None,
 ):
     """
     yaml
@@ -676,6 +677,14 @@ async def dedup_announce(
           number:
             min: 1
             max: 30
+      metadata:
+        name: Metadata
+        description: >-
+          Caller metadata dict passed through to tts_queue_speak and emitted
+          in the tts_queue_item_completed event after playback.
+        required: false
+        selector:
+          object:
     """
     if _is_test_mode():
         log.info("notification_dedup [TEST]: would dedup-announce topic=%s source=%s", topic, source)  # noqa: F821
@@ -713,6 +722,8 @@ async def dedup_announce(
             )
             if chime_path:
                 tts_kwargs["chime_path"] = chime_path
+            if metadata and isinstance(metadata, dict):
+                tts_kwargs["metadata"] = metadata
             tts_call = pyscript.tts_queue_speak(**tts_kwargs)  # noqa: F821
             tts_resp = await tts_call
             tts_ok = tts_resp is not None and tts_resp.get("status") == "queued"
@@ -796,6 +807,8 @@ async def dedup_announce(
         )
         if chime_path:
             tts_kwargs["chime_path"] = chime_path
+        if metadata and isinstance(metadata, dict):
+            tts_kwargs["metadata"] = metadata
         tts_call = pyscript.tts_queue_speak(**tts_kwargs)  # noqa: F821
         tts_resp = await tts_call
         tts_ok = tts_resp is not None and tts_resp.get("status") == "queued"

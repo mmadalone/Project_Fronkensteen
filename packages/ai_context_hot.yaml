@@ -508,6 +508,12 @@ template:
             {%- set ns.lines = ns.lines + ['Memory context:\n' ~ mem_ctx] -%}
             {%- endif -%}
 
+            {# ── C7: Recent topic history ── #}
+            {%- set topic_ctx = state_attr('sensor.ai_recent_topics', 'context') | default('', true) -%}
+            {%- if topic_ctx | length > 0 -%}
+              {%- set ns.lines = ns.lines + [topic_ctx] -%}
+            {%- endif -%}
+
             {# ── LAST INTERACTION (self-awareness, Task 2) ── #}
             {%- set agent_names = {
               'rick': 'Rick', 'quark': 'Quark', 'kramer': 'Kramer',
