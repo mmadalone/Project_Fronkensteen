@@ -139,6 +139,14 @@ ai_contact_history_enabled:
   initial: true
 
 # ═══════════════════════════════════════════════════════════════════
+# ai_banter — Reactive Banter (Pattern 1)
+# ═══════════════════════════════════════════════════════════════════
+ai_reactive_banter_enabled:
+  name: "AI Reactive Banter - Enabled"
+  icon: mdi:message-reply-text
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
 # ai_auto_off — Auto-Off System
 # ═══════════════════════════════════════════════════════════════════
 ai_auto_off_enabled:
@@ -629,3 +637,8 @@ ai_whisper_mood_detection:
   name: "AI Whisper - Mood Detection"
   initial: true
   icon: mdi:emoticon-outline
+
+ai_conversation_sensor_enabled:
+  name: AI Conversation Sensor Enabled
+  icon: mdi:message-text-clock
+  initial: true

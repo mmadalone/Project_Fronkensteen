@@ -157,6 +157,7 @@ Every conversation agent system prompt MUST be organized into these sections, in
 - Who the agent is (character, tone, mannerisms)
 - How they address the user
 - Response length and style constraints
+- **Gender & pronoun markers (multi-persona systems):** When a persona has a specific gender identity, state it explicitly in the PERSONALITY section with pronouns (e.g., `You are a man. Pronouns: he/him.`). LLMs — especially instruction-tuned models — will default to assumptions without reinforcement. In multi-agent systems, every agent's roster/expertise table that names the persona must also include the pronoun marker (e.g., `Doctor Portuondo (he/him)`). One mention in the persona's own prompt is not enough — every cross-reference across all agents must carry the marker, or the LLM loses the signal.
 
 **PERMISSIONS**
 - Explicit list of allowed devices with entity IDs and allowed services
@@ -176,6 +177,7 @@ Every conversation agent system prompt MUST be organized into these sections, in
 - What to do on unclear/misheard input
 - What NOT to do (e.g., never toggle TV unless explicitly asked)
 - Conversation flow / decision tree
+- **Proactive-call guardrail:** When the agent is called programmatically (e.g., by `notification_follow_me`, `email_follow_me`, or any blueprint using `conversation.process`) to summarize content, it must respond with the summary only. It must NOT look up, check, or call any automation entities — the calling blueprint already verified all preconditions. Without this guardrail, LLMs will "helpfully" try to verify automation states, hallucinate entity names (e.g., appending a persona suffix), and break the flow with 404 errors.
 
 **STYLE**
 - Output constraints (max sentence count, no emojis, no entity names spoken aloud, etc.)
@@ -383,6 +385,12 @@ script:
 - Anything that writes to the filesystem or installs packages.
 
 Constrain the agent's capabilities through which tools you expose. The PERMISSIONS section in the prompt is a second line of defense, not the first.
+
+**`execute_service` naming and guards:**
+- The function spec name MUST be `execute_service` (singular). **Never** `execute_services` (plural) — the plural form breaks the native function handler silently.
+- The native function name is `execute_service` (batch/list variant) or `execute_service_single` (Standard single-call variant).
+- LLMs will hallucinate plausible-sounding services that don't exist in HA (e.g., `notify.clear_messages`, `notify.*.clear_count`). When a hallucinated call fails, the `ServiceNotFound` error gets spoken back through TTS. **Guard against known hallucination patterns** by adding explicit "NEVER use this for X" clauses in the `execute_service` description. Current guards:
+  - Phone notifications cannot be cleared, dismissed, or marked as read from HA — no such services exist.
 
 ### 8.3.3 MCP servers as tool sources (HA 2025.2+)
 

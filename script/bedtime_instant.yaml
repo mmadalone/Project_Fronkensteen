@@ -222,13 +222,17 @@ sequence:
         continue_on_error: true
 
   - alias: "2) Announce bedtime"
-    action: tts.speak
-    target:
-      entity_id: "{{ tts_entity }}"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts_result
+    continue_on_error: true
     data:
-      cache: true
-      media_player_entity_id: "{{ announcement_player }}"
-      message: "{{ announcement_message }}"
+      text: "{{ announcement_message }}"
+      voice: "{{ tts_entity }}"
+      target_mode: explicit
+      target: "{{ announcement_player }}"
+      cache: "session"
+      announce: true
+      priority: 3
 
   - alias: "3) Wait for announcement to finish"
     delay:
@@ -298,13 +302,17 @@ sequence:
     continue_on_error: true
 
   - alias: "9) Warn about lights-off"
-    action: tts.speak
-    target:
-      entity_id: "{{ tts_entity }}"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts_result
+    continue_on_error: true
     data:
-      cache: true
-      media_player_entity_id: "{{ audiobook_player }}"
-      message: "{{ warning_message }}"
+      text: "{{ warning_message }}"
+      voice: "{{ tts_entity }}"
+      target_mode: explicit
+      target: "{{ audiobook_player }}"
+      cache: "session"
+      announce: true
+      priority: 3
 
   - alias: "10) Wait for lights-off timer"
     delay:
@@ -316,10 +324,14 @@ sequence:
     continue_on_error: true
 
   - alias: "12) Say goodnight"
-    action: tts.speak
-    target:
-      entity_id: "{{ tts_entity }}"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts_result
+    continue_on_error: true
     data:
-      cache: true
-      media_player_entity_id: "{{ audiobook_player }}"
-      message: "{{ goodnight_message }}"
+      text: "{{ goodnight_message }}"
+      voice: "{{ tts_entity }}"
+      target_mode: explicit
+      target: "{{ audiobook_player }}"
+      cache: "session"
+      announce: true
+      priority: 3

@@ -1195,7 +1195,7 @@ async def _play_item(item: dict) -> None:
     # Skip ducking entirely for announce-native speakers — they handle
     # ducking locally via announce mode, no need to duck other rooms.
     session_id = None
-    if not item.get("announce_native"):
+    if item.get("duck", True) and not item.get("announce_native"):
         try:
             speaker_detail = speaker if isinstance(speaker, str) else speaker[0]
             result = await hass.services.async_call(  # noqa: F821
@@ -1407,6 +1407,7 @@ async def tts_queue_speak(
     target: str = "",
     volume_level: float = None,
     announce: bool = True,
+    duck: bool = True,
     chime_path: str = "",
     chime_duration_ms: int = 0,
     media_file: str = "",
@@ -1475,6 +1476,16 @@ async def tts_queue_speak(
       announce:
         name: Announce
         description: Enable ducking/announce mode.
+        default: true
+        selector:
+          boolean:
+      duck:
+        name: Duck
+        description: >-
+          Enable duck_manager volume ducking for background media.
+          When false, duck_manager is not called — useful for callers
+          that manage their own ducking (e.g. banter). Announce mode
+          on the speaker is unaffected.
         default: true
         selector:
           boolean:
@@ -1585,7 +1596,7 @@ async def tts_queue_speak(
             "priority": priority, "cache": cache,
             "target_mode": target_mode, "resolved_speaker": resolved_speaker,
             "volume_level": volume_level, "announce": announce,
-            "announce_native": announce_native,
+            "duck": duck, "announce_native": announce_native,
             "chime_path": chime_path or None,
             "chime_duration_ms": int(chime_duration_ms) if chime_duration_ms else 0,
             "media_file": media_file or None,

@@ -104,6 +104,15 @@ ai_embedding_batch_time:
   icon: mdi:clock-outline
 
 # ═══════════════════════════════════════════════════════════════════
+# ai_banter — Reactive Banter (Pattern 1)
+# ═══════════════════════════════════════════════════════════════════
+ai_banter_last_reaction:
+  name: "AI Banter — Last Reaction Time"
+  has_date: true
+  has_time: true
+  icon: mdi:message-reply-text
+
+# ═══════════════════════════════════════════════════════════════════
 # ai_escalation — Agent Escalation
 # ═══════════════════════════════════════════════════════════════════
 ai_escalation_last_followthrough:
@@ -174,3 +183,9 @@ ai_sleep_window_end:
   has_date: false
   has_time: true
   icon: mdi:weather-sunny
+
+ai_conversation_summarizer_batch_time:
+  name: AI Conversation Summarizer Batch Time
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline

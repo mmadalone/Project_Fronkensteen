@@ -597,24 +597,16 @@ automation:
     description: >-
       Increment LLM + STT call counters on Assist pipeline runs AND direct
       conversation.process calls. Pipeline trigger tracks both LLM + STT;
-      conversation state trigger tracks LLM only (no voice input).
-      I-33 Phase 2: Also tracks per-agent breakdown.
+      state_changed event trigger dynamically catches ALL conversation.*
+      entity changes (no hardcoded entity list). I-33 Phase 2: per-agent breakdown.
     mode: queued
     max: 20
     triggers:
       - trigger: event
         event_type: assist_pipeline/run/end
         id: pipeline
-      - trigger: state
-        entity_id:
-          - conversation.rick_standard_2
-          - conversation.rick_bedtime_2
-          - conversation.quark
-          - conversation.quark_bedtime_2
-          - conversation.kramer
-          - conversation.kramer_bedtime_2
-          - conversation.deadpool_bedtime
-          - conversation.doctor_portuondo
+      - trigger: event
+        event_type: state_changed
         id: conversation
     conditions:
       - condition: template
@@ -622,7 +614,9 @@ automation:
           {% if trigger.id == 'pipeline' %}
             {{ trigger.event.data.get('pipeline', {}).get('conversation_engine') not in [none, '', 'homeassistant'] }}
           {% else %}
-            true
+            {% set eid = trigger.event.data.get('entity_id', '') %}
+            {{ eid.startswith('conversation.')
+               and eid != 'conversation.home_assistant' }}
           {% endif %}
     actions:
       # Extract agent name from either trigger type
@@ -631,7 +625,7 @@ automation:
             {% if trigger.id == 'pipeline' %}
               {{ trigger.event.data.get('pipeline', {}).get('conversation_engine', '') }}
             {% else %}
-              {{ trigger.entity_id }}
+              {{ trigger.event.data.get('entity_id', '') }}
             {% endif %}
           _agent: >-
             {{ _engine | regex_replace('^conversation\\.', '') | regex_replace('_(standard|bedtime|extended|music).*$', '') | regex_replace('_\\d+$', '') }}

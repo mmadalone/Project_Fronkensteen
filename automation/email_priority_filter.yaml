@@ -64,12 +64,12 @@ blueprint:
             boolean: {}
 
     # ===========================================================================
-    # ③ BYPASS — Follow-Me / Ducking (I-45b)
+    # ③ BYPASS — Follow-Me (I-45b)
     # ===========================================================================
     bypass:
       name: "③ Bypass"
       icon: mdi:shield-off-outline
-      description: Temporarily disable follow-me or ducking during processing.
+      description: Temporarily disable follow-me during processing.
       collapsed: true
       input:
         bypass_follow_me:
@@ -80,26 +80,6 @@ blueprint:
           default: true
           selector:
             boolean: {}
-
-        bypass_ducking:
-          name: Bypass Ducking
-          description: >
-            Temporarily disable ducking during processing so TTS
-            announcements don't duck other media.
-          default: false
-          selector:
-            boolean: {}
-
-        duck_toggle_helper:
-          name: Duck toggle helper
-          description: >
-            The input_boolean that controls the duck manager master toggle.
-            Bypass ducking turns this OFF during the sequence and restores it after.
-          default: input_boolean.ai_duck_manager_enabled
-          selector:
-            entity:
-              filter:
-                domain: input_boolean
 
         bypass_claim_script:
           name: Refcount claim script
@@ -148,40 +128,15 @@ blueprint:
                   value: "t2"
                 - label: "T3 — Ambient (detection/tracking)"
                   value: "t3"
-        privacy_gate_enabled:
-          name: "Privacy gate enabled entity"
-          description: "Boolean that enables the privacy gate system."
-          default: input_boolean.ai_privacy_gate_enabled
-          selector:
-            entity:
-              domain: input_boolean
-        privacy_gate_mode:
-          name: "Privacy gate mode entity"
-          description: "Select that controls privacy gate behavior (auto/force_suppress/force_allow)."
-          default: input_select.ai_privacy_gate_mode
-          selector:
-            entity:
-              domain: input_select
-        privacy_gate_person:
-          name: "Privacy gate person"
-          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
-          default: "miquel"
-          selector:
-            text:
 
 variables:
   imap_entry_id: !input imap_entry_id
   kill_switch: !input kill_switch
   suppress_urgent_tts: !input suppress_urgent_tts
   v_bypass_follow_me: !input bypass_follow_me
-  v_bypass_ducking: !input bypass_ducking
-  v_duck_toggle: !input duck_toggle_helper
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
   privacy_tier: !input privacy_tier
-  v_privacy_enabled: !input privacy_gate_enabled
-  v_privacy_mode: !input privacy_gate_mode
-  v_privacy_person: !input privacy_gate_person
 
 mode: queued
 max: 5
@@ -200,32 +155,12 @@ conditions:
     entity_id: !input kill_switch
     state: "on"
 
-  - alias: "Privacy gate"
-    condition: template
-    value_template: >-
-      {%- set tier = privacy_tier -%}
-      {%- set mode = states(v_privacy_mode) | default('off') -%}
-      {%- set override = states('input_select.ai_privacy_gate_email_priority_filter') | default('off') -%}
-      {%- if tier == 'off'
-          or not is_state(v_privacy_enabled, 'on')
-          or mode == 'force_allow_all' or override == 'force_allow'
-          or override == 'off' -%}
-        true
-      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
-        false
-      {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
-      {%- endif -%}
-
 actions:
-  # Save & bypass follow-me/ducking (I-45b)
-  - alias: "0 · Save & bypass follow-me/ducking (I-45b)"
+  # Save & bypass follow-me (I-45b)
+  - alias: "0 · Save & bypass follow-me (I-45b)"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | bool(false) }}
-      ducking_was_on: >-
-        {{ v_bypass_ducking
-           and is_state(v_duck_toggle, 'on') }}
 
   - alias: "0 · Disable follow-me (if configured) (I-45b)"
     choose:
@@ -239,17 +174,6 @@ actions:
             data:
               owner: "{{ this.entity_id }}"
 
-  - alias: "0 · Disable ducking (if configured) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Turn off duck manager during email processing"
-            action: input_boolean.turn_off
-            target:
-              entity_id: "{{ v_duck_toggle }}"
-
   - alias: "Process email through priority filter"
     action: pyscript.email_promote_process
     response_variable: _email_result
@@ -258,7 +182,7 @@ actions:
       subject: "{{ trigger.event.data.subject }}"
       suppress_tts: "{{ suppress_urgent_tts }}"
 
-  # Restore follow-me/ducking (I-45b)
+  # Restore follow-me (I-45b)
   - alias: "1 · Restore follow-me (if bypassed) (I-45b)"
     choose:
       - conditions:
@@ -271,13 +195,3 @@ actions:
             data:
               owner: "{{ this.entity_id }}"
 
-  - alias: "1 · Restore ducking (if bypassed) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Restore duck manager after email processing"
-            action: input_boolean.turn_on
-            target:
-              entity_id: "{{ v_duck_toggle }}"

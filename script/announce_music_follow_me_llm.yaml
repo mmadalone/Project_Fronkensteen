@@ -13,6 +13,25 @@ blueprint:
 
     ### Recent changes
 
+    - **v9.2 (2026-03-20):** No blueprint changes — LLM call counter gap
+      fixed at budget system level. ai_llm_call_counter automation in
+      ai_llm_budget.yaml replaced hardcoded conversation entity trigger
+      list with dynamic state_changed event + domain filter. All current
+      and future conversation agents are now auto-tracked.
+
+    - **v9.1 (2026-03-20):** Banter delay — configurable pause (default
+      5 s) before banter speaks, preventing banter from preempting the
+      announcement on the same speaker. Banter TTS priority lowered
+      from 3 to 5 (below announcement priority 4) as belt-and-suspenders.
+
+    - **v9 (2026-03-20):** Budget Floor (%) slider gates LLM-generated
+      messages — falls back to static/random when daily budget drops
+      below threshold. Reactive Banter — after the announcement, a
+      different agent probabilistically chimes in with a brief
+      in-character reaction via conversation.process + I-45a
+      tool-suppression prefix. Both features off by default (zero
+      behavioral change on upgrade).
+
     - **v8 (2026-03-18):** Dynamic stinger timing — stinger resolved in
       blueprint but played via tts_queue chime_path with duration-aware
       wait (no hardcoded delay). music_compose_get now exposes duration_ms
@@ -165,6 +184,20 @@ blueprint:
           selector:
             text:
 
+        budget_floor:
+          name: Budget Floor (%)
+          description: >
+            Skip LLM-generated messages when the daily LLM budget drops
+            below this percentage. Falls back to static/random messages.
+            Set to 0 to disable the budget gate (v8 behavior).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
     # ─────────────────────────────────────────────────────────────
     composed_stinger:
       name: "④ Composed Stinger"
@@ -245,8 +278,87 @@ blueprint:
             text: {}
 
     # ─────────────────────────────────────────────────────────────
+    reactive_banter:
+      name: "⑤ Reactive Banter"
+      icon: mdi:message-reply-text
+      collapsed: true
+      description: >
+        After the follow-me announcement, another agent may chime in with
+        a brief, in-character reaction. I-45a tool-suppression prefix
+        prevents re-entry. Gated by probability and budget floor.
+      input:
+        enable_banter:
+          name: Enable reactive banter
+          description: >
+            When enabled, a different agent may react to the music
+            announcement with a brief in-character comment.
+          default: false
+          selector:
+            boolean: {}
+
+        banter_probability:
+          name: Banter Probability (%)
+          description: >
+            Chance of banter after each announcement. 20% is a good
+            starting point.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        banter_agent_pool:
+          name: Agent Pool
+          description: >
+            Comma-separated pipeline display names eligible for banter.
+            The announcing agent is automatically excluded.
+          default: "Rick, Quark, Deadpool, Kramer, Doctor Portuondo"
+          selector:
+            text:
+              multiline: true
+
+        banter_prompt:
+          name: Banter Prompt
+          description: >
+            Prompt sent to Agent B. Placeholders: {agent_a}, {excerpt},
+            {track}, {artist}, {max_words}. Tool-suppression prefix
+            is automatically prepended.
+          default: >
+            {agent_a} just announced: '{excerpt}'.
+            Give ONE brief, witty, in-character reaction. Under {max_words} words.
+          selector:
+            text:
+              multiline: true
+
+        banter_max_words:
+          name: Max Words
+          description: Maximum word count for the banter reaction.
+          default: 25
+          selector:
+            number:
+              min: 5
+              max: 100
+              step: 5
+
+        banter_delay:
+          name: Banter Delay (seconds)
+          description: >
+            Seconds to wait after the announcement before banter speaks.
+            Ensures the announcement finishes playing before Agent B
+            reacts. Increase for longer announcements.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 1
+              unit_of_measurement: "s"
+
+    # ─────────────────────────────────────────────────────────────
     infrastructure:
-      name: "⑤ Infrastructure"
+      name: "⑥ Infrastructure"
       icon: mdi:cog
       collapsed: true
       description: "Shared entity references for the dispatcher system."
@@ -302,6 +414,13 @@ variables:
   prompt_tpl: !input llm_prompt_template
   default_msg_tpl: !input default_message
   custom_msgs: !input custom_random_messages
+  budget_floor: !input budget_floor
+  v_enable_banter: !input enable_banter
+  v_banter_probability: !input banter_probability
+  v_banter_agent_pool: !input banter_agent_pool
+  v_banter_prompt: !input banter_prompt
+  v_banter_max_words: !input banter_max_words
+  v_banter_delay: !input banter_delay
 
 sequence:
   # ── Infrastructure: Agent selection — dispatcher > manual ──────────────
@@ -388,7 +507,11 @@ sequence:
       - alias: "LLM path — generate context-aware message via conversation agent"
         conditions:
           - condition: template
-            value_template: "{{ random_mode and use_llm }}"
+            value_template: >-
+              {%- set floor = budget_floor | int(0) -%}
+              {%- set budget_ok = (floor == 0
+                    or states('sensor.ai_llm_budget_remaining') | int(100) >= floor) -%}
+              {{ random_mode and use_llm and budget_ok }}
         sequence:
           - alias: "Call conversation agent for a fun announcement (non-critical)"
             action: conversation.process
@@ -580,6 +703,131 @@ sequence:
       chime_path: "{{ stinger_resolved_url | default('') }}"
       chime_duration_ms: "{{ stinger_resolved_duration_ms | default(0) | int }}"
       volume_level: "{{ v_stinger_volume | float(0) }}"
+
+  # ── Reactive Banter — probabilistic Agent B reaction ──────────────
+  - alias: "Banter — gate check (enable + probability + budget)"
+    if:
+      - condition: template
+        value_template: >-
+          {%- set floor = budget_floor | int(0) -%}
+          {%- set budget_ok = (floor == 0
+                or states('sensor.ai_llm_budget_remaining') | int(100) >= floor) -%}
+          {%- set dice = range(100) | random -%}
+          {{ v_enable_banter and budget_ok
+             and dice | int < v_banter_probability | int }}
+    then:
+      - alias: "Banter — build filtered agent pool"
+        variables:
+          banter_pool: >-
+            {%- set ns = namespace(items=[]) -%}
+            {%- for p in v_banter_agent_pool.split(',') -%}
+              {%- set persona = p.split(' - ')[0] | trim | lower
+                    | replace(' ', '_') -%}
+              {%- if persona != (dispatch_persona | default('')
+                    | lower | replace(' ', '_')) -%}
+                {%- set ns.items = ns.items + [p | trim] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.items }}
+
+      - alias: "Banter — pick agent, generate, speak"
+        if:
+          - condition: template
+            value_template: "{{ banter_pool | length > 0 }}"
+        then:
+          - variables:
+              banter_agent_name: "{{ banter_pool | random }}"
+
+          - alias: "Banter — resolve Agent B engine"
+            action: pyscript.dispatcher_resolve_engine
+            response_variable: banter_resolve
+            data:
+              pipeline_name: "{{ banter_agent_name }}"
+            continue_on_error: true
+
+          - alias: "Banter — generate via conversation.process"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ (banter_resolve | default({}))
+                     .get('engine', '') | length > 0 }}
+            then:
+              - variables:
+                  banter_engine: >-
+                    {{ banter_resolve.get('engine', '') }}
+                  banter_tts: >-
+                    {{ banter_resolve.get('tts_engine', '') }}
+
+              - action: conversation.process
+                response_variable: banter_llm
+                data:
+                  agent_id: "{{ banter_engine }}"
+                  text: >-
+                    [BANTER — do NOT call handoff_agent, execute_service,
+                    escalate_action, or any other tools. Respond with a
+                    brief in-character reaction only. Use the user's name
+                    from your context — never say "the user".]
+                    {{ v_banter_prompt
+                       | replace('{agent_a}',
+                           dispatch_persona | default('')
+                           | replace('_', ' ') | title)
+                       | replace('{excerpt}',
+                           (tts_message | default(''))[:150])
+                       | replace('{track}',
+                           media_title | default(''))
+                       | replace('{artist}',
+                           media_artist | default(''))
+                       | replace('{max_words}',
+                           v_banter_max_words | string) }}
+                continue_on_error: true
+
+              - alias: "Banter — extract response text"
+                variables:
+                  _raw_banter: >-
+                    {%- set r = banter_llm | default({}) -%}
+                    {%- set resp = r.get('response', {}) -%}
+                    {%- if resp.speech is defined
+                          and resp.speech.plain is defined
+                          and resp.speech.plain.speech is defined -%}
+                      {{ resp.speech.plain.speech | trim }}
+                    {%- elif resp.text is defined -%}
+                      {{ resp.text | trim }}
+                    {%- else -%}
+                      {{ '' }}
+                    {%- endif -%}
+
+              - alias: "Banter — sanitize (I-45a leakage filter)"
+                variables:
+                  banter_text: >-
+                    {%- set _msg = _raw_banter | default('')
+                          | string | trim -%}
+                    {%- if _msg | length == 0 -%}
+                      {{ '' }}
+                    {%- elif _msg | regex_search('(?i)("type"\s*:\s*"function"|"name"\s*:\s*"|handoff_agent|escalate_action|web_search|tool_call|"parameters"\s*:\s*\{|def\s+\w+\(|async\s+def\s+|\{\s*"function"|function\s*\(|\bschema\b.*\bproperties\b)') -%}
+                      {{ '' }}
+                    {%- else -%}
+                      {{ _msg }}
+                    {%- endif -%}
+
+              - alias: "Banter — wait for announcement to finish"
+                delay:
+                  seconds: "{{ v_banter_delay | int(5) }}"
+
+              - alias: "Banter — speak via TTS queue"
+                if:
+                  - condition: template
+                    value_template: "{{ banter_text | length > 0 }}"
+                then:
+                  - action: pyscript.tts_queue_speak
+                    response_variable: _tts_banter
+                    continue_on_error: true
+                    data:
+                      text: "{{ banter_text }}"
+                      voice: "{{ banter_tts }}"
+                      priority: 5
+                      target_mode: explicit
+                      target: "{{ tts_target_player }}"
+                      announce: true
 
   - alias: "Whisper — update self-awareness"
     action: pyscript.agent_whisper

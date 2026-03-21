@@ -197,11 +197,15 @@ actions:
             value_template: "{{ v_tts_mode == 'static' and v_tts_message | trim != '' }}"
         sequence:
           - alias: "Speak static bedtime advisory message"
-            action: tts.speak
-            target:
-              entity_id: "{{ v_tts_speaker }}"
+            action: pyscript.tts_queue_speak
+            response_variable: _tts_result
+            continue_on_error: true
             data:
-              message: "{{ v_tts_message }}"
+              text: "{{ v_tts_message }}"
+              target_mode: explicit
+              target: "{{ v_tts_speaker }}"
+              announce: true
+              priority: 3
 
       - conditions:
           - condition: template
@@ -215,12 +219,15 @@ actions:
               text: "{{ v_llm_prompt | replace('{recommendation}', recommendation) }}"
             response_variable: llm_response
           - alias: "Speak LLM-generated bedtime advisory message"
-            action: tts.speak
+            action: pyscript.tts_queue_speak
+            response_variable: _tts_result
             continue_on_error: true
-            target:
-              entity_id: "{{ v_tts_speaker }}"
             data:
-              message: "{{ (llm_response | default({})).get('response', {}).get('speech', {}).get('plain', {}).get('speech', v_tts_message) }}"
+              text: "{{ (llm_response | default({})).get('response', {}).get('speech', {}).get('plain', {}).get('speech', v_tts_message) }}"
+              target_mode: explicit
+              target: "{{ v_tts_speaker }}"
+              announce: true
+              priority: 3
 
   # ── Advisory actions ──
   - !input advisory_actions

@@ -179,11 +179,15 @@ actions:
         value_template: "{{ v_tts_message | trim != '' }}"
     then:
       - alias: "Speak routine deviation check-in message"
-        action: tts.speak
-        target:
-          entity_id: "{{ v_tts_speaker }}"
+        action: pyscript.tts_queue_speak
+        response_variable: _tts_result
+        continue_on_error: true
         data:
-          message: "{{ v_tts_message }}"
+          text: "{{ v_tts_message }}"
+          target_mode: explicit
+          target: "{{ v_tts_speaker }}"
+          announce: true
+          priority: 3
 
   # ── Custom actions ──
   - !input deviation_actions

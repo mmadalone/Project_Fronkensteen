@@ -266,11 +266,6 @@ ai_privacy_gate_notification_follow_me:
   options: *privacy_override_options
   initial: auto
   icon: mdi:bell-ring
-ai_privacy_gate_email_priority_filter:
-  name: "Privacy Override — Email Priority Filter"
-  options: *privacy_override_options
-  initial: auto
-  icon: mdi:email-alert
 ai_privacy_gate_proactive_briefing:
   name: "Privacy Override — Proactive Briefing"
   options: *privacy_override_options
@@ -323,11 +318,6 @@ ai_privacy_gate_memory_todo_mirror:
   options: *privacy_override_options
   initial: auto
   icon: mdi:format-list-checks
-ai_privacy_gate_interaction_summarizer:
-  name: "Privacy Override — Interaction Summarizer"
-  options: *privacy_override_options
-  initial: auto
-  icon: mdi:text-box-check
 ai_privacy_gate_proactive_llm_sensors:
   name: "Privacy Override — Proactive LLM Sensors"
   options: *privacy_override_options

@@ -299,7 +299,7 @@ blueprint:
     bypass:
       name: "⑤ Bypass"
       icon: mdi:shield-off-outline
-      description: Follow-me and ducking bypass during handoff sequence.
+      description: Follow-me bypass during handoff sequence.
       collapsed: true
       input:
         bypass_follow_me:
@@ -310,26 +310,6 @@ blueprint:
           default: true
           selector:
             boolean: {}
-
-        bypass_ducking:
-          name: Bypass Ducking
-          description: >
-            Temporarily disable ducking during the handoff sequence so
-            commentary and greeting TTS don't duck other media.
-          default: false
-          selector:
-            boolean: {}
-
-        duck_toggle_helper:
-          name: Duck toggle helper
-          description: >
-            The input_boolean that controls the duck manager master toggle.
-            Bypass ducking turns this OFF during the sequence and restores it after.
-          default: input_boolean.ai_duck_manager_enabled
-          selector:
-            entity:
-              filter:
-                domain: input_boolean
 
         bypass_claim_script:
           name: Refcount claim script
@@ -694,10 +674,8 @@ actions:
       # Mic behavior + extra system prompt
       mic_behavior: !input mic_behavior
       extra_system_prompt_input: !input extra_system_prompt
-      # Bypass follow-me / ducking (I-45b)
+      # Bypass follow-me (I-45b)
       v_bypass_follow_me: !input bypass_follow_me
-      v_bypass_ducking: !input bypass_ducking
-      v_duck_toggle: !input duck_toggle_helper
       v_bypass_claim: !input bypass_claim_script
       v_bypass_release: !input bypass_release_script
       # Music
@@ -735,15 +713,12 @@ actions:
       rendered_extra_prompt: >-
         {{ [mic_instruction | trim, extra_system_prompt_input | trim, continuous_stop_instruction | trim] | reject('eq', '') | join(' ') }}
 
-  # 1c. Save & bypass follow-me/ducking (I-45b) — after step 1 so v_bypass_* are defined
-  - alias: "1c · Save & bypass follow-me/ducking (I-45b)"
+  # 1c. Save & bypass follow-me (I-45b) — after step 1 so v_bypass_* are defined
+  - alias: "1c · Save & bypass follow-me (I-45b)"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
            and is_state('input_boolean.notification_follow_me', 'on') }}
-      ducking_was_on: >-
-        {{ v_bypass_ducking | default(false)
-           and is_state(v_duck_toggle | default(''), 'on') }}
 
   - alias: "1c · Disable follow-me (if configured) (I-45b)"
     choose:
@@ -756,17 +731,6 @@ actions:
             continue_on_error: true
             data:
               owner: "{{ this.entity_id }}"
-
-  - alias: "1c · Disable ducking (if configured) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Disable duck manager during handoff"
-            action: input_boolean.turn_off
-            target:
-              entity_id: "{{ v_duck_toggle }}"
 
   # 2. Dynamic values — handle both trigger types
   - alias: "Set handoff topic and 4 more variables"
@@ -854,16 +818,6 @@ actions:
                 continue_on_error: true
                 data:
                   owner: "{{ this.entity_id }}"
-      - alias: "Restore ducking (if bypassed) (I-45b)"
-        choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ ducking_was_on }}"
-            sequence:
-              - alias: "Re-enable duck manager (expertise blocked)"
-                action: input_boolean.turn_on
-                target:
-                  entity_id: "{{ v_duck_toggle }}"
       - alias: "Clear processing guard (expertise blocked)"
         action: input_boolean.turn_off
         target:
@@ -921,16 +875,6 @@ actions:
                 continue_on_error: true
                 data:
                   owner: "{{ this.entity_id }}"
-      - alias: "Restore ducking (if bypassed) (I-45b)"
-        choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ ducking_was_on }}"
-            sequence:
-              - alias: "Re-enable duck manager (unknown target)"
-                action: input_boolean.turn_on
-                target:
-                  entity_id: "{{ v_duck_toggle }}"
       - alias: "Clear processing guard (unknown target)"
         action: input_boolean.turn_off
         target:
@@ -970,16 +914,6 @@ actions:
                 continue_on_error: true
                 data:
                   owner: "{{ this.entity_id }}"
-      - alias: "Restore ducking (if bypassed) (I-45b)"
-        choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ ducking_was_on }}"
-            sequence:
-              - alias: "Re-enable duck manager (self-handoff)"
-                action: input_boolean.turn_on
-                target:
-                  entity_id: "{{ v_duck_toggle }}"
       - alias: "Clear processing guard (self-handoff)"
         action: input_boolean.turn_off
         target:
@@ -1836,7 +1770,7 @@ actions:
               satellite: "{{ satellite_entity }}"
             continue_on_error: true
 
-  # 12b. Restore follow-me/ducking (I-45b) — normal end path
+  # 12b. Restore follow-me (I-45b) — normal end path
   - alias: "12b · Restore follow-me (if bypassed) (I-45b)"
     choose:
       - conditions:
@@ -1848,17 +1782,6 @@ actions:
             continue_on_error: true
             data:
               owner: "{{ this.entity_id }}"
-
-  - alias: "12b · Restore ducking (if bypassed) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Re-enable duck manager (normal end path)"
-            action: input_boolean.turn_on
-            target:
-              entity_id: "{{ v_duck_toggle }}"
 
   # 13. Clear processing guard (redundant safety — already cleared at 11b)
   - alias: "Clear processing guard (final safety)"

@@ -1,5 +1,5 @@
 # =============================================================================
-# Notification Follow-Me (v3.19.0)
+# Notification Follow-Me (v3.20.0)
 # =============================================================================
 # When a messaging notification arrives on the phone, determines the user's
 # room via FP2 presence sensors, routes to the nearest voice satellite, and
@@ -11,7 +11,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Notification Follow-Me (v3.19.0)"
+  name: "Notification Follow-Me (v3.20.0)"
   author: madalone
   description: >
     ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
@@ -29,6 +29,12 @@ blueprint:
     phone" fallback.
 
     ### Recent changes
+    - **v3.20.0:** Eliminate duplicate announcements under `mode: parallel` —
+      trigger now uses `to:` (null) to ignore attribute-only sensor changes
+      per HA docs; §2c-W writes context_id alongside post_time for claim-check
+      pattern; new §3a-dedup verifies slot ownership after debounce (TOCTOU
+      race guard); §7c writes cooldown timestamp before TTS delivery (closes
+      5-15s race window where parallel runs could slip through §3c)
     - **v3.19.0:** Fix repeated announcements — post_time dedup gate prevents
       attribute-only re-fires (AP-23); HA startup trigger clears stale reminder
       state on restart; all tts.speak calls migrated to tts_queue_speak (AP-48)
@@ -683,59 +689,14 @@ blueprint:
     # ⑦ DUCK OTHER PLAYERS
     # =========================================================================
     duck_players:
-      name: "⑦ Duck other players"
+      name: "⑦ Duck guard"
       icon: mdi:volume-minus
       description: >-
-        Temporarily lower the volume of other media players in the house
-        during TTS announcements. Only players currently in the "playing"
-        state are affected. Original volumes are restored after playback.
+        Duck guard inputs — used by Steps 7e/7e2 to update the duck
+        manager snapshot when this blueprint adjusts satellite volume.
+        Inline ducking is handled by duck_manager via tts_queue.
       collapsed: true
       input:
-        duck_player_list:
-          name: Players eligible for ducking
-          description: >-
-            Media players that should be volume-ducked during TTS
-            announcements. Only players in the "playing" state at
-            announcement time are actually ducked. Use a dedicated
-            list to avoid accidentally ducking doorbells, TVs, or
-            other sensitive devices.
-          default: []
-          selector:
-            entity:
-              domain: media_player
-              multiple: true
-
-        duck_volume:
-          name: Duck volume level
-          description: >-
-            Volume level (0.0–1.0) to set on ducked players during
-            TTS playback. Lower values mean quieter background music
-            during announcements.
-          default: 0.10
-          selector:
-            number:
-              min: 0.0
-              max: 1.0
-              step: 0.05
-              mode: slider
-
-        duck_snapshot_helper:
-          name: Duck volume snapshot helper (optional)
-          description: >-
-            Optional. An input_text helper that stores the pre-duck
-            volume snapshot as JSON. When provided, all queued runs
-            share a single source of truth for original volumes —
-            preventing race conditions where Run 2 snapshots the
-            already-ducked level. The first run writes the snapshot;
-            subsequent runs skip the write and restore from the
-            stored values. Cleared after restore. Leave empty to
-            use per-run snapshots (simpler but vulnerable to queued
-            race conditions).
-          default: ""
-          selector:
-            entity:
-              domain: input_text
-
         ducking_flag:
           name: Volume ducking flag (input_boolean)
           description: >-
@@ -760,26 +721,6 @@ blueprint:
           selector:
             entity:
               domain: input_boolean
-
-        duck_refcount_helper:
-          name: Duck cycle reference counter (input_number)
-          description: >-
-            Optional but strongly recommended when mode is parallel.
-            An input_number helper that tracks how many active duck
-            cycles are in flight. Only the last run to finish its
-            TTS delivery restores the original volumes — preventing
-            burst messages from prematurely undoing the duck while
-            other announcements are still playing. Configure the
-            helper with min: 0, max: 20, step: 1, initial: 0.
-            Requires the duck snapshot helper (above) to be
-            configured — the refcount controls WHEN to restore,
-            the snapshot controls WHAT to restore. Leave empty to
-            disable (first run to finish restores immediately,
-            regardless of other active runs).
-          default: ""
-          selector:
-            entity:
-              domain: input_number
 
     # =========================================================================
     # ⑧ UNREAD MESSAGE REMINDERS
@@ -1118,7 +1059,7 @@ blueprint:
           selector:
             text:
 
-        # ── Bypass Follow-Me / Ducking (I-45b) ────────────────────────────────
+        # ── Bypass Follow-Me (I-45b) ────────────────────────────────
         bypass_follow_me:
           name: Bypass Notification Follow-Me
           description: >
@@ -1127,26 +1068,6 @@ blueprint:
           default: false
           selector:
             boolean: {}
-
-        bypass_ducking:
-          name: Bypass Ducking
-          description: >
-            Temporarily disable ducking during processing so TTS
-            announcements don't duck other media.
-          default: false
-          selector:
-            boolean: {}
-
-        duck_toggle_helper:
-          name: Duck toggle helper
-          description: >
-            The input_boolean that controls the duck manager master toggle.
-            Bypass ducking turns this OFF during the sequence and restores it after.
-          default: input_boolean.ai_duck_manager_enabled
-          selector:
-            entity:
-              filter:
-                domain: input_boolean
 
         bypass_claim_script:
           name: Refcount claim script
@@ -1627,12 +1548,8 @@ variables:
   aliases_map: !input sender_aliases
   context_entities_list: !input context_entities
   user_petnames_list: !input user_petnames
-  duck_player_entities: !input duck_player_list
-  duck_vol: !input duck_volume
-  duck_snapshot_entity: !input duck_snapshot_helper
   ducking_flag_entity: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
-  duck_refcount_entity: !input duck_refcount_helper
   reminder_enabled: !input enable_reminders
   reminder_interval_min: !input reminder_interval
   reminder_max: !input reminder_max_repeats
@@ -1656,8 +1573,6 @@ variables:
   v_dispatcher_enabled: !input dispatcher_enabled
   _fallback_persona: !input fallback_persona_name
   v_bypass_follow_me: !input bypass_follow_me
-  v_bypass_ducking: !input bypass_ducking
-  v_duck_toggle: !input duck_toggle_helper
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
   privacy_tier: !input privacy_tier
@@ -1695,6 +1610,7 @@ triggers:
     id: notification_received
     trigger: state
     entity_id: !input notification_sensor
+    to:
 
   - alias: "Watchdog — periodic stale-loop recovery"
     id: watchdog_tick
@@ -2218,10 +2134,19 @@ actions:
   # ---------------------------------------------------------------------------
   # 2c. Post_time dedup — block attribute-only re-fires (v3.19.0, AP-23)
   # ---------------------------------------------------------------------------
-  # Uses a dedicated helper (not the ledger) to avoid race condition:
-  # ledger is written at §9c (after TTS), but parallel runs reach §2c
-  # before either writes. The helper is written at §2c-W (immediately
-  # after this check passes), creating a first-writer-wins pattern.
+  # Two-layer dedup:
+  #   Layer 1 (trigger): `to:` (null) on the state trigger ignores
+  #     attribute-only changes (HA docs: "fires on any matching state
+  #     change, but not if only an attribute changed").
+  #   Layer 2 (§2c): post_time helper check catches state changes that
+  #     carry the same post_time (e.g., package-name → text transitions
+  #     for the same notification event).
+  #
+  # Claim-check pattern (v3.20.0):
+  #   §2c-W writes post_time + truncated context_id to the helper.
+  #   §3a-dedup (after debounce) re-reads the helper and verifies this
+  #   run still owns the slot. Last-writer-wins under mode: parallel —
+  #   the first run to be superseded stops itself.
   # ---------------------------------------------------------------------------
   - alias: "2c · Deduplicate attribute-only re-fires (post_time check)"
     condition: template
@@ -2232,12 +2157,13 @@ actions:
         {% set helper = last_post_time_entity | default('') | string %}
         {% if helper | length == 0 %}true
         {% else %}
-          {% set last_pt = states(helper) | default('0') | int(0) %}
+          {% set stored = states(helper) | default('0') | string %}
+          {% set last_pt = stored.split(':')[0] | int(0) %}
           {{ pt != last_pt }}
         {% endif %}
       {% endif %}
 
-  - alias: "2c-W · Record post_time to prevent parallel re-fire"
+  - alias: "2c-W · Record post_time + context_id (claim-check pattern)"
     if:
       - condition: template
         value_template: >-
@@ -2248,7 +2174,7 @@ actions:
         continue_on_error: true
         data:
           entity_id: "{{ last_post_time_entity }}"
-          value: "{{ _attrs.get('post_time', 0) | int(0) }}"
+          value: "{{ _attrs.get('post_time', 0) | int(0) }}:{{ this.context.id[:16] }}"
 
   # ---------------------------------------------------------------------------
   # 3. Cooldown check — suppress if last announcement was too recent
@@ -2333,6 +2259,35 @@ actions:
         {% set text = notif_text | default('') | string %}
         {% set cap = char_limit | int(500) %}
         {{ text[:cap] ~ '...' if text | length > cap else text }}
+
+  # ---------------------------------------------------------------------------
+  # 3a-dedup. Post-debounce claim-check — verify this run still owns the
+  #           post_time slot after the debounce delay (v3.20.0)
+  # ---------------------------------------------------------------------------
+  # Under mode: parallel, two runs can pass §2c before either writes §2c-W.
+  # Both write post_time:context_id to the helper. After the debounce delay,
+  # re-read the helper: only the run whose context_id is stored survives.
+  # Last-writer-wins — the superseded run stops here.
+  # When post_time is 0 or helper is unconfigured, passes unconditionally
+  # (backwards-compatible with sensors that lack post_time).
+  # ---------------------------------------------------------------------------
+  - alias: "3a-dedup · Post-debounce claim-check (TOCTOU race guard)"
+    condition: template
+    value_template: >-
+      {% set pt = _attrs.get('post_time', 0) | int(0) %}
+      {% if pt == 0 %}true
+      {% else %}
+        {% set helper = last_post_time_entity | default('') | string %}
+        {% if helper | length == 0 %}true
+        {% else %}
+          {% set stored = states(helper) | default('') | string %}
+          {% set stored_ctx = stored.split(':')[1] | default('') %}
+          {% if stored_ctx | length == 0 %}true
+          {% else %}
+            {{ this.context.id[:16] == stored_ctx }}
+          {% endif %}
+        {% endif %}
+      {% endif %}
 
   # ---------------------------------------------------------------------------
   # 2e-L. Early ledger write for burst accumulation (catch_up only)
@@ -3020,16 +2975,13 @@ actions:
     value_template: "{{ ringer_state != 'silent' or enable_quiet | bool(false) }}"
 
   # ---------------------------------------------------------------------------
-  # 7x. Save & bypass follow-me/ducking — moved past all bare-condition gates
+  # 7x. Save & bypass follow-me — moved past all bare-condition gates
   #     so a gate halt can never leave follow-me stuck OFF  (I-45b)
   # ---------------------------------------------------------------------------
-  - alias: "7x · Save & bypass follow-me/ducking (I-45b)"
+  - alias: "7x · Save & bypass follow-me (I-45b)"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | bool(false) }}
-      ducking_was_on: >-
-        {{ v_bypass_ducking | default(false)
-           and is_state(v_duck_toggle, 'on') }}
 
   - alias: "7x · Disable follow-me (if configured) (I-45b)"
     choose:
@@ -3042,17 +2994,6 @@ actions:
             continue_on_error: true
             data:
               owner: "{{ this.entity_id }}"
-
-  - alias: "7x · Disable ducking (if configured) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Disable duck manager during announcement"
-            action: input_boolean.turn_off
-            target:
-              entity_id: "{{ v_duck_toggle }}"
 
   # ---------------------------------------------------------------------------
   # 7e. Duck volume when phone is in vibrate mode
@@ -3116,113 +3057,6 @@ actions:
               entity_id: "{{ target_satellite }}"
               volume_level: "{{ tts_output_vol | float(0.5) }}"
             continue_on_error: true
-
-  # ---------------------------------------------------------------------------
-  # 7f. Snapshot and duck other playing media players during TTS
-  # ---------------------------------------------------------------------------
-  - alias: "7f · Snapshot and duck other playing media players"
-    variables:
-      _duck_helper: "{{ duck_snapshot_entity | default('') | string }}"
-      _stored_snapshot: >-
-        {% if _duck_helper | length > 0 %}
-          {% set raw = states(_duck_helper) | default('') | string | trim %}
-          {{ '' if raw in ['unknown', 'unavailable', ''] else raw }}
-        {% else %}
-          
-        {% endif %}
-      _fresh_snapshot: >-
-        {% set players = duck_player_entities | default([]) %}
-        {% set ns = namespace(result=[]) %}
-        {% for p in players %}
-          {% if states(p) | default('idle') == 'playing' %}
-            {% set vol = state_attr(p, 'volume_level')
-                | default(0.5) | float(0.5) %}
-            {% set ns.result = ns.result +
-                [{'entity_id': p, 'volume': vol}] %}
-          {% endif %}
-        {% endfor %}
-        {{ ns.result }}
-      ducked_players: >-
-        {% if _stored_snapshot | length > 2
-              and _stored_snapshot[0:1] == '[' %}
-          {{ _stored_snapshot | from_json | default(_fresh_snapshot) }}
-        {% else %}
-          {{ _fresh_snapshot }}
-        {% endif %}
-      _snapshot_is_fresh: >-
-        {{ _stored_snapshot | length <= 2 }}
-
-  - alias: "7f-save · Persist snapshot to helper (first run only)"
-    if:
-      - condition: template
-        value_template: >-
-          {{ _duck_helper | length > 0
-             and _snapshot_is_fresh | bool(true)
-             and ducked_players | length > 0 }}
-    then:
-      - alias: "Write volume snapshot JSON to helper"
-        action: input_text.set_value
-        continue_on_error: true
-        target:
-          entity_id: "{{ _duck_helper }}"
-        data:
-          value: "{{ ducked_players | to_json }}"
-
-  - alias: "7f-ref · Increment duck refcount (parallel guard)"
-    if:
-      - condition: template
-        value_template: >-
-          {{ (duck_refcount_entity | default('') | string | length) > 0
-             and ducked_players | length > 0 }}
-    then:
-      - alias: "7e-ref · Increment duck refcount before ducking"
-        action: input_number.increment
-        continue_on_error: true
-        target:
-          entity_id: "{{ duck_refcount_entity }}"
-
-  - alias: "7f-flag · Set ducking flag ON (signal volume-sync to back off)"
-    if:
-      - condition: template
-        value_template: >-
-          {{ (ducking_flag_entity | default('') | string | length) > 0
-             and ducked_players | length > 0 }}
-    then:
-      - alias: "Turn ducking flag ON"
-        action: input_boolean.turn_on
-        continue_on_error: true
-        target:
-          entity_id: "{{ ducking_flag_entity }}"
-
-  - alias: "7f-duck · Set ducked players to duck volume"
-    if:
-      - condition: template
-        value_template: "{{ ducked_players | length > 0 }}"
-    then:
-      - alias: "Duck each playing player"
-        repeat:
-          for_each: "{{ ducked_players }}"
-          sequence:
-            - alias: "Set duck volume"
-              action: media_player.volume_set
-              continue_on_error: true
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                volume_level: "{{ duck_vol | float(0.10) }}"
-            - alias: "Update duck snapshot after duck volume set"
-              if:
-                - condition: template
-                  value_template: >-
-                    {{ is_state(v_duck_guard, 'on')
-                       and is_state(ducking_flag_entity, 'on') }}
-              then:
-                - alias: "Sync duck snapshot with new volume"
-                  action: pyscript.duck_manager_update_snapshot
-                  data:
-                    entity_id: "{{ repeat.item.entity_id }}"
-                    volume_level: "{{ duck_vol | float(0.10) }}"
-                  continue_on_error: true
 
   # ---------------------------------------------------------------------------
   # 7f. I-10: Resolve chime path (before TTS delivery)
@@ -3304,6 +3138,37 @@ actions:
                           v_chime_duration_ms: 3000
 
   # ---------------------------------------------------------------------------
+  # 7c. Pre-TTS cooldown claim (v3.20.0)
+  # ---------------------------------------------------------------------------
+  # Write cooldown timestamp BEFORE TTS delivery. Under mode: parallel,
+  # parallel runs that survived the debounce + claim-check will see a fresh
+  # cooldown from the first run to reach this point. The LLM+TTS pipeline
+  # takes 5-15s — writing the timestamp here (instead of §9) closes that
+  # window. §9 remains as a refresh to reflect actual delivery time.
+  # ---------------------------------------------------------------------------
+  - alias: "7c · Pre-TTS cooldown claim"
+    if:
+      - condition: template
+        value_template: "{{ (last_announced_entity | default('') | string | length) > 0 }}"
+    then:
+      - action: input_datetime.set_datetime
+        continue_on_error: true
+        target:
+          entity_id: "{{ last_announced_entity }}"
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - if:
+          - condition: template
+            value_template: "{{ (last_sender_entity | default('') | string | length) > 0 }}"
+        then:
+          - action: input_text.set_value
+            continue_on_error: true
+            target:
+              entity_id: "{{ last_sender_entity }}"
+            data:
+              value: "{{ notif_sender | default('') | string }}"
+
+  # ---------------------------------------------------------------------------
   # 8. Deliver announcement — TTS to satellite or mobile push fallback
   # ---------------------------------------------------------------------------
   - alias: "8 · Route announcement to satellite or fallback"
@@ -3360,6 +3225,15 @@ actions:
                       volume_level: "{{ tts_output_vol | float(0) }}"
                       announce: "{{ tts_announce | bool(false) }}"
                       priority: 3
+
+              # ── Banter hook: notify reactive banter that a notification was delivered ──
+              - alias: "8b · Fire notification delivered event (banter)"
+                event: ai_notification_delivered
+                event_data:
+                  agent_name: "{{ dispatch_persona | default('rick') }}"
+                  message: "{{ _safe_announcement[:200] }}"
+                  topic: "notification"
+                  source: "notification_follow_me"
             else:
               - alias: "8-skip · Log satellite unreachable (credits protected)"
                 action: system_log.write
@@ -3440,8 +3314,7 @@ actions:
         value_template: >-
           {{ has_satellite and
              (ringer_state == 'vibrate'
-              or tts_output_vol | float(0) > 0
-              or ducked_players | default([]) | length > 0) }}
+              or tts_output_vol | float(0) > 0) }}
     then:
       - alias: "Poll satellite state — exit when idle or max wait reached"
         repeat:
@@ -3457,28 +3330,6 @@ actions:
                 seconds: 1
 
   # ---------------------------------------------------------------------------
-  # 8-ref. Decrement duck refcount and compute restore gate
-  # ---------------------------------------------------------------------------
-  - alias: "8-ref · Decrement duck refcount after TTS"
-    if:
-      - condition: template
-        value_template: >-
-          {{ (duck_refcount_entity | default('') | string | length) > 0
-             and ducked_players | default([]) | length > 0 }}
-    then:
-      - alias: "8-ref · Decrement duck refcount after playback"
-        action: input_number.decrement
-        continue_on_error: true
-        target:
-          entity_id: "{{ duck_refcount_entity }}"
-
-  - alias: "8-ref-gate · Resolve restore permission"
-    variables:
-      _is_last_duck: >-
-        {% set rc = duck_refcount_entity | default('') | string %}
-        {{ rc | length == 0 or states(rc) | int(0) <= 0 }}
-
-  # ---------------------------------------------------------------------------
   # 8a. Restore volume after vibrate-mode announcement
   # ---------------------------------------------------------------------------
   - alias: "8a · Restore player volume after volume-adjusted TTS"
@@ -3487,9 +3338,8 @@ actions:
         conditions:
           - condition: template
             value_template: >-
-              {{ _is_last_duck | bool(true)
-                 and (ringer_state == 'vibrate'
-                      or tts_output_vol | float(0) > 0)
+              {{ (ringer_state == 'vibrate'
+                  or tts_output_vol | float(0) > 0)
                  and has_satellite }}
         sequence:
           - alias: "Restore original volume level"
@@ -3525,66 +3375,6 @@ actions:
                   entity_id: "{{ _sat_snap_helper }}"
                 data:
                   value: ""
-
-  # ---------------------------------------------------------------------------
-  # 8b. Restore ducked players to original volumes
-  # ---------------------------------------------------------------------------
-  - alias: "8b · Restore ducked player volumes"
-    if:
-      - condition: template
-        value_template: >-
-          {{ _is_last_duck | bool(true)
-             and ducked_players | default([]) | length > 0 }}
-    then:
-      - alias: "Restore each ducked player"
-        repeat:
-          for_each: "{{ ducked_players }}"
-          sequence:
-            - alias: "Restore original volume"
-              action: media_player.volume_set
-              continue_on_error: true
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                volume_level: "{{ repeat.item.volume }}"
-            - alias: "Update duck snapshot after ducked player restore"
-              if:
-                - condition: template
-                  value_template: >-
-                    {{ is_state(v_duck_guard, 'on')
-                       and is_state(ducking_flag_entity, 'on') }}
-              then:
-                - alias: "Sync duck snapshot with restored volume"
-                  action: pyscript.duck_manager_update_snapshot
-                  data:
-                    entity_id: "{{ repeat.item.entity_id }}"
-                    volume_level: "{{ repeat.item.volume }}"
-                  continue_on_error: true
-      - alias: "Clear persistent snapshot helper (if configured)"
-        if:
-          - condition: template
-            value_template: "{{ _duck_helper | default('') | length > 0 }}"
-        then:
-          - alias: "Reset snapshot helper to empty"
-            action: input_text.set_value
-            continue_on_error: true
-            target:
-              entity_id: "{{ _duck_helper }}"
-            data:
-              value: ""
-
-  - alias: "8c · Clear ducking flag after restore"
-    if:
-      - condition: template
-        value_template: >-
-          {{ _is_last_duck | bool(true)
-             and (ducking_flag_entity | default('') | string | length) > 0 }}
-    then:
-      - alias: "Turn ducking flag OFF"
-        action: input_boolean.turn_off
-        continue_on_error: true
-        target:
-          entity_id: "{{ ducking_flag_entity }}"
 
   # ---------------------------------------------------------------------------
   # 9. Update cooldown timestamp
@@ -3891,16 +3681,6 @@ actions:
                     continue_on_error: true
                     data:
                       owner: "{{ this.entity_id }}"
-          - alias: "Restore ducking (if bypassed) (I-45b)"
-            choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ ducking_was_on }}"
-                sequence:
-                  - alias: "Restore ducking toggle (I-45b)"
-                    action: input_boolean.turn_on
-                    target:
-                      entity_id: "{{ v_duck_toggle }}"
           - alias: "Stop: Reminder loop already active — ledger updated, trusting e..."
             stop: "Reminder loop already active — ledger updated, trusting existing owner"
       - alias: "9c-flag · Turn on reminder loop flag"
@@ -4075,16 +3855,6 @@ actions:
                           continue_on_error: true
                           data:
                             owner: "{{ this.entity_id }}"
-                - alias: "Restore ducking (if bypassed) (I-45b)"
-                  choose:
-                    - conditions:
-                        - condition: template
-                          value_template: "{{ ducking_was_on }}"
-                      sequence:
-                        - alias: "Restore ducking toggle (I-45b)"
-                          action: input_boolean.turn_on
-                          target:
-                            entity_id: "{{ v_duck_toggle }}"
                 - alias: "Stop: Sensor conversation changed — exiting unified loop"
                   stop: "Sensor conversation changed — exiting unified loop"
 
@@ -4158,16 +3928,6 @@ actions:
                               continue_on_error: true
                               data:
                                 owner: "{{ this.entity_id }}"
-                    - alias: "Restore ducking (if bypassed) (I-45b)"
-                      choose:
-                        - conditions:
-                            - condition: template
-                              value_template: "{{ ducking_was_on }}"
-                          sequence:
-                            - alias: "Restore ducking toggle (I-45b)"
-                              action: input_boolean.turn_on
-                              target:
-                                entity_id: "{{ v_duck_toggle }}"
                     - alias: "Stop: R3c: phone interactive, no app sensor — killing iteration"
                       stop: "R3c: phone interactive, no app sensor — killing iteration"
 
@@ -4257,16 +4017,6 @@ actions:
                                   continue_on_error: true
                                   data:
                                     owner: "{{ this.entity_id }}"
-                        - alias: "Restore ducking (if bypassed) (I-45b)"
-                          choose:
-                            - conditions:
-                                - condition: template
-                                  value_template: "{{ ducking_was_on }}"
-                              sequence:
-                                - alias: "Restore ducking toggle (I-45b)"
-                                  action: input_boolean.turn_on
-                                  target:
-                                    entity_id: "{{ v_duck_toggle }}"
                         - alias: "Stop: R3c: ledger empty after app-aware eviction"
                           stop: "R3c: ledger empty after app-aware eviction"
                   else:
@@ -4458,16 +4208,6 @@ actions:
                           continue_on_error: true
                           data:
                             owner: "{{ this.entity_id }}"
-                - alias: "Restore ducking (if bypassed) (I-45b)"
-                  choose:
-                    - conditions:
-                        - condition: template
-                          value_template: "{{ ducking_was_on }}"
-                      sequence:
-                        - alias: "Restore ducking toggle (I-45b)"
-                          action: input_boolean.turn_on
-                          target:
-                            entity_id: "{{ v_duck_toggle }}"
                 - alias: "Stop: Ledger empty — exiting unified loop"
                   stop: "Ledger empty — exiting unified loop"
 
@@ -4576,16 +4316,6 @@ actions:
                               continue_on_error: true
                               data:
                                 owner: "{{ this.entity_id }}"
-                    - alias: "Restore ducking (if bypassed) (I-45b)"
-                      choose:
-                        - conditions:
-                            - condition: template
-                              value_template: "{{ ducking_was_on }}"
-                          sequence:
-                            - alias: "Restore ducking toggle (I-45b)"
-                              action: input_boolean.turn_on
-                              target:
-                                entity_id: "{{ v_duck_toggle }}"
                     - alias: "Stop: Ledger empty after dismiss — exiting unified loop"
                       stop: "Ledger empty after dismiss — exiting unified loop"
 
@@ -4615,80 +4345,6 @@ actions:
                 # ===========================================================
                 # BLOCKS 7–13: Delivery Pipeline (Chunk 5)
                 # ===========================================================
-
-                # -------------------------------------------------------
-                # BLOCK 7: Duck orchestration
-                # -------------------------------------------------------
-                - alias: "Set r ducked"
-                  variables:
-                    _r_ducked: >-
-                      {% set players = duck_player_entities | default([]) %}
-                      {% set ns = namespace(result=[]) %}
-                      {% for p in players %}
-                        {% if states(p) | default('idle') == 'playing' %}
-                          {% set vol = state_attr(p, 'volume_level')
-                              | default(0.5) | float(0.5) %}
-                          {% set ns.result = ns.result +
-                              [{'entity_id': p, 'volume': vol}] %}
-                        {% endif %}
-                      {% endfor %}
-                      {{ ns.result }}
-
-                - alias: "R5b-ref · Increment duck refcount"
-                  if:
-                    - condition: template
-                      value_template: >-
-                        {{ (duck_refcount_entity | default('') | string | length) > 0
-                           and _r_ducked | length > 0 }}
-                  then:
-                    - alias: "R5b-ref · Increment duck refcount for reminder ducking"
-                      action: input_number.increment
-                      continue_on_error: true
-                      target:
-                        entity_id: "{{ duck_refcount_entity }}"
-
-                - alias: "R5b-flag · Ducking flag ON"
-                  if:
-                    - condition: template
-                      value_template: >-
-                        {{ (ducking_flag_entity | default('') | string | length) > 0
-                           and _r_ducked | length > 0 }}
-                  then:
-                    - alias: "R5b-flag · Turn on ducking flag"
-                      action: input_boolean.turn_on
-                      continue_on_error: true
-                      target:
-                        entity_id: "{{ ducking_flag_entity }}"
-
-                - alias: "R5b-duck · Set ducked players to duck volume"
-                  if:
-                    - condition: template
-                      value_template: "{{ _r_ducked | length > 0 }}"
-                  then:
-                    - alias: "Repeat for each item"
-                      repeat:
-                        for_each: "{{ _r_ducked }}"
-                        sequence:
-                          - alias: "R5b-duck · Set player to duck volume level"
-                            action: media_player.volume_set
-                            continue_on_error: true
-                            target:
-                              entity_id: "{{ repeat.item.entity_id }}"
-                            data:
-                              volume_level: "{{ duck_vol | float(0.10) }}"
-                          - alias: "Update duck snapshot after reminder duck"
-                            if:
-                              - condition: template
-                                value_template: >-
-                                  {{ is_state(v_duck_guard, 'on')
-                                     and is_state(ducking_flag_entity, 'on') }}
-                            then:
-                              - alias: "Sync duck snapshot with duck volume"
-                                action: pyscript.duck_manager_update_snapshot
-                                data:
-                                  entity_id: "{{ repeat.item.entity_id }}"
-                                  volume_level: "{{ duck_vol | float(0.10) }}"
-                                continue_on_error: true
 
                 # -------------------------------------------------------
                 # BLOCK 8: LLM call — single vs bundled prompt
@@ -4999,8 +4655,7 @@ actions:
                       value_template: >-
                         {{ _r_has_satellite | bool(false)
                            and (_r_ringer == 'vibrate'
-                                or tts_output_vol | float(0) > 0
-                                or _r_ducked | default([]) | length > 0) }}
+                                or tts_output_vol | float(0) > 0) }}
                   then:
                     - alias: "Repeat until condition met"
                       repeat:
@@ -5018,24 +4673,8 @@ actions:
                 # -------------------------------------------------------
                 # BLOCK 13: Restore orchestration
                 # -------------------------------------------------------
-                - alias: "R9-ref · Decrement duck refcount"
-                  if:
-                    - condition: template
-                      value_template: >-
-                        {{ (duck_refcount_entity | default('') | string | length) > 0
-                           and _r_ducked | default([]) | length > 0 }}
-                  then:
-                    - alias: "R9-ref · Decrement duck refcount after reminder playback"
-                      action: input_number.decrement
-                      continue_on_error: true
-                      target:
-                        entity_id: "{{ duck_refcount_entity }}"
-
-                - alias: "Set r is last duck, r restore sat vol, r restore players"
+                - alias: "Set r restore sat vol"
                   variables:
-                    _r_is_last_duck: >-
-                      {% set rc = duck_refcount_entity | default('') | string %}
-                      {{ rc | length == 0 or states(rc) | int(0) <= 0 }}
                     _r_restore_sat_vol: >-
                       {% set snap = sat_vol_snapshot_entity | default('') | string %}
                       {% if snap | length > 0 %}
@@ -5048,26 +4687,13 @@ actions:
                       {% else %}
                         {{ _r_saved_vol }}
                       {% endif %}
-                    _r_restore_players: >-
-                      {% set snap = duck_snapshot_entity | default('') | string %}
-                      {% if snap | length > 0 %}
-                        {% set raw = states(snap) | default('') | string | trim %}
-                        {% if raw | length > 2 and raw[0:1] == '[' %}
-                          {{ raw | from_json | default(_r_ducked) }}
-                        {% else %}
-                          {{ _r_ducked }}
-                        {% endif %}
-                      {% else %}
-                        {{ _r_ducked }}
-                      {% endif %}
 
                 - alias: "R9a · Restore satellite volume"
                   if:
                     - condition: template
                       value_template: >-
-                        {{ _r_is_last_duck | bool(true)
-                           and (_r_ringer == 'vibrate'
-                                or tts_output_vol | float(0) > 0)
+                        {{ (_r_ringer == 'vibrate'
+                            or tts_output_vol | float(0) > 0)
                            and _r_has_satellite | bool(false) }}
                   then:
                     - alias: "R9a · Restore satellite to saved volume"
@@ -5091,83 +4717,20 @@ actions:
                             volume_level: "{{ _r_restore_sat_vol }}"
                           continue_on_error: true
 
-                - alias: "R9b · Restore ducked players"
-                  if:
-                    - condition: template
-                      value_template: >-
-                        {{ _r_is_last_duck | bool(true)
-                           and _r_restore_players | default([]) | length > 0 }}
-                  then:
-                    - alias: "Repeat for each item"
-                      repeat:
-                        for_each: "{{ _r_restore_players }}"
-                        sequence:
-                          - alias: "R9b · Restore player to saved volume"
-                            action: media_player.volume_set
-                            continue_on_error: true
-                            target:
-                              entity_id: "{{ repeat.item.entity_id }}"
-                            data:
-                              volume_level: "{{ repeat.item.volume }}"
-                          - alias: "Update duck snapshot after reminder player restore"
-                            if:
-                              - condition: template
-                                value_template: >-
-                                  {{ is_state(v_duck_guard, 'on')
-                                     and is_state(ducking_flag_entity, 'on') }}
-                            then:
-                              - alias: "Sync duck snapshot with restored volume"
-                                action: pyscript.duck_manager_update_snapshot
-                                data:
-                                  entity_id: "{{ repeat.item.entity_id }}"
-                                  volume_level: "{{ repeat.item.volume }}"
-                                continue_on_error: true
 
-                - alias: "R9c · Clear ducking flag"
+                - alias: "R9d · Clear satellite volume snapshot helper"
                   if:
                     - condition: template
                       value_template: >-
-                        {{ _r_is_last_duck | bool(true)
-                           and (ducking_flag_entity | default('') | string | length) > 0 }}
+                        {{ (sat_vol_snapshot_entity | default('') | string | length) > 0 }}
                   then:
-                    - alias: "R9c · Turn off ducking flag"
-                      action: input_boolean.turn_off
+                    - alias: "R9d · Clear satellite volume snapshot"
+                      action: input_text.set_value
                       continue_on_error: true
                       target:
-                        entity_id: "{{ ducking_flag_entity }}"
-
-                - alias: "R9d · Clear snapshot helpers"
-                  if:
-                    - condition: template
-                      value_template: >-
-                        {{ _r_is_last_duck | bool(true) }}
-                  then:
-                    - alias: "Conditional check"
-                      if:
-                        - condition: template
-                          value_template: >-
-                            {{ (sat_vol_snapshot_entity | default('') | string | length) > 0 }}
-                      then:
-                        - alias: "R9d · Clear satellite volume snapshot"
-                          action: input_text.set_value
-                          continue_on_error: true
-                          target:
-                            entity_id: "{{ sat_vol_snapshot_entity }}"
-                          data:
-                            value: ""
-                    - alias: "Conditional check"
-                      if:
-                        - condition: template
-                          value_template: >-
-                            {{ (duck_snapshot_entity | default('') | string | length) > 0 }}
-                      then:
-                        - alias: "R9d · Clear duck player snapshot"
-                          action: input_text.set_value
-                          continue_on_error: true
-                          target:
-                            entity_id: "{{ duck_snapshot_entity }}"
-                          data:
-                            value: ""
+                        entity_id: "{{ sat_vol_snapshot_entity }}"
+                      data:
+                        value: ""
 
             # ---------------------------------------------------------------
             # POST-LLM HEARTBEAT — prove loop survived conversation.process
@@ -5277,7 +4840,7 @@ actions:
       level: info
 
   # ---------------------------------------------------------------------------
-  # 11. Restore follow-me/ducking (I-45b) — normal end path
+  # 11. Restore follow-me (I-45b) — normal end path
   # ---------------------------------------------------------------------------
   - alias: "11 · Restore follow-me (if bypassed) (I-45b)"
     choose:
@@ -5291,13 +4854,3 @@ actions:
             data:
               owner: "{{ this.entity_id }}"
 
-  - alias: "11 · Restore ducking (if bypassed) (I-45b)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Restore ducking toggle (I-45b)"
-            action: input_boolean.turn_on
-            target:
-              entity_id: "{{ v_duck_toggle }}"

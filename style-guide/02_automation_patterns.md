@@ -305,7 +305,20 @@ automation:
 
 4. **`queued` mode**: Triggers queue up and execute in order. **Important:** Conditions are evaluated at **trigger time** (when the event enters the queue), NOT at execution time (when the queued run starts). This means a condition might pass when queued but the world may have changed by the time it actually runs. Default `max` is 10.
 
-5. **`parallel` mode**: Multiple instances run simultaneously. Default `max` is 10. Be extremely careful with shared state — two parallel runs can race each other when reading/writing helpers. **Dedup pattern for parallel mode:** If a condition gate checks state that's written AFTER the gated action (e.g., checking a ledger that's updated post-TTS), both parallel runs will pass before either writes → both execute. Fix: write the dedup marker IMMEDIATELY after the check passes (first-writer-wins), not after the action completes. Use a dedicated `input_text` helper for the marker, not the same entity that serves other purposes. See `notification_follow_me.yaml` §2c/§2c-W (v3.19.0) for a working example.
+5. **`parallel` mode**: Multiple instances run simultaneously. Default `max` is 10. Be extremely careful with shared state — two parallel runs can race each other when reading/writing helpers.
+
+   **Dedup for parallel mode — claim-check pattern (Decision #61):**
+   Single check-then-write is insufficient — both parallel runs read the old value, both pass, then both write (TOCTOU race). The proven pattern is **claim-check**:
+
+   a. **Claim:** Write `value:context_id` to an `input_text` helper immediately after the check passes (§2c-W).
+   b. **Delay:** Debounce, cooldown, or any waiting step.
+   c. **Re-check:** After the delay, re-read the helper and verify `this.context.id` still matches the stored context_id. If another run overwrote it, stop — last-writer-wins, first-writer self-terminates.
+
+   Additionally, reduce spurious trigger fires at the source: add `to:` (null) to state triggers so attribute-only changes don't fire the automation. Per [HA docs](https://www.home-assistant.io/docs/automation/trigger/): "If at least one of `from`, `to`, `not_from`, or `not_to` are given, the trigger fires on any matching state change, but not if only an attribute changed."
+
+   Finally, write blocking state (cooldown timestamps) BEFORE expensive actions (LLM/TTS), not after. The 5-15s pipeline window is a wide-open race — close it by claiming the cooldown early.
+
+   See `notification_follow_me.yaml` §2c/§2c-W/§3a-dedup/§7c (v3.20.0) for the full implementation.
 
 6. **`max` and `max_exceeded`**: For `queued` and `parallel` modes, you can set `max:` to limit concurrent/queued runs. When exceeded, the behavior depends on `max_exceeded:` which defaults to `warning` (logs a warning). Set to `silent` to drop silently, or to any valid log severity level: `debug`, `info`, `warning` (default), `error`, `critical`.
 

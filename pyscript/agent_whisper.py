@@ -872,6 +872,19 @@ async def agent_whisper(
         except Exception:
             pass
 
+    # ── Banter candidate event (Pattern 1 foundation) ──
+    # Only fires for user-sourced interactions with a non-empty response.
+    # Ignored if no automation listens. Also serves Patterns 2 + 4.
+    if source == "user" and response and not test_mode:
+        event.fire(  # noqa: F821
+            "ai_banter_candidate",
+            agent_name=agent,
+            user_query=query,
+            agent_response=response,
+            mood=mood,
+            topic=topic_slug,
+        )
+
     elapsed = round((time.monotonic() - t_start) * 1000, 1)
 
     result = {

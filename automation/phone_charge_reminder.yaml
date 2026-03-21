@@ -405,8 +405,8 @@ blueprint:
       name: "⑥ Bypass controls"
       icon: mdi:shield-off
       description: >
-        Temporarily disable follow-me or ducking during the reminder
-        sequence. Originals are restored when the sequence finishes.
+        Temporarily disable follow-me during the reminder sequence.
+        Originals are restored when the sequence finishes.
       collapsed: true
       input:
         bypass_follow_me:
@@ -417,26 +417,6 @@ blueprint:
           default: true
           selector:
             boolean: {}
-
-        bypass_ducking:
-          name: Bypass ducking
-          description: >
-            Disable volume ducking during TTS delivery so nudges
-            play at full volume.
-          default: false
-          selector:
-            boolean: {}
-
-        duck_toggle_helper:
-          name: Duck toggle helper
-          description: >
-            The input_boolean that controls the duck manager master toggle.
-            Bypass ducking turns this OFF during the sequence and restores it after.
-          default: input_boolean.ai_duck_manager_enabled
-          selector:
-            entity:
-              filter:
-                domain: input_boolean
 
         bypass_claim_script:
           name: Refcount claim script
@@ -553,8 +533,6 @@ variables:
   v_tts_output_player: !input tts_output_player
   v_tts_volume: !input tts_volume
   v_bypass_follow_me: !input bypass_follow_me
-  v_bypass_ducking: !input bypass_ducking
-  v_duck_toggle: !input duck_toggle_helper
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
   privacy_tier: !input privacy_tier
@@ -635,14 +613,11 @@ actions:
       _battery: "{{ states(battery_sensor) | int(0) }}"
 
   # ── Bypass save/disable ──────────────────────────────────────────────
-  - alias: "Set follow me was on, ducking was on"
+  - alias: "Set follow me was on"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
            and is_state('input_boolean.notification_follow_me', 'on') }}
-      ducking_was_on: >-
-        {{ v_bypass_ducking | default(false)
-           and is_state(v_duck_toggle, 'on') }}
 
   - alias: "Bypass follow-me (if configured)"
     choose:
@@ -655,17 +630,6 @@ actions:
             continue_on_error: true
             data:
               owner: "{{ this.entity_id }}"
-
-  - alias: "Bypass ducking (if configured)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Disable duck manager during reminder sequence"
-            action: input_boolean.turn_off
-            target:
-              entity_id: "{{ v_duck_toggle }}"
 
   # ── Agent selection — dispatcher > manual ──────────────────────────────
   - alias: "Agent selection — dispatcher > manual"
@@ -1306,13 +1270,3 @@ actions:
             data:
               owner: "{{ this.entity_id }}"
 
-  - alias: "Restore ducking (if bypassed)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ ducking_was_on }}"
-        sequence:
-          - alias: "Re-enable duck manager after reminder sequence"
-            action: input_boolean.turn_on
-            target:
-              entity_id: "{{ v_duck_toggle }}"

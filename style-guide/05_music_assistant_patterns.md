@@ -228,7 +228,7 @@ also_pause_instead_of_stop:
 ### 7.4 TTS interruption and resume (duck/restore pattern)
 When TTS needs to speak over active music, the automation must duck the music volume, speak, then restore. This is the single most common source of bugs in MA blueprints.
 
-> **Note:** If your voice stack uses the centralized pyscript `duck_manager` (§14.5 Pattern 8), new blueprints should delegate ducking to that infrastructure instead of reimplementing this pattern. The manual pattern below remains valid for understanding the mechanics and for legacy blueprints that pre-date the centralized infrastructure.
+> **Note:** All blueprints MUST delegate ducking to the centralized `duck_manager` via `tts_queue_speak` (§14.5 Pattern 8). As of 2026-03-20, no blueprint-level inline ducking remains — NFM, EFM, and 3 other blueprints were fully consolidated. The manual pattern below is for understanding the mechanics only. Do not reimplement it in new blueprints.
 
 **The ducking flag pattern:**
 

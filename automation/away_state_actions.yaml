@@ -327,12 +327,15 @@ actions:
                 value_template: "{{ v_announce_dep }}"
             then:
               - alias: "Announce departure via TTS"
-                action: tts.speak
+                action: pyscript.tts_queue_speak
+                response_variable: _tts_result
                 continue_on_error: true
-                target:
-                  entity_id: "{{ v_tts_speaker }}"
                 data:
-                  message: "{{ v_dep_message }}"
+                  text: "{{ v_dep_message }}"
+                  target_mode: explicit
+                  target: "{{ v_tts_speaker }}"
+                  announce: true
+                  priority: 3
 
           # ── Departure actions ──
           - alias: "Departure actions"
@@ -377,12 +380,15 @@ actions:
                   person: "{{ v_person }}"
                   duration: "{{ v_duration }}"
               - alias: "Announce arrival with away duration via TTS"
-                action: tts.speak
+                action: pyscript.tts_queue_speak
+                response_variable: _tts_result
                 continue_on_error: true
-                target:
-                  entity_id: "{{ v_tts_speaker }}"
                 data:
-                  message: "{{ v_arr_message }}"
+                  text: "{{ v_arr_message }}"
+                  target_mode: explicit
+                  target: "{{ v_tts_speaker }}"
+                  announce: true
+                  priority: 3
 
           # ── Arrival actions ──
           - alias: "Arrival actions"

@@ -152,23 +152,7 @@ notification_follow_me_ledger:
   max: 255
   mode: text
 
-notification_follow_me_duck_snapshot:
-  name: Notification Follow-Me Duck Snapshot
-  icon: mdi:volume-variant-off
-  max: 255
-  mode: text
-
-notification_follow_me_duck_snapshot_rick:
-  name: Notification Follow-Me - Duck Snapshot - Rick
-  icon: mdi:duck
-  max: 255
-  mode: text
-
-notification_follow_me_duck_snapshot_quark:
-  name: Notification Follow-Me - Duck Snapshot - Quark
-  icon: mdi:duck
-  max: 255
-  mode: text
+# Orphan notification_follow_me_duck_snapshot, _rick, _quark removed 2026-03-20 — superseded by duck_manager
 
 notification_last_announced_sender_name_rick:
   name: Notification Last Announced Sender Name - Rick

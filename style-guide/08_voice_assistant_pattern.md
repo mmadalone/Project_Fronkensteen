@@ -927,14 +927,15 @@ For blueprints that need timeout protection on LLM calls, use the pyscript wrapp
 #### Pattern 8: No Blueprint-Level Ducking (MANDATORY — delegate to infrastructure)
 
 Blueprints MUST NOT implement manual duck/restore volume cycles. Ducking is handled by:
-- **`voice_pe_duck_media_volumes.yaml`** — triggered by satellite state changes for interactive voice flows.
-- **`pyscript.tts_queue_speak`** — handles ducking internally via `duck_manager` for queued announcements.
+- **`pyscript/duck_manager.py`** — centralized session-based ducking engine with crash-safe snapshots, watchdog, and reference-counted sessions.
+- **`pyscript.tts_queue_speak`** — handles ducking internally via `duck_manager` for queued announcements. The `duck: bool = True` parameter (default) controls whether duck_manager is invoked. Pass `duck: false` for callers that manage their own audio (e.g., reactive banter).
+- **Satellite state triggers** — duck_manager registers dynamic `@state_trigger` handlers for configured satellites; wake word ducks, idle restores.
 
-The only exceptions are `email_follow_me` and `notification_follow_me`, which pre-date the centralized duck infrastructure. These should be migrated when next edited.
+**No exceptions.** As of 2026-03-20, `email_follow_me` and `notification_follow_me` have been migrated — their inline ducking code (~500 lines) was removed. The `bypass_ducking` toggle hack (turning OFF `ai_duck_manager_enabled` during blueprint runs) has been eliminated from all 5 blueprints that used it (NFM, EFM, voice_handoff, email_priority_filter, phone_charge_reminder).
 
-**Why this matters:** Manual duck/restore in blueprints creates race conditions when multiple automations try to duck simultaneously. The centralized `duck_manager` uses reference counting and crash-safe snapshots (§14.4.1) to handle concurrent ducking correctly.
+**Why this matters:** Manual duck/restore in blueprints creates race conditions when multiple automations try to duck simultaneously. The centralized `duck_manager` uses session-based reference counting and crash-safe JSON snapshots (§14.4.1) to handle concurrent ducking correctly.
 
-> **Cross-reference: §7.4 documents the manual duck/restore pattern.** That pattern is the underlying mechanism — it's still valid for understanding how ducking works, and for the exceptions listed above (`email_follow_me`, `notification_follow_me`). New blueprints should use the centralized infrastructure instead of reimplementing §7.4 directly.
+> **Cross-reference: §7.4 documents the manual duck/restore pattern.** That pattern explains the underlying mechanism — it's valid for understanding how ducking works. All blueprints MUST use the centralized infrastructure (`tts_queue_speak` with default `duck: true`) instead of reimplementing §7.4 directly.
 
 > 📋 **QA Check CQ-10:** Verify new blueprints use `tts_queue_speak` or `dedup_announce` for TTS — not direct `tts.speak` with manual ducking. See `09_qa_audit_checklist.md`.
 
@@ -1175,17 +1176,19 @@ Three additional patterns dominate the voice assistant stack:
 
 ### Ducking Flags (`input_boolean`)
 
-When TTS speaks over active music, the volume needs to be ducked (lowered), then restored. A shared `input_boolean` (e.g., `input_boolean.voice_pe_ducking`) acts as a coordination flag:
+When TTS speaks over active music, the volume needs to be ducked (lowered), then restored. The centralized `duck_manager.py` manages `input_boolean.ai_ducking_flag` as a coordination flag:
 
-- Set ON before ducking volume
-- Other automations (like volume sync) check this flag and pause their behavior
-- Set OFF after restoring volume
+- Set ON by duck_manager when first session starts (capture + duck)
+- Other automations (like `speaker_volume_sync`) check this flag and pause their behavior
+- Set OFF by duck_manager after last session restores volumes
 
 Without this flag (AP-33), volume sync automations will fight the duck/restore cycle and create feedback loops that sound like a DJ having a stroke.
 
-### Volume Storage (`input_number`)
+**Duck guard pattern:** Blueprints that change speaker volume during an active duck session (e.g., NFM setting vibrate-mode quiet volume) call `pyscript.duck_manager_update_snapshot` to sync the snapshot — otherwise duck_manager would restore to a stale pre-duck level. Gate on `is_state(duck_guard_entity, 'on') and is_state(ducking_flag_entity, 'on')`.
 
-The Voice PE duck/restore blueprints store each player's pre-duck volume in dedicated `input_number` helpers (range 0.0–1.0). This survives across the async duck/restore cycle and handles the edge case where a player doesn't expose `volume_level` right after an HA restart.
+### Volume Storage (duck_manager snapshots)
+
+`duck_manager.py` stores pre-duck volumes in an in-memory dict (`_volume_snapshot`) with crash-safe persistence to `/config/pyscript/duck_snapshot.json`. On startup, it auto-restores from the snapshot file if present. Per-player `input_number` helpers for volume storage are no longer needed — the snapshot file replaces them.
 
 ### Voice Command Bridges (`input_boolean` for Alexa)
 

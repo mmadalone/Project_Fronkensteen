@@ -107,7 +107,7 @@ The section numbers are preserved across files for cross-referencing.
 
 ## Full Table of Contents
 
-**15 top-level sections · ~151 subsections · 56 anti-patterns (51 AP codes + 5 sub-items) · 8 security checks · 10 files · 94 madalone blueprints (62 automation + 32 script)**
+**15 top-level sections · ~151 subsections · 57 anti-patterns (52 AP codes + 5 sub-items) · 8 security checks · 10 files · 94 madalone blueprints (62 automation + 32 script)**
 
 ### [Core Philosophy](00_core_philosophy.md)
 

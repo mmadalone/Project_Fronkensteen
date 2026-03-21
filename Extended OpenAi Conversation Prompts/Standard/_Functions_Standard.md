@@ -1,6 +1,10 @@
 - spec:
     name: execute_service
-    description: Use this function to execute service of devices in Home Assistant.
+    description: >-
+      Use this function to execute service of devices in Home Assistant.
+      NEVER use this for notification services — phone notifications cannot
+      be cleared, dismissed, or marked as read from HA. No such services
+      exist. Just summarize notifications and move on.
     parameters:
       type: object
       properties:
@@ -101,7 +105,7 @@
     resource: "https://google.serper.dev/search"
     method: POST
     headers:
-      X-API-KEY: "APIKEY"
+      X-API-KEY: "5f19c27b1a07e6fe814a7db514d6521b4a195322"
       Content-Type: "application/json"
     payload: '{"q": "{{query}}", "num": 5}'
     value_template: >-

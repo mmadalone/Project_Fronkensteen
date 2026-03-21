@@ -61,12 +61,8 @@ gn_run_debounce_seconds:
 # Orphan home_assistant_voice_living_room_media_player_esp_vol_before_announce removed 2026-03-14
 
 
-# =============================================================================
-# Duck refcount — parallel burst guard
-# =============================================================================
-# Tracks active duck cycles across parallel notification/email runs.
-# Only the last run to finish restores volumes. Configure: min 0, max 20,
-# step 1, initial 0. Shared across Notification Follow-Me & Email Follow-Me.
+# Orphan ai_duck_refcount removed 2026-03-20 — superseded by duck_manager sessions
+
 ai_handoff_restore_seconds:
   name: "AI Handoff - Restore After (seconds)"
   min: 0
@@ -78,15 +74,6 @@ ai_handoff_restore_seconds:
 
 
 # Orphan ai_tts_playback_timeout removed 2026-03-14
-
-ai_duck_refcount:
-  name: Duck cycle refcount
-  icon: mdi:counter
-  initial: 0
-  min: 0
-  max: 20
-  step: 1
-  mode: box
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1651,3 +1638,13 @@ ai_whisper_keyword_cooldown:
   initial: 300
   mode: slider
   unit_of_measurement: s
+
+ai_conversation_history_retention_days:
+  name: AI Conversation History Retention (days)
+  icon: mdi:calendar-clock
+  min: 1
+  max: 90
+  step: 1
+  initial: 7
+  mode: box
+  unit_of_measurement: days

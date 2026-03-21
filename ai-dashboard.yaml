@@ -42,6 +42,8 @@ views:
         name: Focus Guard
       - entity: sensor.ai_duck_manager_status
         name: Duck Mgr
+      - entity: sensor.ai_conversation_sensor_status
+        name: Conv Sensor
   - type: vertical-stack
     cards:
     - type: markdown
@@ -425,8 +427,6 @@ views:
         name: Status
       - entity: input_boolean.ai_ducking_flag
         name: Ducking Active
-      - entity: input_number.ai_duck_refcount
-        name: Active Duck Cycles
     - type: markdown
       content: '**Last duck:** {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_source'')
         | default(''none'') }} {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_detail'')
@@ -1242,6 +1242,43 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
+      content: '### Conversation Sensor
+
+
+        Captures agent responses for reactive banter and stores conversation
+        history in L2 memory. Responses are summarized nightly via blueprint.
+
+
+        **Retention** = days before raw conversation entries expire from L2.
+
+        Summaries persist longer (configured in the blueprint instance).'
+    - type: entities
+      title: Conversation Sensor
+      entities:
+      - entity: input_boolean.ai_conversation_sensor_enabled
+        name: L2 History Enabled
+      - entity: input_number.ai_conversation_history_retention_days
+        name: History Retention (days)
+      - entity: input_datetime.ai_conversation_summarizer_batch_time
+        name: Summarizer Batch Time
+      - entity: sensor.ai_conversation_sensor_config
+        name: Config Status
+      - entity: sensor.ai_conversation_sensor_status
+        name: Pyscript Status
+      - entity: sensor.ai_last_conversation_response
+        name: Last Response
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Summarize Now
+        icon: mdi:text-box-check
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.summarize_conversations
+        icon_height: 40px
+  - type: vertical-stack
+    cards:
+    - type: markdown
       content: '### Blueprint-Managed Features
 
 
@@ -1276,7 +1313,9 @@ views:
 
         | Evening Briefing | AI - Proactive Evening Briefing |
 
-        | Email Priority Filter | AI Email - Priority Filter |'
+        | Email Priority Filter | AI Email - Priority Filter |
+
+        | Conversation Summarizer | AI - Conversation Summarizer |'
 - title: Debug
   path: debug
   icon: mdi:bug

@@ -972,13 +972,16 @@ sequence:
                       preannounce: false
             default:
               - alias: "Pre-announce via dispatched TTS"
-                action: tts.speak
+                action: pyscript.tts_queue_speak
+                response_variable: _tts_result
                 continue_on_error: true
-                target:
-                  entity_id: "{{ dispatch_voice }}"
                 data:
-                  message: "{{ pre_tts_final }}"
-                  media_player_entity_id: "{{ tts_media_player }}"
+                  text: "{{ pre_tts_final }}"
+                  voice: "{{ dispatch_voice }}"
+                  target_mode: explicit
+                  target: "{{ tts_media_player }}"
+                  announce: true
+                  priority: 3
 
   # ── Step 4: Stage 1 – Devices question ──
   - alias: "Stage 1 gate — devices question enabled?"
@@ -1376,13 +1379,16 @@ sequence:
                       preannounce: false
             default:
               - alias: "Post-announce via dispatched TTS"
-                action: tts.speak
+                action: pyscript.tts_queue_speak
+                response_variable: _tts_result
                 continue_on_error: true
-                target:
-                  entity_id: "{{ dispatch_voice }}"
                 data:
-                  message: "{{ post_tts_final }}"
-                  media_player_entity_id: "{{ tts_media_player }}"
+                  text: "{{ post_tts_final }}"
+                  voice: "{{ dispatch_voice }}"
+                  target_mode: explicit
+                  target: "{{ tts_media_player }}"
+                  announce: true
+                  priority: 3
 
   # ── Post-interaction whisper ──
   - alias: "Post-interaction whisper"

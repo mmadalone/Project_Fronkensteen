@@ -32,12 +32,16 @@ blueprint:
         text: "Your prompt here"
       response_variable: llm_response
     - alias: "Speak TTS message"
-      action: tts.speak
-      target:
-        entity_id: "{{ randomizer.tts_engine }}"
+      action: pyscript.tts_queue_speak
+      response_variable: _tts_result
+      continue_on_error: true
       data:
-        media_player_entity_id: media_player.kitchen_speaker
-        message: "{{ llm_response.response.speech.plain.speech }}"
+        text: "{{ llm_response.response.speech.plain.speech }}"
+        voice: "{{ randomizer.tts_engine }}"
+        target_mode: explicit
+        target: media_player.kitchen_speaker
+        announce: true
+        priority: 3
     ```
 
     ### Returns

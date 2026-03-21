@@ -727,6 +727,18 @@ async def _process_email(
                 and tts_resp.get("status") == "ok"
                 and tts_resp.get("announced", False)
             )
+            # ── Banter hook: notify reactive banter a notification was delivered ──
+            if tts_announced:
+                try:
+                    event.fire(  # noqa: F821
+                        "ai_notification_delivered",
+                        agent_name=persona or "rick",
+                        message=(speech_text or subject or "")[:200],
+                        topic="email",
+                        source="email_promote",
+                    )
+                except Exception:
+                    pass
         except Exception as exc:
             log.warning(  # noqa: F821
                 f"email_promote: dedup_announce failed: {exc}"

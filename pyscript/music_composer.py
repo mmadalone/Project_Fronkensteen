@@ -489,9 +489,9 @@ async def _generate_sfx_api(prompt: str, duration_s: float = 2.0) -> bytes | Non
 @pyscript_executor  # noqa: F821
 def _check_fluidsynth_sync() -> bool:
     """Check if FluidSynth binary + midiutil are available. BLOCKING — run in executor."""
+    import subprocess
     try:
         import midiutil  # noqa: F401
-        import subprocess
         result = subprocess.run(["fluidsynth", "--version"], capture_output=True, timeout=5)
         from pathlib import Path
         sf_dir = Path("/config/soundfonts")
