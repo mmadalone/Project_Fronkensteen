@@ -542,6 +542,40 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
+      content: '### Media & Music
+
+        Music generation, taste extraction, and Sonarr/Radarr tracking.'
+    - type: entities
+      title: Media Tracking
+      entities:
+      - entity: input_boolean.ai_media_tracking_enabled
+        name: Media Tracking
+      - entity: input_boolean.ai_media_data_stale
+        name: Data Stale
+      - entity: input_text.ai_media_upcoming_summary
+        name: Upcoming Summary
+      - entity: input_text.ai_media_upcoming_sonarr
+        name: Upcoming (Sonarr)
+      - entity: input_text.ai_media_upcoming_radarr
+        name: Upcoming (Radarr)
+      - entity: input_text.ai_media_recent_downloads
+        name: Recent Downloads
+    - type: entities
+      title: Music Composer
+      entities:
+      - entity: input_boolean.ai_music_composer_enabled
+        name: Composer Enabled
+      - entity: input_number.ai_music_generations_today
+        name: Generations Today
+      - entity: input_number.ai_music_daily_generation_limit
+        name: Daily Limit
+      - entity: input_number.ai_music_cache_size_mb
+        name: Cache Size (MB)
+      - entity: input_button.ai_music_compose_batch
+        name: Compose Batch
+  - type: vertical-stack
+    cards:
+    - type: markdown
       content: '### Kill Switches
 
 
@@ -578,6 +612,32 @@ views:
         name: Voice Handoff
       - entity: input_boolean.ai_music_follow_me
         name: Music Follow-Me
+      - entity: input_boolean.ai_away_patterns_enabled
+        name: Away Patterns
+      - entity: input_boolean.ai_escalation_enabled
+        name: Escalation
+      - entity: input_boolean.ai_music_composer_enabled
+        name: Music Composer
+      - entity: input_boolean.ai_music_taste_enabled
+        name: Music Taste
+      - entity: input_boolean.ai_media_tracking_enabled
+        name: Media Tracking
+      - entity: input_boolean.ai_whisper_enabled
+        name: Whisper Network
+      - entity: input_boolean.ai_privacy_gate_enabled
+        name: Privacy Gate
+      - entity: input_boolean.ai_presence_identity_enabled
+        name: Presence Identity
+      - entity: input_boolean.ai_reactive_banter_enabled
+        name: Reactive Banter
+      - entity: input_boolean.ai_interview_mode
+        name: User Interview
+      - entity: input_boolean.notification_follow_me
+        name: Notification Follow-Me
+      - entity: input_boolean.ai_continuous_conversation_active
+        name: Continuous Conversation
+      - entity: input_boolean.ai_memory_auto_archive
+        name: Memory Auto-Archive
   - type: vertical-stack
     cards:
     - type: markdown
@@ -730,6 +790,10 @@ views:
         name: LLM Token Limit
       - entity: input_number.ai_budget_daily_cost_limit
         name: Daily Cost Limit (€)
+      - entity: input_number.ai_budget_threshold_low
+        name: Budget Alert Threshold (%)
+      - entity: input_number.ai_budget_threshold_high
+        name: Budget Critical Threshold (%)
   - type: vertical-stack
     cards:
     - type: markdown
@@ -942,30 +1006,9 @@ views:
         name: Day Overrides JSON (I-28)
       - entity: input_number.ai_bedtime_relaxed_extension_minutes
         name: Relaxed Extension min (I-29)
-    - type: horizontal-stack
-      cards:
-      - type: entities
-        title: Miquel Schedule
-        entities:
-        - entity: input_datetime.ai_context_wake_time_weekday_miquel
-          name: Wake Weekday
-        - entity: input_datetime.ai_context_wake_time_weekend_miquel
-          name: Wake Weekend
-        - entity: input_datetime.ai_context_bed_time_miquel
-          name: Bedtime
-        - entity: input_boolean.ai_context_work_day_miquel
-          name: Work Day
-      - type: entities
-        title: Jessica Schedule
-        entities:
-        - entity: input_datetime.ai_context_wake_time_weekday_jessica
-          name: Wake Weekday
-        - entity: input_datetime.ai_context_wake_time_weekend_jessica
-          name: Wake Weekend
-        - entity: input_datetime.ai_context_bed_time_jessica
-          name: Bedtime
-        - entity: input_boolean.ai_context_work_day_jessica
-          name: Work Day
+    - type: markdown
+      content: '_Per-person sleep schedules moved to the **User Profiles** tab.
+        Household defaults remain above._'
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1105,6 +1148,8 @@ views:
       entities:
       - entity: input_number.ai_dedup_default_ttl
         name: Default TTL (minutes)
+      - entity: input_number.ai_dedup_cleanup_hours
+        name: Cleanup Interval (hours)
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1235,10 +1280,8 @@ views:
         name: Pets
       - entity: input_select.ai_context_preferred_language
         name: System Language
-      - entity: input_select.ai_context_preferred_language_miquel
-        name: Miquel Language
-      - entity: input_select.ai_context_preferred_language_jessica
-        name: Jessica Language
+    - type: markdown
+      content: '_Per-person language settings moved to the **User Profiles** tab._'
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1279,6 +1322,253 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
+      content: '### Away Patterns
+
+        Predictive departure and return time estimation from WiFi history.
+        Extract patterns from historical WiFi state changes. Prediction accuracy
+        improves with more data.'
+    - type: entities
+      title: Away Settings
+      entities:
+      - entity: input_boolean.ai_away_patterns_enabled
+        name: Patterns Enabled
+      - entity: input_number.ai_away_pattern_lookback_days
+        name: Lookback Days
+      - entity: input_number.ai_away_pattern_min_samples
+        name: Min Samples
+      - entity: input_number.ai_away_travel_buffer_minutes
+        name: Travel Buffer (min)
+      - entity: input_number.ai_away_flap_debounce_seconds
+        name: WiFi Debounce (sec)
+      - entity: input_number.ai_away_prediction_update_minutes
+        name: Update Interval (min)
+      - entity: input_number.ai_away_ordinal_min_samples
+        name: Ordinal Min Samples
+    - type: entities
+      title: Current Prediction
+      entities:
+      - entity: sensor.ai_away_prediction
+        name: Return Prediction
+      - entity: sensor.ai_away_duration
+        name: Away Duration
+      - entity: input_text.ai_away_prediction_accuracy
+        name: Prediction Accuracy
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Extract
+        icon: mdi:database-search
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.away_extract_cycles
+        icon_height: 40px
+      - type: button
+        name: Rebuild
+        icon: mdi:database-refresh
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.away_rebuild_patterns
+        icon_height: 40px
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Escalation Tuning
+
+        Escalation engine probability weights. Global probability gates all
+        escalation. Per-type probabilities weight the random selection of
+        escalation method.'
+    - type: entities
+      title: Escalation Global
+      entities:
+      - entity: input_boolean.ai_escalation_enabled
+        name: Escalation Enabled
+      - entity: input_number.ai_escalation_probability
+        name: Global Probability (%)
+      - entity: input_number.ai_escalation_cooldown_minutes
+        name: Cooldown (min)
+      - entity: input_text.ai_escalation_last_outcome
+        name: Last Outcome
+      - entity: input_datetime.ai_escalation_last_followthrough
+        name: Last Followthrough
+    - type: entities
+      title: Per-Type Probabilities
+      entities:
+      - entity: input_number.ai_escalation_prob_persona_switch
+        name: Persona Switch
+      - entity: input_number.ai_escalation_prob_play_media
+        name: Play Media
+      - entity: input_number.ai_escalation_prob_light_flash
+        name: Light Flash
+      - entity: input_number.ai_escalation_prob_volume_boost
+        name: Volume Boost
+      - entity: input_number.ai_escalation_prob_send_notification
+        name: Send Notification
+      - entity: input_number.ai_escalation_prob_prompt_barrage
+        name: Prompt Barrage
+      - entity: input_number.ai_escalation_prob_run_script
+        name: Run Script
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Music Taste Tuning
+
+        Taste extraction from Spotify play history. Dedup cooldown prevents
+        re-extracting from the same track. Top limit caps stored taste entries.'
+    - type: entities
+      title: Music Taste
+      entities:
+      - entity: input_boolean.ai_music_taste_enabled
+        name: Taste Extraction Enabled
+      - entity: input_number.ai_music_dedup_cooldown
+        name: Dedup Cooldown (sec)
+      - entity: input_number.ai_music_play_expiry_days
+        name: Play Expiry (days)
+      - entity: input_number.ai_music_top_limit
+        name: Top Limit
+      - entity: input_button.ai_music_taste_rebuild
+        name: Rebuild Taste
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Whisper Network Tuning
+
+        Context expiry for interaction, mood, and topic signals.
+        Auto-keywords are generated from recent whisper topics.'
+    - type: entities
+      title: Whisper Tuning
+      entities:
+      - entity: input_boolean.ai_whisper_enabled
+        name: Whisper Network
+      - entity: input_number.ai_whisper_interaction_expiry_days
+        name: Interaction Expiry (days)
+      - entity: input_number.ai_whisper_mood_expiry_days
+        name: Mood Expiry (days)
+      - entity: input_number.ai_whisper_topic_expiry_days
+        name: Topic Expiry (days)
+      - entity: input_number.ai_whisper_mood_dedup_seconds
+        name: Mood Dedup (sec)
+      - entity: input_number.ai_whisper_max_auto_keywords
+        name: Max Auto Keywords
+      - entity: input_number.ai_whisper_keyword_cooldown
+        name: Keyword Cooldown (sec)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Dispatcher Advanced
+
+        Conversation continuity window keeps the same agent across rapid
+        interactions. Cache TTL controls pipeline rediscovery frequency.
+        Fixed agent forces a specific persona; agent pool restricts rotation.'
+    - type: entities
+      title: Dispatcher Advanced
+      entities:
+      - entity: input_number.ai_conversation_continuity_window
+        name: Continuity Window (sec)
+      - entity: input_number.ai_dispatcher_cache_ttl
+        name: Cache TTL (sec)
+      - entity: input_text.ai_dispatcher_fixed_agent
+        name: Fixed Agent
+      - entity: input_text.ai_dispatcher_agent_pool
+        name: Agent Pool (CSV)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Bedtime Negotiator Timing
+
+        Good-night dialog timing. Debounce prevents re-triggers after recent
+        runs. Cooldown sets the minimum interval between bedtime sessions.
+
+        Good-night state (gn_* helpers) is managed automatically by the blueprint.'
+    - type: entities
+      title: Bedtime Timing
+      entities:
+      - entity: input_number.bedtime_debounce_seconds
+        name: Debounce (sec)
+      - entity: input_number.bedtime_cooldown_minutes
+        name: Cooldown (min)
+      - entity: input_number.bedtime_reply_timeout_seconds
+        name: Reply Timeout (sec)
+      - entity: input_number.bedtime_max_attempts
+        name: Max Attempts
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Calendar Tuning
+
+        Promotion TTL controls how long calendar events stay in hot context.
+        Failure threshold gates retry attempts for failed promotions.'
+    - type: entities
+      title: Calendar Tuning
+      entities:
+      - entity: input_number.ai_calendar_promote_ttl
+        name: Promote TTL (min)
+      - entity: input_number.ai_calendar_failure_threshold
+        name: Failure Threshold
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Entity Configuration
+
+        Entity references used by pyscript modules and blueprints. Change
+        these if you rename integrations or add new calendar/media entities.'
+    - type: entities
+      title: Entity References
+      entities:
+      - entity: input_text.ai_imap_sensor_entity
+        name: IMAP Sensor
+      - entity: input_text.ai_calendar_main
+        name: Main Calendar
+      - entity: input_text.ai_calendar_holidays
+        name: Holidays Calendar
+      - entity: input_text.ai_calendar_birthdays
+        name: Birthdays Calendar
+      - entity: input_text.ai_spotifyplus_entity
+        name: SpotifyPlus Entity
+      - entity: input_text.ai_music_players
+        name: Music Players (CSV)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Reactive Banter
+
+        Spontaneous agent reactions to state changes. Banter is rate-limited
+        to prevent spam.'
+    - type: entities
+      title: Reactive Banter
+      entities:
+      - entity: input_boolean.ai_reactive_banter_enabled
+        name: Banter Enabled
+      - entity: input_datetime.ai_banter_last_reaction
+        name: Last Reaction
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### User Interview
+
+        Guided profile-building conversations. Interview mode activates a
+        structured question flow to populate user preferences.'
+    - type: entities
+      title: User Interview
+      entities:
+      - entity: input_boolean.ai_interview_mode
+        name: Interview Mode
+      - entity: input_text.ai_interview_progress
+        name: Interview Progress
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Continuous Conversation
+
+        Keeps the microphone active after TTS playback for follow-up responses
+        without re-triggering a wake word.'
+    - type: entities
+      title: Continuous Conversation
+      entities:
+      - entity: input_boolean.ai_continuous_conversation_active
+        name: Continuous Conversation
+  - type: vertical-stack
+    cards:
+    - type: markdown
       content: '### Blueprint-Managed Features
 
 
@@ -1315,7 +1605,441 @@ views:
 
         | Email Priority Filter | AI Email - Priority Filter |
 
-        | Conversation Summarizer | AI - Conversation Summarizer |'
+        | Conversation Summarizer | AI - Conversation Summarizer |
+
+        | Bedtime Negotiator | AI - Bedtime Negotiator |
+
+        | Notification Follow-Me | AI - Notification Follow Me |
+
+        | Email Follow-Me | AI - Email Follow Me |
+
+        | Volume Sync (per-room) | Volume Sync - [Room] |
+
+        | Privacy Gate (per-tier) | AI Privacy Gate - [Person] [Tier] |'
+- title: User Profiles
+  path: profiles
+  icon: mdi:account-group
+  cards:
+  - type: markdown
+    content: '## User Profiles
+
+      Per-person identity, schedule, language, and privacy settings.
+
+      Household defaults are in the Configuration tab.'
+  - type: horizontal-stack
+    cards:
+    - type: entities
+      title: Miquel Identity
+      entities:
+      - entity: sensor.identity_confidence_miquel
+        name: Confidence
+      - entity: device_tracker.oppo_a60
+        name: WiFi
+      - entity: device_tracker.madoppo
+        name: GPS
+      - entity: sensor.ai_location_miquel
+        name: Location
+    - type: entities
+      title: Jessica Identity
+      entities:
+      - entity: sensor.identity_confidence_jessica
+        name: Confidence
+      - entity: device_tracker.oppo_a38
+        name: WiFi
+      - entity: input_boolean.ai_wifi_stale_jessica
+        name: WiFi Stale
+      - entity: sensor.ai_location_jessica
+        name: Location
+  - type: entities
+    title: Sleep Schedule
+    entities:
+    - type: section
+      label: Miquel
+    - entity: input_datetime.ai_context_wake_time_weekday_miquel
+      name: Wake Weekday
+    - entity: input_datetime.ai_context_wake_time_weekend_miquel
+      name: Wake Weekend
+    - entity: input_datetime.ai_context_bed_time_miquel
+      name: Bedtime
+    - entity: input_boolean.ai_context_work_day_miquel
+      name: Work Day
+    - type: section
+      label: Jessica
+    - entity: input_datetime.ai_context_wake_time_weekday_jessica
+      name: Wake Weekday
+    - entity: input_datetime.ai_context_wake_time_weekend_jessica
+      name: Wake Weekend
+    - entity: input_datetime.ai_context_bed_time_jessica
+      name: Bedtime
+    - entity: input_boolean.ai_context_work_day_jessica
+      name: Work Day
+  - type: horizontal-stack
+    cards:
+    - type: entities
+      title: Miquel Language
+      entities:
+      - entity: input_select.ai_context_preferred_language_miquel
+        name: Language
+    - type: entities
+      title: Jessica Language
+      entities:
+      - entity: input_select.ai_context_preferred_language_jessica
+        name: Language
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### User Profile Data
+
+        Names, spoken names, and spoken languages for agent personalization.'
+    - type: entities
+      title: User Profiles
+      entities:
+      - type: section
+        label: Miquel
+      - entity: input_text.ai_context_user_name_miquel
+        name: Name
+      - entity: input_text.ai_context_user_name_spoken_miquel
+        name: Spoken Name
+      - entity: input_text.ai_context_user_languages_miquel
+        name: Languages
+      - type: section
+        label: Jessica
+      - entity: input_text.ai_context_user_name_jessica
+        name: Name
+      - entity: input_text.ai_context_user_name_spoken_jessica
+        name: Spoken Name
+      - entity: input_text.ai_context_user_languages_jessica
+        name: Languages
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Privacy Gate
+
+        Suppresses personal features when another household member is home.
+
+        T1 = intimate (bedtime/wake), T2 = personal (notifications, briefings),
+
+        T3 = ambient (detection, summarization). Per-feature overrides allow
+        fine-grained control.'
+    - type: entities
+      title: Privacy Gate Mode
+      entities:
+      - entity: input_boolean.ai_privacy_gate_enabled
+        name: Privacy Gate Enabled
+      - entity: input_select.ai_privacy_gate_mode
+        name: Gate Mode
+      - entity: sensor.ai_privacy_gate_status
+        name: Gate Status
+    - type: entities
+      title: Hysteresis Thresholds
+      entities:
+      - type: section
+        label: Miquel
+      - entity: input_number.ai_privacy_gate_miquel_t1_suppress_at
+        name: T1 Suppress
+      - entity: input_number.ai_privacy_gate_miquel_t1_reenable_at
+        name: T1 Reenable
+      - entity: input_number.ai_privacy_gate_miquel_t2_suppress_at
+        name: T2 Suppress
+      - entity: input_number.ai_privacy_gate_miquel_t2_reenable_at
+        name: T2 Reenable
+      - entity: input_number.ai_privacy_gate_miquel_t3_suppress_at
+        name: T3 Suppress
+      - entity: input_number.ai_privacy_gate_miquel_t3_reenable_at
+        name: T3 Reenable
+      - type: section
+        label: Jessica
+      - entity: input_number.ai_privacy_gate_jessica_t1_suppress_at
+        name: T1 Suppress
+      - entity: input_number.ai_privacy_gate_jessica_t1_reenable_at
+        name: T1 Reenable
+      - entity: input_number.ai_privacy_gate_jessica_t2_suppress_at
+        name: T2 Suppress
+      - entity: input_number.ai_privacy_gate_jessica_t2_reenable_at
+        name: T2 Reenable
+      - entity: input_number.ai_privacy_gate_jessica_t3_suppress_at
+        name: T3 Suppress
+      - entity: input_number.ai_privacy_gate_jessica_t3_reenable_at
+        name: T3 Reenable
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Per-Feature Overrides
+
+
+        auto = follow tier logic
+
+        force_suppress = always suppress
+
+        force_allow = always allow
+
+        off = feature excluded from gate'
+    - type: entities
+      title: "T1 \u2014 Intimate"
+      entities:
+      - entity: input_select.ai_privacy_gate_wake_up_guard
+        name: Wake-Up Guard
+      - entity: input_select.ai_privacy_gate_calendar_alarm
+        name: Calendar Alarm
+      - entity: input_select.ai_privacy_gate_escalating_wakeup
+        name: Escalating Wakeup
+      - entity: input_select.ai_privacy_gate_bedtime_routine
+        name: Bedtime Routine
+      - entity: input_select.ai_privacy_gate_bedtime_routine_plus
+        name: Bedtime Routine+
+      - entity: input_select.ai_privacy_gate_bedtime_last_call
+        name: Bedtime Last Call
+    - type: entities
+      title: "T2 \u2014 Personal"
+      entities:
+      - entity: input_select.ai_privacy_gate_email_follow_me
+        name: Email Follow-Me
+      - entity: input_select.ai_privacy_gate_notification_follow_me
+        name: Notification Follow-Me
+      - entity: input_select.ai_privacy_gate_proactive_briefing
+        name: Proactive Briefing
+      - entity: input_select.ai_privacy_gate_proactive_unified
+        name: Proactive Unified
+      - entity: input_select.ai_privacy_gate_phone_charge_reminder
+        name: Phone Charge Reminder
+      - entity: input_select.ai_privacy_gate_bedtime_escalation
+        name: Bedtime Escalation
+      - entity: input_select.ai_privacy_gate_calendar_pre_event
+        name: Calendar Pre-Event
+      - entity: input_select.ai_privacy_gate_llm_alarm
+        name: LLM Alarm
+      - entity: input_select.ai_privacy_gate_voice_handoff
+        name: Voice Handoff
+    - type: entities
+      title: "T3 \u2014 Ambient"
+      entities:
+      - entity: input_select.ai_privacy_gate_meal_detection
+        name: Meal Detection
+      - entity: input_select.ai_privacy_gate_sleep_detection
+        name: Sleep Detection
+      - entity: input_select.ai_privacy_gate_memory_todo_mirror
+        name: Memory Todo Mirror
+      - entity: input_select.ai_privacy_gate_proactive_llm_sensors
+        name: LLM Sensors
+    - type: entities
+      title: Excluded (off)
+      entities:
+      - entity: input_select.ai_privacy_gate_dispatcher_profile
+        name: Dispatcher Profile
+      - entity: input_select.ai_privacy_gate_sleep_lights
+        name: Sleep Lights
+      - entity: input_select.ai_privacy_gate_media_tracking
+        name: Media Tracking
+      - entity: input_select.ai_privacy_gate_refcount_watchdog
+        name: Refcount Watchdog
+      - entity: input_select.ai_privacy_gate_coming_home
+        name: Coming Home
+  - type: entities
+    title: Departure Tracking
+    entities:
+    - type: section
+      label: Miquel
+    - entity: input_datetime.ai_away_departed_miquel
+      name: Departed
+    - entity: input_datetime.ai_home_since_miquel
+      name: Home Since
+    - type: section
+      label: Jessica
+    - entity: input_datetime.ai_away_departed_jessica
+      name: Departed
+    - entity: input_datetime.ai_home_since_jessica
+      name: Home Since
+- title: Presence
+  path: presence
+  icon: mdi:account-search
+  cards:
+  - type: markdown
+    content: '## Presence Confidence Scorecard
+
+      Real-time identity scoring. Each signal contributes points.
+
+      70+ = full personal features, 30-69 = limited, <30 = guest mode.'
+  - type: horizontal-stack
+    cards:
+    - type: gauge
+      entity: sensor.identity_confidence_miquel
+      name: Miquel
+      min: 0
+      max: 100
+      severity:
+        green: 70
+        yellow: 30
+        red: 0
+    - type: gauge
+      entity: sensor.identity_confidence_jessica
+      name: Jessica
+      min: 0
+      max: 100
+      severity:
+        green: 70
+        yellow: 30
+        red: 0
+  - type: markdown
+    title: Signal Breakdown
+    content: >-
+      {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
+      {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+      {%- set j_stale = is_state('input_boolean.ai_wifi_stale_jessica', 'on') -%}
+      {%- set m_gps = is_state('device_tracker.madoppo', 'home') -%}
+      {%- set solo = is_state('binary_sensor.ai_solo_single_zone', 'on') -%}
+      {%- set sust = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
+      {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
+      {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(30) -%}
+      {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
+      {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
+
+      Signal | Miquel | Jessica | Weight
+
+      :--- | :---: | :---: | ---:
+
+      WiFi Home | {{ 'ON' if m_wifi else 'off' }} | {{ 'stale' if j_stale else ('ON' if j_wifi else 'off') }} | {{ w1 }}
+
+      GPS Home | {{ 'ON' if m_gps else 'off' }} | _N/A_ | {{ w2 }}
+
+      FP2 Solo Infer | {{ 'ON' if solo else 'off' }} | {{ 'ON' if solo else 'off' }} | {{ w3 }}
+
+      Sustained Solo | {{ 'ON' if sust else 'off' }} | {{ 'ON' if sust else 'off' }} | {{ w4 }}
+
+      **Total** | **{{ states('sensor.identity_confidence_miquel') }}** | **{{ states('sensor.identity_confidence_jessica') }}** | {{ w1 + w2 + w3 + w4 }}
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Score Weights
+
+        Configure the points assigned to each identity signal.'
+    - type: entities
+      title: Score Weights
+      entities:
+      - entity: input_number.ai_wifi_score_primary
+        name: WiFi Home (primary)
+      - entity: input_number.ai_wifi_score_secondary
+        name: GPS Home (secondary)
+      - entity: input_number.ai_wifi_score_tertiary
+        name: FP2 Solo Infer (tertiary)
+      - entity: input_number.ai_wifi_score_quaternary
+        name: Sustained Solo (quaternary)
+      - entity: input_number.ai_wifi_stale_timeout
+        name: WiFi Stale Timeout (min)
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Occupancy Mode'
+    - type: entities
+      title: Occupancy
+      entities:
+      - entity: sensor.occupancy_mode
+        name: Current Mode
+      - entity: input_boolean.ai_context_guests_present
+        name: Guests Present
+      - entity: input_boolean.ai_guest_mode
+        name: Guest Mode
+  - type: glance
+    title: FP2 Zone Status
+    state_color: true
+    columns: 4
+    entities:
+    - entity: binary_sensor.fp2_presence_sensor_workshop
+      name: Workshop
+    - entity: binary_sensor.fp2_presence_sensor_living_room
+      name: Living Room
+    - entity: binary_sensor.fp2_presence_sensor_main_room
+      name: Main Room
+    - entity: binary_sensor.fp2_presence_sensor_kitchen
+      name: Kitchen
+    - entity: binary_sensor.fp2_presence_sensor_bed
+      name: Bed
+    - entity: binary_sensor.fp2_presence_sensor_lobby
+      name: Lobby
+    - entity: binary_sensor.fp2_presence_sensor_bathroom
+      name: Bathroom
+    - entity: binary_sensor.fp2_presence_sensor_shower
+      name: Shower
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Presence Identity (Room Inference)
+
+        Room-level identity from WiFi + FP2 correlation. Transition window
+
+        smooths rapid zone changes. Departure debounce prevents false
+        away detection.'
+    - type: entities
+      title: Presence Identity
+      entities:
+      - entity: input_boolean.ai_presence_identity_enabled
+        name: Identity Enabled
+      - entity: input_number.ai_presence_identity_confidence_floor
+        name: Confidence Floor
+      - entity: input_number.ai_presence_identity_transition_window
+        name: Transition Window (sec)
+      - entity: input_number.ai_presence_identity_departure_debounce
+        name: Departure Debounce (sec)
+      - entity: sensor.ai_location_miquel
+        name: Miquel Location
+      - entity: sensor.ai_location_jessica
+        name: Jessica Location
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Presence Confidence Tuning
+
+        Fine-tune the confidence weights for the multi-signal presence engine.
+
+        Solo/voice/departure/arrival affect signal strength. Decay parameters
+        control how quickly stale signals lose value.'
+    - type: entities
+      title: Confidence Weights
+      entities:
+      - entity: input_number.ai_presence_conf_solo
+        name: Solo Weight
+      - entity: input_number.ai_presence_conf_voice
+        name: Voice Weight
+      - entity: input_number.ai_presence_conf_departure
+        name: Departure Weight
+      - entity: input_number.ai_presence_conf_arrival
+        name: Arrival Weight
+      - entity: input_number.ai_presence_conf_count
+        name: Count Weight
+      - entity: input_number.ai_presence_conf_transition
+        name: Transition Weight
+      - entity: input_number.ai_presence_conf_markov_cap
+        name: Markov Cap
+      - entity: input_number.ai_presence_fp2_dwell_sec
+        name: FP2 Dwell (sec)
+    - type: entities
+      title: Decay Parameters
+      entities:
+      - entity: input_number.ai_presence_decay_start
+        name: Decay Start (sec)
+      - entity: input_number.ai_presence_decay_cap
+        name: Decay Cap
+      - entity: input_number.ai_presence_decay_range
+        name: Decay Range
+      - entity: input_number.ai_presence_decay_factor
+        name: Decay Factor
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Away Pattern Status
+
+        Read-only status. Tuning controls are in the **Configuration** tab
+        under Away Patterns.'
+    - type: entities
+      title: Away Status
+      entities:
+      - entity: sensor.ai_away_prediction
+        name: Current Prediction
+      - entity: sensor.ai_away_duration
+        name: Away Duration
+      - entity: input_text.ai_away_prediction_accuracy
+        name: Prediction Accuracy
+      - entity: sensor.ai_away_pattern_status
+        name: Engine Status
 - title: Debug
   path: debug
   icon: mdi:bug
@@ -1418,28 +2142,6 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      content: '### TTS Speaker Info
-
-
-        Current speaker routing. Default speaker is fallback; zone priority
-
-        maps FP2 zones to specific speakers.'
-    - type: entities
-      title: TTS Speaker Routing
-      entities:
-      - entity: input_text.ai_default_speaker
-        name: Default Speaker
-      - entity: input_text.ai_tts_zone_priority
-        name: Zone → Speaker Map
-      - entity: sensor.ai_tts_queue_status
-        name: Queue Status
-      - entity: input_number.ai_tts_calls_today
-        name: TTS Calls Today
-      - entity: sensor.ai_tts_cache_hit_rate
-        name: Cache Hit Rate
-  - type: vertical-stack
-    cards:
-    - type: markdown
       content: '### Subsystem Status (Raw)
 
         All subsystem sensors with full attributes.'
@@ -1467,7 +2169,7 @@ views:
 
         and seeded L2 data is available.'
     - type: entities
-      title: Test Harness
+      title: Test Controls
       entities:
       - entity: input_boolean.ai_test_mode
         name: Test Mode
@@ -1493,6 +2195,49 @@ views:
           action: perform-action
           perform_action: script.ai_test_clear_memory
         icon_height: 40px
+      - type: button
+        name: Reset Budget
+        icon: mdi:cash-sync
+        tap_action:
+          action: perform-action
+          perform_action: input_button.press
+          target:
+            entity_id: input_button.ai_budget_manual_reset
+        icon_height: 40px
+    - type: entities
+      title: Current State
+      entities:
+      - entity: sensor.identity_confidence_miquel
+        name: Miquel Confidence
+      - entity: sensor.identity_confidence_jessica
+        name: Jessica Confidence
+      - entity: sensor.occupancy_mode
+        name: Occupancy Mode
+      - entity: sensor.ai_llm_budget_remaining
+        name: LLM Budget
+      - entity: input_number.ai_llm_calls_today
+        name: LLM Calls Today
+      - entity: sensor.ai_dispatcher_status
+        name: Dispatcher Status
+      - entity: sensor.ai_tts_queue_status
+        name: TTS Queue Status
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: input_boolean.ai_test_mode
+        state: "on"
+      card:
+        type: markdown
+        content: >-
+          **TEST MODE ACTIVE**
+
+          TTS: routed to log sink (no audio).
+          Identity: {% if states('input_text.ai_test_identity') | length > 0 %}
+          overridden to **{{ states('input_text.ai_test_identity') }}**
+          {% else %}using real sensors{% endif %}.
+          Routine: {% if states('input_text.ai_test_routine_stage') | length > 0 %}
+          overridden to **{{ states('input_text.ai_test_routine_stage') }}**
+          {% else %}using real stage{% endif %}.
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1657,75 +2402,6 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      title: L1 Hot Context
-      content: >-
-        {%- set ctx = state_attr('sensor.ai_hot_context', 'context') | default('No data', true) -%}
-        {%- set icons = {
-          'Time': '🕐', 'User': '👤', 'Household': '🏠', 'Presence': '📡',
-          'Occupancy': '🚪', 'Media': '🎵', 'Music taste': '🎶',
-          'Sonarr': '📺', 'Radarr': '🎬',
-          'House mode': '🏡', 'Expertise routing': '🧭',
-          'Weather': '🌤', "Tomorrow's weather": '🌤', 'Tomorrow weather': '🌤',
-          'Next alarm': '⏰', 'Schedule': '📅', 'Projects': '📋', 'Focus': '🎯',
-          'Privacy': '🔒', 'Guests': '👥',
-          'Memory context': '🧠', 'Last interaction': '💬'
-        } -%}
-        {%- for line in ctx.split('\n') -%}
-        {%- if line.startswith('- ') -%}
-        {%- set clean = line[2:] | trim -%}
-        {%- if clean[:1] == '[' -%}
-        {%- set agent = clean.split(']')[0][1:] | title -%}
-        {%- set rest = clean.split('] ', 1)[1] | default('') -%}
-        {%- set rest = rest | regex_replace('^topic: *', '') -%}
-        {%- set rest = rest | regex_replace(' *\\| *intent: *', ' — ') %}
-
-        · {{ agent }}: {{ rest }}
-        {%- else %}
-
-        · {{ clean }}
-        {%- endif -%}
-        {%- elif line.startswith('Recent') %}
-
-        📝 **Recent:**
-        {%- else -%}
-        {%- set parts = line.split(': ', 1) -%}
-        {%- if parts | length > 1 -%}
-        {%- set label = parts[0] | trim -%}
-        {%- set icon = icons.get(label, '•') -%}
-        {%- if label == 'Memory context' %}
-
-        ---
-
-        **{{ icon }} {{ label }}**
-        {%- else %}
-
-        {{ icon }} **{{ label }}:** {{ parts[1] }}
-        {%- endif -%}
-        {%- endif -%}
-        {%- endif -%}
-        {%- endfor -%}
-      card_mod:
-        style: |
-          ha-card {
-            border-left: 4px solid #9999FF;
-            border-radius: 0 12px 12px 0;
-          }
-          .card-header {
-            color: #9999FF;
-            font-size: 16px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            padding-bottom: 4px;
-            border-bottom: 2px solid;
-            border-image: linear-gradient(90deg, #9999FF 40%, #CC6699 70%, #F1DF6F) 1;
-          }
-          .card-content {
-            font-size: 13px;
-            line-height: 1.6;
-          }
-  - type: vertical-stack
-    cards:
-    - type: markdown
       content: '### Memory Health
 
 
@@ -1804,3 +2480,43 @@ views:
             border-bottom: 2px solid;
             border-image: linear-gradient(90deg, #F1DF6F 40%, #CC6699 70%, #9999FF) 1;
           }
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Memory Archive & Lifecycle
+
+        Auto-archive aging entries, search enrichment, and semantic autolink.
+        Archive protection tags prevent important entries from being archived.'
+    - type: entities
+      title: Archive Settings
+      entities:
+      - entity: input_boolean.ai_memory_auto_archive
+        name: Auto-Archive
+      - entity: input_number.ai_memory_archive_target_pct
+        name: Archive Target (%)
+      - entity: input_number.ai_memory_archive_recency_days
+        name: Recency Protection (days)
+      - entity: input_text.ai_memory_archive_protection_tags
+        name: Protection Tags
+      - entity: input_number.ai_memory_record_limit
+        name: Record Alert Threshold
+      - entity: input_number.ai_memory_db_max_mb
+        name: DB Size Limit (MB)
+    - type: entities
+      title: Search Enrichment
+      entities:
+      - entity: input_boolean.ai_memory_search_enrich
+        name: Enrichment Enabled
+      - entity: input_number.ai_memory_search_enrich_max
+        name: Max Enriched Results
+      - entity: input_number.ai_memory_search_enrich_min_weight
+        name: Min Weight Threshold
+    - type: entities
+      title: Semantic Autolink
+      entities:
+      - entity: input_boolean.ai_memory_semantic_autolink
+        name: Autolink Enabled
+      - entity: input_number.ai_memory_semantic_autolink_threshold
+        name: Similarity Threshold
+      - entity: input_number.ai_memory_semantic_autolink_batch
+        name: Batch Size
