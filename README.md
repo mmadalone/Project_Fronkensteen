@@ -119,7 +119,7 @@ This runs on a Raspberry Pi 5. Not a rack. Not a cloud bill. Every token is trac
                              │
      ┌───────────────────────┼───────────────────────┐
      │                       │                       │
-┌────▼──────┐         ┌─────▼──────┐          ┌─────▼──────┐
+┌────▼──────┐         ┌──────▼─────┐          ┌──────▼─────┐
 │  Memory   │         │ TTS Layer  │          │ Presence   │
 │ L1: Hot   │         │ ElevenLabs │          │ Aqara FP2  │
 │   context │         │ 5 voices   │          │ 8 zones    │
