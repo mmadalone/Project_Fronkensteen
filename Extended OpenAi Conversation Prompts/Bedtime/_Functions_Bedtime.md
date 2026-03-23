@@ -229,6 +229,102 @@
         response_variable: _function_result
 
 - spec:
+    name: calendar_event
+    description: >-
+      Manage calendar events. Supports four operations:
+      "create" — add new event. Provide summary + start_date_time (or start_date
+      for all-day). Omit end times — system adds default duration.
+      "find" — search for events by title/date. Returns matching events with IDs.
+      "delete" — remove an event. Provide summary + approximate date to find it,
+      or uid if known from a previous find. For recurring events, set scope:
+      "this_instance" (default), "this_and_future", or "entire_series".
+      "edit" — modify an event. Provide summary + date to find it, then new_*
+      fields for changes (new_summary, new_start_date_time, new_location, etc.).
+      Only supports editing single instances — series editing not available via voice.
+      Format dates as YYYY-MM-DD HH:MM (24h local time). For all-day events use
+      start_date (YYYY-MM-DD) instead of start_date_time — do NOT provide both.
+      After success, confirm naturally what happened. Do NOT use execute_service
+      for calendar operations. Never name this function.
+    parameters:
+      type: object
+      properties:
+        operation:
+          type: string
+          enum: [create, find, delete, edit]
+          description: "What to do: create, find, delete, or edit"
+        summary:
+          type: string
+          description: "Event title (create) or search term (find/delete/edit)"
+        start_date_time:
+          type: string
+          description: "Timed event start: YYYY-MM-DD HH:MM (create, or approximate date for find/delete/edit)"
+        end_date_time:
+          type: string
+          description: "Timed event end: YYYY-MM-DD HH:MM (create only, optional)"
+        start_date:
+          type: string
+          description: "All-day event or date filter: YYYY-MM-DD"
+        description:
+          type: string
+          description: "Event description (create/edit, optional)"
+        location:
+          type: string
+          description: "Event location (create/edit, optional)"
+        uid:
+          type: string
+          description: "Event UID from a previous find result (delete/edit — omit to auto-find by summary)"
+        recurrence_id:
+          type: string
+          description: "Recurring event instance ID from find result (delete/edit recurring)"
+        scope:
+          type: string
+          enum: [this_instance, this_and_future, entire_series]
+          description: "Delete scope for recurring events (default: this_instance)"
+        new_summary:
+          type: string
+          description: "Updated title (edit only)"
+        new_start_date_time:
+          type: string
+          description: "Updated start time: YYYY-MM-DD HH:MM (edit only)"
+        new_end_date_time:
+          type: string
+          description: "Updated end time: YYYY-MM-DD HH:MM (edit only)"
+        new_start_date:
+          type: string
+          description: "Updated all-day date: YYYY-MM-DD (edit only)"
+        new_description:
+          type: string
+          description: "Updated description (edit only)"
+        new_location:
+          type: string
+          description: "Updated location (edit only)"
+      required:
+        - operation
+        - summary
+  function:
+    type: script
+    sequence:
+      - service: script.voice_calendar_event
+        data:
+          operation: "{{operation}}"
+          summary: "{{summary}}"
+          start_date_time: "{{start_date_time|default('')}}"
+          end_date_time: "{{end_date_time|default('')}}"
+          start_date: "{{start_date|default('')}}"
+          description: "{{description|default('')}}"
+          location: "{{location|default('')}}"
+          uid: "{{uid|default('')}}"
+          recurrence_id: "{{recurrence_id|default('')}}"
+          scope: "{{scope|default('this_instance')}}"
+          new_summary: "{{new_summary|default('')}}"
+          new_start_date_time: "{{new_start_date_time|default('')}}"
+          new_end_date_time: "{{new_end_date_time|default('')}}"
+          new_start_date: "{{new_start_date|default('')}}"
+          new_description: "{{new_description|default('')}}"
+          new_location: "{{new_location|default('')}}"
+        response_variable: _function_result
+
+- spec:
     name: voice_set_bedtime_countdown
     description: >-
       Sets the bedtime countdown timer. The lights will turn off

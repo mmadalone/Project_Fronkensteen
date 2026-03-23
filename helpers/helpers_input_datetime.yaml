@@ -189,3 +189,18 @@ ai_conversation_summarizer_batch_time:
   has_date: false
   has_time: true
   icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+ai_winddown_last_offer:
+  name: "AI Wind-Down - Last Offer"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-check-outline
+
+ai_winddown_session_start:
+  name: "AI Wind-Down - Session Start"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-start

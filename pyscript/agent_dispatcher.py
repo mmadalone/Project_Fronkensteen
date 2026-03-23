@@ -121,6 +121,7 @@ def _get_cache_ttl():
 #   topic_keywords:  dict[persona → list[str]]              from memory
 _cache: dict | None = None
 _cache_ts: float = 0.0
+_CACHE_EMPTY_RETRY: int = 30  # seconds — fast retry when pipelines were empty
 _round_robin_index = 0
 
 result_entity_name: dict[str, str] = {}
@@ -387,9 +388,10 @@ def _strip_handoff_command(intent_text: str, patterns: list) -> str:
 async def _ensure_cache() -> None:
     """Lazy-load the full cache on first dispatch. Auto-expires after configurable TTL."""
     global _cache, _cache_ts
-    if _cache is not None and (time.monotonic() - _cache_ts) < _get_cache_ttl():
-        return
     if _cache is not None:
+        ttl = _CACHE_EMPTY_RETRY if not _cache["personas"] else _get_cache_ttl()
+        if (time.monotonic() - _cache_ts) < ttl:
+            return
         log.info("agent_dispatch: cache TTL expired, reloading")  # noqa: F821
     _cache = None
 

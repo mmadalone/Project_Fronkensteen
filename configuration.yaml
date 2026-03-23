@@ -95,6 +95,7 @@ recorder:
   exclude:
     event_types:
       - extended_openai_conversation.conversation.finished
+      - pyscript_running
     entities:
       - sensor.sonarr_shows
  
@@ -137,3 +138,5 @@ panel_custom:
     url_path: lcars
     js_url: /local/lcars-panel/lcars-panel.js?v=38
     config: {}
+
+calendar_utils:

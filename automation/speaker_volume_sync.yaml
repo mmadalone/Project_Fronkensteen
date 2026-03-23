@@ -340,10 +340,12 @@ variables:
   target_entity: >
     {% set idx = pair_index | int(-1) %}
     {% if idx >= 0 %}
-      {% if is_alexa_source %}
+      {% if is_alexa_source and idx < ma_list | length %}
         {{ ma_list[idx] }}
-      {% else %}
+      {% elif not is_alexa_source and idx < alexa_list | length %}
         {{ alexa_list[idx] }}
+      {% else %}
+        {{ '' }}
       {% endif %}
     {% else %}
       {{ '' }}

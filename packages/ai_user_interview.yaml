@@ -1,14 +1,19 @@
-# =============================================================================
-# AI User Interview Package — I-36
-# =============================================================================
-# Helpers for LLM-driven user preference interview.
-# Engine: pyscript/user_interview.py
+# ══════════════════════════════════════════════════════════════════════
+# AI User Interview — I-36
+# ══════════════════════════════════════════════════════════════════════
+# Status: Active
 # Deployed: 2026-03-11
-# =============================================================================
-
-# Pyscript-created sensor (user_interview.py via state.set):
-#   sensor.ai_user_interview_status — interview progress, last completed topic
-
-# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
-
-# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+# LLM-driven user preference interview for personalisation data.
+# Engine: pyscript/user_interview.py
+#
+# Pyscript sensor: sensor.ai_user_interview_status  (pyscript/user_interview.py)
+#   States: ok, error, idle
+#   Key attributes: interview progress, last completed topic
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_interview_mode
+#
+# Dependencies:
+#   - Blueprints: user_interview.yaml
+#   - Context: ai_context_hot.yaml (reads ai_interview_mode for gate)
+# ══════════════════════════════════════════════════════════════════════

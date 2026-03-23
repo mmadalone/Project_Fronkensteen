@@ -89,6 +89,7 @@ def _get_max_timeout(): return _helper_float("input_number.ai_tts_max_timeout", 
 def _get_post_buffer(): return _helper_float("input_number.ai_tts_post_buffer", 0.3)
 def _get_max_ambient(): return _helper_int("input_number.ai_tts_max_ambient", 3)
 def _get_default_duration(): return _helper_float("input_number.ai_tts_default_duration", 5.0)
+def _get_generation_buffer(): return _helper_float("input_number.ai_tts_generation_buffer", 2.0)
 def _get_fallback_tts_voice(): return _helper_str("input_text.ai_default_tts_voice", "tts.home_assistant_cloud")
 
 
@@ -1030,10 +1031,12 @@ async def _process_queue() -> None:
                         # text-length estimate instead of state polling.
                         if item.get("announce_native"):
                             text_len = len(item.get("text") or "")
-                            est_secs = max(2.0, text_len / 13.0)
+                            gen_buf = _get_generation_buffer()
+                            est_secs = max(2.0, text_len / 11.0) + gen_buf
                             log.info(  # noqa: F821
                                 f"tts_queue: announce-native wait "
-                                f"{est_secs:.1f}s for {text_len} chars"
+                                f"{est_secs:.1f}s for {text_len} chars "
+                                f"(gen_buf={gen_buf:.1f})"
                             )
                             await asyncio.sleep(est_secs)
                         else:
@@ -1042,11 +1045,12 @@ async def _process_queue() -> None:
                             # Fall back to text-length time estimate.
                             if item.get("_was_playing_before"):
                                 text_len = len(item.get("text") or "")
-                                est_secs = max(2.0, text_len / 13.0)
+                                gen_buf = _get_generation_buffer()
+                                est_secs = max(2.0, text_len / 11.0) + gen_buf
                                 log.info(  # noqa: F821
                                     f"tts_queue: was-playing fallback wait "
                                     f"{est_secs:.1f}s for {text_len} chars "
-                                    f"on {speaker}"
+                                    f"on {speaker} (gen_buf={gen_buf:.1f})"
                                 )
                                 await asyncio.sleep(est_secs)
                             else:

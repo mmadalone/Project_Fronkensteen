@@ -175,6 +175,13 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.voice_handoff` | Full handoff sequence — farewell, pipeline switch, greeting, continuous conversation | `voice_handoff.yaml` |
 | `pyscript.voice_handoff_restore` | Restore original pipeline after handoff timeout | `voice_handoff.yaml` (auto-restore) |
 
+**HA Built-in Services (Voice)**
+
+| Service | Purpose | Blueprint usage |
+|---|---|---|
+| `assist_satellite.start_conversation` | Initiate conversation on satellite — requires `start_message` or `start_media_id` (AP-64). `extra_system_prompt` alone is invalid. | `bedtime_winddown.yaml` (offer flow) |
+| `assist_satellite.ask_question` | Ask yes/no question with defined answer sentences | `proactive_unified.yaml` (bedtime question ⑦) |
+
 **Configuration Services** (`sleep_config.py`)
 
 | Service | Purpose | Blueprint usage |
@@ -637,6 +644,7 @@ When in doubt, ask: “Should this continue safely, or fail loudly with guidance
 - Every template condition should handle the `unavailable` and `unknown` states explicitly when they could affect logic.
 - In `wait_for_trigger` templates, guard against the entity not existing at all.
 - List operations (`[0]`, `| first`, `| last`) MUST guard against empty lists.
+- **Paired/parallel list indexing** — when an index derived from list A is used to access list B, MUST check `idx < list_b | length` before access. Lists may have different sizes even when the user intends them to be paired (e.g., `alexa_list[idx]` where `idx` came from `ma_list.index()`).
 - Variables used in `repeat` loops that need current state MUST be re-read inside the loop (see §3.4 caveat) or use native conditions that HA re-evaluates each iteration.
 
 > 📋 **QA Check BP-3:** Mentally instantiate every blueprint with edge-case inputs (all defaults, empty lists, min/max values, unavailable entities) and verify it doesn't break. See `09_qa_audit_checklist.md`.

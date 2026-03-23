@@ -899,5 +899,5 @@ ai_vsync_shower_alexa:
 notification_follow_me_last_post_time:
   name: "Notification Follow-Me Last Post Time"
   icon: mdi:clock-digital
-  max: 20
+  max: 35
   initial: "0"

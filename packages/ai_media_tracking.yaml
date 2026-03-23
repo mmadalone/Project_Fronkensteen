@@ -1,19 +1,21 @@
-# =============================================================================
+# ══════════════════════════════════════════════════════════════════════
 # AI Media Tracking — Radarr/Sonarr Integration (I-47)
-# =============================================================================
+# ══════════════════════════════════════════════════════════════════════
+# Status: Active
+# Deployed: 2026-03-10
 # Thin package — storage helpers only. All config knobs live in the blueprint.
 #
-# Dependencies:
-#   - pyscript/media_promote.py (data service)
-#   - blueprints/automation/madalone/media_tracking.yaml (triggers + config)
-#   - packages/ai_context_hot.yaml (L1 injection reads these helpers)
+# Pyscript sensor: sensor.ai_media_promotion_status  (pyscript/media_promote.py)
+#   States: ok, error, idle
+#   Key attributes: last sync result, promoted media counts
 #
-# Deployed: 2026-03-10
-# =============================================================================
-
-# Pyscript-created sensor (media_promote.py via state.set):
-#   sensor.ai_media_promotion_status — last sync result, promoted media counts
-
-# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
-
-# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_media_tracking_enabled, ai_media_data_stale
+#   - helpers_input_text.yaml:    ai_media_upcoming_summary, ai_media_upcoming_sonarr,
+#       ai_media_upcoming_radarr, ai_media_recent_downloads
+#
+# Dependencies:
+#   - Blueprints: media_tracking.yaml
+#   - Context: ai_context_hot.yaml (reads sonarr/radarr helpers for L1 injection)
+#   - Other packages: ai_privacy_gate.yaml
+# ══════════════════════════════════════════════════════════════════════

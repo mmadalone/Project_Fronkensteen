@@ -928,7 +928,7 @@ For blueprints that need timeout protection on LLM calls, use the pyscript wrapp
 
 Blueprints MUST NOT implement manual duck/restore volume cycles. Ducking is handled by:
 - **`pyscript/duck_manager.py`** — centralized session-based ducking engine with crash-safe snapshots, watchdog, and reference-counted sessions.
-- **`pyscript.tts_queue_speak`** — handles ducking internally via `duck_manager` for queued announcements. The `duck: bool = True` parameter (default) controls whether duck_manager is invoked. Pass `duck: false` for callers that manage their own audio (e.g., reactive banter).
+- **`pyscript.tts_queue_speak`** — handles ducking internally via `duck_manager` for queued announcements. The `duck: bool = True` parameter (default) controls whether duck_manager is invoked. Pass `duck: false` for callers that manage their own audio (e.g., reactive banter). Note: banter passes `duck: false` but still has a Step 6g ducking gate that waits for *prior* TTS ducking to settle before speaking — this prevents banter from talking over a still-ducked notification.
 - **Satellite state triggers** — duck_manager registers dynamic `@state_trigger` handlers for configured satellites; wake word ducks, idle restores.
 
 **No exceptions.** As of 2026-03-20, `email_follow_me` and `notification_follow_me` have been migrated — their inline ducking code (~500 lines) was removed. The `bypass_ducking` toggle hack (turning OFF `ai_duck_manager_enabled` during blueprint runs) has been eliminated from all 5 blueprints that used it (NFM, EFM, voice_handoff, email_priority_filter, phone_charge_reminder).
@@ -1518,14 +1518,22 @@ These are the ones that'll bite you in the ass if you're not careful:
 
 7. **`continue_on_timeout: true` on every wait** (AP-04) — With explicit timeout handlers that clean up state.
 
-8. **LLM tool-call narration leak** — LLMs (Llama 4 Maverick, Gemini 2.5 Flash) sometimes return raw function call syntax or tool arguments in `message.content`, which gets spoken via TTS. A 3-layer sanitizer in `conversation.py` (`_sanitize_for_speech()`) catches this:
+8. **LLM tool-call narration leak** — LLMs (Llama 4 Maverick, Gemini 2.5 Flash) sometimes return raw function call syntax or tool arguments in `message.content`, which gets spoken via TTS. A 4-layer cascading sanitizer in `conversation.py` (`_sanitize_for_speech()`) catches this:
    - **Layer 1:** Entire response is a bare function call (`function_name(args)`) → returns `None`
    - **Layer 2:** Response contains known function names (dynamically resolved from configured tools) → strips them
    - **Layer 3:** Orphaned keyword arguments without function name (`action="promote", library_id="foo")`) → strips `key="value"` sequences
+   - **Layer 4:** Inline tool-param sequences (`(target="deadpool", reason="user_request")`) → catches residual `key="value"` pairs left by earlier layers
+
+   **Cascading design (Decision #75):** Layers 2–4 run sequentially on the same `cleaned` string instead of early-returning. This ensures Layer 2 stripping a function name (e.g., `handoff_agent(`) exposes the orphaned arguments for Layer 3, and any remaining inline params are caught by Layer 4. Without cascading, Layer 2 would return a string with stray tool params still attached.
 
    **WARNING:** This is a custom patch to `custom_components/extended_openai_conversation/conversation.py`. It gets overwritten on integration updates — re-apply after updating Extended OpenAI Conversation. Backup at `GIT_REPO/archive/conversation.py.bak.*`.
 
-9. **One agent per persona, deliberate wake word mapping** — Each persona (Rick, Quark) gets one agent with one pipeline. Map wake words to the correct pipeline so "Hey Rick" routes to Rick's agent and "Hey Quark" routes to Quark's. Scenario-specific context (arrival, bedtime, proactive) is injected via `extra_system_prompt` — never create separate agents per scenario (§8.4). If running dual personas on one satellite (supported since HA 2025.10), map each wake word to a dedicated pipeline. **Clarification:** "one agent per persona" limits agent *count*, not tool *sources*. A single `Rick - Extended` agent can use exposed scripts AND MCP-provided tools simultaneously (§8.3.3). The rule prevents scenario-based agent explosion (O(personas×scenarios)), not multi-tool diversity.
+9. **Satellite idle guard before autonomous TTS** — Any automation that plays TTS on a satellite's speaker (banter, notifications, proactive announcements) must check the satellite is not in an active voice session (`listening`, `responding`). Without this, TTS plays on the speaker while the mic is open, STT captures it as "user speech," and the conversation is corrupted. Pattern:
+   - **Condition gate:** Check `states(satellite_entity) not in ['listening', 'responding']` before entering the TTS path. Bypass for non-satellite triggers (e.g., notification-triggered banter).
+   - **Pre-TTS re-check:** Re-check satellite state immediately before `tts_queue_speak`. The satellite may have re-entered a voice session during prompt generation or queue waits.
+   Reference implementation: `reactive_banter.yaml` Gate 6 + Step 6h.
+
+10. **One agent per persona, deliberate wake word mapping** — Each persona (Rick, Quark) gets one agent with one pipeline. Map wake words to the correct pipeline so "Hey Rick" routes to Rick's agent and "Hey Quark" routes to Quark's. Scenario-specific context (arrival, bedtime, proactive) is injected via `extra_system_prompt` — never create separate agents per scenario (§8.4). If running dual personas on one satellite (supported since HA 2025.10), map each wake word to a dedicated pipeline. **Clarification:** "one agent per persona" limits agent *count*, not tool *sources*. A single `Rick - Extended` agent can use exposed scripts AND MCP-provided tools simultaneously (§8.3.3). The rule prevents scenario-based agent explosion (O(personas×scenarios)), not multi-tool diversity.
 
 ---
 

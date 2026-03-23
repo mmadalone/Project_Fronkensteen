@@ -1,0 +1,1548 @@
+blueprint:
+  name: "Bedtime Wind-Down – Context-aware offers + escalation"
+  author: madalone
+  description: '![Bedtime Wind-Down](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_winddown-header.jpeg)
+
+    # Bedtime Wind-Down
+
+    Context-aware bedtime detection + conversational offers + multi-stage
+    escalation. Detects 4 scenarios (sleepy TV, bed+TV, bed+idle,
+    bed+non-sleepy), makes LLM offers via Assist Satellite, tracks
+    escalation stages with configurable cooldown curves, and at the final
+    stage runs the bedtime routine autonomously.
+
+    Pairs with **bedtime_routine_core.yaml** script blueprint for the
+    actual shutdown sequence.
+
+    ### Recent changes
+
+    - **v1:** Initial version — 4 scenarios, escalation, budget gate, memory'
+  domain: automation
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_winddown.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① TRIGGERS & DETECTION
+    # =========================================================================
+    triggers_detection:
+      name: "① Triggers & Detection"
+      icon: mdi:motion-sensor
+      collapsed: false
+      input:
+        bed_presence_sensor:
+          name: "Bed presence sensor"
+          description: "Binary sensor for bed occupancy."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        bed_settle_minutes:
+          name: "Bed settle time (minutes)"
+          description: "How long bed must be occupied before triggering."
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+              mode: slider
+
+        tv_media_player:
+          name: "TV media player (Kodi/TV)"
+          description: "Media player to monitor for sleepy TV detection."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        sleepytv_detection_method:
+          name: "Sleepy TV detection method"
+          description: "How to identify bedtime content on the TV."
+          default: "pvr_channel_matches"
+          selector:
+            select:
+              options:
+                - label: "Media title contains"
+                  value: "media_title_contains"
+                - label: "Content ID matches"
+                  value: "media_content_id_matches"
+                - label: "Playing + title matches"
+                  value: "state_playing_and_title"
+                - label: "PVR channel matches"
+                  value: "pvr_channel_matches"
+
+        sleepytv_match_string:
+          name: "Sleepy TV match string"
+          description: "String to match against (case-insensitive)."
+          default: ""
+          selector:
+            text: {}
+
+        sleepytv_pvr_sensor:
+          name: "PVR channel sensor"
+          description: "Sensor showing current PVR channel name."
+          default: sensor.madteevee_pvr_channel
+          selector:
+            entity:
+              domain: sensor
+
+        min_presence_seconds:
+          name: "Min presence before trigger (seconds)"
+          description: "Extra debounce after bed settle. 0 = none."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 10
+              mode: slider
+
+        block_if_media_playing:
+          name: "Block if media is playing"
+          description: "Suppress offers while TV/media is actively playing."
+          default: false
+          selector:
+            boolean: {}
+
+    # =========================================================================
+    # ② SCHEDULE & TIMING
+    # =========================================================================
+    schedule_timing:
+      name: "② Schedule & Timing"
+      icon: mdi:clock-outline
+      collapsed: true
+      input:
+        enable_toggle:
+          name: "Kill switch"
+          description: "Master toggle for the wind-down system."
+          default: input_boolean.ai_winddown_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        time_window_start:
+          name: "Time window start"
+          default: "20:30:00"
+          selector:
+            time: {}
+
+        time_window_end:
+          name: "Time window end"
+          description: "Cross-midnight safe (e.g. 02:00)."
+          default: "02:00:00"
+          selector:
+            time: {}
+
+        run_days:
+          name: "Active days"
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Monday
+                  value: mon
+                - label: Tuesday
+                  value: tue
+                - label: Wednesday
+                  value: wed
+                - label: Thursday
+                  value: thu
+                - label: Friday
+                  value: fri
+                - label: Saturday
+                  value: sat
+                - label: Sunday
+                  value: sun
+
+        cooldown_minutes:
+          name: "Base cooldown (minutes)"
+          description: "Minimum interval between offers."
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              mode: slider
+              unit_of_measurement: min
+
+        repeat_while_present:
+          name: "Repeat while present"
+          description: "Keep offering at cooldown intervals while in bed."
+          default: true
+          selector:
+            boolean: {}
+
+        max_offers_per_session:
+          name: "Max offers per session (0 = unlimited)"
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 20
+              step: 1
+              mode: box
+
+        bedtime_active_entity:
+          name: "Bedtime active entity"
+          description: "Boolean set by the routine script. Wind-down suppresses when on."
+          default: input_boolean.ai_bedtime_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        winddown_active_flag:
+          name: "Wind-down active flag"
+          description: "Boolean showing wind-down automation is running."
+          default: input_boolean.ai_winddown_active
+          selector:
+            entity:
+              domain: input_boolean
+
+    # =========================================================================
+    # ③ AI CONVERSATION
+    # =========================================================================
+    ai_conversation:
+      name: "③ AI Conversation"
+      icon: mdi:robot
+      collapsed: true
+      input:
+        conversation_agent:
+          name: "Conversation agent / persona"
+          description: "Pipeline name (for dispatcher) or agent entity."
+          default: "Rick - Bedtime"
+          selector:
+            text: {}
+
+        use_dispatcher:
+          name: "Use dispatcher"
+          default: true
+          selector:
+            boolean: {}
+
+        assist_satellites:
+          name: "Assist Satellite(s) for offers"
+          description: "Satellite entity for start_conversation offers."
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        user_names:
+          name: "User name(s) (comma-separated)"
+          description: "Random pick for LLM personalisation."
+          default: "Miquel"
+          selector:
+            text: {}
+
+        llm_prompt:
+          name: "Base offer prompt"
+          description: "LLM prompt for bedtime offers. Scenario + stage overlay appended."
+          default: >
+            You are a smart home AI speaking to the user at bedtime.
+            Make a brief, natural offer to help them get ready for bed.
+            Be conversational, not robotic. Maximum 200 characters,
+            no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        context_entities:
+          name: "Extra context entities"
+          description: "Entity states appended to the LLM prompt."
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+        budget_floor:
+          name: "LLM budget floor (%)"
+          description: "Below this budget %, use static fallback instead of LLM."
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+              mode: slider
+
+        fallback_offer_text:
+          name: "Static fallback offer text"
+          description: "Used when LLM budget is below floor."
+          default: "Hey, it's getting late. Want me to start the bedtime routine?"
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ④ ESCALATION SETTINGS
+    # =========================================================================
+    escalation_settings:
+      name: "④ Escalation"
+      icon: mdi:stairs
+      collapsed: true
+      input:
+        enable_escalation:
+          name: "Enable multi-stage escalation"
+          default: true
+          selector:
+            boolean: {}
+
+        escalation_stage_count:
+          name: "Number of stages"
+          default: 4
+          selector:
+            number:
+              min: 2
+              max: 8
+              step: 1
+              mode: slider
+
+        escalation_stage_helper:
+          name: "Stage counter helper"
+          description: "input_number entity tracking the current stage."
+          default: input_number.ai_winddown_stage
+          selector:
+            entity:
+              domain: input_number
+
+        escalation_session_helper:
+          name: "Session start helper"
+          description: "input_datetime tracking when the session started."
+          default: input_datetime.ai_winddown_session_start
+          selector:
+            entity:
+              domain: input_datetime
+
+        cooldown_curve:
+          name: "Cooldown curve"
+          description: "How cooldown changes across stages."
+          default: "accelerating"
+          selector:
+            select:
+              options:
+                - label: "Fixed (same every stage)"
+                  value: "fixed"
+                - label: "Accelerating (halves each stage)"
+                  value: "accelerating"
+                - label: "Custom (per-stage intervals)"
+                  value: "custom"
+
+        custom_stage_intervals:
+          name: "Custom stage intervals (comma-separated minutes)"
+          description: "Per-stage cooldowns. Last value repeats."
+          default: "30,20,15,10"
+          selector:
+            text: {}
+
+        absence_gap_minutes:
+          name: "Absence gap tolerance (minutes)"
+          description: "Resume session if user returns within this window."
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 120
+              step: 5
+              mode: slider
+              unit_of_measurement: min
+
+        no_response_behavior:
+          name: "No-response behavior"
+          description: "What happens when the user doesn't respond or declines."
+          default: "advance"
+          selector:
+            select:
+              options:
+                - label: "Advance to next stage"
+                  value: "advance"
+                - label: "Reset to stage 0"
+                  value: "reset"
+
+        offer_start_stage:
+          name: "Start offering at stage"
+          description: "Don't offer until this stage is reached."
+          default: 1
+          selector:
+            number:
+              min: 1
+              max: 8
+              step: 1
+              mode: slider
+
+        stage_1_prompt_overlay:
+          name: "Stage 1 prompt overlay"
+          description: "Casual, low-pressure mention."
+          default: "Be casual and gentle. Light suggestion, no pressure."
+          selector:
+            text:
+              multiline: true
+
+        stage_2_prompt_overlay:
+          name: "Stage 2 prompt overlay"
+          description: "More direct, patience wearing thin."
+          default: "Be more direct. You've mentioned this before."
+          selector:
+            text:
+              multiline: true
+
+        stage_3_prompt_overlay:
+          name: "Stage 3 prompt overlay"
+          description: "Blunt, serious, no humour."
+          default: "Be blunt and serious. No jokes. This is the last gentle ask."
+          selector:
+            text:
+              multiline: true
+
+        stage_4_prompt_overlay:
+          name: "Stage 4 prompt overlay"
+          description: "Final warning. Used at last stage before autonomous."
+          default: >
+            Final warning. You're about to just do it without asking.
+            Make this dramatic and unmistakable.
+          selector:
+            text:
+              multiline: true
+
+        stage_5_prompt_overlay:
+          name: "Stage 5 prompt overlay (optional)"
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        stage_6_prompt_overlay:
+          name: "Stage 6 prompt overlay (optional)"
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        autonomous_execution_prompt:
+          name: "Autonomous execution TTS prompt"
+          description: "Spoken before running the routine without consent."
+          default: >
+            Announce that you're starting the bedtime routine now because
+            they've been ignoring you. Be dramatic but brief.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ⑤ OFFER FLOW
+    # =========================================================================
+    offer_flow:
+      name: "⑤ Offer Flow"
+      icon: mdi:message-question
+      collapsed: true
+      input:
+        offer_timeout_seconds:
+          name: "Offer timeout (seconds)"
+          description: "How long to wait for a response on the satellite."
+          default: 30
+          selector:
+            number:
+              min: 10
+              max: 120
+              step: 5
+              mode: slider
+              unit_of_measurement: s
+
+        offer_prompt_sleepy_tv:
+          name: "Scenario prompt — Sleepy TV on"
+          default: >
+            The user fell asleep watching their bedtime TV content.
+            Offer to formalise bedtime: shut down TV, start audiobook.
+          selector:
+            text:
+              multiline: true
+
+        offer_prompt_bed_tv:
+          name: "Scenario prompt — In bed + TV playing"
+          default: >
+            The user is in bed but the TV is still on with regular content.
+            Offer to handle TV shutdown and start bedtime routine.
+          selector:
+            text:
+              multiline: true
+
+        offer_prompt_bed_idle:
+          name: "Scenario prompt — In bed + idle"
+          default: >
+            The user is in bed with nothing playing. Offer an audiobook
+            or quiet night option.
+          selector:
+            text:
+              multiline: true
+
+        offer_prompt_bed_non_sleepy:
+          name: "Scenario prompt — In bed + non-sleepy content"
+          default: >
+            The user is in bed watching something that isn't their usual
+            bedtime content. Suggest switching to something more relaxing.
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ⑥ WIND-DOWN ACTIONS
+    # =========================================================================
+    winddown_actions:
+      name: "⑥ Wind-Down Actions"
+      icon: mdi:play-circle
+      collapsed: true
+      input:
+        routine_script:
+          name: "Bedtime routine script"
+          description: "Script entity for the bedtime routine (bedtime_routine_core instance)."
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        run_routine_on_accept:
+          name: "Run routine on accept"
+          description: "Automatically call the routine script when user says yes."
+          default: true
+          selector:
+            boolean: {}
+
+    # =========================================================================
+    # ⑦ AUTONOMOUS EXECUTION
+    # =========================================================================
+    autonomous_execution:
+      name: "⑦ Autonomous Execution"
+      icon: mdi:robot-angry
+      collapsed: true
+      input:
+        notify_on_autonomous:
+          name: "Notify on autonomous execution"
+          default: false
+          selector:
+            boolean: {}
+
+        notify_entity:
+          name: "Notification entity"
+          description: "notify.* entity for autonomous execution alerts."
+          default: ""
+          selector:
+            text: {}
+
+        notify_message:
+          name: "Notification message"
+          default: "Bedtime routine started autonomously — no response after all escalation stages."
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ⑧ TEST MODE
+    # =========================================================================
+    test_mode_section:
+      name: "⑧ Test Mode"
+      icon: mdi:test-tube
+      collapsed: true
+      input:
+        enable_test_mode:
+          name: "Enable test mode"
+          description: "Compressed cooldowns, skip device actions."
+          default: false
+          selector:
+            boolean: {}
+
+        test_mode_cooldown_seconds:
+          name: "Test mode cooldown (seconds)"
+          default: 60
+          selector:
+            number:
+              min: 10
+              max: 300
+              step: 10
+              mode: slider
+              unit_of_measurement: s
+
+    # =========================================================================
+    # ⑨ WEEKEND OVERRIDES
+    # =========================================================================
+    weekend_overrides:
+      name: "⑨ Weekend Overrides"
+      icon: mdi:calendar-weekend
+      collapsed: true
+      input:
+        weekend_mode:
+          name: "Weekend mode"
+          default: "same"
+          selector:
+            select:
+              options:
+                - label: "Same as weekdays"
+                  value: "same"
+                - label: "Disabled on weekends"
+                  value: "disabled"
+                - label: "Weekend profile"
+                  value: "profile"
+
+        weekend_days:
+          name: "Weekend days"
+          default:
+            - sat
+            - sun
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Saturday
+                  value: sat
+                - label: Sunday
+                  value: sun
+                - label: Friday
+                  value: fri
+                - label: Wednesday
+                  value: wed
+
+        weekend_time_start:
+          name: "Weekend window start"
+          default: "22:00:00"
+          selector:
+            time: {}
+
+        weekend_time_end:
+          name: "Weekend window end"
+          default: "03:00:00"
+          selector:
+            time: {}
+
+        weekend_cooldown_minutes:
+          name: "Weekend cooldown (minutes)"
+          default: 45
+          selector:
+            number:
+              min: 1
+              max: 240
+              step: 1
+              mode: slider
+              unit_of_measurement: min
+
+        weekend_llm_prompt_override:
+          name: "Weekend LLM prompt override"
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ⑩ MEMORY & HISTORY
+    # =========================================================================
+    memory_history:
+      name: "⑩ Memory & History"
+      icon: mdi:brain
+      collapsed: true
+      input:
+        enable_memory:
+          name: "Enable memory integration"
+          default: true
+          selector:
+            boolean: {}
+
+        memory_store_key:
+          name: "Memory store key"
+          default: "winddown.offer"
+          selector:
+            text: {}
+
+        memory_scope:
+          name: "Memory scope"
+          default: "household"
+          selector:
+            select:
+              options:
+                - household
+                - user
+
+        memory_expiration_days:
+          name: "Memory expiration (days)"
+          default: 90
+          selector:
+            number:
+              min: 0
+              max: 365
+              step: 1
+              mode: box
+
+        memory_history_inject_prompt:
+          name: "Memory history injection prompt"
+          description: "Prepended to recent bedtime memory results."
+          default: >
+            Recent bedtime history (use for context, do not repeat verbatim):
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ⑪ PRIVACY & INFRASTRUCTURE
+    # =========================================================================
+    privacy_infra:
+      name: "⑪ Privacy & Infrastructure"
+      icon: mdi:shield-lock
+      collapsed: true
+      input:
+        privacy_tier:
+          name: "Privacy tier"
+          default: "t1"
+          selector:
+            select:
+              options:
+                - label: "Off"
+                  value: "off"
+                - label: "T1 — Intimate"
+                  value: "t1"
+                - label: "T2 — Personal"
+                  value: "t2"
+                - label: "T3 — Household"
+                  value: "t3"
+
+        privacy_gate_enabled:
+          name: "Privacy gate enabled"
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        privacy_gate_mode:
+          name: "Privacy gate mode"
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person entity whose presence triggers privacy suppression."
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+        ducking_flag:
+          name: "Ducking flag"
+          default: input_boolean.ai_ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+
+        duck_guard_enabled:
+          name: "Duck guard enabled"
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # =========================================================================
+    # ⑫ TTS & SPEAKER
+    # =========================================================================
+    tts_speaker:
+      name: "⑫ TTS & Speaker"
+      icon: mdi:speaker
+      collapsed: true
+      input:
+        tts_speaker:
+          name: "TTS speaker"
+          description: "Media player for voice output (offers + autonomous)."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tts_volume:
+          name: "TTS volume"
+          default: 0.4
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Automation properties
+# ═══════════════════════════════════════════════════════════════════════════════
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Bed presence confirmed"
+    trigger: state
+    entity_id: !input bed_presence_sensor
+    to: "on"
+    for:
+      minutes: !input bed_settle_minutes
+    id: bed_confirmed
+
+  - alias: "Sleepy TV content detected"
+    trigger: state
+    entity_id: !input tv_media_player
+    to: "playing"
+    id: sleepy_tv_detected
+
+  - alias: "Nag repeat tick (5-min pattern)"
+    trigger: time_pattern
+    minutes: "/5"
+    id: nag_tick
+
+variables:
+  # ── Input extraction ──
+  bed_presence_sensor: !input bed_presence_sensor
+  tv_media_player: !input tv_media_player
+  sleepytv_detection_method: !input sleepytv_detection_method
+  sleepytv_match_string: !input sleepytv_match_string
+  sleepytv_pvr_sensor: !input sleepytv_pvr_sensor
+  min_presence_seconds: !input min_presence_seconds
+  block_if_media_playing: !input block_if_media_playing
+  v_enable_toggle: !input enable_toggle
+  time_window_start: !input time_window_start
+  time_window_end: !input time_window_end
+  run_days: !input run_days
+  base_cooldown: !input cooldown_minutes
+  repeat_while_present: !input repeat_while_present
+  max_offers: !input max_offers_per_session
+  v_bedtime_active: !input bedtime_active_entity
+  v_winddown_active: !input winddown_active_flag
+  conversation_agent: !input conversation_agent
+  use_dispatcher: !input use_dispatcher
+  assist_satellite: !input assist_satellites
+  user_names_csv: !input user_names
+  base_llm_prompt: !input llm_prompt
+  context_entities: !input context_entities
+  budget_floor: !input budget_floor
+  fallback_offer_text: !input fallback_offer_text
+  enable_escalation: !input enable_escalation
+  escalation_stage_count: !input escalation_stage_count
+  v_stage_helper: !input escalation_stage_helper
+  v_session_helper: !input escalation_session_helper
+  cooldown_curve: !input cooldown_curve
+  custom_intervals_csv: !input custom_stage_intervals
+  absence_gap_minutes: !input absence_gap_minutes
+  no_response_behavior: !input no_response_behavior
+  offer_start_stage: !input offer_start_stage
+  stage_1_overlay: !input stage_1_prompt_overlay
+  stage_2_overlay: !input stage_2_prompt_overlay
+  stage_3_overlay: !input stage_3_prompt_overlay
+  stage_4_overlay: !input stage_4_prompt_overlay
+  stage_5_overlay: !input stage_5_prompt_overlay
+  stage_6_overlay: !input stage_6_prompt_overlay
+  autonomous_prompt: !input autonomous_execution_prompt
+  offer_timeout: !input offer_timeout_seconds
+  prompt_sleepy_tv: !input offer_prompt_sleepy_tv
+  prompt_bed_tv: !input offer_prompt_bed_tv
+  prompt_bed_idle: !input offer_prompt_bed_idle
+  prompt_bed_non_sleepy: !input offer_prompt_bed_non_sleepy
+  routine_script: !input routine_script
+  run_routine_on_accept: !input run_routine_on_accept
+  notify_on_autonomous: !input notify_on_autonomous
+  notify_entity: !input notify_entity
+  notify_message: !input notify_message
+  test_mode: !input enable_test_mode
+  test_cooldown_s: !input test_mode_cooldown_seconds
+  weekend_mode: !input weekend_mode
+  weekend_days: !input weekend_days
+  weekend_time_start: !input weekend_time_start
+  weekend_time_end: !input weekend_time_end
+  weekend_cooldown: !input weekend_cooldown_minutes
+  weekend_llm_override: !input weekend_llm_prompt_override
+  enable_memory: !input enable_memory
+  memory_key: !input memory_store_key
+  memory_scope: !input memory_scope
+  memory_expiration: !input memory_expiration_days
+  memory_inject_prompt: !input memory_history_inject_prompt
+  privacy_tier: !input privacy_tier
+  v_privacy_gate_enabled: !input privacy_gate_enabled
+  v_privacy_gate_mode: !input privacy_gate_mode
+  privacy_gate_person: !input privacy_gate_person
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+  v_dispatcher_enabled: !input dispatcher_enabled
+  tts_speaker: !input tts_speaker
+  tts_volume: !input tts_volume
+
+  # ── Derived: day / weekend logic ──
+  day_map:
+    mon: 0
+    tue: 1
+    wed: 2
+    thu: 3
+    fri: 4
+    sat: 5
+    sun: 6
+  effective_day_key: >-
+    {% set h = now().hour %}
+    {% set d = now().weekday() %}
+    {% if h < 6 %}{% set d = (d - 1) % 7 %}{% endif %}
+    {% set rmap = {0:'mon',1:'tue',2:'wed',3:'thu',4:'fri',5:'sat',6:'sun'} %}
+    {{ rmap[d] }}
+  is_weekend: >-
+    {{ effective_day_key in weekend_days }}
+  weekend_active: >-
+    {{ is_weekend and weekend_mode == 'profile' }}
+
+  # ── Derived: effective schedule ──
+  effective_start: >-
+    {{ weekend_time_start if weekend_active else time_window_start }}
+  effective_end: >-
+    {{ weekend_time_end if weekend_active else time_window_end }}
+  effective_cooldown: >-
+    {{ weekend_cooldown if weekend_active else base_cooldown }}
+  effective_llm_prompt: >-
+    {% if weekend_active and (weekend_llm_override | default('') | trim) %}
+      {{ weekend_llm_override }}
+    {% else %}
+      {{ base_llm_prompt }}
+    {% endif %}
+
+  # ── Derived: user name ──
+  chosen_name: >-
+    {% set names = user_names_csv.split(',') | map('trim') | list %}
+    {{ names | random }}
+
+  # ── Derived: time window check (cross-midnight safe) ──
+  in_time_window: >-
+    {% set t = now().strftime('%H:%M:%S') %}
+    {% set s = effective_start %}
+    {% set e = effective_end %}
+    {% if s <= e %}
+      {{ s <= t <= e }}
+    {% else %}
+      {{ t >= s or t <= e }}
+    {% endif %}
+
+  # ── Derived: guards ──
+  kill_switch_on: >-
+    {{ not is_state(v_enable_toggle, 'on') }}
+  bedtime_already_active: >-
+    {{ is_state(v_bedtime_active, 'on') }}
+  day_allowed: >-
+    {{ effective_day_key in run_days }}
+  weekend_disabled: >-
+    {{ is_weekend and weekend_mode == 'disabled' }}
+
+  # ── Derived: sleepy TV detection ──
+  is_sleepy_tv: >-
+    {% set method = sleepytv_detection_method %}
+    {% set match = sleepytv_match_string | default('') | lower %}
+    {% if method == 'media_title_contains' %}
+      {{ (state_attr(tv_media_player, 'media_title') | default('') | lower).find(match) >= 0
+         and match | length > 0 }}
+    {% elif method == 'media_content_id_matches' %}
+      {{ (state_attr(tv_media_player, 'media_content_id') | default('') | lower).find(match) >= 0
+         and match | length > 0 }}
+    {% elif method == 'state_playing_and_title' %}
+      {{ is_state(tv_media_player, 'playing')
+         and (state_attr(tv_media_player, 'media_title') | default('') | lower).find(match) >= 0
+         and match | length > 0 }}
+    {% elif method == 'pvr_channel_matches' %}
+      {{ (states(sleepytv_pvr_sensor) | default('') | lower).find(match) >= 0
+         and match | length > 0 }}
+    {% else %}
+      false
+    {% endif %}
+
+  # ── Derived: media state ──
+  media_is_playing: >-
+    {{ is_state(tv_media_player, 'playing') }}
+  bed_is_occupied: >-
+    {{ is_state(bed_presence_sensor, 'on') }}
+
+  # ── Derived: escalation state ──
+  current_stage: >-
+    {{ states(v_stage_helper) | default(0) | int }}
+  session_start_raw: >-
+    {{ states(v_session_helper) | default('') }}
+  session_active: >-
+    {% set raw = session_start_raw | trim %}
+    {% if raw in ['', 'unknown', 'unavailable'] %}
+      false
+    {% else %}
+      {% set gap = absence_gap_minutes | int %}
+      {% set elapsed = (as_timestamp(now()) - as_timestamp(raw, 0)) / 60 %}
+      {{ elapsed < (gap + 300) }}
+    {% endif %}
+
+  # ── Derived: scenario classification ──
+  scenario: >-
+    {% if trigger.id | default('') == 'sleepy_tv_detected' and is_sleepy_tv %}
+      sleepy_tv
+    {% elif bed_is_occupied and media_is_playing and is_sleepy_tv %}
+      sleepy_tv
+    {% elif bed_is_occupied and media_is_playing %}
+      bed_non_sleepy
+    {% elif bed_is_occupied and not media_is_playing %}
+      bed_idle
+    {% elif bed_is_occupied %}
+      bed_tv
+    {% else %}
+      bed_idle
+    {% endif %}
+
+  # ── Derived: scenario prompt ──
+  scenario_prompt: >-
+    {% if scenario == 'sleepy_tv' %}
+      {{ prompt_sleepy_tv }}
+    {% elif scenario == 'bed_tv' %}
+      {{ prompt_bed_tv }}
+    {% elif scenario == 'bed_idle' %}
+      {{ prompt_bed_idle }}
+    {% else %}
+      {{ prompt_bed_non_sleepy }}
+    {% endif %}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Conditions
+# ═══════════════════════════════════════════════════════════════════════════════
+conditions:
+  - alias: "Kill switch is ON"
+    condition: template
+    value_template: "{{ not kill_switch_on }}"
+
+  - alias: "Inside time window"
+    condition: template
+    value_template: "{{ in_time_window }}"
+
+  - alias: "Day of week allowed"
+    condition: template
+    value_template: "{{ day_allowed }}"
+
+  - alias: "Weekend not disabled"
+    condition: template
+    value_template: "{{ not weekend_disabled }}"
+
+  - alias: "Bedtime not already active"
+    condition: template
+    value_template: "{{ not bedtime_already_active }}"
+
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {% set gate_on = is_state(v_privacy_gate_enabled, 'on') %}
+      {% set mode = states(v_privacy_gate_mode) | default('auto') %}
+      {% if not gate_on or privacy_tier == 'off' %}
+        true
+      {% elif mode == 'force_suppress_all' %}
+        false
+      {% elif mode == 'force_allow_all' %}
+        true
+      {% else %}
+        true
+      {% endif %}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Actions
+# ═══════════════════════════════════════════════════════════════════════════════
+actions:
+  # ── 1. Restart-safe cleanup ────────────────────────────────────────────
+  - alias: "1. Clear stale winddown_active from crashed runs"
+    if:
+      - condition: template
+        value_template: "{{ is_state(v_winddown_active, 'on') }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+
+  # ── 2. Set winddown_active ON ──────────────────────────────────────────
+  - alias: "2. Set winddown_active ON"
+    action: input_boolean.turn_on
+    target:
+      entity_id: "{{ v_winddown_active }}"
+
+  # ── 3. Nag tick guard — only proceed if repeat enabled + bed occupied ──
+  - alias: "3. Nag tick guard"
+    if:
+      - condition: template
+        value_template: >-
+          {{ trigger.id | default('') == 'nag_tick'
+             and (not repeat_while_present or not bed_is_occupied) }}
+    then:
+      - alias: "Skip — nag tick but no repeat/presence"
+        action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+      - stop: "Nag tick skipped"
+
+  # ── 4. Media playing guard ─────────────────────────────────────────────
+  - alias: "4. Media guard"
+    if:
+      - condition: template
+        value_template: >-
+          {{ block_if_media_playing and media_is_playing
+             and not is_sleepy_tv }}
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+      - stop: "Media playing — suppressed"
+
+  # ── 5. Sleepy TV trigger guard ─────────────────────────────────────────
+  - alias: "5. Sleepy TV trigger validation"
+    if:
+      - condition: template
+        value_template: >-
+          {{ trigger.id | default('') == 'sleepy_tv_detected'
+             and not is_sleepy_tv }}
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+      - stop: "TV playing but not sleepy content"
+
+  # ── 6. Escalation stage management ─────────────────────────────────────
+  - alias: "6a. Session management"
+    variables:
+      absence_elapsed: >-
+        {% set raw = session_start_raw | trim %}
+        {% if raw in ['', 'unknown', 'unavailable'] %}
+          9999
+        {% else %}
+          {{ ((as_timestamp(now()) - as_timestamp(raw, 0)) / 60) | int }}
+        {% endif %}
+      session_expired: >-
+        {{ absence_elapsed > (absence_gap_minutes | int) and current_stage > 0
+           and not bed_is_occupied }}
+
+  - alias: "6b. Reset expired session"
+    if:
+      - condition: template
+        value_template: "{{ session_expired }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ v_stage_helper }}"
+        data:
+          value: 0
+
+  - alias: "6c. Start or resume session"
+    if:
+      - condition: template
+        value_template: "{{ current_stage == 0 or session_expired }}"
+    then:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "{{ v_session_helper }}"
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - alias: "6d. Compute stage cooldown + overlay"
+    variables:
+      stage_now: "{{ states(v_stage_helper) | default(0) | int }}"
+      stage_cooldown_minutes: >-
+        {% if test_mode %}
+          {{ (test_cooldown_s | int) / 60 }}
+        {% elif cooldown_curve == 'fixed' %}
+          {{ effective_cooldown | int }}
+        {% elif cooldown_curve == 'accelerating' %}
+          {% set base = effective_cooldown | int %}
+          {% set halved = (base / (2 ** (stage_now | int))) | int %}
+          {{ [halved, 5] | max }}
+        {% elif cooldown_curve == 'custom' %}
+          {% set vals = custom_intervals_csv.split(',') | map('trim') | map('int') | list %}
+          {% set idx = [stage_now | int, vals | length - 1] | min %}
+          {{ vals[idx] | default(effective_cooldown) }}
+        {% else %}
+          {{ effective_cooldown | int }}
+        {% endif %}
+      is_final_stage: >-
+        {{ enable_escalation and (stage_now | int) >= (escalation_stage_count | int) }}
+      stage_overlay: >-
+        {% set s = stage_now | int %}
+        {% set overlays = {
+          1: stage_1_overlay,
+          2: stage_2_overlay,
+          3: stage_3_overlay,
+          4: stage_4_overlay,
+          5: stage_5_overlay,
+          6: stage_6_overlay
+        } %}
+        {% if s in overlays and (overlays[s] | default('') | trim) %}
+          {{ overlays[s] }}
+        {% else %}
+          {% set pct = (s / (escalation_stage_count | int)) if escalation_stage_count | int > 0 else 0 %}
+          {% if pct <= 0.35 %}
+            Be casual and gentle. Light suggestion.
+          {% elif pct <= 0.65 %}
+            Be more direct. Patience wearing thin.
+          {% elif pct <= 0.85 %}
+            Be blunt and serious. No jokes.
+          {% else %}
+            Final warning. Dramatic and unmistakable.
+          {% endif %}
+        {% endif %}
+
+  # ── 7. Cooldown check ──────────────────────────────────────────────────
+  - alias: "7. Cooldown elapsed check"
+    variables:
+      last_offer_raw: >-
+        {{ states('input_datetime.ai_winddown_last_offer') | default('') }}
+      cooldown_ok: >-
+        {% set raw = last_offer_raw | trim %}
+        {% if raw in ['', 'unknown', 'unavailable'] %}
+          true
+        {% else %}
+          {% set elapsed_min = ((as_timestamp(now()) - as_timestamp(raw, 0)) / 60) | int %}
+          {{ elapsed_min >= (stage_cooldown_minutes | float | int) }}
+        {% endif %}
+
+  - alias: "7b. Skip if cooldown not elapsed"
+    if:
+      - condition: template
+        value_template: "{{ not cooldown_ok }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+      - stop: "Cooldown not elapsed"
+
+  # ── 8. Update scenario helper ──────────────────────────────────────────
+  - alias: "8. Record scenario"
+    action: input_select.select_option
+    target:
+      entity_id: input_select.ai_winddown_last_scenario
+    data:
+      option: "{{ scenario }}"
+    continue_on_error: true
+
+  # ── 9. Agent resolution ────────────────────────────────────────────────
+  - alias: "9a. Dispatch agent"
+    if:
+      - condition: template
+        value_template: "{{ use_dispatcher }}"
+    then:
+      - action: pyscript.agent_dispatch
+        data:
+          wake_word: "{{ conversation_agent }}"
+        response_variable: dispatch_result
+        continue_on_error: true
+
+  - alias: "9b. Resolve agent + voice"
+    variables:
+      resolved_agent: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.agent_id is defined %}
+          {{ dispatch_result.agent_id }}
+        {% else %}
+          {{ conversation_agent }}
+        {% endif %}
+      resolved_voice: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.tts_engine is defined %}
+          {{ dispatch_result.tts_engine }}
+        {% else %}{% endif %}
+      resolved_persona: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.persona is defined %}
+          {{ dispatch_result.persona }}
+        {% else %}
+          {{ conversation_agent }}
+        {% endif %}
+
+  # ── 10. Build sensor context ───────────────────────────────────────────
+  - alias: "10. Sensor context"
+    variables:
+      sensor_context: >-
+        {% set ns = namespace(lines=[]) %}
+        {% for e in context_entities if e %}
+          {% set ns.lines = ns.lines + [e ~ ': ' ~ (states(e) | default('unknown'))] %}
+        {% endfor %}
+        {{ ns.lines | join('\n') }}
+
+  # ── 11. Memory history injection ───────────────────────────────────────
+  - alias: "11. Memory history"
+    if:
+      - condition: template
+        value_template: "{{ enable_memory }}"
+    then:
+      - action: pyscript.memory_search
+        data:
+          query: "bedtime winddown offer"
+          limit: 3
+        response_variable: memory_results
+        continue_on_error: true
+
+  - variables:
+      memory_context: >-
+        {% if enable_memory and memory_results is defined
+              and memory_results.results is defined %}
+          {{ memory_inject_prompt }}
+          {% for r in memory_results.results %}
+            - {{ r.value | default('') | truncate(120) }}
+          {% endfor %}
+        {% endif %}
+
+  # ── 12. Autonomous execution (final stage) ─────────────────────────────
+  - alias: "12. Autonomous check"
+    if:
+      - condition: template
+        value_template: "{{ is_final_stage }}"
+    then:
+      # Announce autonomous execution
+      - alias: "Autonomous TTS"
+        if:
+          - condition: template
+            value_template: "{{ tts_speaker not in ['', none] }}"
+        then:
+          - action: pyscript.conversation_with_timeout
+            data:
+              agent_id: "{{ resolved_agent }}"
+              text: "{{ autonomous_prompt }}"
+              timeout_secs: 60
+            response_variable: auto_llm
+            continue_on_error: true
+
+          - variables:
+              auto_speech: >-
+                {% set resp = auto_llm.response if auto_llm is defined else none %}
+                {% if resp is not none
+                      and resp.speech is defined
+                      and resp.speech.plain is defined
+                      and resp.speech.plain.speech is defined
+                      and resp.speech.plain.speech | trim | length > 0 %}
+                  {{ resp.speech.plain.speech | trim }}
+                {% else %}
+                  Starting bedtime routine now.
+                {% endif %}
+
+          - action: pyscript.tts_queue_speak
+            data:
+              text: "{{ auto_speech }}"
+              voice: "{{ resolved_voice }}"
+              target_mode: explicit
+              target: "{{ tts_speaker }}"
+              priority: 1
+            continue_on_error: true
+
+          - delay:
+              seconds: 5
+
+      # Fire routine script
+      - alias: "Autonomous — run routine"
+        if:
+          - condition: template
+            value_template: "{{ routine_script not in ['', none] }}"
+        then:
+          - action: script.turn_on
+            target:
+              entity_id: "{{ routine_script }}"
+            continue_on_error: true
+
+      # Notification
+      - alias: "Autonomous notification"
+        if:
+          - condition: template
+            value_template: >-
+              {{ notify_on_autonomous
+                 and notify_entity not in ['', none] }}
+        then:
+          - action: "{{ notify_entity }}"
+            data:
+              message: "{{ notify_message }}"
+            continue_on_error: true
+
+      # Memory + whisper + cleanup
+      - alias: "Memory — autonomous"
+        if:
+          - condition: template
+            value_template: "{{ enable_memory }}"
+        then:
+          - action: pyscript.memory_set
+            data:
+              key: "{{ memory_key }}"
+              value: >-
+                Autonomous bedtime execution at {{ now().strftime('%H:%M') }}.
+                Stage {{ stage_now }}, scenario: {{ scenario }}.
+              scope: "{{ memory_scope }}"
+              expiration_days: "{{ memory_expiration | int }}"
+              tags: "bedtime,winddown,autonomous"
+              force_new: true
+            response_variable: _mem_auto
+            continue_on_error: true
+
+      - action: pyscript.agent_whisper
+        data:
+          agent_name: "{{ resolved_persona }}"
+          user_query: "bedtime autonomous execution"
+          agent_response: >-
+            Autonomous bedtime at stage {{ stage_now }}. Scenario: {{ scenario }}.
+          source: automation
+        response_variable: _whisper_auto
+        continue_on_error: true
+
+      # Reset stage + cleanup
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ v_stage_helper }}"
+        data:
+          value: 0
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.ai_winddown_last_offer
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ v_winddown_active }}"
+      - stop: "Autonomous execution complete"
+
+  # ── 13. Budget gate ────────────────────────────────────────────────────
+  - alias: "13. Budget gate"
+    variables:
+      budget_pct: >-
+        {% set raw = states('sensor.ai_llm_budget_remaining_pct') | default(100) %}
+        {{ raw | float(100) }}
+      use_llm: "{{ budget_pct >= (budget_floor | float) }}"
+
+  # ── 14. Assemble prompt + offer ────────────────────────────────────────
+  - alias: "14. Offer flow"
+    choose:
+      # ── LLM path (budget OK) ──
+      - alias: "LLM offer via Assist Satellite"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_llm and assist_satellite not in ['', none] }}
+        sequence:
+          - variables:
+              full_prompt: >-
+                {{ effective_llm_prompt }}
+
+                SCENARIO: {{ scenario }}
+                {{ stage_overlay }}
+
+                Address the user as {{ chosen_name }}.
+
+                {{ sensor_context }}
+                {{ memory_context | default('') }}
+
+          - alias: "Generate offer text via LLM"
+            action: pyscript.conversation_with_timeout
+            data:
+              agent_id: "{{ resolved_agent }}"
+              text: "{{ full_prompt }}"
+              timeout_secs: 60
+            response_variable: offer_llm
+            continue_on_error: true
+
+          - variables:
+              offer_speech: >-
+                {% set resp = offer_llm.response
+                      if offer_llm is defined else none %}
+                {% if resp is not none
+                      and resp.speech is defined
+                      and resp.speech.plain is defined
+                      and resp.speech.plain.speech is defined
+                      and resp.speech.plain.speech | trim | length > 0 %}
+                  {{ resp.speech.plain.speech | trim }}
+                {% else %}
+                  {{ fallback_offer_text }}
+                {% endif %}
+
+          - alias: "Start conversation on satellite"
+            action: assist_satellite.start_conversation
+            target:
+              entity_id: "{{ assist_satellite }}"
+            data:
+              start_message: "{{ offer_speech }}"
+            continue_on_error: true
+
+      # ── Fallback path (budget low or no satellite) ──
+      - alias: "Static fallback offer via TTS"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ not use_llm or assist_satellite in ['', none] }}
+        sequence:
+          - alias: "TTS fallback"
+            if:
+              - condition: template
+                value_template: "{{ tts_speaker not in ['', none] }}"
+            then:
+              - action: pyscript.tts_queue_speak
+                data:
+                  text: "{{ fallback_offer_text }}"
+                  voice: "{{ resolved_voice }}"
+                  target_mode: explicit
+                  target: "{{ tts_speaker }}"
+                  priority: 2
+                continue_on_error: true
+
+  # ── 15. Post-offer: advance stage + record timestamp ───────────────────
+  - alias: "15a. Advance escalation stage"
+    if:
+      - condition: template
+        value_template: "{{ enable_escalation }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ v_stage_helper }}"
+        data:
+          value: "{{ [stage_now + 1, escalation_stage_count | int] | min }}"
+
+  - alias: "15b. Record last offer timestamp"
+    action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.ai_winddown_last_offer
+    data:
+      datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # ── 16. Memory + whisper ───────────────────────────────────────────────
+  - alias: "16a. Memory write"
+    if:
+      - condition: template
+        value_template: "{{ enable_memory }}"
+    then:
+      - action: pyscript.memory_set
+        data:
+          key: "{{ memory_key }}"
+          value: >-
+            Wind-down offer at {{ now().strftime('%H:%M') }}.
+            Stage {{ stage_now }}, scenario: {{ scenario }}, method: {{ 'llm' if use_llm else 'fallback' }}.
+          scope: "{{ memory_scope }}"
+          expiration_days: "{{ memory_expiration | int }}"
+          tags: "bedtime,winddown,offer"
+          force_new: true
+        response_variable: _mem_offer
+        continue_on_error: true
+
+  - alias: "16b. Whisper"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ resolved_persona }}"
+      user_query: "wind-down offer — {{ scenario }}"
+      agent_response: >-
+        Offered bedtime wind-down. Stage {{ stage_now }}/{{ escalation_stage_count }}.
+        Scenario: {{ scenario }}.
+      source: automation
+    response_variable: _whisper
+    continue_on_error: true
+
+  # ── 17. Cleanup ────────────────────────────────────────────────────────
+  - alias: "17. Cleanup — winddown_active OFF"
+    action: input_boolean.turn_off
+    target:
+      entity_id: "{{ v_winddown_active }}"

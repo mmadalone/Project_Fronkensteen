@@ -44,6 +44,8 @@ views:
         name: Duck Mgr
       - entity: sensor.ai_conversation_sensor_status
         name: Conv Sensor
+      - entity: sensor.ai_music_taste_status
+        name: Music Taste
   - type: vertical-stack
     cards:
     - type: markdown
@@ -288,6 +290,8 @@ views:
         name: Bedtime Active
       - entity: input_boolean.ai_bedtime_global_lock
         name: Bedtime Lock
+      - entity: input_boolean.ai_winddown_active
+        name: Wind-Down Active
       - entity: input_boolean.ai_wake_up_snooze
         name: Wake-Up Snooze
       - entity: input_boolean.ai_wake_up_stop
@@ -355,6 +359,8 @@ views:
         tap_action:
           action: perform-action
           perform_action: pyscript.voice_handoff_restore_now
+      - entity: input_boolean.ai_handoff_processing
+        name: Handoff In Progress
       - entity: input_select.ai_expertise_routing_mode
         name: Expertise Routing
   - type: vertical-stack
@@ -1270,6 +1276,20 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
+      content: '### TTS Controls
+
+
+        Speech output post-processing and volume management.'
+    - type: entities
+      title: TTS Controls
+      entities:
+      - entity: input_boolean.ai_tts_strip_stage_directions
+        name: Strip Stage Directions
+      - entity: input_boolean.ai_tts_volume_restore
+        name: Volume Restore After TTS
+  - type: vertical-stack
+    cards:
+    - type: markdown
       content: '### Household & Language
 
 
@@ -1497,6 +1517,29 @@ views:
         name: Reply Timeout (sec)
       - entity: input_number.bedtime_max_attempts
         name: Max Attempts
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Wind-Down System
+
+        Context-aware bedtime detection and escalation. Kill switch controls
+        the wind-down automation; active flag shows a session is in progress.
+        Stage tracks escalation progress (0 = idle).'
+    - type: entities
+      title: Wind-Down Controls
+      entities:
+      - entity: input_boolean.ai_winddown_enabled
+        name: Enabled
+      - entity: input_boolean.ai_winddown_active
+        name: Active (in-progress)
+      - entity: input_number.ai_winddown_stage
+        name: Escalation Stage
+      - entity: input_select.ai_winddown_last_scenario
+        name: Last Scenario
+      - entity: input_datetime.ai_winddown_last_offer
+        name: Last Offer
+      - entity: input_number.ai_winddown_cooldown_minutes
+        name: Cooldown (min)
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1796,6 +1839,8 @@ views:
         name: Bedtime Routine+
       - entity: input_select.ai_privacy_gate_bedtime_last_call
         name: Bedtime Last Call
+      - entity: input_select.ai_privacy_gate_bedtime_winddown
+        name: Bedtime Wind-Down
     - type: entities
       title: "T2 \u2014 Personal"
       entities:

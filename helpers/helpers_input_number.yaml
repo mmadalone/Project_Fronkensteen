@@ -1216,6 +1216,16 @@ ai_tts_default_duration:
   unit_of_measurement: s
   initial: 5
 
+ai_tts_generation_buffer:
+  name: "TTS Generation Buffer (seconds)"
+  icon: mdi:timer-sand
+  min: 0
+  max: 10
+  step: 0.5
+  mode: slider
+  unit_of_measurement: s
+  initial: 2.0
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_duck_manager — Audio Ducking Tuning
 # ═══════════════════════════════════════════════════════════════════
@@ -1421,6 +1431,16 @@ ai_calendar_failure_threshold:
   step: 1
   mode: box
   initial: 3
+
+ai_calendar_default_event_duration:
+  name: "Calendar Default Event Duration"
+  icon: mdi:clock-outline
+  min: 15
+  max: 480
+  step: 15
+  initial: 60
+  mode: slider
+  unit_of_measurement: min
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_music_taste — Music Tracking Tuning
@@ -1657,3 +1677,25 @@ ai_conversation_history_retention_days:
   initial: 7
   mode: box
   unit_of_measurement: days
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+ai_winddown_cooldown_minutes:
+  name: "AI Wind-Down - Cooldown"
+  icon: mdi:timer-sand
+  min: 1
+  max: 240
+  step: 1
+  initial: 30
+  mode: slider
+  unit_of_measurement: min
+
+ai_winddown_stage:
+  name: "AI Wind-Down - Escalation Stage"
+  icon: mdi:stairs
+  min: 0
+  max: 8
+  step: 1
+  initial: 0
+  mode: box

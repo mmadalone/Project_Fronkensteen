@@ -16,6 +16,7 @@
 #   - pyscript/tts_queue.py (tts_queue_speak)
 #   - input_datetime.ai_banter_last_reaction (cooldown tracking)
 #
+# v2.2.0: 2026-03-23 — Gate 6 satellite idle check, Step 6h pre-TTS guard, direct-address prompt
 # v2.1.0: 2026-03-20 — event-driven triggers, Step 0 eliminated
 # v2.0.0: 2026-03-20 — conversation.process + flexible agent pool
 # v1.0.0: 2026-03-20 — initial deployment (llm_task_call)
@@ -333,8 +334,10 @@ blueprint:
             {max_words} = word limit. The safety prefix (tool suppression)
             is automatically prepended — do not include it here.
           default: >-
-            {agent_a} just said: '{excerpt}'.
-            Give ONE brief, witty, in-character reaction. Under {max_words} words.
+            {agent_a} just told the user: '{excerpt}'.
+            Jump in with ONE brief, witty, in-character line directed AT the user.
+            If your character speaks a language other than English, respond in that language.
+            Under {max_words} words.
           selector:
             text:
               multiline: true
@@ -456,6 +459,16 @@ conditions:
         true
       {% else %}
         {{ (as_timestamp(now()) - as_timestamp(last | as_datetime)) > (cooldown_minutes | int(30) * 60) }}
+      {% endif %}
+
+  # ── Gate 6: Satellite not in active voice session ──
+  - alias: "Gate 6 — Satellite idle check"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'notification' %}
+        true
+      {% else %}
+        {{ states(satellite_entity) not in ['listening', 'responding'] }}
       {% endif %}
 
 action:
@@ -673,6 +686,33 @@ action:
                     then:
                       - variables:
                           v_chime_path: "{{ v_stinger_fallback_url }}"
+
+  # ── Step 6g: Wait for ducking to clear (prevents banter over ducked audio) ──
+  - alias: "Step 6g — Wait for ducking to settle"
+    if:
+      - condition: template
+        value_template: "{{ states('input_boolean.ai_ducking_flag') == 'on' }}"
+    then:
+      - wait_template: "{{ states('input_boolean.ai_ducking_flag') == 'off' }}"
+        timeout: "00:00:10"
+        continue_on_timeout: true
+  - alias: "Step 6g2 — Settle delay for volume propagation"
+    if:
+      - condition: template
+        value_template: "{{ is_notification }}"
+    then:
+      - delay:
+          seconds: 1
+
+  # ── Step 6h: Final satellite guard before TTS ──
+  - alias: "Step 6h — Satellite still idle"
+    if:
+      - condition: template
+        value_template: >-
+          {{ not is_notification
+             and states(satellite_entity) in ['listening', 'responding'] }}
+    then:
+      - stop: "Satellite is in voice session — suppressing banter"
 
   # ── Step 7: TTS via tts_queue_speak in Agent B's voice ──
   - alias: "Step 7 — Speak banter"

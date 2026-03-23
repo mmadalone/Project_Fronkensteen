@@ -2664,7 +2664,7 @@ actions:
           agent_id: "{{ llm_agent }}"
           conversation_id: "{{ _conv_id }}"
           text: >-
-            {% if is_addressed_to_agent | default(false) | bool(false) and (direct_address_prompt_text | default('') | string | trim) | length > 0 %}
+            [NOTIFICATION] {% if is_addressed_to_agent | default(false) | bool(false) and (direct_address_prompt_text | default('') | string | trim) | length > 0 %}
             {{ direct_address_prompt_text }}
             {% elif (agent_name | default('') | string | trim) | length > 0 %}
             {{ notification_prompt }}
@@ -3487,7 +3487,7 @@ actions:
             data:
               agent_id: "{{ llm_agent }}"
               text: >-
-                {{ bundled_prompt_text }}
+                [NOTIFICATION] {{ bundled_prompt_text }}
 
                 You have {{ _batch_count }} additional notification(s)
                 that arrived while the first message was being announced.
@@ -4376,7 +4376,7 @@ actions:
                     agent_id: "{{ llm_agent }}"
                     conversation_id: "{{ _conv_id }}"
                     text: >-
-                      {% set _name = agent_name | default('') | string | trim %}
+                      [NOTIFICATION] {% set _name = agent_name | default('') | string | trim %}
                       {% set _r_is_addressed = _name | length > 0 and _r_truncated | default('') | regex_search('(?i)\\b' ~ _name ~ '\\b') %}
                       {% if _r_is_addressed and (direct_address_prompt_text | default('') | string | trim) | length > 0 %}
                       {{ direct_address_prompt_text }}

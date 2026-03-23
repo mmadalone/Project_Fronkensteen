@@ -1,5 +1,14 @@
-# ── I-47: Tomorrow Weather Forecast Helpers ──────────────────────────────────
-# Used by weather_forecast_promote.yaml blueprint.
-
-# input_text: moved to helpers_input_text.yaml (C5 consolidation)
-
+# ══════════════════════════════════════════════════════════════════════
+# AI Weather Forecast — I-47
+# ══════════════════════════════════════════════════════════════════════
+# Status: Placeholder — future weather integration (I-47)
+# No pyscript module or sensor. Blueprint handles promotion directly.
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_text.yaml:   ai_weather_tomorrow_summary
+#   - helpers_input_button.yaml: ai_weather_forecast_rebuild
+#
+# Dependencies:
+#   - Blueprints: weather_forecast_promote.yaml
+#   - Context: ai_context_hot.yaml (reads ai_weather_tomorrow_summary for L1 injection)
+# ══════════════════════════════════════════════════════════════════════

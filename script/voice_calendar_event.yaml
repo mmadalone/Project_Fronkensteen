@@ -1,0 +1,531 @@
+blueprint:
+  name: "Voice — Calendar Event (unified agent tool)"
+  description: >
+    LLM tool wrapper: create, find, delete, and edit Google Calendar events via
+    voice. Pyscript handles validation and calendar operations; blueprint handles
+    TTS confirmation, memory, and whisper. Instantiate once, register as LLM tool.
+  author: madalone
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_calendar_event.yaml"
+  domain: script
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ── ① CALENDAR DEFAULTS ────────────────────────────────────────
+    section_defaults:
+      name: "① Calendar Defaults"
+      icon: mdi:calendar-edit
+      collapsed: false
+      input:
+        default_calendar:
+          name: Default calendar
+          description: >
+            Calendar entity used when the agent doesn't specify one.
+          selector:
+            entity:
+              domain: calendar
+
+        default_duration_minutes:
+          name: Default event duration (minutes)
+          description: >
+            Duration applied when the user omits an end time.
+          default: 60
+          selector:
+            number:
+              min: 15
+              max: 480
+              step: 15
+              unit_of_measurement: "min"
+
+    # ── ② TTS CONFIRMATION ─────────────────────────────────────────
+    section_tts:
+      name: "② TTS Confirmation"
+      icon: mdi:account-voice
+      collapsed: true
+      input:
+        enable_confirmation_tts:
+          name: Enable TTS confirmation
+          description: >
+            Speak a confirmation after calendar operations (except find).
+          default: true
+          selector:
+            boolean: {}
+
+        confirmation_prompt_create:
+          name: Confirmation prompt (create)
+          description: >
+            LLM prompt for TTS after event creation.
+          default: >-
+            Briefly confirm the calendar event you just created.
+            State the title, date, and time. Be concise.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        confirmation_prompt_delete:
+          name: Confirmation prompt (delete)
+          description: >
+            LLM prompt for TTS after event deletion.
+          default: >-
+            Briefly confirm the calendar event you just deleted.
+            State what was removed and when it was. Be concise.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        confirmation_prompt_edit:
+          name: Confirmation prompt (edit)
+          description: >
+            LLM prompt for TTS after event modification.
+          default: >-
+            Briefly confirm the calendar event you just modified.
+            State what changed. Be concise.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        conversation_agent:
+          name: Conversation agent
+          description: >
+            Agent persona for TTS confirmation (e.g. "Rick", "Quark").
+          default: ""
+          selector:
+            text: {}
+
+        use_dispatcher:
+          name: Use dispatcher for agent resolution
+          description: >
+            Resolve agent + TTS voice via pyscript.agent_dispatch.
+          default: true
+          selector:
+            boolean: {}
+
+        tts_speaker:
+          name: TTS speaker
+          description: >
+            Media player for TTS confirmation output.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+    # ── ③ MEMORY & LOGGING ─────────────────────────────────────────
+    section_memory:
+      name: "③ Memory & Logging"
+      icon: mdi:brain
+      collapsed: true
+      input:
+        enable_memory:
+          name: Enable memory logging
+          description: >
+            Write calendar operations to L2 memory.
+          default: true
+          selector:
+            boolean: {}
+
+        enable_whisper:
+          name: Enable whisper logging
+          description: >
+            Log operations to the agent whisper network.
+          default: true
+          selector:
+            boolean: {}
+
+    # ── ④ INFRASTRUCTURE ───────────────────────────────────────────
+    section_infrastructure:
+      name: "④ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        post_tts_delay:
+          name: Post-TTS delay (seconds)
+          description: >
+            Seconds to wait after TTS before returning.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: "s"
+
+fields:
+  operation:
+    name: Operation
+    description: "What to do: create, find, delete, or edit"
+    required: true
+    selector:
+      select:
+        options:
+          - create
+          - find
+          - delete
+          - edit
+  summary:
+    name: Summary
+    description: "Event title (create) or search term (find/delete/edit)"
+    required: true
+    selector:
+      text: {}
+  start_date_time:
+    name: Start Date/Time
+    description: "Timed event start: YYYY-MM-DD HH:MM"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  end_date_time:
+    name: End Date/Time
+    description: "Timed event end: YYYY-MM-DD HH:MM (optional)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  start_date:
+    name: Start Date
+    description: "All-day event date or date filter: YYYY-MM-DD"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  description:
+    name: Description
+    description: "Event description (create/edit, optional)"
+    required: false
+    default: ""
+    selector:
+      text:
+        multiline: true
+  location:
+    name: Location
+    description: "Event location (create/edit, optional)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  uid:
+    name: UID
+    description: "Event UID from a previous find (delete/edit, optional)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  recurrence_id:
+    name: Recurrence ID
+    description: "Recurring event instance ID (delete/edit, optional)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  scope:
+    name: Scope
+    description: "Delete scope: this_instance, this_and_future, entire_series"
+    required: false
+    default: "this_instance"
+    selector:
+      text: {}
+  new_summary:
+    name: New Summary
+    description: "Updated title (edit only)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  new_start_date_time:
+    name: New Start Date/Time
+    description: "Updated start: YYYY-MM-DD HH:MM (edit only)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  new_end_date_time:
+    name: New End Date/Time
+    description: "Updated end: YYYY-MM-DD HH:MM (edit only)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  new_start_date:
+    name: New Start Date
+    description: "Updated all-day date: YYYY-MM-DD (edit only)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+  new_description:
+    name: New Description
+    description: "Updated description (edit only)"
+    required: false
+    default: ""
+    selector:
+      text:
+        multiline: true
+  new_location:
+    name: New Location
+    description: "Updated location (edit only)"
+    required: false
+    default: ""
+    selector:
+      text: {}
+
+variables:
+  v_default_calendar: !input default_calendar
+  v_default_duration: !input default_duration_minutes
+  v_enable_tts: !input enable_confirmation_tts
+  v_prompt_create: !input confirmation_prompt_create
+  v_prompt_delete: !input confirmation_prompt_delete
+  v_prompt_edit: !input confirmation_prompt_edit
+  v_conversation_agent: !input conversation_agent
+  v_use_dispatcher: !input use_dispatcher
+  v_tts_speaker: !input tts_speaker
+  v_enable_memory: !input enable_memory
+  v_enable_whisper: !input enable_whisper
+  v_post_tts_delay: !input post_tts_delay
+  # Resolve runtime fields
+  op: "{{ operation | default('create') | trim | lower }}"
+  resolved_calendar: "{{ v_default_calendar }}"
+  resolved_summary: "{{ summary | default('') | trim }}"
+  resolved_start_dt: "{{ start_date_time | default('') | trim }}"
+  resolved_end_dt: "{{ end_date_time | default('') | trim }}"
+  resolved_start_d: "{{ start_date | default('') | trim }}"
+  resolved_description: "{{ description | default('') | trim }}"
+  resolved_location: "{{ location | default('') | trim }}"
+  resolved_uid: "{{ uid | default('') | trim }}"
+  resolved_recurrence_id: "{{ recurrence_id | default('') | trim }}"
+  resolved_scope: "{{ scope | default('this_instance') | trim }}"
+
+sequence:
+  # ── 1. Dispatch to pyscript by operation ──────────────────────────
+  - alias: "1. Operation dispatch"
+    choose:
+      # ── CREATE ──
+      - alias: "create"
+        conditions:
+          - condition: template
+            value_template: "{{ op == 'create' }}"
+        sequence:
+          - action: pyscript.calendar_create_event
+            data:
+              summary: "{{ resolved_summary }}"
+              start_date_time: "{{ resolved_start_dt }}"
+              end_date_time: "{{ resolved_end_dt }}"
+              start_date: "{{ resolved_start_d }}"
+              description: "{{ resolved_description }}"
+              location: "{{ resolved_location }}"
+              calendar_entity: "{{ resolved_calendar }}"
+            response_variable: op_result
+            continue_on_error: true
+
+      # ── FIND ──
+      - alias: "find"
+        conditions:
+          - condition: template
+            value_template: "{{ op == 'find' }}"
+        sequence:
+          - action: pyscript.calendar_find_events
+            data:
+              summary: "{{ resolved_summary }}"
+              start_date: "{{ resolved_start_d or resolved_start_dt[:10] if resolved_start_dt | length > 0 else '' }}"
+              end_date: ""
+              calendar_entity: "{{ resolved_calendar }}"
+            response_variable: op_result
+            continue_on_error: true
+
+      # ── DELETE ──
+      - alias: "delete"
+        conditions:
+          - condition: template
+            value_template: "{{ op == 'delete' }}"
+        sequence:
+          - action: pyscript.calendar_delete_event
+            data:
+              summary: "{{ resolved_summary }}"
+              start_date: "{{ resolved_start_d or resolved_start_dt[:10] if resolved_start_dt | length > 0 else '' }}"
+              uid: "{{ resolved_uid }}"
+              recurrence_id: "{{ resolved_recurrence_id }}"
+              scope: "{{ resolved_scope }}"
+              calendar_entity: "{{ resolved_calendar }}"
+            response_variable: op_result
+            continue_on_error: true
+
+      # ── EDIT ──
+      - alias: "edit"
+        conditions:
+          - condition: template
+            value_template: "{{ op == 'edit' }}"
+        sequence:
+          - action: pyscript.calendar_edit_event
+            data:
+              summary: "{{ resolved_summary }}"
+              start_date: "{{ resolved_start_d or resolved_start_dt[:10] if resolved_start_dt | length > 0 else '' }}"
+              uid: "{{ resolved_uid }}"
+              recurrence_id: "{{ resolved_recurrence_id }}"
+              new_summary: "{{ new_summary | default('') | trim }}"
+              new_start_date_time: "{{ new_start_date_time | default('') | trim }}"
+              new_end_date_time: "{{ new_end_date_time | default('') | trim }}"
+              new_start_date: "{{ new_start_date | default('') | trim }}"
+              new_description: "{{ new_description | default('') | trim }}"
+              new_location: "{{ new_location | default('') | trim }}"
+              calendar_entity: "{{ resolved_calendar }}"
+            response_variable: op_result
+            continue_on_error: true
+
+    default:
+      - variables:
+          op_result:
+            status: "error"
+            op: "{{ op }}"
+            error: "Invalid operation '{{ op }}'. Use create, find, delete, or edit."
+
+  # ── 2. Guard: abort on error (skip for find — returns matches) ────
+  - alias: "2. Check result"
+    if:
+      - condition: template
+        value_template: >-
+          {{ op != 'find'
+             and (op_result | default({})).get('status', 'error') not in ['ok'] }}
+    then:
+      - stop: ""
+        response_variable: op_result
+
+  # ── 3. Memory write (if enabled, skip for find) ──────────────────
+  - alias: "3. Memory write"
+    if:
+      - condition: template
+        value_template: "{{ v_enable_memory and op != 'find' }}"
+    then:
+      - action: pyscript.memory_set
+        data:
+          key: "calendar_{{ op }}:{{ now().strftime('%Y%m%d_%H%M%S') }}"
+          value: >-
+            {% set r = op_result | default({}) %}
+            {% if op == 'create' %}Created '{{ resolved_summary }}' on {{ r.get('start', '') }}
+            {% elif op == 'delete' %}Deleted '{{ r.get('summary', resolved_summary) }}' ({{ r.get('scope', '') }})
+            {% elif op == 'edit' %}Edited '{{ r.get('original_summary', '') }}' → '{{ r.get('summary', '') }}' at {{ r.get('start', '') }}
+            {% endif %}
+          scope: user
+          expiration_days: 30
+          tags: "calendar,{{ op }},voice"
+          force_new: true
+        response_variable: _mem
+        continue_on_error: true
+
+  # ── 4. Agent whisper (if enabled, skip for find) ──────────────────
+  - alias: "4. Whisper log"
+    if:
+      - condition: template
+        value_template: "{{ v_enable_whisper and op != 'find' }}"
+    then:
+      - action: pyscript.agent_whisper
+        data:
+          agent_name: "{{ v_conversation_agent | default('system') }}"
+          user_query: "calendar {{ op }} — {{ resolved_summary }}"
+          agent_response: >-
+            {% set r = op_result | default({}) %}
+            {% if op == 'create' %}Created '{{ resolved_summary }}' at {{ r.get('start', '') }}
+            {% elif op == 'delete' %}Deleted '{{ r.get('summary', resolved_summary) }}' ({{ r.get('scope', '') }})
+            {% elif op == 'edit' %}Edited '{{ r.get('original_summary', '') }}' → '{{ r.get('summary', '') }}'
+            {% endif %}
+          source: script
+        response_variable: _whisper
+        continue_on_error: true
+
+  # ── 5. TTS confirmation (if enabled, skip for find) ───────────────
+  - alias: "5. TTS confirmation"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_enable_tts and op != 'find'
+             and (v_tts_speaker | default('')) | length > 0 }}
+    then:
+      # 5a. Dispatch agent
+      - alias: "5a. Dispatch agent"
+        if:
+          - condition: template
+            value_template: "{{ v_use_dispatcher }}"
+        then:
+          - action: pyscript.agent_dispatch
+            data:
+              wake_word: "{{ v_conversation_agent }}"
+            response_variable: dispatch_result
+            continue_on_error: true
+
+      - alias: "5b. Resolve agent + voice"
+        variables:
+          resolved_agent: >-
+            {% if v_use_dispatcher and dispatch_result is defined
+                  and dispatch_result.agent_id is defined %}
+              {{ dispatch_result.agent_id }}
+            {% else %}
+              {{ v_conversation_agent }}
+            {% endif %}
+          resolved_voice: >-
+            {% if v_use_dispatcher and dispatch_result is defined
+                  and dispatch_result.tts_engine is defined %}
+              {{ dispatch_result.tts_engine }}
+            {% else %}{% endif %}
+          # Select prompt by operation
+          active_prompt: >-
+            {% if op == 'delete' %}{{ v_prompt_delete }}
+            {% elif op == 'edit' %}{{ v_prompt_edit }}
+            {% else %}{{ v_prompt_create }}{% endif %}
+
+      # 5c. Generate confirmation via LLM
+      - alias: "5c. Generate confirmation text"
+        action: pyscript.conversation_with_timeout
+        data:
+          agent_id: "{{ resolved_agent }}"
+          text: >-
+            {{ active_prompt }}
+
+            {% set r = op_result | default({}) %}
+            {% if op == 'create' %}Event: {{ resolved_summary }}, {{ r.get('start', '') }}
+            {%- if resolved_location | length > 0 %}, at {{ resolved_location }}{% endif %}
+            {% elif op == 'delete' %}Deleted: {{ r.get('summary', resolved_summary) }}, scope: {{ r.get('scope', '') }}
+            {% elif op == 'edit' %}Changed: '{{ r.get('original_summary', '') }}' → '{{ r.get('summary', '') }}', {{ r.get('start', '') }}
+            {% endif %}
+          timeout_secs: 15
+        response_variable: confirm_llm
+        continue_on_error: true
+
+      - variables:
+          confirm_speech: >-
+            {% set resp = confirm_llm.response
+                  if confirm_llm is defined else none %}
+            {% if resp is not none
+                  and resp.speech is defined
+                  and resp.speech.plain is defined
+                  and resp.speech.plain.speech is defined %}
+              {{ resp.speech.plain.speech | trim }}
+            {% else %}
+              Calendar event {{ op }}d: {{ resolved_summary }}.
+            {% endif %}
+
+      # 5d. Speak confirmation
+      - alias: "5d. TTS speak"
+        if:
+          - condition: template
+            value_template: "{{ (confirm_speech | default('')) | length > 0 }}"
+        then:
+          - action: pyscript.tts_queue_speak
+            data:
+              text: "{{ confirm_speech }}"
+              voice: "{{ resolved_voice }}"
+              target_mode: explicit
+              target: "{{ v_tts_speaker }}"
+              priority: 2
+            response_variable: _tts
+            continue_on_error: true
+          - delay:
+              seconds: "{{ v_post_tts_delay | int }}"
+
+  # ── 6. Return result ──────────────────────────────────────────────
+  - alias: "6. Return result"
+    stop: ""
+    response_variable: op_result
+
+mode: queued
+max_exceeded: silent

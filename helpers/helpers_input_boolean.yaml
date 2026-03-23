@@ -642,3 +642,16 @@ ai_conversation_sensor_enabled:
   name: AI Conversation Sensor Enabled
   icon: mdi:message-text-clock
   initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+ai_winddown_enabled:
+  name: "AI Wind-Down - Enabled"
+  initial: true
+  icon: mdi:weather-night
+
+ai_winddown_active:
+  name: "AI Wind-Down - Active"
+  initial: false
+  icon: mdi:moon-waning-crescent

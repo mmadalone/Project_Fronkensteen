@@ -156,6 +156,7 @@ Every conversation agent system prompt MUST be organized into these sections, in
 **PERSONALITY**
 - Who the agent is (character, tone, mannerisms)
 - How they address the user
+- **Direct-address anchor:** The prompt must include an explicit statement that the agent is speaking directly to the user (e.g., `You are speaking directly to the user — always address them as "you", never in third person.`). Without this, LLMs default to third-person framing when context mentions the user's name.
 - Response length and style constraints
 - **Gender & pronoun markers (multi-persona systems):** When a persona has a specific gender identity, state it explicitly in the PERSONALITY section with pronouns (e.g., `You are a man. Pronouns: he/him.`). LLMs — especially instruction-tuned models — will default to assumptions without reinforcement. In multi-agent systems, every agent's roster/expertise table that names the persona must also include the pronoun marker (e.g., `Doctor Portuondo (he/him)`). One mention in the persona's own prompt is not enough — every cross-reference across all agents must carry the marker, or the LLM loses the signal.
 

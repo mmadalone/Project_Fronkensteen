@@ -286,6 +286,11 @@ ai_privacy_gate_bedtime_escalation:
   options: *privacy_override_options
   initial: auto
   icon: mdi:bed-double
+ai_privacy_gate_bedtime_winddown:
+  name: "Privacy Override — Bedtime Wind-Down"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:moon-waning-crescent
 ai_privacy_gate_calendar_pre_event:
   name: "Privacy Override — Calendar Pre-Event"
   options: *privacy_override_options
@@ -461,4 +466,18 @@ ai_tts_restore_mode:
   options:
     - dynamic
     - fixed
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+ai_winddown_last_scenario:
+  name: "AI Wind-Down - Last Scenario"
+  icon: mdi:script-text
+  options:
+    - none
+    - sleepy_tv
+    - bed_tv
+    - bed_idle
+    - bed_non_sleepy
+  initial: none
 

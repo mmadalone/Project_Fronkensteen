@@ -55,6 +55,9 @@ RECENT_TOPICS_ENTITY = "sensor.ai_recent_topics"
 
 # ── Dynamic Cache ────────────────────────────────────────────────────────────
 _cache: dict | None = None
+_cache_ts: float = 0.0
+_CACHE_TTL: int = 600        # seconds — normal refresh interval
+_CACHE_EMPTY_RETRY: int = 30  # seconds — fast retry when pipelines were empty
 
 # ── Mood Detection Keywords ──────────────────────────────────────────────────
 MOOD_KEYWORDS: dict[str, list[str]] = {
@@ -249,10 +252,16 @@ def _build_from_pipelines(
 
 
 async def _ensure_cache() -> None:
-    """Lazy-load the pipeline cache on first service call."""
-    global _cache
+    """Lazy-load the pipeline cache. TTL-based refresh with fast retry on empty."""
+    global _cache, _cache_ts
+
     if _cache is not None:
-        return
+        ttl = _CACHE_EMPTY_RETRY if not _cache["personas"] else _CACHE_TTL
+        if (time.monotonic() - _cache_ts) < ttl:
+            return
+        log.info(  # noqa: F821
+            "agent_whisper: cache TTL expired (%ss), reloading", ttl,
+        )
 
     items = _load_pipelines_from_file(PIPELINE_FILE)
     personas, entity_map, wake_word_map, pipeline_map = _build_from_pipelines(
@@ -260,9 +269,9 @@ async def _ensure_cache() -> None:
     )
 
     if not personas:
-        log.error(  # noqa: F821
+        log.warning(  # noqa: F821
             "agent_whisper: no conversation pipelines found in "
-            f"{PIPELINE_FILE} — persona validation will reject all agents"
+            f"{PIPELINE_FILE} — will retry in {_CACHE_EMPTY_RETRY}s"
         )
 
     _cache = {
@@ -271,10 +280,18 @@ async def _ensure_cache() -> None:
         "wake_word_map": wake_word_map,
         "pipeline_map": pipeline_map,
     }
+    _cache_ts = time.monotonic()
 
     log.info(  # noqa: F821
         f"agent_whisper: loaded {len(personas)} personas from pipelines"
     )
+
+
+def _reload_cache() -> None:
+    """Invalidate cache so it reloads on next call."""
+    global _cache, _cache_ts
+    _cache = None
+    _cache_ts = 0.0
 
 
 # ── Pure-Python Sync Helpers ─────────────────────────────────────────────────
@@ -388,7 +405,7 @@ def _build_context_summary(entries: list[dict[str, Any]]) -> str:
     parts = []
     if observations:
         parts.append(
-            "Recent observations: " + " | ".join(observations[:3]) + "."
+            "What the user heard recently: " + " | ".join(observations[:3]) + "."
         )
     if mood_notes:
         parts.append("Mood notes: " + " | ".join(mood_notes[:2]) + ".")
@@ -679,7 +696,7 @@ def _build_topic_context_str(topics):
     """Build compact multi-line string for hot context injection."""
     if not topics:
         return ""
-    lines = ["Recent topics:"]
+    lines = ["Topics discussed with the user:"]
     for t in topics:
         line = f"- {t['topic']} ({t['agent']}, {t['ago']})"
         lines.append(line)
@@ -842,7 +859,7 @@ async def agent_whisper(
 
     # ── 1. INTERACTION LOG (always) ──────────────────────────────────────
     interaction_key = f"whisper:interaction:{ts}"
-    interaction_value = f"{agent} responded to '{query_summary}'"
+    interaction_value = f"User heard from {agent} about '{query_summary}'"
     interaction_tags = f"whisper interaction {agent} mood_{mood} source_{source}"
 
     if test_mode:
@@ -927,7 +944,7 @@ async def agent_whisper(
         )
     else:
         topic_value = (
-            f"{agent} ran {topic_slug.replace('_', ' ')} at {time_str}"
+            f"{agent} delivered {topic_slug.replace('_', ' ')} to the user at {time_str}"
         )
     topic_tags = f"whisper topic {topic_slug} {agent} source_{source}"
 
@@ -1706,6 +1723,31 @@ async def save_handoff_context(context: str = ""):
     return {"status": "ok", "op": "save_handoff_context"}
 
 
+# ── Cache Reload ─────────────────────────────────────────────────────────────
+
+@service(supports_response="optional")  # noqa: F821
+async def whisper_reload_cache():
+    """Invalidate and rebuild the whisper pipeline cache.
+
+    yaml
+    name: Whisper Reload Cache
+    description: >-
+      Invalidates the in-memory pipeline cache and reloads personas
+      from the pipeline file. Call after pipeline config changes.
+    """
+    if _is_test_mode():
+        log.info("agent_whisper [TEST]: would reload whisper cache")  # noqa: F821
+        return
+
+    _reload_cache()
+    await _ensure_cache()
+    personas = _cache["personas"] if _cache else ()
+    log.info(  # noqa: F821
+        f"whisper_reload_cache: reloaded {len(personas)} personas"
+    )
+    return {"status": "ok", "personas": list(personas)}
+
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 @time_trigger("startup")  # noqa: F821
@@ -1713,6 +1755,7 @@ async def agent_whisper_startup():
     """Initialize whisper network sensor on HA startup."""
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")
+    await _ensure_cache()
     # Restore handoff context from L2
     try:
         persisted = await _get_l2(HANDOFF_CONTEXT_L2_KEY)

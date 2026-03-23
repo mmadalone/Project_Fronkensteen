@@ -56,6 +56,7 @@ template:
             {%- set u_name = states('input_text.ai_context_user_name_' ~ user) | default('User', true) -%}
             {%- set u_lang = states('input_text.ai_context_user_languages_' ~ user) | default('English', true) -%}
             {%- set ns.lines = ns.lines + ['User: ' ~ u_name ~ ' (speaks ' ~ u_lang ~ ').'] -%}
+            {%- set ns.lines = ns.lines + ['Speaking to: ' ~ u_name ~ '.'] -%}
             {%- set ns.lines = ns.lines + ['Household: ' ~ (states('input_text.ai_context_household') | default('Unknown', true)) ~ '.'] -%}
 
             {{- ns.lines | join('\n') -}}

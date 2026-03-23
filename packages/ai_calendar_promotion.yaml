@@ -17,6 +17,10 @@
 #
 # Services (pyscript):
 #   pyscript.calendar_promote_now — on-demand promotion (force=true bypasses cache)
+#   pyscript.calendar_create_event — create calendar event + L2/L1 refresh (C8)
+#   pyscript.calendar_find_events — search events with UIDs (C8b, via calendar_utils)
+#   pyscript.calendar_delete_event — delete event by UID or summary match (C8b)
+#   pyscript.calendar_edit_event — edit event via delete + recreate (C8b)
 #
 # Test mode:
 #   When ai_test_mode=ON, pyscript uses mock data from

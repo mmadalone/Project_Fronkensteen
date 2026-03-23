@@ -1575,7 +1575,7 @@ actions:
         data:
           agent_id: "{{ dispatch_agent }}"
           text: >-
-            {{ email_prompt }}
+            [NOTIFICATION] {{ email_prompt }}
 
             {% if (dispatch_persona | default('') | string | trim) | length > 0 %}
             YOUR IDENTITY: Your name is {{ dispatch_persona }}. This may
@@ -2402,7 +2402,7 @@ actions:
                   data:
                     agent_id: "{{ dispatch_agent }}"
                     text: >-
-                      {{ reminder_prompt_text }}
+                      [NOTIFICATION] {{ reminder_prompt_text }}
 
                       {% if (dispatch_persona | default('') | string | trim)
                             | length > 0 %}

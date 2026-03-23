@@ -854,6 +854,856 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
     }
 
 
+# ── C8: Calendar Event Creation ──────────────────────────────────────────────
+
+@pyscript_compile  # noqa: F821
+def _validate_event_params(
+    summary: str,
+    start_date_time: str,
+    end_date_time: str,
+    start_date: str,
+    default_duration_min: int,
+) -> dict:
+    """Validate and normalise calendar event parameters.
+
+    Returns {"valid": True, ...params} or {"valid": False, "error": "..."}.
+    """
+    if not summary or not summary.strip():
+        return {"valid": False, "error": "Event summary is required"}
+
+    summary = summary.strip()
+    start_date_time = (start_date_time or "").strip()
+    end_date_time = (end_date_time or "").strip()
+    start_date = (start_date or "").strip()
+
+    if not start_date_time and not start_date:
+        return {
+            "valid": False,
+            "error": "Either start_date_time or start_date is required",
+        }
+
+    now = datetime.now()
+    today = now.date()
+
+    if start_date and not start_date_time:
+        # ── All-day event ──
+        try:
+            sd = datetime.strptime(start_date, "%Y-%m-%d").date()
+        except ValueError:
+            return {
+                "valid": False,
+                "error": f"Invalid start_date format: {start_date} "
+                         f"(expected YYYY-MM-DD)",
+            }
+
+        if sd < today:
+            return {
+                "valid": False,
+                "error": f"Start date {start_date} is in the past",
+            }
+
+        # HA requires end_date for all-day events (exclusive)
+        ed = sd + timedelta(days=1)
+
+        return {
+            "valid": True,
+            "is_all_day": True,
+            "summary": summary,
+            "start_date": sd.strftime("%Y-%m-%d"),
+            "end_date": ed.strftime("%Y-%m-%d"),
+        }
+
+    # ── Timed event ──
+    try:
+        sdt = datetime.strptime(start_date_time, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return {
+            "valid": False,
+            "error": f"Invalid start_date_time format: {start_date_time} "
+                     f"(expected YYYY-MM-DD HH:MM)",
+        }
+
+    if sdt.date() < today:
+        return {
+            "valid": False,
+            "error": f"Start date/time {start_date_time} is in the past",
+        }
+
+    if end_date_time:
+        try:
+            edt = datetime.strptime(end_date_time, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return {
+                "valid": False,
+                "error": f"Invalid end_date_time format: {end_date_time} "
+                         f"(expected YYYY-MM-DD HH:MM)",
+            }
+    else:
+        edt = sdt + timedelta(minutes=default_duration_min)
+
+    return {
+        "valid": True,
+        "is_all_day": False,
+        "summary": summary,
+        "start_date_time": sdt.strftime("%Y-%m-%d %H:%M:%S"),
+        "end_date_time": edt.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@service(supports_response="only")  # noqa: F821
+async def calendar_create_event(
+    summary: str,
+    start_date_time: str = "",
+    end_date_time: str = "",
+    start_date: str = "",
+    description: str = "",
+    location: str = "",
+    calendar_entity: str = "",
+):
+    """
+    yaml
+    name: Calendar Create Event
+    description: >-
+      Create a new Google Calendar event. Validates parameters, creates the
+      event via calendar.create_event, and refreshes L2/L1 data. Returns
+      status dict with event details or error message.
+    fields:
+      summary:
+        name: Summary
+        description: Event title/summary (required).
+        required: true
+        selector:
+          text: {}
+      start_date_time:
+        name: Start Date/Time
+        description: "Timed event start: YYYY-MM-DD HH:MM (24h local time)."
+        selector:
+          text: {}
+      end_date_time:
+        name: End Date/Time
+        description: "Timed event end: YYYY-MM-DD HH:MM (optional — default duration applied)."
+        selector:
+          text: {}
+      start_date:
+        name: Start Date
+        description: "All-day event date: YYYY-MM-DD."
+        selector:
+          text: {}
+      description:
+        name: Description
+        description: "Event description or notes (optional)."
+        selector:
+          text:
+            multiline: true
+      location:
+        name: Location
+        description: "Event location (optional)."
+        selector:
+          text: {}
+      calendar_entity:
+        name: Calendar Entity
+        description: "Calendar entity to create event on. Empty = default main calendar."
+        selector:
+          entity:
+            domain: calendar
+    """
+    t_start = time.monotonic()
+
+    # ── Resolve calendar entity ──
+    cal_entity = (calendar_entity or "").strip()
+    if not cal_entity:
+        cal_entity = _get_calendar_entities()[0]
+
+    # ── Read default duration ──
+    default_dur = _helper_int(
+        "input_number.ai_calendar_default_event_duration", 60,
+    )
+
+    # ── Validate parameters ──
+    params = _validate_event_params(
+        summary=summary,
+        start_date_time=start_date_time,
+        end_date_time=end_date_time,
+        start_date=start_date,
+        default_duration_min=default_dur,
+    )
+
+    if not params.get("valid"):
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        error_result = {
+            "status": "error",
+            "op": "create",
+            "error": params.get("error", "Validation failed"),
+            "elapsed_ms": elapsed,
+        }
+        _set_result("error", **error_result)
+        return error_result
+
+    # ── Create event via HA service ──
+    try:
+        svc_data = {
+            "entity_id": cal_entity,
+            "summary": params["summary"],
+        }
+
+        if (description or "").strip():
+            svc_data["description"] = description.strip()
+        if (location or "").strip():
+            svc_data["location"] = location.strip()
+
+        if params["is_all_day"]:
+            svc_data["start_date"] = params["start_date"]
+            svc_data["end_date"] = params["end_date"]
+        else:
+            svc_data["start_date_time"] = params["start_date_time"]
+            svc_data["end_date_time"] = params["end_date_time"]
+
+        result = calendar.create_event(**svc_data)  # noqa: F821
+        await result
+
+    except Exception as exc:
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        error_result = {
+            "status": "error",
+            "op": "create",
+            "error": str(exc),
+            "elapsed_ms": elapsed,
+        }
+        log.error(f"cal_create: failed: {exc}")  # noqa: F821
+        _set_result("error", **error_result)
+        return error_result
+
+    # ── Post-creation: refresh L2/L1 ──
+    try:
+        await _promote_internal(False, True)
+    except Exception as exc:
+        log.warning(  # noqa: F821
+            f"cal_create: post-creation promote failed: {exc}"
+        )
+
+    elapsed = round((time.monotonic() - t_start) * 1000, 1)
+    start_field = (
+        params.get("start_date", "")
+        if params["is_all_day"]
+        else params.get("start_date_time", "")
+    )
+    end_field = (
+        params.get("end_date", "")
+        if params["is_all_day"]
+        else params.get("end_date_time", "")
+    )
+
+    ok_result = {
+        "status": "ok",
+        "op": "create",
+        "summary": params["summary"],
+        "start": start_field,
+        "end": end_field,
+        "is_all_day": params["is_all_day"],
+        "calendar": cal_entity,
+        "elapsed_ms": elapsed,
+    }
+
+    log.info(  # noqa: F821
+        f"cal_create: created '{params['summary']}' "
+        f"start={start_field} end={end_field} "
+        f"all_day={params['is_all_day']} cal={cal_entity} {elapsed}ms"
+    )
+    _set_result("ok", **ok_result)
+    return ok_result
+
+
+# ── C8b: Calendar Find / Delete / Edit ──────────────────────────────────────
+
+@pyscript_compile  # noqa: F821
+def _match_events(events: list, summary_query: str, target_date: str = "") -> list:
+    """Fuzzy-match events by summary substring, optionally filtered to a date.
+
+    Returns list of matching event dicts (uid, recurrence_id, summary, start, end, etc.).
+    """
+    if not events:
+        return []
+
+    query = summary_query.strip().lower()
+    if not query:
+        return events
+
+    matched = []
+    for ev in events:
+        ev_summary = (ev.get("summary") or "").lower()
+        if query not in ev_summary:
+            continue
+
+        if target_date:
+            ev_start = (ev.get("start") or "")[:10]
+            if target_date not in ev_start:
+                continue
+
+        matched.append(ev)
+
+    return matched
+
+
+@service(supports_response="only")  # noqa: F821
+async def calendar_find_events(
+    summary: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    calendar_entity: str = "",
+):
+    """
+    yaml
+    name: Calendar Find Events
+    description: >-
+      Search for calendar events by summary and/or date range. Returns
+      matching events with UIDs for use in delete/edit operations.
+      Uses calendar_utils.get_events for UID access.
+    fields:
+      summary:
+        name: Summary
+        description: "Search term to match against event titles (substring, case-insensitive)."
+        selector:
+          text: {}
+      start_date:
+        name: Start Date
+        description: "Start of search window: YYYY-MM-DD. Defaults to today."
+        selector:
+          text: {}
+      end_date:
+        name: End Date
+        description: "End of search window: YYYY-MM-DD. Defaults to start + 7 days."
+        selector:
+          text: {}
+      calendar_entity:
+        name: Calendar Entity
+        description: "Calendar to search. Empty = default main calendar."
+        selector:
+          entity:
+            domain: calendar
+    """
+    t_start = time.monotonic()
+
+    cal_entity = (calendar_entity or "").strip()
+    if not cal_entity:
+        cal_entity = _get_calendar_entities()[0]
+
+    # Default date range: today + 7 days
+    now = datetime.now()
+    sd = (start_date or "").strip()
+    ed = (end_date or "").strip()
+    if not sd:
+        sd = now.strftime("%Y-%m-%d")
+    if not ed:
+        try:
+            ed_dt = datetime.strptime(sd, "%Y-%m-%d") + timedelta(days=7)
+            ed = ed_dt.strftime("%Y-%m-%d")
+        except ValueError:
+            ed = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+
+    # Fetch events with UIDs via calendar_utils
+    try:
+        result = calendar_utils.get_events(  # noqa: F821
+            entity_id=cal_entity,
+            start_date_time=f"{sd} 00:00:00",
+            end_date_time=f"{ed} 23:59:59",
+        )
+        resp = await result
+
+        events = []
+        if isinstance(resp, dict):
+            events = resp.get("events", [])
+        elif isinstance(resp, list):
+            events = resp
+
+    except Exception as exc:
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        log.error(f"cal_find: fetch failed: {exc}")  # noqa: F821
+        return {
+            "status": "error", "op": "find",
+            "error": str(exc), "elapsed_ms": elapsed,
+        }
+
+    # Filter by summary
+    target_date_filter = ""
+    if start_date and not end_date:
+        target_date_filter = sd
+
+    matched = _match_events(events, summary or "", target_date_filter)
+
+    elapsed = round((time.monotonic() - t_start) * 1000, 1)
+    log.info(  # noqa: F821
+        f"cal_find: query='{summary}' range={sd}..{ed} "
+        f"fetched={len(events)} matched={len(matched)} {elapsed}ms"
+    )
+
+    return {
+        "status": "ok",
+        "op": "find",
+        "matches": matched,
+        "count": len(matched),
+        "search_range": f"{sd} to {ed}",
+        "elapsed_ms": elapsed,
+    }
+
+
+@service(supports_response="only")  # noqa: F821
+async def calendar_delete_event(
+    summary: str = "",
+    start_date: str = "",
+    uid: str = "",
+    recurrence_id: str = "",
+    scope: str = "this_instance",
+    calendar_entity: str = "",
+):
+    """
+    yaml
+    name: Calendar Delete Event
+    description: >-
+      Delete a calendar event. Finds by summary+date or uses provided UID.
+      Supports recurring event scopes: this_instance, this_and_future, entire_series.
+      Uses calendar_utils.delete_event_by_uid.
+    fields:
+      summary:
+        name: Summary
+        description: "Event title to find (substring match). Not needed if uid provided."
+        selector:
+          text: {}
+      start_date:
+        name: Start Date
+        description: "Date to search around: YYYY-MM-DD. Helps narrow matches."
+        selector:
+          text: {}
+      uid:
+        name: UID
+        description: "Event UID (from a previous find). Skips search if provided."
+        selector:
+          text: {}
+      recurrence_id:
+        name: Recurrence ID
+        description: "Recurring event instance ID (from find). For single-instance ops."
+        selector:
+          text: {}
+      scope:
+        name: Scope
+        description: "Delete scope: this_instance, this_and_future, entire_series."
+        default: this_instance
+        selector:
+          select:
+            options:
+              - this_instance
+              - this_and_future
+              - entire_series
+      calendar_entity:
+        name: Calendar Entity
+        description: "Calendar entity. Empty = default main calendar."
+        selector:
+          entity:
+            domain: calendar
+    """
+    t_start = time.monotonic()
+
+    cal_entity = (calendar_entity or "").strip()
+    if not cal_entity:
+        cal_entity = _get_calendar_entities()[0]
+
+    event_uid = (uid or "").strip()
+    event_recurrence_id = (recurrence_id or "").strip() or None
+    event_summary = ""
+
+    # ── Resolve UID: provided or find by summary ──
+    if not event_uid:
+        if not (summary or "").strip():
+            return {
+                "status": "error", "op": "delete",
+                "error": "Either uid or summary is required",
+            }
+
+        find_result = await calendar_find_events(
+            summary=summary,
+            start_date=start_date,
+            calendar_entity=cal_entity,
+        )
+
+        if find_result.get("status") != "ok":
+            return find_result
+
+        matches = find_result.get("matches", [])
+        if len(matches) == 0:
+            elapsed = round((time.monotonic() - t_start) * 1000, 1)
+            return {
+                "status": "error", "op": "delete",
+                "error": f"No events matching '{summary}' found",
+                "elapsed_ms": elapsed,
+            }
+        if len(matches) > 1:
+            elapsed = round((time.monotonic() - t_start) * 1000, 1)
+            return {
+                "status": "disambiguation", "op": "delete",
+                "error": f"Multiple events match '{summary}'. Be more specific or provide a date.",
+                "matches": matches,
+                "count": len(matches),
+                "elapsed_ms": elapsed,
+            }
+
+        event_uid = matches[0].get("uid", "")
+        event_recurrence_id = matches[0].get("recurrence_id") or event_recurrence_id
+        event_summary = matches[0].get("summary", summary)
+
+        if not event_uid:
+            return {
+                "status": "error", "op": "delete",
+                "error": "Matched event has no UID — cannot delete",
+            }
+    else:
+        event_summary = (summary or "").strip() or event_uid
+
+    # ── Build delete call data ──
+    delete_data = {"entity_id": cal_entity, "uid": event_uid}
+
+    effective_scope = (scope or "this_instance").strip()
+    if effective_scope == "entire_series":
+        pass  # uid only — no recurrence_id
+    elif event_recurrence_id:
+        delete_data["recurrence_id"] = event_recurrence_id
+        if effective_scope == "this_and_future":
+            delete_data["recurrence_range"] = "THISANDFUTURE"
+
+    # ── Delete via calendar_utils ──
+    try:
+        result = calendar_utils.delete_event_by_uid(**delete_data)  # noqa: F821
+        await result
+    except Exception as exc:
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        log.error(f"cal_delete: failed: {exc}")  # noqa: F821
+        return {
+            "status": "error", "op": "delete",
+            "error": str(exc), "elapsed_ms": elapsed,
+        }
+
+    # ── Refresh L2/L1 ──
+    try:
+        await _promote_internal(False, True)
+    except Exception as exc:
+        log.warning(f"cal_delete: post-delete promote failed: {exc}")  # noqa: F821
+
+    elapsed = round((time.monotonic() - t_start) * 1000, 1)
+    ok_result = {
+        "status": "ok",
+        "op": "delete",
+        "summary": event_summary,
+        "uid": event_uid,
+        "scope": effective_scope,
+        "calendar": cal_entity,
+        "elapsed_ms": elapsed,
+    }
+
+    log.info(  # noqa: F821
+        f"cal_delete: deleted '{event_summary}' "
+        f"uid={event_uid} scope={effective_scope} {elapsed}ms"
+    )
+    _set_result("ok", **ok_result)
+    return ok_result
+
+
+@service(supports_response="only")  # noqa: F821
+async def calendar_edit_event(
+    summary: str = "",
+    start_date: str = "",
+    uid: str = "",
+    recurrence_id: str = "",
+    new_summary: str = "",
+    new_start_date_time: str = "",
+    new_end_date_time: str = "",
+    new_start_date: str = "",
+    new_description: str = "",
+    new_location: str = "",
+    calendar_entity: str = "",
+):
+    """
+    yaml
+    name: Calendar Edit Event
+    description: >-
+      Edit a calendar event via delete + recreate. Finds by summary+date
+      or uses provided UID. Applies new_* field overrides. Only supports
+      single-instance editing — series editing not available.
+    fields:
+      summary:
+        name: Summary
+        description: "Event title to find (substring match). Not needed if uid provided."
+        selector:
+          text: {}
+      start_date:
+        name: Start Date
+        description: "Date to search around: YYYY-MM-DD."
+        selector:
+          text: {}
+      uid:
+        name: UID
+        description: "Event UID (from a previous find)."
+        selector:
+          text: {}
+      recurrence_id:
+        name: Recurrence ID
+        description: "Recurring event instance ID."
+        selector:
+          text: {}
+      new_summary:
+        name: New Summary
+        description: "Updated event title."
+        selector:
+          text: {}
+      new_start_date_time:
+        name: New Start Date/Time
+        description: "Updated start: YYYY-MM-DD HH:MM."
+        selector:
+          text: {}
+      new_end_date_time:
+        name: New End Date/Time
+        description: "Updated end: YYYY-MM-DD HH:MM."
+        selector:
+          text: {}
+      new_start_date:
+        name: New Start Date
+        description: "Updated all-day date: YYYY-MM-DD."
+        selector:
+          text: {}
+      new_description:
+        name: New Description
+        description: "Updated description."
+        selector:
+          text:
+            multiline: true
+      new_location:
+        name: New Location
+        description: "Updated location."
+        selector:
+          text: {}
+      calendar_entity:
+        name: Calendar Entity
+        description: "Calendar entity. Empty = default main calendar."
+        selector:
+          entity:
+            domain: calendar
+    """
+    t_start = time.monotonic()
+
+    cal_entity = (calendar_entity or "").strip()
+    if not cal_entity:
+        cal_entity = _get_calendar_entities()[0]
+
+    event_uid = (uid or "").strip()
+    event_recurrence_id = (recurrence_id or "").strip() or None
+
+    # ── Find the event ──
+    if not event_uid:
+        if not (summary or "").strip():
+            return {
+                "status": "error", "op": "edit",
+                "error": "Either uid or summary is required",
+            }
+
+        find_result = await calendar_find_events(
+            summary=summary,
+            start_date=start_date,
+            calendar_entity=cal_entity,
+        )
+
+        if find_result.get("status") != "ok":
+            return find_result
+
+        matches = find_result.get("matches", [])
+        if len(matches) == 0:
+            elapsed = round((time.monotonic() - t_start) * 1000, 1)
+            return {
+                "status": "error", "op": "edit",
+                "error": f"No events matching '{summary}' found",
+                "elapsed_ms": elapsed,
+            }
+        if len(matches) > 1:
+            elapsed = round((time.monotonic() - t_start) * 1000, 1)
+            return {
+                "status": "disambiguation", "op": "edit",
+                "error": f"Multiple events match '{summary}'. Be more specific or provide a date.",
+                "matches": matches,
+                "count": len(matches),
+                "elapsed_ms": elapsed,
+            }
+
+        original = matches[0]
+        event_uid = original.get("uid", "")
+        event_recurrence_id = original.get("recurrence_id") or event_recurrence_id
+    else:
+        # UID provided — still need original fields for merge
+        find_result = await calendar_find_events(
+            summary=summary or "",
+            start_date=start_date,
+            calendar_entity=cal_entity,
+        )
+        matches = find_result.get("matches", []) if find_result.get("status") == "ok" else []
+        original = None
+        for m in matches:
+            if m.get("uid") == event_uid:
+                original = m
+                break
+        if not original:
+            original = {"summary": summary or "", "start": "", "end": "",
+                        "description": "", "location": ""}
+
+    if not event_uid:
+        return {
+            "status": "error", "op": "edit",
+            "error": "Matched event has no UID — cannot edit",
+        }
+
+    # ── Delete original (single instance only) ──
+    delete_data = {"entity_id": cal_entity, "uid": event_uid}
+    if event_recurrence_id:
+        delete_data["recurrence_id"] = event_recurrence_id
+
+    try:
+        result = calendar_utils.delete_event_by_uid(**delete_data)  # noqa: F821
+        await result
+    except Exception as exc:
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        log.error(f"cal_edit: delete step failed: {exc}")  # noqa: F821
+        return {
+            "status": "error", "op": "edit",
+            "error": f"Delete step failed: {exc}", "elapsed_ms": elapsed,
+        }
+
+    # ── Merge original + new fields ──
+    orig_summary = original.get("summary", "")
+    orig_start = original.get("start", "")
+    orig_end = original.get("end", "")
+    orig_desc = original.get("description", "")
+    orig_loc = original.get("location", "")
+
+    # Determine if original was all-day
+    orig_all_day = "T" not in orig_start if orig_start else False
+
+    merged_summary = (new_summary or "").strip() or orig_summary
+
+    # Resolve start/end
+    ns_dt = (new_start_date_time or "").strip()
+    ne_dt = (new_end_date_time or "").strip()
+    ns_d = (new_start_date or "").strip()
+    merged_desc = (new_description or "").strip() or orig_desc
+    merged_loc = (new_location or "").strip() or orig_loc
+
+    # Build create data
+    create_data = {
+        "entity_id": cal_entity,
+        "summary": merged_summary,
+    }
+    if merged_desc:
+        create_data["description"] = merged_desc
+    if merged_loc:
+        create_data["location"] = merged_loc
+
+    if ns_d:
+        # New all-day
+        create_data["start_date"] = ns_d
+        try:
+            ed = datetime.strptime(ns_d, "%Y-%m-%d") + timedelta(days=1)
+            create_data["end_date"] = ed.strftime("%Y-%m-%d")
+        except ValueError:
+            create_data["end_date"] = ns_d
+    elif ns_dt:
+        # New timed
+        create_data["start_date_time"] = ns_dt
+        if ne_dt:
+            create_data["end_date_time"] = ne_dt
+        elif orig_end and not orig_all_day:
+            # Preserve original duration
+            try:
+                o_start = datetime.fromisoformat(orig_start)
+                o_end = datetime.fromisoformat(orig_end)
+                dur = o_end - o_start
+                n_start = datetime.strptime(ns_dt, "%Y-%m-%d %H:%M")
+                create_data["end_date_time"] = (n_start + dur).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            except (ValueError, TypeError):
+                default_dur = _helper_int(
+                    "input_number.ai_calendar_default_event_duration", 60,
+                )
+                try:
+                    n_start = datetime.strptime(ns_dt, "%Y-%m-%d %H:%M")
+                    create_data["end_date_time"] = (
+                        n_start + timedelta(minutes=default_dur)
+                    ).strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    pass
+        else:
+            default_dur = _helper_int(
+                "input_number.ai_calendar_default_event_duration", 60,
+            )
+            try:
+                n_start = datetime.strptime(ns_dt, "%Y-%m-%d %H:%M")
+                create_data["end_date_time"] = (
+                    n_start + timedelta(minutes=default_dur)
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                pass
+    elif orig_all_day:
+        # Keep original all-day dates
+        create_data["start_date"] = orig_start[:10]
+        try:
+            ed = datetime.strptime(orig_start[:10], "%Y-%m-%d") + timedelta(days=1)
+            create_data["end_date"] = ed.strftime("%Y-%m-%d")
+        except ValueError:
+            create_data["end_date"] = orig_end[:10] if orig_end else orig_start[:10]
+    else:
+        # Keep original timed dates
+        if orig_start:
+            create_data["start_date_time"] = orig_start
+        if orig_end:
+            create_data["end_date_time"] = orig_end
+
+    # ── Recreate with merged fields ──
+    try:
+        result = calendar.create_event(**create_data)  # noqa: F821
+        await result
+    except Exception as exc:
+        elapsed = round((time.monotonic() - t_start) * 1000, 1)
+        log.error(f"cal_edit: recreate step failed: {exc}")  # noqa: F821
+        return {
+            "status": "error", "op": "edit",
+            "error": f"Event deleted but recreate failed: {exc}. "
+                     f"Original: '{orig_summary}' at {orig_start}",
+            "elapsed_ms": elapsed,
+        }
+
+    # ── Refresh L2/L1 ──
+    try:
+        await _promote_internal(False, True)
+    except Exception as exc:
+        log.warning(f"cal_edit: post-edit promote failed: {exc}")  # noqa: F821
+
+    elapsed = round((time.monotonic() - t_start) * 1000, 1)
+    start_field = (
+        create_data.get("start_date", "")
+        or create_data.get("start_date_time", "")
+    )
+
+    ok_result = {
+        "status": "ok",
+        "op": "edit",
+        "original_summary": orig_summary,
+        "summary": merged_summary,
+        "start": start_field,
+        "calendar": cal_entity,
+        "elapsed_ms": elapsed,
+    }
+
+    log.info(  # noqa: F821
+        f"cal_edit: '{orig_summary}' → '{merged_summary}' "
+        f"start={start_field} cal={cal_entity} {elapsed}ms"
+    )
+    _set_result("ok", **ok_result)
+    return ok_result
+
+
 # ── Services ─────────────────────────────────────────────────────────────────
 
 @service(supports_response="only")  # noqa: F821
