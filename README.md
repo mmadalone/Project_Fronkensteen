@@ -114,7 +114,7 @@ This runs on a Raspberry Pi 5. Not a rack. Not a cloud bill. Every token is trac
               │   Memory (L2) · Whisper     │
               │   Briefing · Focus Guard    │
               │   Presence · Routines       │
-              │   Budget · Dedup · Composer  │
+              │   Budget · Dedup · Composer │
               └──────────────┬──────────────┘
                              │
      ┌───────────────────────┼───────────────────────┐
