@@ -381,7 +381,7 @@ No YAML in this repository was written by hand. Budget sustainability is a desig
 
 ### Thanks
 
-To Jessica — for her patience with this obsession, for coexisting with five AI personalities she never auditioned for, and for being living proof that the best things in a smart home have nothing to do with the technology.
+To Jessica — for her patience with this obsession, for coexisting with four AI personalities she never auditioned for, and for being living proof that the best things in a smart home have nothing to do with the technology.
 
 ---
 
