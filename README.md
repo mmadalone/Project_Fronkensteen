@@ -90,7 +90,7 @@ This runs on a Raspberry Pi 5. Not a rack. Not a cloud bill. Every token is trac
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    HA VOICE ASSISTANTS (Assist Pipelines)             │
+│                    HA VOICE ASSISTANTS (Assist Pipelines)            │
 │              27 pipelines: 5 personas x 4-5 variants + 3 fallbacks   │
 │    Rick · Quark · Deadpool · Kramer · Doctor Portuondo               │
 │    Modes: Standard · Bedtime · Music Compose · Music Transfer        │
