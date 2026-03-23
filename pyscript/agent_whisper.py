@@ -564,8 +564,10 @@ async def _auto_update_keywords(agent: str, topic_slug: str, source: str = "user
         for kw in auto_keywords:
             kw_words = set(kw.split())
             # Skip if all words of an existing shorter keyword are in this one
-            if any(existing.issubset(kw_words) and existing != kw_words
-                   for existing in deduped_word_sets):
+            # (uses list comprehension — generator expressions crash pyscript AP-57)
+            is_subset = any([existing.issubset(kw_words) and existing != kw_words
+                             for existing in deduped_word_sets])
+            if is_subset:
                 continue
             deduped.append(kw)
             deduped_word_sets.append(kw_words)

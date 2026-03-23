@@ -703,14 +703,24 @@ script:
           - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.ai_budget_fallback_active
+      # ── Step 6: Record reset date (startup catch-up detection) ──
+      - alias: "Record reset date for startup detection"
+        action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.ai_budget_last_reset
+        data:
+          date: "{{ now().strftime('%Y-%m-%d') }}"
 
 # ── AUTOMATIONS ──────────────────────────────────────────────────────────────
 
 automation:
-  # ── BUDGET RESET (midnight + manual) ──────────────────────────────────────
+  # ── BUDGET RESET (midnight + manual + startup catch-up) ───────────────────
   - id: ai_budget_reset_trigger
-    alias: "AI Budget - Reset (Midnight + Manual)"
-    description: "Daily midnight reset and dashboard button share the same reset script"
+    alias: "AI Budget - Reset (Midnight + Manual + Startup)"
+    description: >-
+      Daily midnight reset, dashboard button, and startup catch-up share the
+      same reset script.  Startup trigger fires only if the midnight reset was
+      missed (e.g. HA was restarting at 00:00).
     mode: single
     triggers:
       - trigger: time
@@ -719,7 +729,31 @@ automation:
       - trigger: state
         entity_id: input_button.ai_budget_manual_reset
         id: manual
+      - trigger: homeassistant
+        event: start
+        id: startup
+    conditions:
+      - condition: template
+        value_template: >-
+          {% if trigger.id == 'startup' %}
+            {% set last = states('input_datetime.ai_budget_last_reset') %}
+            {{ last in ['unknown', 'unavailable', '']
+               or last < now().strftime('%Y-%m-%d') }}
+          {% else %}
+            true
+          {% endif %}
     actions:
+      # Startup: wait for REST sensors before snapshotting OpenRouter
+      - if:
+          - condition: trigger
+            id: startup
+        then:
+          - alias: "Wait for OpenRouter REST sensor to load"
+            wait_template: >-
+              {{ states('sensor.openrouter_credits') not in ['unknown', 'unavailable'] }}
+            timeout:
+              minutes: 3
+            continue_on_timeout: true
       - action: script.ai_budget_reset
 
   # ── LLM CALL COUNTER (pipeline + direct conversation.process) ────────────
