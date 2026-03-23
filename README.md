@@ -157,7 +157,7 @@ Three deployed patterns for agent-to-agent interaction:
 |---------|------|-------------|
 | Reactive Banter | After Agent A responds, Agent B probabilistically chimes in with in-character commentary. Probability gate, cooldown, budget floor, tool-suppression to prevent loops. |
 | Handoff with Commentary | Agent recognizes it's out of its depth, signals a handoff. Pipeline switches, farewell + greeting TTS, mic reopens. |
-| Whisper Network | Agents share mood, topic, and context through L2 memory without the user hearing. Rick stores "Miquel seemed stressed today" — Quark adjusts his tone. Zero LLM calls, <200ms. |
+| Whisper Network | Agents share mood, topic, and context through L2 memory without the user hearing. Rick stores "User seemed stressed today" — Quark adjusts his tone. Zero LLM calls, <200ms. |
 
 ---
 
