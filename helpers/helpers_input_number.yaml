@@ -252,6 +252,18 @@ ai_semantic_blend_weight:
   unit_of_measurement: "%"
   icon: mdi:scale-balance
 
+# ═══════════════════════════════════════════════════════════════════
+# ai_scene_learner — Scene Preference Learning (C6)
+# ═══════════════════════════════════════════════════════════════════
+ai_scene_learner_min_observations:
+  name: "AI Scene Learner - Min Observations"
+  icon: mdi:counter
+  min: 1
+  max: 50
+  step: 1
+  initial: 5
+  mode: slider
+
 # ── Lifecycle monitoring (I-42 Phase 1) ──────────────────────────
 # Warning threshold for total L2 record count.
 ai_memory_record_limit:
@@ -724,6 +736,50 @@ ai_serper_credits_midnight:
 
 # Serper pricing — removed; now auto-calculated as template sensor
 # sensor.ai_cost_per_serper_credit = ($50 / 50 000) × USD→EUR rate
+
+# C5: Per-model cost accumulator — resets at midnight alongside other counters
+ai_model_cost_today:
+  name: "AI Model Cost Today (EUR)"
+  min: 0
+  max: 100
+  step: 0.001
+  initial: 0
+  mode: box
+  unit_of_measurement: "€"
+  icon: mdi:cash-multiple
+
+# C5: ElevenLabs monthly subscription cost (for derived TTS per-char rate)
+ai_elevenlabs_monthly_cost:
+  name: "ElevenLabs - Monthly Cost (USD)"
+  min: 0
+  max: 500
+  step: 1
+  initial: 22
+  mode: box
+  unit_of_measurement: "$"
+  icon: mdi:account-voice
+
+# C5: Serper plan cost (replaces hardcoded $50 in cost formula)
+ai_serper_plan_cost:
+  name: "Serper - Plan Cost (USD)"
+  min: 0
+  max: 500
+  step: 5
+  initial: 50
+  mode: box
+  unit_of_measurement: "$"
+  icon: mdi:web
+
+# C5: Serper plan credits (replaces hardcoded 50000 in cost formula)
+ai_serper_plan_credits:
+  name: "Serper - Plan Credits"
+  min: 1000
+  max: 10000000
+  step: 1000
+  initial: 50000
+  mode: box
+  unit_of_measurement: "credits"
+  icon: mdi:web
 
 
 # ═══════════════════════════════════════════════════════════════════

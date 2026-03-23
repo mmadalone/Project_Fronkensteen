@@ -171,7 +171,7 @@ Every conversation agent system prompt MUST be organized into these sections, in
 | Workshop lights  | light.workshop_lights  | light.turn_on / light.turn_off    |
 ```
 
-> **Why a manual table?** Extended OpenAI Conversation bypasses HA's native Assist API, so the Exposed Entities UI doesn't constrain what the agent can access. The PERMISSIONS table is a **compensating control** — the prompt is the only place to enforce device scoping. For native integrations (OpenAI Conversation, Google Gemini, etc.) that use the Assist API, entity visibility is managed through the Exposed Entities UI instead, and a manual table would be redundant. The tool exposure pattern in §8.3.2 is the first line of defense; this table is the second.
+> **Why a manual table?** Extended OpenAI Conversation uses `async_should_expose` for entity **visibility** (the CSV list agents see), so the Exposed Entities UI does control which entities appear in the prompt. However, it bypasses HA's native Assist API for **service execution** — agents can call services on ANY entity they know the ID of, regardless of exposure settings. The PERMISSIONS table is a **compensating control** for this execution bypass — the prompt is the only place to enforce device scoping. For native integrations (OpenAI Conversation, Google Gemini, etc.) that use the Assist API, both visibility AND execution are managed through the Exposed Entities UI, and a manual table would be redundant. The tool exposure pattern in §8.3.2 is the first line of defense; this table is the second.
 
 **RULES**
 - Specific behavioral rules for the scenario (arrival flow, bedtime flow, etc.)

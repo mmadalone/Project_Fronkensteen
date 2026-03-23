@@ -1359,11 +1359,11 @@ async def music_compose(
 
     file_path = await _write_cache(audio, key, target_dir, metadata)
 
-    # Track budget
+    # Track budget — C5: ElevenLabs API calls use "music_api" (has cost)
     _increment_generations()
     try:
         pyscript.budget_track_call(  # noqa: F821
-            service_type="music", agent=agent, calls=1,
+            service_type="music_api", agent=agent, calls=1,
         )
     except Exception:
         pass
@@ -1536,10 +1536,10 @@ async def music_compose_local(
     }
     _write_meta_sync(str(PRODUCTION_DIR / f"{key}.json"), json.dumps(metadata, indent=2))
 
-    # Track calls (no cost for local)
+    # Track calls — C5: FluidSynth local renders use "music_local" (zero cost)
     try:
         pyscript.budget_track_call(  # noqa: F821
-            service_type="music", agent=agent, calls=1,
+            service_type="music_local", agent=agent, calls=1,
         )
     except Exception:
         pass

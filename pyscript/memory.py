@@ -240,6 +240,19 @@ def _ensure_db() -> None:
             conn.execute("ALTER TABLE budget_history ADD COLUMN serper_credits INTEGER DEFAULT 0")
         except Exception:
             pass
+        # ── C5: Per-model cost + breakdown columns ──
+        try:
+            conn.execute("ALTER TABLE budget_history ADD COLUMN model_cost_eur REAL DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE budget_history ADD COLUMN model_breakdown TEXT DEFAULT '{}'")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE budget_history ADD COLUMN music_generations INTEGER DEFAULT 0")
+        except Exception:
+            pass
         # ── mem_archive: cold storage for archived L2 entries (I-42 Phase 2) ──
         conn.execute(
             """
@@ -4242,6 +4255,9 @@ async def budget_history_record(
     tts_chars: int = 0,
     stt_calls: int = 0,
     serper_credits: int = 0,
+    model_cost_eur: float = 0.0,
+    model_breakdown: str = "{}",
+    music_generations: int = 0,
 ):
     """
     yaml
@@ -4250,6 +4266,7 @@ async def budget_history_record(
       Record a daily usage row into budget_history. Called from ai_budget_reset
       Step 1b after L2 log, before counter reset. INSERT OR REPLACE ensures
       idempotency (manual resets won't duplicate).
+      C5: Added model_cost_eur, model_breakdown, music_generations.
     fields:
       date:
         name: Date
@@ -4315,6 +4332,30 @@ async def budget_history_record(
           number:
             min: 0
             max: 999999
+      model_cost_eur:
+        name: Model Cost EUR
+        description: "Per-model cost total in EUR (C5)."
+        default: 0
+        selector:
+          number:
+            min: 0
+            max: 9999
+            step: 0.0001
+      model_breakdown:
+        name: Model Breakdown
+        description: "JSON string of per-model cost breakdown (C5)."
+        default: "{}"
+        selector:
+          text:
+            multiline: true
+      music_generations:
+        name: Music Generations
+        description: "Total music generations for the day (C5)."
+        default: 0
+        selector:
+          number:
+            min: 0
+            max: 999999
     """
     if _is_test_mode():
         log.info("memory [TEST]: would record budget history for date=%s", date)  # noqa: F821
@@ -4327,6 +4368,8 @@ async def budget_history_record(
     usage_usd_f = float(usage_usd)
     exchange_rate_f = float(exchange_rate)
     usage_eur = round(usage_usd_f * exchange_rate_f, 4)
+    model_cost_f = float(model_cost_eur)
+    music_gens_i = int(music_generations)
 
     def _insert():
         with closing(_get_db_connection()) as conn:
@@ -4334,17 +4377,18 @@ async def budget_history_record(
                 """
                 INSERT OR REPLACE INTO budget_history
                     (date, usage_usd, usage_eur, exchange_rate,
-                     llm_calls, llm_tokens, tts_chars, stt_calls, serper_credits)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     llm_calls, llm_tokens, tts_chars, stt_calls, serper_credits,
+                     model_cost_eur, model_breakdown, music_generations)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (date, usage_usd_f, usage_eur, exchange_rate_f,
                  int(llm_calls), int(llm_tokens), int(tts_chars), int(stt_calls),
-                 int(serper_credits)),
+                 int(serper_credits), model_cost_f, str(model_breakdown), music_gens_i),
             )
             conn.commit()
 
     await asyncio.to_thread(_insert)
-    log.info("budget_history_record: %s — $%.4f (€%.4f)", date, usage_usd_f, usage_eur)  # noqa: F821
+    log.info("budget_history_record: %s — $%.4f (€%.4f) model_cost=€%.4f", date, usage_usd_f, usage_eur, model_cost_f)  # noqa: F821
 
     # Refresh rolling sensor
     await budget_history_rolling()
@@ -4355,6 +4399,7 @@ async def budget_history_record(
         "date": date,
         "usage_usd": usage_usd_f,
         "usage_eur": usage_eur,
+        "model_cost_eur": model_cost_f,
     }
 
 
@@ -4395,6 +4440,7 @@ async def budget_history_rolling(months: int = 0):
                     COALESCE(SUM(usage_eur), 0.0) AS total_eur,
                     COALESCE(SUM(usage_usd), 0.0) AS total_usd,
                     COALESCE(SUM(serper_credits), 0) AS total_serper,
+                    COALESCE(SUM(model_cost_eur), 0.0) AS total_model_cost,
                     COUNT(*) AS days_with_data,
                     MIN(date) AS period_start,
                     MAX(date) AS period_end
@@ -4446,6 +4492,14 @@ async def budget_history_rolling(months: int = 0):
     serper_total_cost = round(total_serper * serper_rate, 4)
     serper_today_cost = round(today_serper * serper_rate, 4)
 
+    hist_model_cost = round(result.get("total_model_cost", 0.0), 4)
+    # C5: Add today's live model cost delta
+    try:
+        today_model_cost = float(state.get("input_number.ai_model_cost_today") or 0)  # noqa: F821
+    except Exception:
+        today_model_cost = 0.0
+    total_model_cost = round(hist_model_cost + today_model_cost, 4)
+
     state.set(  # noqa: F821
         "sensor.ai_openrouter_rolling_usage",
         total_eur,
@@ -4459,6 +4513,7 @@ async def budget_history_rolling(months: int = 0):
             "total_usd": total_usd,
             "today_eur": today_eur,
             "daily_average_eur": daily_avg,
+            "model_cost_eur": total_model_cost,
             "period_start": result.get("period_start", ""),
             "period_end": result.get("period_end", ""),
         },

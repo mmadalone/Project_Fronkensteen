@@ -667,6 +667,7 @@ async def voice_handoff(
             service_type="handoff",
             agent=target,
             calls=1,
+            model=state.getattr("sensor.ai_budget_breakdown").get("full_slug_map", {}).get(target, "") if state.getattr("sensor.ai_budget_breakdown") else "",  # noqa: F821
         )
     except Exception as exc:
         log.warning("voice_handoff: budget_track_call failed: %s", exc)  # noqa: F821

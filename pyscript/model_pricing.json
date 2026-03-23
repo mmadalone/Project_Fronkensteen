@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "currency": "USD",
+    "last_refreshed": "2026-03-23T21:26:28.636333",
+    "source": "openrouter_api",
+    "models_fetched": 2,
+    "next_refresh": "2026-03-24T21:26:28.636349"
+  },
+  "models": {
+    "anthropic/claude-opus-4.6": {
+      "input_per_1m": 5.0,
+      "output_per_1m": 25.0,
+      "source": "api"
+    },
+    "meta-llama/llama-4-maverick": {
+      "input_per_1m": 0.15,
+      "output_per_1m": 0.6,
+      "source": "api"
+    }
+  },
+  "overrides": {},
+  "defaults": {
+    "input_per_1m": 1.0,
+    "output_per_1m": 5.0
+  }
+}

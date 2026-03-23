@@ -1,0 +1,170 @@
+blueprint:
+  name: "AI Budget – Cost Alert"
+  description: >-
+    Notify and optionally auto-downgrade when daily cost exceeds configurable
+    thresholds. Uses numeric_state triggers on the selected cost sensor.
+    Warning = persistent notification + optional TTS.
+    Critical = same + optional auto-downgrade (activates budget fallback).
+    Cooldown prevents alert spam during sustained high-cost periods.
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/budget_cost_alert.yaml
+  input:
+    # ── Core ──────────────────────────────────────────────────────────
+    cost_threshold_warning:
+      name: Warning Threshold (EUR)
+      description: "Send a warning notification when daily cost exceeds this amount."
+      default: 3.0
+      selector:
+        number:
+          min: 0.5
+          max: 50
+          step: 0.5
+          unit_of_measurement: "EUR"
+    cost_threshold_critical:
+      name: Critical Threshold (EUR)
+      description: "Send a critical alert (and optionally auto-downgrade) at this amount."
+      default: 5.0
+      selector:
+        number:
+          min: 0.5
+          max: 100
+          step: 0.5
+          unit_of_measurement: "EUR"
+    cost_entity:
+      name: Cost Entity to Monitor
+      description: "Sensor providing the daily cost value."
+      default: sensor.ai_total_daily_cost
+      selector:
+        entity:
+          domain: sensor
+
+    # ── Notifications ─────────────────────────────────────────────────
+    notify_target:
+      name: Notification Service
+      description: >-
+        Service target for mobile/push notifications (e.g. notify.mobile_app_phone).
+        Leave empty to skip push notifications.
+      default: ""
+      selector:
+        text: {}
+    tts_announce:
+      name: TTS Announcement
+      description: "Announce cost alerts via TTS (uses tts_queue_speak if available)."
+      default: true
+      selector:
+        boolean: {}
+
+    # ── Automatic Actions ─────────────────────────────────────────────
+    auto_downgrade:
+      name: Auto-downgrade on Critical
+      description: >-
+        When critical threshold is reached, automatically activate budget
+        fallback mode (switches to HA Cloud TTS + fallback agent).
+      default: false
+      selector:
+        boolean: {}
+    cooldown_minutes:
+      name: Alert Cooldown (minutes)
+      description: "Minimum time between repeated alerts of the same level."
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 240
+          step: 5
+
+mode: single
+
+variables:
+  _cost: "{{ states(cost_entity) | float(0) }}"
+  _limit: "{{ states('input_number.ai_budget_daily_cost_limit') | float(5) }}"
+  _pct: "{{ ((_cost / [_limit, 0.01] | max) * 100) | round(0) }}"
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input cost_entity
+    above: !input cost_threshold_warning
+    id: warning
+  - trigger: numeric_state
+    entity_id: !input cost_entity
+    above: !input cost_threshold_critical
+    id: critical
+
+conditions:
+  # Cooldown gate — skip if last alert was too recent
+  - condition: template
+    value_template: >-
+      {% set last = state_attr('automation.this', 'last_triggered') %}
+      {% if last is none %}true
+      {% else %}
+        {{ (now() - last).total_seconds() > (cooldown_minutes | int(30)) * 60 }}
+      {% endif %}
+
+actions:
+  - variables:
+      _level: "{{ 'CRITICAL' if trigger.id == 'critical' else 'WARNING' }}"
+      _icon: "{{ '🔴' if trigger.id == 'critical' else '🟡' }}"
+      _msg: >-
+        {{ _icon }} AI cost {{ _level }}: €{{ _cost | round(2) }} today
+        ({{ _pct }}% of €{{ _limit }} limit).
+        {% if trigger.id == 'critical' and auto_downgrade %}
+          Auto-downgrade activated.
+        {% endif %}
+
+  # Persistent notification (always)
+  - action: persistent_notification.create
+    data:
+      title: "AI Budget {{ _level }}"
+      message: "{{ _msg }}"
+      notification_id: "ai_budget_cost_{{ trigger.id }}"
+
+  # Push notification (if configured)
+  - if:
+      - condition: template
+        value_template: "{{ notify_target | default('') | length > 0 }}"
+    then:
+      - action: "{{ notify_target }}"
+        data:
+          title: "AI Budget {{ _level }}"
+          message: "{{ _msg }}"
+
+  # TTS announcement (if enabled)
+  - if:
+      - condition: template
+        value_template: "{{ tts_announce | default(true) }}"
+    then:
+      - alias: "TTS cost alert"
+        continue_on_error: true
+        action: pyscript.tts_queue_speak
+        data:
+          text: >-
+            Attention. AI daily cost {{ _level | lower }}. Current spend is
+            {{ _cost | round(2) }} euro, which is {{ _pct }} percent of the daily limit.
+            {% if trigger.id == 'critical' and auto_downgrade %}
+              Activating budget fallback mode.
+            {% endif %}
+          voice: "tts.home_assistant_cloud"
+          priority: 1
+          target_mode: "presence"
+
+  # Auto-downgrade on critical (if enabled)
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'critical' and auto_downgrade | default(false) }}"
+      - condition: state
+        entity_id: input_boolean.ai_budget_fallback_active
+        state: "off"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ai_budget_fallback_active
+      - alias: "Log to L2"
+        continue_on_error: true
+        action: pyscript.memory_set
+        data:
+          key: "budget_cost_alert:{{ now().strftime('%Y-%m-%d') }}"
+          value: >-
+            CRITICAL cost threshold (€{{ cost_threshold_critical }}) exceeded at
+            €{{ _cost | round(2) }} — auto-downgrade activated {{ now().strftime('%H:%M') }}
+          scope: "system"
+          tags: "budget,cost_alert,fallback"

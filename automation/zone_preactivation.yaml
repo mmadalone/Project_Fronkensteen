@@ -1,5 +1,5 @@
 blueprint:
-  name: "Zone pre-activation (I-40)"
+  name: "Zone Pre-Activation"
   author: madalone
   description: >
     # Zone Pre-Activation
@@ -48,9 +48,27 @@ blueprint:
         target_zone:
           name: Target zone
           description: >
-            Zone name to watch for (e.g., kitchen, living_room, bed, workshop).
+            Zone to watch for. Must match the zone names from
+            presence_patterns.py (FP2 zone map in entity_config.yaml).
           selector:
-            text: {}
+            select:
+              options:
+                - label: "Workshop"
+                  value: "workshop"
+                - label: "Living Room"
+                  value: "living_room"
+                - label: "Main Room"
+                  value: "main_room"
+                - label: "Kitchen"
+                  value: "kitchen"
+                - label: "Bed"
+                  value: "bed"
+                - label: "Lobby"
+                  value: "lobby"
+                - label: "Bathroom"
+                  value: "bathroom"
+                - label: "Shower"
+                  value: "shower"
 
         min_probability:
           name: Minimum probability (%)
@@ -191,7 +209,8 @@ actions:
               {% endif %}
         sequence:
           # ── Run pre-activation actions ──
-          - !input pre_activation_actions
+          - choose: []
+            default: !input pre_activation_actions
 
           # ── Wait for deactivation timeout, then check if zone changed ──
           - alias: "Wait for deactivation timeout, then check if zone changed"

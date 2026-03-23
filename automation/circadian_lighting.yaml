@@ -1,0 +1,468 @@
+blueprint:
+  name: "Circadian Lighting (C6)"
+  author: madalone
+  description: >
+    # Circadian Lighting
+
+    Per-room automation that continuously adjusts light color temperature and
+    brightness based on the sun's elevation. Ported from the proven
+    [HarvsG community formula](https://community.home-assistant.io/t/472105)
+    (active since 2022, updated Feb 2025 for `color_temp_kelvin`).
+
+    ### Features
+
+    - Sun elevation → color temperature curve (2200K–5000K default)
+    - Sun elevation → brightness curve (15%–100% default)
+    - Sleep mode: locks to warm/dim when bedtime flag is active
+    - Manual override detection: skips lights the user manually adjusted
+    - Fires `ai_scene_learner_suppress` event for scene learner integration
+    - Standard privacy gate section
+
+    ### How it works
+
+    1. Every N minutes (and on sun elevation change), calculates ideal
+       color_temp_kelvin and brightness_pct from sun position.
+    2. For each managed light that is ON and supports color_temp:
+       - If manual override detection is enabled and the light's current
+         color_temp differs by more than 400K from circadian → skip it.
+    3. Applies the circadian values via `light.turn_on` with transition.
+    4. When bedtime flag turns ON, overrides with sleep brightness/color.
+
+    ### Instances
+
+    Create one instance per room. Each instance manages its own lights
+    and has independent kill switch + sleep + gate controls.
+
+    ### Recent changes
+    - **v1.0.0:** Initial blueprint — C6 Layer 1
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/circadian_lighting.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      description: >
+        Kill switch, target lights, and update interval.
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch. Turn off to pause circadian
+            adjustments for this room.
+          selector:
+            entity:
+              domain: input_boolean
+
+        target_lights:
+          name: Target lights
+          description: >
+            Lights to manage. Only lights supporting color temperature
+            will be adjusted — others are silently skipped.
+          selector:
+            entity:
+              domain: light
+              multiple: true
+
+        update_interval:
+          name: Update interval (minutes)
+          description: >
+            How often to recalculate and apply circadian values.
+            Lower = smoother transitions but more service calls.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: "min"
+
+        transition_seconds:
+          name: Transition (seconds)
+          description: >
+            Duration of the color/brightness transition.
+            Smooth enough to be imperceptible.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 60
+              unit_of_measurement: "s"
+
+    # ===========================================================================
+    # ② COLOR & BRIGHTNESS RANGE
+    # ===========================================================================
+    color_range:
+      name: "② Color & brightness range"
+      icon: mdi:palette
+      collapsed: true
+      description: >
+        Configure the circadian curve endpoints.
+        Color temperature ranges from warm (night) to cool (noon).
+        Brightness ranges from dim (night) to full (noon).
+      input:
+        min_color_temp_kelvin:
+          name: Warmest color temp (K)
+          description: >
+            Color temperature at night / below horizon. Lower = warmer/more amber.
+          default: 2200
+          selector:
+            number:
+              min: 1800
+              max: 4000
+              unit_of_measurement: "K"
+
+        max_color_temp_kelvin:
+          name: Coolest color temp (K)
+          description: >
+            Color temperature at solar noon. Higher = cooler/bluer.
+          default: 5000
+          selector:
+            number:
+              min: 3500
+              max: 6500
+              unit_of_measurement: "K"
+
+        min_brightness_pct:
+          name: Minimum brightness (%)
+          description: >
+            Brightness when the sun is well below the horizon.
+          default: 15
+          selector:
+            number:
+              min: 1
+              max: 50
+              unit_of_measurement: "%"
+
+        max_brightness_pct:
+          name: Maximum brightness (%)
+          description: >
+            Brightness at solar noon.
+          default: 100
+          selector:
+            number:
+              min: 50
+              max: 100
+              unit_of_measurement: "%"
+
+    # ===========================================================================
+    # ③ MANUAL OVERRIDE DETECTION
+    # ===========================================================================
+    manual_override:
+      name: "③ Manual override detection"
+      icon: mdi:hand-back-left
+      collapsed: true
+      description: >
+        When enabled, lights whose color temperature differs significantly
+        from the circadian value are considered manually overridden and
+        skipped. The override clears when the light cycles OFF→ON.
+      input:
+        detect_manual_changes:
+          name: Detect manual changes
+          description: >
+            If enabled, lights whose current color_temp differs by more
+            than 400K from the circadian calculation are skipped.
+            This prevents the automation from fighting manual adjustments.
+          default: true
+          selector:
+            boolean: {}
+
+        manual_threshold_kelvin:
+          name: Manual detection threshold (K)
+          description: >
+            Color temperature difference (in Kelvin) that counts as a
+            manual override. 400K catches intentional changes while
+            allowing natural circadian drift.
+          default: 400
+          selector:
+            number:
+              min: 100
+              max: 1000
+              unit_of_measurement: "K"
+
+    # ===========================================================================
+    # ④ SLEEP MODE
+    # ===========================================================================
+    sleep_mode:
+      name: "④ Sleep mode"
+      icon: mdi:weather-night
+      collapsed: true
+      description: >
+        When the bedtime flag turns ON, overrides circadian with very
+        warm/dim settings. Resumes circadian when bedtime turns OFF
+        or sleep detection clears.
+      input:
+        bedtime_entity:
+          name: Bedtime entity
+          description: >
+            Boolean that signals bedtime is active.
+          default: input_boolean.ai_bedtime_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        sleep_brightness_pct:
+          name: Sleep brightness (%)
+          description: >
+            Brightness during sleep mode.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: "%"
+
+        sleep_color_temp_kelvin:
+          name: Sleep color temp (K)
+          description: >
+            Color temperature during sleep mode. Very warm.
+          default: 2200
+          selector:
+            number:
+              min: 1800
+              max: 2500
+              unit_of_measurement: "K"
+
+    # ===========================================================================
+    # ⑤ GATES
+    # ===========================================================================
+    gates:
+      name: "⑤ Gates"
+      icon: mdi:gate
+      collapsed: true
+      description: >
+        Focus mode, guest mode, and privacy gating.
+      input:
+        focus_mode_entity:
+          name: Focus mode entity
+          description: >
+            Boolean that signals focus mode is active.
+          default: input_boolean.ai_focus_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        focus_behavior:
+          name: Focus mode behavior
+          description: >
+            How circadian behaves during focus mode.
+          default: "normal"
+          selector:
+            select:
+              options:
+                - label: "Normal — no change"
+                  value: "normal"
+                - label: "High brightness — max brightness, normal color"
+                  value: "high_brightness"
+                - label: "Dim warm — 40% brightness, warm color"
+                  value: "dim_warm"
+
+        guest_mode_entity:
+          name: Guest mode entity
+          description: >
+            Boolean that signals guests are present.
+          default: input_boolean.ai_guest_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person name used for tier suppression lookups."
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  v_enable: !input enable_toggle
+  v_lights: !input target_lights
+  v_interval: !input update_interval
+  v_transition: !input transition_seconds
+  v_min_ct: !input min_color_temp_kelvin
+  v_max_ct: !input max_color_temp_kelvin
+  v_min_bri: !input min_brightness_pct
+  v_max_bri: !input max_brightness_pct
+  v_detect_manual: !input detect_manual_changes
+  v_manual_threshold: !input manual_threshold_kelvin
+  v_bedtime: !input bedtime_entity
+  v_sleep_bri: !input sleep_brightness_pct
+  v_sleep_ct: !input sleep_color_temp_kelvin
+  v_focus: !input focus_mode_entity
+  v_focus_behavior: !input focus_behavior
+  v_guest: !input guest_mode_entity
+  v_privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  # ── Periodic update ──
+  - alias: "Periodic circadian update"
+    trigger: time_pattern
+    minutes: !input update_interval
+
+  # ── Sun elevation change ──
+  - alias: "Sun elevation changed"
+    trigger: state
+    entity_id: sun.sun
+
+  # ── Bedtime flag changed ──
+  - alias: "Bedtime flag changed"
+    trigger: state
+    entity_id: !input bedtime_entity
+
+  # ── A managed light turned on ──
+  - alias: "Managed light turned on"
+    trigger: state
+    entity_id: !input target_lights
+    to: "on"
+
+conditions:
+  # ── Kill switch ──
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Privacy gate ──
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = v_privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_circadian_lighting') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  # ── Calculate circadian values ──
+  - alias: "Calculate circadian values"
+    variables:
+      v_is_bedtime: "{{ is_state(v_bedtime, 'on') }}"
+      v_is_focus: "{{ is_state(v_focus, 'on') }}"
+      v_elev: "{{ state_attr('sun.sun', 'elevation') | float(0) }}"
+
+      # ── Color temperature from sun elevation (HarvsG formula) ──
+      # Maps sun elevation to color temp using a logistic-like curve.
+      # Constrained between min_ct (warmest/night) and max_ct (coolest/noon).
+      v_circadian_ct: >-
+        {% if v_is_bedtime %}
+          {{ v_sleep_ct }}
+        {% elif v_is_focus and v_focus_behavior == 'dim_warm' %}
+          {{ v_min_ct }}
+        {% else %}
+          {% set elev_clamped = [([0, v_elev | float] | max), 90] | min %}
+          {% set raw_ct = (4791.67 - 3290.66 / (1 + 0.222 * (elev_clamped ** 0.81))) | int %}
+          {{ [([raw_ct, v_max_ct | int] | min), v_min_ct | int] | max }}
+        {% endif %}
+
+      # ── Brightness from sun elevation ──
+      # Linear interpolation: -10° = min_bri, 60° = max_bri
+      v_circadian_bri: >-
+        {% if v_is_bedtime %}
+          {{ v_sleep_bri }}
+        {% elif v_is_focus and v_focus_behavior == 'high_brightness' %}
+          {{ v_max_bri }}
+        {% elif v_is_focus and v_focus_behavior == 'dim_warm' %}
+          40
+        {% else %}
+          {% set elev_clamped = [([v_elev | float, -10] | max), 60] | min %}
+          {% set normalized = (elev_clamped + 10) / 70.0 %}
+          {{ (v_min_bri | float + (v_max_bri | float - v_min_bri | float) * normalized) | round(0) }}
+        {% endif %}
+
+  # ── Fire suppress event for scene learner ──
+  - alias: "Suppress scene learner observation"
+    event: ai_scene_learner_suppress
+    event_data:
+      source: circadian_lighting
+
+  # ── Apply to each light ──
+  - alias: "Apply circadian values to lights"
+    repeat:
+      for_each: "{{ v_lights }}"
+      sequence:
+        - alias: "Resolve light capabilities"
+          variables:
+            v_light_state: "{{ states(repeat.item) }}"
+            v_modes: "{{ state_attr(repeat.item, 'supported_color_modes') | default([]) }}"
+            v_has_color_temp: "{{ 'color_temp' in v_modes }}"
+            v_has_brightness: "{{ v_modes | reject('eq', 'onoff') | list | length > 0 }}"
+
+        - alias: "Skip if light is off or on/off only"
+          if:
+            - condition: template
+              value_template: "{{ v_light_state == 'on' and v_has_brightness }}"
+          then:
+            - alias: "Check manual override (color_temp lights only)"
+              if:
+                - condition: template
+                  value_template: >-
+                    {% if not v_detect_manual or not v_has_color_temp %}
+                      true
+                    {% else %}
+                      {% set current_ct = state_attr(repeat.item, 'color_temp_kelvin') | int(0) %}
+                      {% if current_ct == 0 %}
+                        true
+                      {% else %}
+                        {{ (current_ct - v_circadian_ct | int) | abs <= v_manual_threshold | int }}
+                      {% endif %}
+                    {% endif %}
+              then:
+                - alias: "Apply circadian values"
+                  action: light.turn_on
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    brightness_pct: "{{ v_circadian_bri | int }}"
+                    color_temp_kelvin: >-
+                      {{ v_circadian_ct | int if v_has_color_temp else none }}
+                    transition: "{{ v_transition | int }}"

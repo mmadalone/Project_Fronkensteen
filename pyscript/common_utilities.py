@@ -710,8 +710,12 @@ _STATIC_PROVIDER_MAP = {"elevenlabs": "elevenlabs", "ha_cloud": "ha_cloud"}
 
 # Cached maps — populated on first use or by budget_reload_model_map
 _AGENT_MODEL_MAP: dict = {"llm": {}, "tts": _AGENT_TTS_MAP, "stt": _AGENT_STT_MAP}
+_AGENT_FULL_SLUG_MAP: dict = {}  # C5: agent → full "provider/model" slug (for pricing lookup)
 _MODEL_PROVIDER_MAP: dict = dict(_STATIC_PROVIDER_MAP)
+_MODEL_PRICING: dict = {}  # C5: model_slug → {input_per_1m, output_per_1m, source}
 _model_map_loaded: bool = False
+_pricing_loaded: bool = False
+_PRICING_JSON_PATH = Path("/config/pyscript/model_pricing.json")
 
 
 @pyscript_compile  # noqa: F821
@@ -762,10 +766,11 @@ def _infer_provider(display_model: str) -> str:
 
 
 @pyscript_executor  # noqa: F821
-def _load_agent_model_map_sync() -> tuple[dict, dict]:
-    """Read config entries + entity registry to build agent→model and model→provider maps.
-    Runs in executor thread — file I/O only, no HA API calls."""
+def _load_agent_model_map_sync() -> tuple[dict, dict, dict]:
+    """Read config entries + entity registry to build agent→model, model→provider,
+    and agent→full_slug maps. Runs in executor thread — file I/O only, no HA API calls."""
     llm_map: dict[str, str] = {}
+    full_slug_map: dict[str, str] = {}  # C5: agent → full "provider/model" slug
     provider_map: dict[str, str] = dict(_STATIC_PROVIDER_MAP)
 
     try:
@@ -775,7 +780,7 @@ def _load_agent_model_map_sync() -> tuple[dict, dict]:
             entity_data = orjson.loads(f.read())
     except Exception as exc:
         # Can't read storage — return empty, caller will fall back
-        return llm_map, provider_map
+        return llm_map, provider_map, full_slug_map
 
     # Build subentry_id → (chat_model, title) lookup from all EOC + anthropic entries
     subentry_info: dict[str, tuple[str, str]] = {}  # sid → (model, title)
@@ -843,25 +848,27 @@ def _load_agent_model_map_sync() -> tuple[dict, dict]:
         if not chosen:
             chosen = variants[0][1]
 
+        full_slug_map[agent] = chosen  # C5: preserve full slug for pricing lookup
         display, prefix_provider = _strip_provider_prefix(chosen)
         llm_map[agent] = display
         if display not in provider_map:
             provider_map[display] = prefix_provider or _infer_provider(display)
 
-    return llm_map, provider_map
+    return llm_map, provider_map, full_slug_map
 
 
 async def _load_and_cache_model_map() -> None:
     """Load model map from config entries and cache in module globals."""
-    global _AGENT_MODEL_MAP, _MODEL_PROVIDER_MAP, _model_map_loaded
+    global _AGENT_MODEL_MAP, _AGENT_FULL_SLUG_MAP, _MODEL_PROVIDER_MAP, _model_map_loaded
     try:
-        llm_map, provider_map = _load_agent_model_map_sync()
+        llm_map, provider_map, full_slug_map = _load_agent_model_map_sync()
         _AGENT_MODEL_MAP = {"llm": llm_map, "tts": _AGENT_TTS_MAP, "stt": _AGENT_STT_MAP}
+        _AGENT_FULL_SLUG_MAP = full_slug_map
         _MODEL_PROVIDER_MAP = provider_map
         _model_map_loaded = True
         log.info(  # noqa: F821
-            "budget: model map loaded — %d agents, %d models",
-            len(llm_map), len(provider_map),
+            "budget: model map loaded — %d agents, %d models, %d full slugs",
+            len(llm_map), len(provider_map), len(full_slug_map),
         )
     except Exception as exc:
         log.warning("budget: model map load failed: %s", exc)  # noqa: F821
@@ -899,6 +906,257 @@ async def budget_reload_model_map() -> None:
     _model_map_loaded = False
     await _load_and_cache_model_map()
     log.info("budget: model map reloaded — llm=%s", _AGENT_MODEL_MAP.get("llm", {}))  # noqa: F821
+    # C5: Refresh pricing when model map changes (may have new models)
+    await _refresh_model_pricing()
+
+
+# ── C5: Dynamic Per-Model Pricing ─────────────────────────────────────────────
+
+
+@pyscript_executor  # noqa: F821
+def _fetch_openrouter_pricing_sync(active_slug_values: list = None) -> dict:
+    """Fetch per-model pricing from OpenRouter /api/v1/models API.
+    active_slug_values: list of full slugs to filter (passed from caller to avoid
+    reading mutable global inside executor). Empty/None = fetch all models.
+    Returns {model_slug: {input_per_1m, output_per_1m}} for active models."""
+    import requests as _requests
+
+    # Read API key from secrets (same key used by the REST sensor)
+    api_key = ""
+    try:
+        with open("/config/secrets.yaml") as f:
+            for line in f:
+                if line.strip().startswith("openrouter_api_key:"):
+                    api_key = line.split(":", 1)[1].strip().strip("'\"")
+                    break
+    except Exception:
+        pass
+
+    if not api_key:
+        return {}
+
+    resp = _requests.get(
+        "https://openrouter.ai/api/v1/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Filter to active models if slug list provided
+    active_slugs = set(active_slug_values) if active_slug_values else set()
+
+    pricing = {}
+    for model in data.get("data", []):
+        model_id = model.get("id", "")
+        if not model_id:
+            continue
+        # Only cache models we actually use (or all if slug set empty — first run)
+        if active_slugs and model_id not in active_slugs:
+            continue
+        p = model.get("pricing", {})
+        try:
+            input_per_token = float(p.get("prompt", "0"))
+            output_per_token = float(p.get("completion", "0"))
+        except (TypeError, ValueError):
+            continue
+        pricing[model_id] = {
+            "input_per_1m": round(input_per_token * 1_000_000, 4),
+            "output_per_1m": round(output_per_token * 1_000_000, 4),
+            "source": "api",
+        }
+
+    return pricing
+
+
+@pyscript_executor  # noqa: F821
+def _load_pricing_cache_sync() -> dict:
+    """Load model_pricing.json from disk. Returns full JSON structure or empty dict."""
+    import json as _json
+    try:
+        with open(_PRICING_JSON_PATH) as f:
+            return _json.load(f)
+    except (FileNotFoundError, _json.JSONDecodeError):
+        return {}
+
+
+@pyscript_executor  # noqa: F821
+def _write_pricing_cache_sync(api_data: dict, overrides: dict, defaults: dict) -> None:
+    """Merge API data with overrides and write to model_pricing.json."""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    merged_models = {}
+    for slug, info in api_data.items():
+        merged_models[slug] = info
+    # Overrides always win
+    for slug, info in overrides.items():
+        merged_models[slug] = {**info, "source": "override"}
+
+    cache = {
+        "_meta": {
+            "currency": "USD",
+            "last_refreshed": _dt.now().isoformat(),
+            "source": "openrouter_api",
+            "models_fetched": len(api_data),
+            "next_refresh": (_dt.now() + _td(hours=24)).isoformat(),
+        },
+        "models": merged_models,
+        "overrides": overrides,
+        "defaults": defaults,
+    }
+    with open(_PRICING_JSON_PATH, "w") as f:
+        _json.dump(cache, f, indent=2)
+
+
+async def _refresh_model_pricing() -> None:
+    """Orchestrate pricing refresh: API → merge with overrides → cache → update globals."""
+    global _MODEL_PRICING, _pricing_loaded
+
+    # Load existing cache for overrides + defaults
+    existing = _load_pricing_cache_sync()
+    if not isinstance(existing, dict):
+        existing = {}
+    overrides = existing.get("overrides", {})
+    defaults = existing.get("defaults", {"input_per_1m": 1.00, "output_per_1m": 5.00})
+
+    source = "api"
+    try:
+        # Pass slug values from the mutable global (safe here — this is a regular async func)
+        slug_values = list(_AGENT_FULL_SLUG_MAP.values()) if _AGENT_FULL_SLUG_MAP else []
+        api_data = _fetch_openrouter_pricing_sync(active_slug_values=slug_values)
+        if api_data:
+            _write_pricing_cache_sync(api_data, overrides, defaults)
+            # Merge: API data + overrides (overrides win)
+            merged = dict(api_data)
+            for slug, info in overrides.items():
+                merged[slug] = {**info, "source": "override"}
+            _MODEL_PRICING = {"models": merged, "defaults": defaults}
+            _pricing_loaded = True
+            log.info(  # noqa: F821
+                "budget: pricing refreshed from API — %d models (+ %d overrides)",
+                len(api_data), len(overrides),
+            )
+        else:
+            raise ValueError("API returned no pricing data")
+    except Exception as exc:
+        log.warning("budget: API pricing fetch failed: %s — trying cache", exc)  # noqa: F821
+        source = "cache"
+        # Fall back to cached JSON
+        cached = existing.get("models", {})
+        if cached:
+            _MODEL_PRICING = {"models": cached, "defaults": defaults}
+            _pricing_loaded = True
+            log.info("budget: pricing loaded from cache — %d models", len(cached))  # noqa: F821
+        else:
+            source = "defaults_only"
+            _MODEL_PRICING = {"models": {}, "defaults": defaults}
+            _pricing_loaded = True
+            log.error("budget: no pricing available — using defaults only")  # noqa: F821
+
+    # Update status sensor
+    models_in_pricing = len(_MODEL_PRICING.get("models", {}))
+    meta = existing.get("_meta", {})
+    last_refreshed = meta.get("last_refreshed", "never") if source != "api" else datetime.now().isoformat()
+
+    # Determine staleness
+    status = source
+    if source == "api":
+        status = "ok"
+    elif source == "cache":
+        try:
+            lr = datetime.fromisoformat(meta.get("last_refreshed", ""))
+            if (datetime.now() - lr).total_seconds() > 48 * 3600:
+                status = "stale"
+            else:
+                status = "cache_only"
+        except (ValueError, TypeError):
+            status = "stale"
+
+    state.set(  # noqa: F821
+        "sensor.ai_model_pricing_status",
+        status,
+        {
+            "friendly_name": "AI Model Pricing Status",
+            "icon": "mdi:check-circle" if status == "ok" else (
+                "mdi:clock-alert" if status == "stale" else "mdi:alert-circle"
+            ),
+            "last_refreshed": last_refreshed,
+            "models_tracked": models_in_pricing,
+            "source": source,
+        },
+    )
+
+
+@pyscript_compile  # noqa: F821
+def _calculate_model_cost(model_slug: str, input_tokens: int, output_tokens: int) -> float:
+    """Calculate cost in USD for a given model and token counts.
+    Lookup order: exact slug → prefix-stripped scan → defaults → flat-rate helper."""
+    models = _MODEL_PRICING.get("models", {})
+    defaults = _MODEL_PRICING.get("defaults", {"input_per_1m": 1.00, "output_per_1m": 5.00})
+
+    info = models.get(model_slug)
+
+    # Try prefix-stripped match (e.g., "llama-4-maverick" → scan for "*/llama-4-maverick")
+    if not info and "/" not in model_slug:
+        for key, val in models.items():
+            if key.endswith("/" + model_slug):
+                info = val
+                break
+
+    if info:
+        input_rate = float(info.get("input_per_1m", defaults.get("input_per_1m", 1.0)))
+        output_rate = float(info.get("output_per_1m", defaults.get("output_per_1m", 5.0)))
+    elif defaults:
+        input_rate = float(defaults.get("input_per_1m", 1.0))
+        output_rate = float(defaults.get("output_per_1m", 5.0))
+    else:
+        # Ultimate fallback: flat-rate helper
+        return 0.0  # Caller should use flat-rate helper directly
+
+    cost_usd = (input_tokens / 1_000_000 * input_rate) + (output_tokens / 1_000_000 * output_rate)
+    return round(cost_usd, 6)
+
+
+@service  # noqa: F821
+async def budget_refresh_pricing() -> None:
+    """
+    yaml
+    name: Budget Refresh Pricing
+    description: >-
+      Force-refresh per-model pricing from the OpenRouter API and write
+      to model_pricing.json cache. Use after pricing changes or adding new models.
+    """
+    if _is_test_mode():
+        log.info("common_utilities [TEST]: would refresh model pricing")  # noqa: F821
+        return
+    await _refresh_model_pricing()
+
+
+@time_trigger("startup")  # noqa: F821
+async def _initialize_pricing() -> None:
+    """Load pricing from cache on startup, then schedule API refresh."""
+    global _MODEL_PRICING, _pricing_loaded
+    # Quick load from cache (no API wait)
+    cached = _load_pricing_cache_sync()
+    if isinstance(cached, dict) and cached.get("models"):
+        defaults = cached.get("defaults", {"input_per_1m": 1.00, "output_per_1m": 5.00})
+        _MODEL_PRICING = {"models": cached["models"], "defaults": defaults}
+        _pricing_loaded = True
+        log.info("budget: pricing warm-loaded from cache — %d models", len(cached["models"]))  # noqa: F821
+    # Schedule API refresh (non-blocking)
+    task.create(_refresh_model_pricing)  # noqa: F821
+
+
+@time_trigger("cron(0 4 * * *)")  # noqa: F821
+async def _daily_pricing_refresh() -> None:
+    """Daily pricing refresh at 04:00 — pricing rarely changes intra-day."""
+    await _refresh_model_pricing()
+
+
+@state_trigger("input_button.ai_budget_refresh_pricing")  # noqa: F821
+async def _manual_pricing_refresh(**kwargs) -> None:
+    """Trigger pricing refresh from dashboard button."""
+    await _refresh_model_pricing()
 
 
 def _update_breakdown_sensor() -> None:
@@ -915,6 +1173,7 @@ def _update_breakdown_sensor() -> None:
             new_attributes={
                 "breakdown": _budget_breakdown,
                 "model_map": _AGENT_MODEL_MAP,
+                "full_slug_map": _AGENT_FULL_SLUG_MAP,
                 "provider_map": _MODEL_PROVIDER_MAP,
                 "last_updated": datetime.now().isoformat(),
             },
@@ -931,20 +1190,24 @@ def budget_track_call(
     tokens: int = 0,
     chars: int = 0,
     reset: bool = False,
+    model: str = "",
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> None:
     """
     yaml
     name: Budget Track Call
     description: >-
       Track a call in the per-agent breakdown. Pass reset=true to clear all data.
+      C5: model + input_tokens/output_tokens enable per-model cost calculation.
     fields:
       service_type:
         name: Service Type
-        description: "llm, tts, or stt"
+        description: "llm, tts, stt, search, handoff, music, music_api, music_local"
         required: true
         selector:
           select:
-            options: [llm, tts, stt]
+            options: [llm, tts, stt, search, handoff, music, music_api, music_local]
       agent:
         name: Agent
         description: Agent key (rick, quark, deadpool, kramer, portuondo, task_gpt4o_mini, etc.)
@@ -961,7 +1224,7 @@ def budget_track_call(
             max: 1000
       tokens:
         name: Tokens
-        description: Token count to add (LLM only).
+        description: Token count to add (LLM only — legacy total).
         default: 0
         selector:
           number:
@@ -981,6 +1244,28 @@ def budget_track_call(
         default: false
         selector:
           boolean:
+      model:
+        name: Model
+        description: "Full OpenRouter model slug (e.g. meta-llama/llama-4-maverick) for per-model costing."
+        default: ""
+        selector:
+          text:
+      input_tokens:
+        name: Input Tokens
+        description: Prompt/input token count (C5 per-model costing).
+        default: 0
+        selector:
+          number:
+            min: 0
+            max: 999999
+      output_tokens:
+        name: Output Tokens
+        description: Completion/output token count (C5 per-model costing).
+        default: 0
+        selector:
+          number:
+            min: 0
+            max: 999999
     """
     if _is_test_mode():
         log.info("common_utilities [TEST]: would track budget call type=%s agent=%s", service_type, agent)  # noqa: F821
@@ -990,15 +1275,47 @@ def budget_track_call(
     global _budget_breakdown
 
     if reset:
-        _budget_breakdown = {"llm": {}, "tts": {}, "stt": {}, "search": {}, "handoff": {}, "music": {}}
+        _budget_breakdown = {
+            "llm": {}, "tts": {}, "stt": {}, "search": {},
+            "handoff": {}, "music": {}, "music_api": {}, "music_local": {},
+        }
         _update_breakdown_sensor()
         return
 
     bucket = _budget_breakdown.setdefault(service_type, {})
-    entry = bucket.setdefault(agent, {"calls": 0, "tokens": 0, "chars": 0})
+    entry = bucket.setdefault(agent, {
+        "calls": 0, "tokens": 0, "chars": 0,
+        "input_tokens": 0, "output_tokens": 0, "model_cost_eur": 0.0, "model": "",
+    })
     entry["calls"] += calls
     entry["tokens"] += tokens
     entry["chars"] += chars
+    entry["input_tokens"] += input_tokens
+    entry["output_tokens"] += output_tokens
+    if model:
+        entry["model"] = model
+
+    # C5: Per-model cost calculation when model + tokens are provided
+    if model and (input_tokens > 0 or output_tokens > 0) and _pricing_loaded:
+        cost_usd = _calculate_model_cost(model, input_tokens, output_tokens)
+        if cost_usd > 0:
+            try:
+                rate = float(state.get("sensor.usd_eur_exchange_rate") or 0.92)  # noqa: F821
+            except (TypeError, ValueError):
+                rate = 0.92
+            cost_eur = round(cost_usd * rate, 6)
+            entry["model_cost_eur"] += cost_eur
+            # Accumulate into helper for template sensor access
+            try:
+                cur = float(state.get("input_number.ai_model_cost_today") or 0)  # noqa: F821
+                service.call(  # noqa: F821
+                    "input_number", "set_value",
+                    entity_id="input_number.ai_model_cost_today",
+                    value=min(round(cur + cost_eur, 4), 100),
+                )
+            except Exception:
+                pass
+
     _update_breakdown_sensor()
 
 
@@ -1044,8 +1361,11 @@ def _read_budget_remaining() -> int:
 
 
 def _increment_budget_counters(calls: int = 1, tokens: int = 0, stt: int = 0,
-                                agent: str = "task_llm") -> None:
-    """Increment LLM budget counters after a successful call."""
+                                agent: str = "task_llm",
+                                model: str = "", input_tokens: int = 0,
+                                output_tokens: int = 0) -> None:
+    """Increment LLM budget counters after a successful call.
+    C5: model + input_tokens/output_tokens enable per-model cost tracking."""
     try:
         if calls > 0:
             cur_calls = int(float(state.get("input_number.ai_llm_calls_today") or 0))  # noqa: F821
@@ -1068,8 +1388,17 @@ def _increment_budget_counters(calls: int = 1, tokens: int = 0, stt: int = 0,
                 entity_id="input_number.ai_stt_calls_today",
                 value=min(cur_stt + stt, 99999),
             )
-        # I-33 Phase 2: Track per-agent breakdown
-        budget_track_call("llm", agent, calls=calls, tokens=tokens)
+        # C5: Resolve model from full slug map if not provided
+        resolved_model = model
+        if not resolved_model and agent:
+            # Strip "task_" prefix for slug map lookup
+            lookup_key = agent.removeprefix("task_") if agent.startswith("task_") else agent
+            resolved_model = _AGENT_FULL_SLUG_MAP.get(lookup_key, "")
+        # I-33 Phase 2 + C5: Track per-agent breakdown with model + split tokens
+        budget_track_call(
+            "llm", agent, calls=calls, tokens=tokens,
+            model=resolved_model, input_tokens=input_tokens, output_tokens=output_tokens,
+        )
     except Exception as exc:
         log.warning("llm budget increment failed: %s", exc)  # noqa: F821
 
@@ -1218,7 +1547,7 @@ async def llm_task_call(
             if response_text is not None:
                 break
 
-    # Extract token counts
+    # Extract token counts (total + C5 split if available)
     for key in ("tokens_used", "total_tokens"):
         if key in result:
             try:
@@ -1226,13 +1555,36 @@ async def llm_task_call(
             except (TypeError, ValueError):
                 pass
             break
+    # C5: Try to extract split token counts from ha_text_ai response
+    prompt_tokens = 0
+    completion_tokens = 0
+    for pk in ("prompt_tokens", "input_tokens"):
+        if pk in result:
+            try:
+                prompt_tokens = int(result[pk])
+            except (TypeError, ValueError):
+                pass
+            break
+    for ck in ("completion_tokens", "output_tokens"):
+        if ck in result:
+            try:
+                completion_tokens = int(result[ck])
+            except (TypeError, ValueError):
+                pass
+            break
+    # Fallback: if no split but total available, attribute all to output (conservative)
+    if tokens_used > 0 and prompt_tokens == 0 and completion_tokens == 0:
+        completion_tokens = tokens_used
 
     # Derive agent name from model used or instance entity
     model_used = result.get("model_used", "") or model or ""
     agent_label = f"task_{model_used.replace('-', '_').replace('.', '_')}" if model_used else f"task_{instance_entity.split('.')[-1]}"
 
-    # Increment budget
-    _increment_budget_counters(calls=1, tokens=tokens_used, agent=agent_label)
+    # C5: Increment budget with model + split tokens for per-model costing
+    _increment_budget_counters(
+        calls=1, tokens=tokens_used, agent=agent_label,
+        model=model_used, input_tokens=prompt_tokens, output_tokens=completion_tokens,
+    )
 
     return {
         "status": "ok",

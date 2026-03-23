@@ -10,6 +10,11 @@ ai_budget_manual_reset:
   name: "AI Budget - Manual Reset"
   icon: mdi:refresh-circle
 
+# C5: Manual trigger for OpenRouter pricing API refresh
+ai_budget_refresh_pricing:
+  name: "AI Budget - Refresh Pricing"
+  icon: mdi:refresh-auto
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_music_composer — Music Composition (I-10)
 # ═══════════════════════════════════════════════════════════════════

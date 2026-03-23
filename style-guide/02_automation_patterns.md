@@ -405,6 +405,39 @@ actions:
 - Use `choose` (not `if/then/elif`) when routing between 3+ trigger paths — it's more readable in traces.
 - Multiple trigger IDs can match the same `choose` branch using a list: `id: [motion_cleared, scheduled_off]`.
 
+**Variant — Trigger ID gating in conditions (same actions, different delays):**
+When multiple triggers share the same actions but should fire at different times (e.g., a short presence delay during the day vs. a longer one at night), use `trigger.id` in a **condition** template instead of `choose`. This is the canonical HA pattern for time-dependent `for:` durations, since `for:` is static and cannot be templated at runtime.
+
+```yaml
+triggers:
+  - trigger: state
+    id: normal
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    for: !input presence_delay        # e.g. 40 seconds
+
+  - trigger: state
+    id: quiet
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    for: !input quiet_hours_delay     # e.g. 3 minutes
+
+conditions:
+  # ... other conditions ...
+  - condition: template
+    alias: "Route correct trigger for current time"
+    value_template: >-
+      {% if in_quiet_hours %}
+        {{ trigger.id == 'quiet' }}
+      {% else %}
+        {{ trigger.id == 'normal' }}
+      {% endif %}
+```
+
+Both triggers watch the same entity. The shorter fires first — if conditions reject it (wrong time window), no action. The longer fires later — if conditions accept it, actions run. If presence drops before either delay expires, both auto-cancel (built-in `for:` behavior). Reference implementation: `zone_presence.yaml` quiet hours.
+
 > 📋 **QA Check PERF-1:** Flag `platform: state` without `entity_id:` and `time_pattern` with intervals under 5 seconds — both cause unnecessary event bus load. See `09_qa_audit_checklist.md`.
 
 ### 5.7 Order of operations

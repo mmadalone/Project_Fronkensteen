@@ -335,7 +335,7 @@ blueprint:
             is automatically prepended — do not include it here.
           default: >-
             {agent_a} just told the user: '{excerpt}'.
-            Jump in with ONE brief, witty, in-character line directed AT the user.
+            Respond in your natural language and style, directed AT the user.
             If your character speaks a language other than English, respond in that language.
             Under {max_words} words.
           selector:

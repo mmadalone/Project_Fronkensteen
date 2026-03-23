@@ -1,0 +1,583 @@
+blueprint:
+  name: "Ambient Music Auto-Play (C6)"
+  author: madalone
+  description: >
+    # Ambient Music Auto-Play
+
+    Automatically starts ambient music when a zone becomes occupied
+    during qualifying context (time of day, routine stage, no active
+    media). Supports multiple source modes: playlist, radio, composer,
+    or taste-auto (genre from music taste profile).
+
+    ### How it works
+
+    1. FP2 presence sensor detects zone entry (with delay — longer than
+       lights, default 2 minutes).
+    2. Checks context filters (time windows, day, routine stage).
+    3. Checks playback protection (already playing, TTS active, follow-me).
+    4. Starts music on the configured player at the configured volume.
+
+    ### Recent changes
+    - **v1.0.0:** Initial blueprint — C6 Layer 4
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/ambient_music_autoplay.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: Per-instance kill switch.
+          selector:
+            entity:
+              domain: input_boolean
+
+        presence_sensor:
+          name: Presence sensor
+          description: FP2 binary sensor for this zone.
+          selector:
+            entity:
+              domain: binary_sensor
+
+        target_player:
+          name: Target media player
+          description: >
+            The speaker to play music on (e.g. media_player.workshop_sonos).
+          selector:
+            entity:
+              domain: media_player
+
+        presence_delay:
+          name: Presence delay
+          description: >
+            How long presence must hold before starting music.
+            Should be longer than light delays to feel natural.
+          default:
+            minutes: 2
+          selector:
+            duration: {}
+
+    # ===========================================================================
+    # ② MUSIC SOURCE
+    # ===========================================================================
+    music_source:
+      name: "② Music source"
+      icon: mdi:music
+      collapsed: false
+      input:
+        source_mode:
+          name: Source mode
+          description: >
+            How to select music. Playlist/radio use fixed URIs.
+            Composer generates via ElevenLabs/FluidSynth. Taste-auto
+            picks from the music taste profile.
+          default: "playlist"
+          selector:
+            select:
+              options:
+                - label: "Playlist — fixed Music Assistant playlist"
+                  value: "playlist"
+                - label: "Radio — internet radio station"
+                  value: "radio"
+                - label: "Composer — AI-generated ambient"
+                  value: "composer"
+                - label: "Taste Auto — genre from taste profile"
+                  value: "taste_auto"
+
+        playlist_uri:
+          name: Playlist URI
+          description: >
+            Music Assistant playlist URI (for playlist mode).
+          default: ""
+          selector:
+            text: {}
+
+        radio_station:
+          name: Radio station URI
+          description: >
+            Internet radio stream URL (for radio mode).
+          default: ""
+          selector:
+            text: {}
+
+        composer_agent:
+          name: Composer agent
+          description: >
+            Agent name for music_compose (for composer mode).
+            E.g. rick, quark, deadpool.
+          default: "rick"
+          selector:
+            text: {}
+
+        composer_content_type:
+          name: Composer content type
+          description: >
+            Content type for music_compose (e.g. ambient, wake_melody).
+          default: "ambient"
+          selector:
+            text: {}
+
+        volume_pct:
+          name: Volume (%)
+          description: Playback volume.
+          default: 25
+          selector:
+            number:
+              min: 5
+              max: 100
+              unit_of_measurement: "%"
+
+    # ===========================================================================
+    # ③ CONTEXT FILTERS
+    # ===========================================================================
+    context_filters:
+      name: "③ Context filters"
+      icon: mdi:filter
+      collapsed: true
+      description: >
+        When this automation is allowed to fire. Leave defaults for
+        always-active behavior.
+      input:
+        time_start:
+          name: Active from
+          description: Start of the daily active window.
+          default: "06:00:00"
+          selector:
+            time: {}
+
+        time_end:
+          name: Active until
+          description: >
+            End of the daily window. Cross-midnight supported.
+          default: "22:00:00"
+          selector:
+            time: {}
+
+        run_days:
+          name: Run on these days
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
+    # ===========================================================================
+    # ④ PLAYBACK PROTECTION
+    # ===========================================================================
+    playback_protection:
+      name: "④ Playback protection"
+      icon: mdi:shield-music
+      collapsed: true
+      input:
+        skip_if_playing:
+          name: Skip if already playing
+          description: >
+            Don't start music if the target player is already playing.
+          default: true
+          selector:
+            boolean: {}
+
+        skip_if_tts_active:
+          name: Skip if TTS/ducking active
+          description: >
+            Don't start music if voice ducking is active
+            (input_boolean.ai_ducking_flag).
+          default: true
+          selector:
+            boolean: {}
+
+        auto_stop_vacancy:
+          name: Auto-stop on vacancy
+          description: >
+            Stop playback when the zone becomes vacant. If disabled,
+            music keeps playing until manually stopped or another
+            automation handles it.
+          default: true
+          selector:
+            boolean: {}
+
+        vacancy_delay:
+          name: Vacancy stop delay
+          description: >
+            How long vacancy must hold before stopping music.
+          default:
+            minutes: 5
+          selector:
+            duration: {}
+
+    # ===========================================================================
+    # ⑤ GATES
+    # ===========================================================================
+    gates:
+      name: "⑤ Gates"
+      icon: mdi:gate
+      collapsed: true
+      input:
+        focus_mode_entity:
+          name: Focus mode entity
+          default: input_boolean.ai_focus_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        focus_behavior:
+          name: Focus mode behavior
+          default: "silent"
+          selector:
+            select:
+              options:
+                - label: "Silent — no music during focus"
+                  value: "silent"
+                - label: "Focus playlist — switch to focus playlist"
+                  value: "focus_playlist"
+                - label: "Normal — ignore focus mode"
+                  value: "normal"
+
+        focus_playlist_uri:
+          name: Focus playlist URI
+          description: >
+            Alternative playlist for focus mode (only used when focus
+            behavior is set to "Focus playlist").
+          default: ""
+          selector:
+            text: {}
+
+        guest_mode_entity:
+          name: Guest mode entity
+          default: input_boolean.ai_guest_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        bedtime_entity:
+          name: Bedtime entity
+          default: input_boolean.ai_bedtime_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        bedtime_behavior:
+          name: Bedtime behavior
+          default: "skip"
+          selector:
+            select:
+              options:
+                - label: "Skip — no music during bedtime"
+                  value: "skip"
+                - label: "Wind-down — play wind-down sounds"
+                  value: "wind_down"
+
+        music_follow_me_entity:
+          name: Music follow-me entity
+          default: input_boolean.ai_music_follow_me
+          selector:
+            entity:
+              domain: input_boolean
+
+        skip_if_follow_me:
+          name: Skip if follow-me active
+          description: >
+            Don't start ambient music if music follow-me is actively
+            moving playback between rooms.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ⑥ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑥ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  v_source_mode: !input source_mode
+  v_playlist: !input playlist_uri
+  v_radio: !input radio_station
+  v_composer_agent: !input composer_agent
+  v_composer_type: !input composer_content_type
+  v_volume: !input volume_pct
+  v_skip_playing: !input skip_if_playing
+  v_skip_tts: !input skip_if_tts_active
+  v_auto_stop: !input auto_stop_vacancy
+  v_focus: !input focus_mode_entity
+  v_focus_behavior: !input focus_behavior
+  v_focus_playlist: !input focus_playlist_uri
+  v_guest: !input guest_mode_entity
+  v_bedtime: !input bedtime_entity
+  v_bedtime_behavior: !input bedtime_behavior
+  v_follow_me: !input music_follow_me_entity
+  v_skip_follow_me: !input skip_if_follow_me
+  v_privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_time_start: !input time_start
+  v_time_end: !input time_end
+  v_run_days: !input run_days
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Zone occupied"
+    trigger: state
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    for: !input presence_delay
+
+conditions:
+  # ── Kill switch ──
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Day-of-week ──
+  - condition: template
+    value_template: >-
+      {% set day_map = {'0': 'mon', '1': 'tue', '2': 'wed', '3': 'thu',
+                        '4': 'fri', '5': 'sat', '6': 'sun'} %}
+      {{ day_map[now().strftime('%w') | string] | default('mon')
+         in (v_run_days | default([])) }}
+
+  # ── Time window (cross-midnight safe) ──
+  - condition: template
+    value_template: >-
+      {% set start = today_at(v_time_start) %}
+      {% set end = today_at(v_time_end) %}
+      {% set n = now() %}
+      {% if start > end %}
+        {{ n >= start or n <= end }}
+      {% else %}
+        {{ start <= n <= end }}
+      {% endif %}
+
+  # ── Skip if already playing ──
+  - condition: template
+    value_template: >-
+      {{ not v_skip_playing or states(trigger.entity_id | default('')) != 'playing' }}
+
+  # ── Skip if player is already playing ──
+  - condition: template
+    value_template: >-
+      {% set player = states[this.attributes.get('target_player', '')] %}
+      {{ not v_skip_playing
+         or states(this.attributes.get('variables', {}).get('_target_player', '')) != 'playing' }}
+
+  # ── Skip if TTS/ducking active ──
+  - condition: template
+    value_template: >-
+      {{ not v_skip_tts or states('input_boolean.ai_ducking_flag') != 'on' }}
+
+  # ── Skip if follow-me active ──
+  - condition: template
+    value_template: >-
+      {{ not v_skip_follow_me or not is_state(v_follow_me, 'on') }}
+
+  # ── Bedtime ──
+  - condition: template
+    value_template: >-
+      {{ v_bedtime_behavior != 'skip' or not is_state(v_bedtime, 'on') }}
+
+  # ── Focus mode (silent = block) ──
+  - condition: template
+    value_template: >-
+      {{ v_focus_behavior != 'silent' or not is_state(v_focus, 'on') }}
+
+  # ── Privacy gate ──
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = v_privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_ambient_music') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  # ── Resolve music source ──
+  - alias: "Resolve effective source"
+    variables:
+      v_effective_mode: >-
+        {% if is_state(v_focus, 'on') and v_focus_behavior == 'focus_playlist' %}
+          playlist
+        {% elif is_state(v_bedtime, 'on') and v_bedtime_behavior == 'wind_down' %}
+          composer
+        {% else %}
+          {{ v_source_mode }}
+        {% endif %}
+      v_effective_uri: >-
+        {% if is_state(v_focus, 'on') and v_focus_behavior == 'focus_playlist' %}
+          {{ v_focus_playlist }}
+        {% else %}
+          {{ v_playlist }}
+        {% endif %}
+
+  # ── Set volume ──
+  - alias: "Set volume"
+    action: media_player.volume_set
+    target:
+      entity_id: !input target_player
+    data:
+      volume_level: "{{ v_volume | float / 100.0 }}"
+
+  # ── Play music based on source mode ──
+  - alias: "Play music"
+    choose:
+      # ── Playlist mode ──
+      - conditions:
+          - condition: template
+            value_template: "{{ v_effective_mode == 'playlist' }}"
+        sequence:
+          - action: media_player.play_media
+            target:
+              entity_id: !input target_player
+            data:
+              media_content_id: "{{ v_effective_uri }}"
+              media_content_type: "playlist"
+
+      # ── Radio mode ──
+      - conditions:
+          - condition: template
+            value_template: "{{ v_effective_mode == 'radio' }}"
+        sequence:
+          - action: media_player.play_media
+            target:
+              entity_id: !input target_player
+            data:
+              media_content_id: "{{ v_radio }}"
+              media_content_type: "music"
+
+      # ── Composer mode ──
+      - conditions:
+          - condition: template
+            value_template: "{{ v_effective_mode == 'composer' }}"
+        sequence:
+          - action: pyscript.music_library_play
+            data:
+              agent: >-
+                {% if is_state(v_bedtime, 'on') %}
+                  {{ v_composer_agent }}
+                {% else %}
+                  {{ v_composer_agent }}
+                {% endif %}
+              content_type: >-
+                {% if is_state(v_bedtime, 'on') and v_bedtime_behavior == 'wind_down' %}
+                  bedtime
+                {% else %}
+                  {{ v_composer_type }}
+                {% endif %}
+              speaker: !input target_player
+            continue_on_error: true
+
+      # ── Taste auto mode ──
+      - conditions:
+          - condition: template
+            value_template: "{{ v_effective_mode == 'taste_auto' }}"
+        sequence:
+          - alias: "Taste-auto: use top genre from taste profile"
+            variables:
+              v_genre: >-
+                {{ state_attr('sensor.ai_music_taste_status', 'genre_summary')
+                   | default('ambient') }}
+            # Use genre as search query for Music Assistant
+          - action: media_player.play_media
+            target:
+              entity_id: !input target_player
+            data:
+              media_content_id: "{{ v_genre }}"
+              media_content_type: "music"
+            continue_on_error: true
+
+  # ── Auto-stop on vacancy (if enabled) ──
+  - alias: "Wait for vacancy then stop"
+    if:
+      - condition: template
+        value_template: "{{ v_auto_stop }}"
+    then:
+      - alias: "Wait for zone to go vacant"
+        wait_for_trigger:
+          - trigger: state
+            entity_id: !input presence_sensor
+            from: "on"
+            to: "off"
+            for: !input vacancy_delay
+        timeout:
+          hours: 8
+        continue_on_timeout: false
+
+      - alias: "Stop playback"
+        action: media_player.media_stop
+        target:
+          entity_id: !input target_player

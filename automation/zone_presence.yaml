@@ -233,15 +233,111 @@ blueprint:
           selector:
             time: {}
 
+    quiet_hours:
+      name: "Quiet hours"
+      icon: mdi:moon-waning-crescent
+      description: >
+        Optional nighttime mode: use a longer presence delay or fully
+        suppress lights during specified hours.
+      collapsed: true
+      input:
+        quiet_hours_mode:
+          name: Quiet hours behavior
+          description: >
+            "Off" disables this feature entirely (normal delay always used).
+            "Delayed" uses an alternative (longer) delay during quiet hours.
+            "Disabled" fully suppresses light activation during quiet hours.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — feature disabled"
+                  value: "off"
+                - label: "Delayed — longer presence delay"
+                  value: delayed
+                - label: "Disabled — no lights during quiet hours"
+                  value: disabled
+
+        quiet_hours_delay:
+          name: Quiet hours delay
+          description: >
+            Alternative (longer) delay used during quiet hours. Only
+            applies when mode is "Delayed". Should be longer than the
+            normal presence delay. If presence drops before this time
+            elapses, nothing happens.
+          default:
+            hours: 0
+            minutes: 3
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
+
+        quiet_hours_start:
+          name: Quiet hours start
+          description: >
+            When quiet hours begin. Can cross midnight
+            (e.g. 23:00 start with 06:00 end).
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        quiet_hours_end:
+          name: Quiet hours end
+          description: When quiet hours end.
+          default: "06:00:00"
+          selector:
+            time: {}
+
+        quiet_hours_days:
+          name: Quiet hours days
+          description: >
+            Days quiet hours apply. Independent of the main
+            "Run on these days" setting.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              options:
+                - label: "Monday"
+                  value: mon
+                - label: "Tuesday"
+                  value: tue
+                - label: "Wednesday"
+                  value: wed
+                - label: "Thursday"
+                  value: thu
+                - label: "Friday"
+                  value: fri
+                - label: "Saturday"
+                  value: sat
+                - label: "Sunday"
+                  value: sun
+              multiple: true
+
 mode: restart
 max_exceeded: silent
 
 triggers:
   - trigger: state
+    id: normal
     entity_id: !input presence_sensor
     from: "off"
     to: "on"
     for: !input presence_delay
+
+  - trigger: state
+    id: quiet
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    for: !input quiet_hours_delay
 
 conditions:
   - condition: state
@@ -277,7 +373,36 @@ conditions:
         {{ now_ts >= start_ts or now_ts <= end_ts }}
       {% endif %}
 
+  # ── Quiet hours trigger routing ──────────────────────────────────────────
+  - condition: template
+    alias: "Quiet hours trigger routing"
+    value_template: >-
+      {% set mode = quiet_hours_mode | default('off') %}
+      {% if mode == 'off' %}
+        {{ trigger.id == 'normal' }}
+      {% elif mode == 'disabled' %}
+        {% if in_quiet_hours %}
+          false
+        {% else %}
+          {{ trigger.id == 'normal' }}
+        {% endif %}
+      {% elif mode == 'delayed' %}
+        {% if in_quiet_hours %}
+          {{ trigger.id == 'quiet' }}
+        {% else %}
+          {{ trigger.id == 'normal' }}
+        {% endif %}
+      {% else %}
+        {{ trigger.id == 'normal' }}
+      {% endif %}
+
 actions:
+  # ── Suppress scene learner (C6 integration) ────────────────────────────
+  - alias: "Suppress scene learner observation"
+    event: ai_scene_learner_suppress
+    event_data:
+      source: zone_presence
+
   # ── Lights ──────────────────────────────────────────────────────────────
   - alias: "Lights"
     if:
@@ -410,4 +535,38 @@ variables:
       {{ days[(now().weekday() - 1) % 7] }}
     {% else %}
       {{ tentative_day_key }}
+    {% endif %}
+
+  # ── quiet hours ──────────────────────────────────────────────────────────
+  quiet_hours_mode: !input quiet_hours_mode
+  quiet_hours_start: !input quiet_hours_start
+  quiet_hours_end: !input quiet_hours_end
+  quiet_hours_days: !input quiet_hours_days
+
+  quiet_hours_day_key: >-
+    {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set start = today_at(quiet_hours_start) %}
+    {% set end = today_at(quiet_hours_end) %}
+    {% set crosses_midnight = as_timestamp(end) < as_timestamp(start) %}
+    {% if crosses_midnight and now() < end %}
+      {{ days[(now().weekday() - 1) % 7] }}
+    {% else %}
+      {{ days[now().weekday()] }}
+    {% endif %}
+
+  in_quiet_hours: >-
+    {% set mode = quiet_hours_mode | default('off') %}
+    {% if mode == 'off' %}
+      false
+    {% else %}
+      {% set start = today_at(quiet_hours_start) %}
+      {% set end = today_at(quiet_hours_end) %}
+      {% set now_ts = as_timestamp(now()) %}
+      {% set start_ts = as_timestamp(start) %}
+      {% set end_ts = as_timestamp(end) %}
+      {% set in_window = (now_ts >= start_ts and now_ts <= end_ts)
+                         if end_ts > start_ts
+                         else (now_ts >= start_ts or now_ts <= end_ts) %}
+      {% set on_quiet_day = quiet_hours_day_key in (quiet_hours_days | default([])) %}
+      {{ in_window and on_quiet_day }}
     {% endif %}

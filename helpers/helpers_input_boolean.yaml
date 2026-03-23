@@ -646,6 +646,33 @@ ai_conversation_sensor_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # ai_winddown — Bedtime Wind-Down System (C11)
 # ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# ai_scene_learner — Scene Preference Learning (C6)
+# ═══════════════════════════════════════════════════════════════════
+ai_scene_learner_enabled:
+  name: "AI Scene Learner - Enabled"
+  icon: mdi:lightbulb-auto
+
+ai_circadian_workshop_enabled:
+  name: "AI Circadian Workshop Enabled"
+  initial: true
+  icon: mdi:sun-clock
+
+ai_circadian_living_room_enabled:
+  name: "AI Circadian Living Room Enabled"
+  initial: true
+  icon: mdi:sun-clock
+
+ai_pre_light_enabled:
+  name: "AI Pre-Light Enabled"
+  initial: true
+  icon: mdi:lightbulb-flash
+
+ai_ambient_music_enabled:
+  name: "AI Ambient Music Enabled"
+  initial: false
+  icon: mdi:music-note
+
 ai_winddown_enabled:
   name: "AI Wind-Down - Enabled"
   initial: true

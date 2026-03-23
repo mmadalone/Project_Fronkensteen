@@ -58,10 +58,11 @@ rest:
           - date
 
   # I-32: OpenRouter Credits (actual API spend across all providers)
+  # C5: Reduced from 3600s → 1800s for tighter budget gate reconciliation
   - resource: https://openrouter.ai/api/v1/credits
     headers:
       Authorization: !secret openrouter_api_header
-    scan_interval: 3600
+    scan_interval: 1800
     sensor:
       - name: "OpenRouter Credits"
         unique_id: openrouter_credits
@@ -129,7 +130,12 @@ template:
           {% set call_limit = [states('input_number.ai_llm_daily_limit') | int(100), 1] | max %}
           {% set tokens = states('input_number.ai_llm_tokens_today') | int(0) %}
           {% set token_limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
-          {% set cost = states('sensor.ai_total_daily_cost') | float(0) %}
+          {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
+          {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
+          {% set actual_eur = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+          {% set cost = estimated if source == 'estimated'
+             else (actual_eur if source == 'actual'
+             else [estimated, actual_eur] | max) %}
           {% set cost_limit = [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max %}
           {% set calls_pct = [[((call_limit - calls) / call_limit * 100) | round(0) | int, 0] | max, 100] | min %}
           {% set tokens_pct = [[((token_limit - tokens) / token_limit * 100) | round(0) | int, 0] | max, 100] | min %}
@@ -145,7 +151,12 @@ template:
             {% set limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
             {{ [[((limit - tokens) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
           cost_pct: >-
-            {% set cost = states('sensor.ai_total_daily_cost') | float(0) %}
+            {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
+            {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
+            {% set actual_eur = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+            {% set cost = estimated if source == 'estimated'
+               else (actual_eur if source == 'actual'
+               else [estimated, actual_eur] | max) %}
             {% set limit = [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max %}
             {{ [[((limit - cost) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
           limiting_metric: >-
@@ -155,6 +166,8 @@ template:
             {% if cost_pct <= tokens_pct and cost_pct <= calls_pct %}cost
             {% elif tokens_pct <= calls_pct %}tokens
             {% else %}calls{% endif %}
+          cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
 
       # I-33: TTS budget remaining (mirrors LLM pattern)
       - name: "AI TTS Budget Remaining"
@@ -182,11 +195,15 @@ template:
           {% set serper = states('sensor.serper_daily_usage') | int(0) %}
           {% set music_gens = states('input_number.ai_music_generations_today') | int(0) %}
           {% set llm_rate = states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01) %}
-          {% set tts_rate = states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
+          {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
+          {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
           {% set stt_rate = states('input_number.ai_cost_per_stt_call') | float(0.02) %}
           {% set serper_rate = states('sensor.ai_cost_per_serper_credit') | float(0) %}
           {% set music_rate = states('input_number.ai_cost_per_music_generation') | float(0.02) %}
-          {% set total = (llm_tokens / 1000 * llm_rate)
+          {% set model_cost = states('input_number.ai_model_cost_today') | float(0) %}
+          {% set flat_llm_cost = llm_tokens / 1000 * llm_rate %}
+          {% set llm_component = [model_cost, flat_llm_cost] | max %}
+          {% set total = llm_component
                        + (tts_chars / 1000 * tts_rate)
                        + (stt_calls * stt_rate)
                        + (serper * serper_rate)
@@ -194,11 +211,19 @@ template:
           {{ total | round(2) }}
         attributes:
           llm_cost: >-
+            {% set model_cost = states('input_number.ai_model_cost_today') | float(0) %}
+            {% set flat_cost = (states('input_number.ai_llm_tokens_today') | int(0) / 1000
+                * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) %}
+            {{ [model_cost, flat_cost] | max | round(4) }}
+          llm_model_cost: >-
+            {{ states('input_number.ai_model_cost_today') | float(0) | round(4) }}
+          llm_flat_cost: >-
             {{ (states('input_number.ai_llm_tokens_today') | int(0) / 1000
                 * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) | round(4) }}
           tts_cost: >-
-            {{ (states('input_number.ai_tts_chars_today') | int(0) / 1000
-                * states('input_number.ai_cost_per_1k_tts_chars') | float(0.30)) | round(4) }}
+            {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
+            {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
+            {{ (states('input_number.ai_tts_chars_today') | int(0) / 1000 * tts_rate) | round(4) }}
           stt_cost: >-
             {{ (states('input_number.ai_stt_calls_today') | int(0)
                 * states('input_number.ai_cost_per_stt_call') | float(0.02)) | round(4) }}
@@ -216,6 +241,15 @@ template:
             {{ [[(cost / limit * 100) | round(0) | int, 0] | max, 100] | min }}
           currency: >-
             {{ states('input_select.ai_budget_currency') | default('€') }}
+          cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
+          openrouter_actual_eur: >-
+            {{ state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) }}
+          divergence_pct: >-
+            {% set estimated = this.state | float(0) %}
+            {% set actual = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+            {% set denom = [estimated, actual, 0.01] | max %}
+            {{ (((estimated - actual) | abs / denom) * 100) | round(1) }}
 
       # I-33 Phase 2: ElevenLabs credits remaining (API or manual cap)
       - name: "ElevenLabs Credits Remaining"
@@ -283,14 +317,77 @@ template:
           credits_remaining: >-
             {{ states('sensor.serper_account') | int(0) }}
 
-      # Serper cost per credit — $50 / 50 000 credits, converted to EUR
+      # C5: Serper cost per credit — uses configurable plan helpers (S8 fix)
       - name: "AI Cost per Serper Credit"
         unique_id: ai_cost_per_serper_credit
         icon: mdi:web
         unit_of_measurement: "€"
         state: >-
           {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
-          {{ (50 / 50000 * rate) | round(6) }}
+          {% set plan_cost = states('input_number.ai_serper_plan_cost') | float(50) %}
+          {% set plan_credits = [states('input_number.ai_serper_plan_credits') | int(50000), 1] | max %}
+          {{ (plan_cost / plan_credits * rate) | round(6) }}
+        attributes:
+          plan_cost_usd: >-
+            {{ states('input_number.ai_serper_plan_cost') | float(50) }}
+          plan_credits: >-
+            {{ states('input_number.ai_serper_plan_credits') | int(50000) }}
+
+      # C5: Derived TTS cost per 1K chars from ElevenLabs plan (semi-dynamic)
+      - name: "AI TTS Cost per 1K Chars (Derived)"
+        unique_id: ai_tts_cost_per_1k_chars_derived
+        icon: mdi:account-voice
+        unit_of_measurement: "€"
+        state: >-
+          {% set monthly = states('input_number.ai_elevenlabs_monthly_cost') | float(22) %}
+          {% set char_limit = state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(100000) %}
+          {% set char_limit = [char_limit, 1] | max %}
+          {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+          {{ ((monthly / char_limit) * 1000 * rate) | round(4) }}
+        attributes:
+          monthly_cost_usd: >-
+            {{ states('input_number.ai_elevenlabs_monthly_cost') | float(22) }}
+          character_limit: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(100000) }}
+          tier: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'tier') | default('unknown') }}
+          fallback_rate: >-
+            {{ states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) }}
+
+      # C5: Model pricing health status — owned by pyscript state.set()
+      # (no template definition needed; pyscript creates and updates this sensor)
+
+      # C5: Budget daily average (7-day rolling from budget_history via rolling sensor)
+      - name: "AI Budget Daily Average"
+        unique_id: ai_budget_daily_average
+        icon: mdi:chart-line
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {{ state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) }}
+
+      # C5: Monthly cost projection from daily average
+      - name: "AI Budget Monthly Projection"
+        unique_id: ai_budget_monthly_projection
+        icon: mdi:calendar-arrow-right
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {% set avg = state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) %}
+          {% set days_in_month = (now().replace(month=now().month % 12 + 1, day=1) - timedelta(days=1)).day
+             if now().month < 12 else 31 %}
+          {% set days_remaining = days_in_month - now().day + 1 %}
+          {% set spent_so_far = states('sensor.ai_openrouter_rolling_usage') | float(0)
+             - (state_attr('sensor.ai_openrouter_rolling_usage', 'today_eur') | float(0)) %}
+          {{ (state_attr('sensor.ai_openrouter_rolling_usage', 'today_eur') | float(0)
+              + (avg * (days_remaining - 1))) | round(2) }}
+        attributes:
+          daily_average: >-
+            {{ state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) }}
+          days_remaining: >-
+            {% set days_in_month = (now().replace(month=now().month % 12 + 1, day=1) - timedelta(days=1)).day
+               if now().month < 12 else 31 %}
+            {{ days_in_month - now().day + 1 }}
 
       # I-32: OpenRouter daily usage (delta from midnight snapshot)
       - name: "OpenRouter Daily Usage"
@@ -302,17 +399,19 @@ template:
           {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
           {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
           {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
-          {{ ((total - midnight) * rate) | round(2) }}
+          {% set delta = [total - midnight, 0] | max %}
+          {{ (delta * rate) | round(2) }}
         attributes:
           daily_usage_eur: >-
             {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
             {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
             {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
-            {{ ((total - midnight) * rate) | round(2) }}
+            {% set delta = [total - midnight, 0] | max %}
+            {{ (delta * rate) | round(2) }}
           daily_usage_usd: >-
             {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
             {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
-            {{ (total - midnight) | round(4) }}
+            {{ [total - midnight, 0] | max | round(4) }}
           total_usage_usd: >-
             {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(0) | round(2) }}
           credits_remaining_usd: >-
@@ -379,6 +478,7 @@ script:
               - luxury
     sequence:
       # I-33: Multi-metric budget check — ALL limits interact (min wins)
+      # C5: Cost uses hybrid/actual/estimated per ai_budget_cost_source
       - variables:
           _calls: >-
             {{ states('input_number.ai_llm_calls_today') | int(0) }}
@@ -388,8 +488,16 @@ script:
             {{ states('input_number.ai_llm_tokens_today') | int(0) }}
           _token_limit: >-
             {{ [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max }}
-          _cost: >-
+          _cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
+          _estimated_cost: >-
             {{ states('sensor.ai_total_daily_cost') | float(0) }}
+          _actual_cost: >-
+            {{ state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) }}
+          _cost: >-
+            {% if _cost_source == 'estimated' %}{{ _estimated_cost }}
+            {% elif _cost_source == 'actual' %}{{ _actual_cost }}
+            {% else %}{{ [_estimated_cost | float, _actual_cost | float] | max }}{% endif %}
           _cost_limit: >-
             {{ [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max }}
       - variables:
@@ -515,6 +623,28 @@ script:
           tts_chars: "{{ states('input_number.ai_tts_chars_today') | int(0) }}"
           stt_calls: "{{ states('input_number.ai_stt_calls_today') | int(0) }}"
           serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
+          model_cost_eur: "{{ states('input_number.ai_model_cost_today') | float(0) }}"
+          model_breakdown: >-
+            {% set bd = state_attr('sensor.ai_budget_breakdown', 'breakdown') %}
+            {% if bd is mapping %}
+              {% set ns = namespace(models={}) %}
+              {% for svc in ['llm', 'handoff'] %}
+                {% for agent, data in (bd.get(svc, {}) or {}).items() %}
+                  {% if data.get('model') %}
+                    {% set m = data.get('model') %}
+                    {% set prev = ns.models.get(m, {'calls': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_eur': 0}) %}
+                    {% set ns.models = dict(ns.models, **{m: {
+                       'calls': prev.calls + data.get('calls', 0),
+                       'input_tokens': prev.input_tokens + data.get('input_tokens', 0),
+                       'output_tokens': prev.output_tokens + data.get('output_tokens', 0),
+                       'cost_eur': (prev.cost_eur + data.get('model_cost_eur', 0)) | round(4)
+                    }}) %}
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+              {{ ns.models | tojson }}
+            {% else %}{}{% endif %}
+          music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
       # ── Step 2: Reset all counters ──
       - alias: "Reset all budget counters to zero"
         action: input_number.set_value
@@ -525,6 +655,7 @@ script:
             - input_number.ai_tts_calls_today
             - input_number.ai_tts_chars_today
             - input_number.ai_stt_calls_today
+            - input_number.ai_model_cost_today
         data:
           value: 0
       # ── Step 3: Snapshot OpenRouter usage for next day's delta ──

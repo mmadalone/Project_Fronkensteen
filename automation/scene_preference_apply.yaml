@@ -1,0 +1,351 @@
+blueprint:
+  name: "Scene Preference Apply (C6)"
+  author: madalone
+  description: >
+    # Scene Preference Apply
+
+    Applies learned light scene preferences when a zone becomes occupied.
+    Works with `scene_learner.py` which records preferences over time
+    from observed light states in occupied zones.
+
+    ### How it works
+
+    1. FP2 presence sensor detects zone entry.
+    2. Calls `pyscript.scene_learner_get` for the target zone.
+    3. If sufficient observations exist, applies the learned brightness
+       and color temperature via `light.turn_on`.
+    4. Optionally pauses the circadian lighting automation during apply.
+
+    ### Sequencing
+
+    - **Layer 2** (zone_preactivation): fires BEFORE arrival (prediction)
+    - **Layer 3** (this blueprint): fires AFTER arrival (presence) and
+      overrides pre-staged generic values with learned preferences.
+
+    ### Recent changes
+    - **v1.0.0:** Initial blueprint — C6 Layer 3
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/scene_preference_apply.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: Per-instance kill switch.
+          selector:
+            entity:
+              domain: input_boolean
+
+        target_zone:
+          name: Target zone
+          description: >
+            Zone matching entity_config.yaml scene_learner_lights.
+          selector:
+            select:
+              options:
+                - label: "Workshop"
+                  value: "workshop"
+                - label: "Living Room"
+                  value: "living_room"
+                - label: "Main Room"
+                  value: "main_room"
+                - label: "Kitchen"
+                  value: "kitchen"
+                - label: "Bed"
+                  value: "bed"
+                - label: "Lobby"
+                  value: "lobby"
+                - label: "Bathroom"
+                  value: "bathroom"
+                - label: "Shower"
+                  value: "shower"
+
+        presence_sensor:
+          name: Presence sensor
+          description: FP2 binary sensor for this zone.
+          selector:
+            entity:
+              domain: binary_sensor
+
+        presence_delay:
+          name: Presence delay
+          description: How long presence must hold before applying.
+          default:
+            seconds: 10
+          selector:
+            duration: {}
+
+    # ===========================================================================
+    # ② LEARNING THRESHOLDS
+    # ===========================================================================
+    thresholds:
+      name: "② Learning thresholds"
+      icon: mdi:school
+      collapsed: true
+      input:
+        min_observations:
+          name: Minimum observations
+          description: >
+            Minimum recorded observations before applying preferences.
+            Lower = faster learning but less reliable.
+          default: 5
+          selector:
+            number:
+              min: 3
+              max: 50
+
+    # ===========================================================================
+    # ③ APPLICATION
+    # ===========================================================================
+    application:
+      name: "③ Application"
+      icon: mdi:lightbulb-on
+      collapsed: true
+      input:
+        transition_seconds:
+          name: Transition (seconds)
+          description: Transition duration when applying learned preferences.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 30
+              unit_of_measurement: "s"
+
+        circadian_resume_minutes:
+          name: Circadian resume delay (minutes)
+          description: >
+            Re-enable the circadian automation after this many minutes.
+            Set to 0 to never re-enable (manual reset needed).
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 120
+              unit_of_measurement: "min"
+
+        fallback_action:
+          name: Fallback action
+          description: >
+            Action to run if no learned preference exists (e.g. turn on
+            at circadian defaults). Leave empty to do nothing.
+          default: []
+          selector:
+            action: {}
+
+    # ===========================================================================
+    # ④ GATES
+    # ===========================================================================
+    gates:
+      name: "④ Gates"
+      icon: mdi:gate
+      collapsed: true
+      input:
+        circadian_toggle:
+          name: Circadian instance toggle
+          description: >
+            Kill switch of the circadian_lighting instance for this zone.
+            Turned off while learned preference is active, restored after
+            resume delay.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        focus_mode_entity:
+          name: Focus mode entity
+          default: input_boolean.ai_focus_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        guest_mode_entity:
+          name: Guest mode entity
+          default: input_boolean.ai_guest_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        bedtime_entity:
+          name: Bedtime entity
+          default: input_boolean.ai_bedtime_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        bedtime_behavior:
+          name: Bedtime behavior
+          default: "skip"
+          selector:
+            select:
+              options:
+                - label: "Skip — do not apply during bedtime"
+                  value: "skip"
+                - label: "Dim only — apply brightness, ignore color"
+                  value: "dim_only"
+
+    # ===========================================================================
+    # ⑤ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑤ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          default: "miquel"
+          selector:
+            text:
+
+variables:
+  v_enable: !input enable_toggle
+  v_zone: !input target_zone
+  v_min_obs: !input min_observations
+  v_transition: !input transition_seconds
+  v_resume_min: !input circadian_resume_minutes
+  v_circadian_toggle: !input circadian_toggle
+  v_bedtime: !input bedtime_entity
+  v_bedtime_behavior: !input bedtime_behavior
+  v_guest: !input guest_mode_entity
+  v_privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - alias: "Zone occupied"
+    trigger: state
+    entity_id: !input presence_sensor
+    from: "off"
+    to: "on"
+    for: !input presence_delay
+
+conditions:
+  # ── Kill switch ──
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Guest mode ──
+  - condition: template
+    value_template: "{{ not is_state(v_guest, 'on') }}"
+
+  # ── Bedtime ──
+  - condition: template
+    value_template: >-
+      {{ v_bedtime_behavior != 'skip' or not is_state(v_bedtime, 'on') }}
+
+  # ── Privacy gate ──
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = v_privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- set override = states('input_select.ai_privacy_gate_scene_preference') | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all' or override == 'force_allow'
+          or override == 'off' -%}
+        true
+      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+actions:
+  # ── Get learned preference ──
+  - alias: "Get learned preference"
+    action: pyscript.scene_learner_get
+    data:
+      zone: "{{ v_zone }}"
+    response_variable: pref
+
+  # ── Check if we have enough data ──
+  - alias: "Apply or fallback"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ pref.observations | default(0) | int >= v_min_obs | int
+                 and pref.lights | default({}) | length > 0 }}
+        sequence:
+          # ── Pause circadian if configured ──
+          - alias: "Pause circadian automation"
+            if:
+              - condition: template
+                value_template: "{{ v_circadian_toggle not in ['', 'none', none] }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: "{{ v_circadian_toggle }}"
+
+          # ── Fire suppress event ──
+          - event: ai_scene_learner_suppress
+            event_data:
+              source: scene_preference_apply
+
+          # ── Apply learned preferences ──
+          - alias: "Apply learned scene"
+            action: pyscript.scene_learner_apply
+            data:
+              zone: "{{ v_zone }}"
+              transition: "{{ v_transition }}"
+
+          # ── Resume circadian after timeout ──
+          - alias: "Resume circadian after timeout"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ v_circadian_toggle not in ['', 'none', none]
+                     and v_resume_min | int > 0 }}
+            then:
+              - delay:
+                  minutes: "{{ v_resume_min | int }}"
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: "{{ v_circadian_toggle }}"
+
+    default:
+      # ── No learned preference — run fallback ──
+      - choose: []
+        default: !input fallback_action

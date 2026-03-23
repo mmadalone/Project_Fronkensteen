@@ -529,6 +529,9 @@ async def _daily_aggregate():
     task_instance = state.get("input_text.ai_task_instance")  # noqa: F821
     if task_instance and raw_summary:
         genre_summary = await _generate_genre_summary(raw_summary, task_instance, 100, "")
+        # C5: Track the LLM call that _generate_genre_summary makes via llm_task_call
+        # (llm_task_call already increments counters, but this was previously a blind spot
+        # if called via a different path — now explicitly documented as tracked)
 
     _set_result(
         "ok",
