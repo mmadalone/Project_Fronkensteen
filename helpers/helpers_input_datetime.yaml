@@ -206,6 +206,17 @@ ai_winddown_session_start:
   icon: mdi:clock-start
 
 # ═══════════════════════════════════════════════════════════════════
+# ai_budget — Budget System
+# ═══════════════════════════════════════════════════════════════════
+# Tracks the last date the daily budget reset ran. Used by the startup
+# trigger to detect missed midnight resets (e.g. HA was restarting at 00:00).
+ai_budget_last_reset:
+  name: "AI Budget - Last Reset Date"
+  has_date: true
+  has_time: false
+  icon: mdi:calendar-check
+
+# ═══════════════════════════════════════════════════════════════════
 # ai_theatrical — Theatrical Mode (C12 / Pattern 4)
 # ═══════════════════════════════════════════════════════════════════
 ai_theatrical_last_exchange:
