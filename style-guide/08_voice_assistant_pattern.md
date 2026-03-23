@@ -371,7 +371,7 @@ Conversely, HA can also act as an **MCP server**, exposing your home's entities 
 
 ### 14.4.1 Layer 3.5 — Pyscript Orchestration
 
-Between the conversation agents and the blueprints sits a **pyscript orchestration layer** — 15 Python modules (~510KB) that handle agent routing, inter-agent communication, memory, TTS queuing, predictions, and proactive behaviors. This layer reads from `assist_pipeline.pipelines` for persona discovery and operates on top of the HA Voice Assistant pipelines.
+Between the conversation agents and the blueprints sits a **pyscript orchestration layer** — 16 Python modules (~545KB) that handle agent routing, inter-agent communication, memory, TTS queuing, predictions, and proactive behaviors. This layer reads from `assist_pipeline.pipelines` for persona discovery and operates on top of the HA Voice Assistant pipelines.
 
 **Core modules:**
 
@@ -393,8 +393,9 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 | `email_promote.py` | Gmail IMAP priority filter, L3→L2 promotion | `pyscript.email_promote_process` |
 | `common_utilities.py` | SQLite cache layer, `conversation.process` timeout wrapper | (utility, no public service) |
 | `volume_sync.py` | Alexa ↔ MA volume synchronization | (trigger-based, no public service) |
+| `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging) — **testing pending** | `pyscript.theatrical_mode_start/stop` |
 
-**Supporting infrastructure:** 17 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config).
+**Supporting infrastructure:** 18 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config), `ai_theatrical.yaml` (theatrical mode config).
 
 **Three-layer memory architecture:**
 - **L1 (Hot Context):** `sensor.ai_hot_context` — real-time template sensor injected into every agent's system prompt. Time, presence, media, weather, schedule, mood, focus mode, budget, history (home-since durations, temperature ranges).
@@ -1574,6 +1575,9 @@ These are the ones that'll bite you in the ass if you're not careful:
 | ESPHome secrets | `/config/esphome/secrets.yaml` |
 | Custom wake word models | `/config/www/microwake/*.json` + `*.tflite` |
 | Automation blueprints | `/config/blueprints/automation/madalone/` |
+| Theatrical mode engine | `/config/pyscript/theatrical_mode.py` |
+| Theatrical mode blueprint | `/config/blueprints/automation/madalone/theatrical_mode.yaml` |
+| Theatrical mode package | `/config/packages/ai_theatrical.yaml` |
 | Script blueprints | `/config/blueprints/script/madalone/` |
 | Voice PE duck/restore blueprints | `/config/blueprints/automation/voice_pe/` |
 | Conversation agent prompts | Configured in HA UI (integration settings) |

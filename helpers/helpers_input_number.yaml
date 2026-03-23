@@ -1755,3 +1755,33 @@ ai_winddown_stage:
   step: 1
   initial: 0
   mode: box
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_turn_limit:
+  name: "AI Theatrical - Turn Limit"
+  icon: mdi:counter
+  min: 2
+  max: 20
+  step: 1
+  initial: 6
+  mode: slider
+
+ai_theatrical_max_words:
+  name: "AI Theatrical - Max Words Per Turn"
+  icon: mdi:text-short
+  min: 10
+  max: 100
+  step: 5
+  initial: 40
+  mode: slider
+
+ai_theatrical_budget_floor:
+  name: "AI Theatrical - Budget Floor (%)"
+  icon: mdi:cash-lock
+  min: 0
+  max: 100
+  step: 5
+  initial: 70
+  unit_of_measurement: "%"

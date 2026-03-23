@@ -271,6 +271,41 @@
           clip: "{{clip}}"
 
 - spec:
+    name: start_debate
+    description: >-
+      Start a theatrical debate between AI personas on a topic.
+      Call when the user says "debate this", "argue about it",
+      "what do you guys think?", "let's hear from everyone",
+      or wants multiple agents to discuss something.
+      Do NOT call during bedtime variant.
+      IMPORTANT: After calling, respond with a brief in-character
+      intro like "Alright, let's get the crew's take on this."
+    parameters:
+      type: object
+      properties:
+        topic:
+          type: string
+          description: "The topic to debate (2-10 words)"
+        participants:
+          type: string
+          description: >-
+            Comma-separated agent names to include (e.g. "Rick, Quark").
+            Leave empty for all available agents.
+      required:
+        - topic
+  function:
+    type: script
+    sequence:
+      - condition: state
+        entity_id: input_boolean.ai_theatrical_mode_active
+        state: "off"
+      - event: ai_theatrical_request
+        event_data:
+          topic: "{{ topic }}"
+          participants: "{{ participants | default('') }}"
+          source: "user_request"
+
+- spec:
     name: end_conversation
     description: >-
       End the continuous conversation session. Call when the user says goodbye,

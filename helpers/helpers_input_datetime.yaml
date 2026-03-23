@@ -204,3 +204,12 @@ ai_winddown_session_start:
   has_date: true
   has_time: true
   icon: mdi:clock-start
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_last_exchange:
+  name: "AI Theatrical - Last Exchange Time"
+  has_date: true
+  has_time: true
+  icon: mdi:drama-masks

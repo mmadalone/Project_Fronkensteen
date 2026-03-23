@@ -50,7 +50,6 @@ from shared_utils import build_result_entity_name
 
 RESULT_ENTITY = "sensor.ai_whisper_status"
 PIPELINE_FILE = "/config/.storage/assist_pipeline.pipelines"
-KNOWN_VARIANTS = {"standard", "bedtime"}
 RECENT_TOPICS_ENTITY = "sensor.ai_recent_topics"
 
 # ── Dynamic Cache ────────────────────────────────────────────────────────────
@@ -210,45 +209,63 @@ def _load_pipelines_from_file(pipeline_file: str) -> list:
 
 
 @pyscript_compile  # noqa: F821
-def _build_from_pipelines(
-    items: list,
-    known_variants: set,
-) -> tuple:
-    """Derive personas, entity_map, wake_word_map, pipeline_map from pipeline items."""
+def _build_from_pipelines(items: list) -> tuple:
+    """Derive personas from pipeline display names (not entity IDs).
+
+    Parses 'Rick - Bedtime' → persona='rick', variant='bedtime'.
+    Returns (personas, entity_map, wake_word_map, pipeline_map, display_map).
+    """
     personas_set = set()
     entity_map = {}
     pipeline_map = {}
+    display_map = {}
 
     for item in items:
         engine = item.get("conversation_engine", "")
+        pname = (item.get("name") or "").strip()
+
         if not engine or not engine.startswith("conversation."):
             continue
+        if not pname:
+            continue
 
-        name = engine[len("conversation."):]
-        if "_" in name:
-            prefix, suffix = name.rsplit("_", 1)
-            if suffix in known_variants:
-                persona, variant = prefix, suffix
-            elif suffix.isdigit() and "_" in prefix:
-                # Strip HA's numeric suffix (e.g., rick_standard_2 → rick + standard)
-                inner_prefix, inner_suffix = prefix.rsplit("_", 1)
-                if inner_suffix in known_variants:
-                    persona, variant = inner_prefix, inner_suffix
-                else:
-                    persona, variant = name, "standard"
-            else:
-                persona, variant = name, "standard"
+        if " - " in pname:
+            parts = pname.split(" - ", 1)
+            display_persona = parts[0].strip()
+            variant_str = parts[1].strip().lower().replace(" ", "_")
+            variant = variant_str if variant_str else "standard"
         else:
-            persona, variant = name, "standard"
+            display_persona = pname
+            variant = "standard"
+
+        persona = display_persona.lower().replace(" ", "_")
 
         personas_set.add(persona)
         entity_map[(persona, variant)] = engine
         pipeline_map[engine] = item
+        display_map[persona] = display_persona
 
     personas = tuple(sorted(personas_set))
     wake_word_map = {p: p for p in personas}
+    return personas, entity_map, wake_word_map, pipeline_map, display_map
 
-    return personas, entity_map, wake_word_map, pipeline_map
+
+@pyscript_compile  # noqa: F821
+def _normalize_agent_name(raw: str) -> str:
+    """Normalize agent name to match cache persona keys.
+
+    Handles:
+    - Case folding + trim: '  Rick  ' → 'rick'
+    - Variant suffix stripping: 'rick - standard' → 'rick'
+    - Spaces to underscores: 'doctor portuondo' → 'doctor_portuondo'
+
+    Idempotent — already-normalized names pass through unchanged.
+    """
+    name = (raw or "").strip().lower()
+    if " - " in name:
+        name = name.split(" - ", 1)[0].strip()
+    name = name.replace(" ", "_")
+    return name
 
 
 async def _ensure_cache() -> None:
@@ -264,8 +281,8 @@ async def _ensure_cache() -> None:
         )
 
     items = _load_pipelines_from_file(PIPELINE_FILE)
-    personas, entity_map, wake_word_map, pipeline_map = _build_from_pipelines(
-        items, KNOWN_VARIANTS
+    personas, entity_map, wake_word_map, pipeline_map, display_map = (
+        _build_from_pipelines(items)
     )
 
     if not personas:
@@ -279,11 +296,13 @@ async def _ensure_cache() -> None:
         "entity_map": entity_map,
         "wake_word_map": wake_word_map,
         "pipeline_map": pipeline_map,
+        "display_map": display_map,
     }
     _cache_ts = time.monotonic()
 
     log.info(  # noqa: F821
-        f"agent_whisper: loaded {len(personas)} personas from pipelines"
+        f"agent_whisper: loaded {len(personas)} personas from pipelines: "
+        f"{', '.join(personas)}"
     )
 
 
@@ -819,7 +838,7 @@ async def agent_whisper(
     await _ensure_cache()
     personas = _cache["personas"]
 
-    agent = (agent_name or "").lower().strip()
+    agent = _normalize_agent_name(agent_name)
     if agent not in personas:
         result = {
             "status": "error",
@@ -1105,7 +1124,7 @@ async def agent_whisper_context(
     await _ensure_cache()
     personas = _cache["personas"]
 
-    agent = (agent_name or "").lower().strip()
+    agent = _normalize_agent_name(agent_name)
     if agent not in personas:
         result = {
             "status": "error",
@@ -1600,7 +1619,7 @@ async def agent_interaction_log(
     await _ensure_cache()
     personas = _cache["personas"]
 
-    agent = (agent_name or "").lower().strip()
+    agent = _normalize_agent_name(agent_name)
     if agent not in personas:
         result = {
             "status": "error",

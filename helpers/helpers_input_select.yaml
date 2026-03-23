@@ -508,3 +508,32 @@ ai_winddown_last_scenario:
     - bed_non_sleepy
   initial: none
 
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_interrupt_mode:
+  name: "AI Theatrical - Interrupt Mode"
+  icon: mdi:hand-back-right
+  options:
+    - mic_gap
+    - turn_limit
+    - wake_word
+  initial: turn_limit
+
+ai_theatrical_context_mode:
+  name: "AI Theatrical - Context Mode"
+  icon: mdi:brain
+  options:
+    - full
+    - topic_only
+    - whisper
+  initial: full
+
+ai_theatrical_turn_order:
+  name: "AI Theatrical - Turn Order"
+  icon: mdi:shuffle-variant
+  options:
+    - round_robin
+    - random
+  initial: round_robin
+

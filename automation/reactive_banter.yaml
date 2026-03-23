@@ -352,6 +352,54 @@ blueprint:
               max: 100
               step: 5
 
+    # ── ⑧ Theatrical Escalation ────────────────────────────────────────
+    escalation:
+      name: "⑧ Theatrical Escalation"
+      icon: mdi:trending-up
+      description: >-
+        When enabled, a banter reaction can probabilistically
+        escalate into a full multi-turn theatrical exchange
+        (Pattern 4). Fires an ai_theatrical_request event.
+      collapsed: true
+      input:
+        enable_theatrical_escalation:
+          name: Enable Theatrical Escalation
+          description: >-
+            When enabled, after a successful banter reaction,
+            a probability roll determines if the exchange
+            escalates into a full theatrical debate.
+          default: false
+          selector:
+            boolean:
+
+        escalation_probability:
+          name: Escalation Probability (%)
+          description: >-
+            Chance that a banter reaction escalates into
+            theatrical mode. Only applies when escalation
+            is enabled above. 10% is conservative.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        escalation_budget_floor:
+          name: Escalation Budget Floor (%)
+          description: >-
+            Additional budget floor gate for escalation.
+            Set to 0 to use the theatrical blueprint's own
+            budget floor only.
+          default: 70
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
 mode: single
 max_exceeded: silent
 
@@ -395,6 +443,9 @@ variables:
   v_stinger_fallback_url: !input stinger_fallback_media_url
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
+  enable_theatrical_escalation: !input enable_theatrical_escalation
+  escalation_probability: !input escalation_probability
+  escalation_budget_floor: !input escalation_budget_floor
   # ── TTS voice map parsing (proven pattern from voice_handoff.yaml) ──
   tts_voice_map_raw: !input tts_voice_map
   voice_map: >-
@@ -759,3 +810,24 @@ action:
       user_query: "banter reaction to {{ agent_a }}'s response about {{ topic }}"
       agent_response: "{{ banter_text }}"
       source: "automation"
+
+  # ── Step 10: Theatrical escalation check ──
+  - alias: "Step 10 — Theatrical escalation"
+    if:
+      - condition: template
+        value_template: >-
+          {{ enable_theatrical_escalation | default(false)
+             and is_state('input_boolean.ai_theatrical_mode_enabled', 'on')
+             and is_state('input_boolean.ai_theatrical_mode_active', 'off')
+             and (states('sensor.ai_llm_budget_remaining') | float(100))
+                >= (escalation_budget_floor | float(70))
+             and (range(100) | random) < (escalation_probability | int(10)) }}
+    then:
+      - event: ai_theatrical_request
+        event_data:
+          topic: "{{ trigger.event.data.get('topic', 'the conversation') }}"
+          initial_context: >-
+            {{ trigger.event.data.get('agent', 'Agent') }}: {{ trigger.event.data.get('response', '')[:200] }}
+            {{ agent_b }}: {{ banter_text[:200] }}
+          source: "banter_escalation"
+          opener_persona: "{{ agent_b }}"

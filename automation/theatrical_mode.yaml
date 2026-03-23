@@ -1,0 +1,725 @@
+blueprint:
+  name: "Theatrical Mode \u2014 Multi-Agent Debate"
+  description: >-
+    Pattern 4 of inter-agent communication. Orchestrates multi-turn
+    debate/banter exchanges between 2\u20135 AI personas. Triggered by
+    ai_theatrical_request event. Each agent speaks in character via
+    their own TTS voice, optionally on different physical speakers
+    for spatial staging. Foundation: Pattern 1 (Reactive Banter).
+  domain: automation
+  homeassistant:
+    min_version: "2025.7.0"
+
+  input:
+    # \u2500\u2500 \u2460 Control \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    control:
+      name: "\u2460 Control"
+      icon: mdi:drama-masks
+      description: Enable toggle, satellite, and orchestration mode switches.
+      collapsed: false
+      input:
+        enable_toggle:
+          name: Enable Toggle
+          description: Per-instance kill switch for theatrical mode.
+          selector:
+            entity:
+              domain: input_boolean
+
+        satellite:
+          name: Voice Satellite
+          description: >-
+            Which satellite this instance serves. Interrupt modes
+            (mic_gap, wake_word) target this satellite.
+          selector:
+            entity:
+              domain: assist_satellite
+
+        satellite_speaker:
+          name: Satellite Speaker
+          description: >-
+            The media_player entity for this satellite's ESP speaker.
+            Used for idle detection fallback.
+          selector:
+            entity:
+              domain: media_player
+
+        conversation_agent:
+          name: Fallback Conversation Agent
+          description: >-
+            Used when the dispatcher is disabled. Ignored when
+            use_dispatcher is on.
+          default: ""
+          selector:
+            conversation_agent:
+
+        use_dispatcher:
+          name: Use AI Dispatcher for agent resolution
+          description: >-
+            Route through pyscript.theatrical_mode_start for dynamic
+            agent/voice/persona selection per participant. When off,
+            uses conversation_agent for a simplified single-agent loop.
+          default: true
+          selector:
+            boolean:
+
+        use_tts_queue:
+          name: Use TTS queue for speech delivery
+          description: >-
+            Route TTS through pyscript.tts_queue_speak. When off,
+            falls back to tts.speak directly.
+          default: true
+          selector:
+            boolean:
+
+        use_whisper:
+          name: Log exchanges to Whisper network
+          description: >-
+            Log each theatrical exchange to L2 memory via
+            pyscript.memory_set. When off, no logging.
+          default: true
+          selector:
+            boolean:
+
+    # \u2500\u2500 \u2461 Gating \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    gating:
+      name: "\u2461 Gating"
+      icon: mdi:dice-multiple
+      description: Budget floor, cooldown, and probability gates.
+      collapsed: true
+      input:
+        budget_floor:
+          name: Budget Floor (%)
+          description: >-
+            Skip theatrical exchange when LLM budget remaining drops
+            below this percentage. Set to 0 to disable the budget gate.
+          default: 70
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        cooldown_minutes:
+          name: Cooldown (minutes)
+          description: >-
+            Minimum time between theatrical exchanges. Prevents
+            back-to-back debates that drain the LLM budget.
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 480
+              step: 10
+              unit_of_measurement: min
+
+        cooldown_helper:
+          name: Cooldown Helper
+          description: >-
+            input_datetime entity tracking last exchange time.
+            Updated automatically after each exchange.
+          default: input_datetime.ai_theatrical_last_exchange
+          selector:
+            entity:
+              domain: input_datetime
+
+    # \u2500\u2500 \u2462 Participants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    participants_section:
+      name: "\u2462 Participants"
+      icon: mdi:account-group
+      description: Which agents are eligible for the debate roster.
+      collapsed: true
+      input:
+        agent_pool_list:
+          name: Agent Pool
+          description: >-
+            Comma-separated pipeline display names eligible for
+            theatrical exchanges. The trigger event may override
+            this with a specific participant list.
+          default: "Rick, Quark, Deadpool, Kramer, Doctor Portuondo"
+          selector:
+            text:
+              multiline: true
+
+        min_participants:
+          name: Minimum Participants
+          description: >-
+            Minimum number of agents required for an exchange.
+            If fewer are available, the exchange is skipped.
+          default: 2
+          selector:
+            number:
+              min: 2
+              max: 5
+              step: 1
+
+        max_participants:
+          name: Maximum Participants
+          description: >-
+            Maximum agents per exchange. When the pool is larger,
+            a random subset is selected.
+          default: 5
+          selector:
+            number:
+              min: 2
+              max: 5
+              step: 1
+
+    # \u2500\u2500 \u2463 Turn Management \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    turns:
+      name: "\u2463 Turn Management"
+      icon: mdi:counter
+      description: Turn limit, ordering, word count, and pacing.
+      collapsed: true
+      input:
+        turn_limit:
+          name: Turn Limit
+          description: >-
+            Maximum total turns in the exchange (across all
+            participants). 6 turns with 3 agents = 2 rounds each.
+          default: 6
+          selector:
+            number:
+              min: 2
+              max: 20
+              step: 1
+
+        turn_order:
+          name: Turn Order
+          description: >-
+            How the next speaker is selected each turn.
+          default: "round_robin"
+          selector:
+            select:
+              options:
+                - round_robin
+                - random
+
+        max_words:
+          name: Max Words Per Turn
+          description: >-
+            Maximum word count per agent response. Enforced in
+            the I-45a prefix AND by post-generation truncation.
+          default: 40
+          selector:
+            number:
+              min: 10
+              max: 100
+              step: 5
+
+        inter_turn_pause:
+          name: Inter-Turn Pause (seconds)
+          description: >-
+            Pause between speakers after TTS completion.
+          default: 0.8
+          selector:
+            number:
+              min: 0.0
+              max: 5.0
+              step: 0.1
+
+    # \u2500\u2500 \u2464 Interrupt Mode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    interrupt:
+      name: "\u2464 Interrupt Mode"
+      icon: mdi:hand-back-right
+      description: >-
+        How the user can interrupt a running exchange.
+        All modes also check the active session kill switch.
+      collapsed: true
+      input:
+        interrupt_mode:
+          name: Interrupt Mode
+          description: >-
+            "mic_gap": Asks user between turns.
+            "turn_limit": No interrupt, plays to turn limit.
+            "wake_word": Detects wake word between turns.
+          default: "turn_limit"
+          selector:
+            select:
+              options:
+                - mic_gap
+                - turn_limit
+                - wake_word
+
+        mic_gap_question:
+          name: Mic Gap Question
+          description: >-
+            Question spoken via TTS between turns in mic_gap mode.
+          default: "Anything to add?"
+          selector:
+            text:
+
+        mic_gap_stop_phrases:
+          name: Mic Gap Stop Phrases
+          description: >-
+            Comma-separated phrases that end the exchange.
+          default: "stop, enough, shut up, that's enough, quiet, ok stop, stop it"
+          selector:
+            text:
+              multiline: true
+
+        mic_gap_redirect_phrases:
+          name: Mic Gap Redirect Phrases
+          description: >-
+            Comma-separated phrases that end the exchange and
+            return control to the user.
+          default: "actually, wait, hold on, let me, I want to"
+          selector:
+            text:
+              multiline: true
+
+    # \u2500\u2500 \u2465 Context Mode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    context:
+      name: "\u2465 Context Mode"
+      icon: mdi:brain
+      description: How agents see what other agents said.
+      collapsed: true
+      input:
+        context_mode:
+          name: Context Mode
+          description: >-
+            "full": Each agent sees previous agents' responses.
+            "topic_only": Agents know topic but not what others said.
+            "whisper": Uses L2 whisper network for context.
+          default: "full"
+          selector:
+            select:
+              options:
+                - full
+                - topic_only
+                - whisper
+
+        context_window:
+          name: Context Window (turns)
+          description: >-
+            Number of previous turns in sliding context buffer
+            when context_mode is "full".
+          default: 6
+          selector:
+            number:
+              min: 2
+              max: 12
+              step: 1
+
+    # \u2500\u2500 \u2466 Delivery \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    delivery:
+      name: "\u2466 Delivery"
+      icon: mdi:bullhorn
+      description: >-
+        TTS speaker mapping, voice overrides, volume, and priority.
+      collapsed: true
+      input:
+        speaker_list:
+          name: Speakers (same order as Agent Pool)
+          description: >-
+            Physical media_player entities for each agent, in the
+            exact same order as the Agent Pool list in section 3.
+            Agent 1 speaks on speaker 1, agent 2 on speaker 2, etc.
+            If fewer speakers than agents, they cycle round-robin.
+            Leave empty for auto-assignment from zone speaker config.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+        tts_voice_map:
+          name: TTS Voice Map
+          description: >-
+            Persona-to-TTS engine override. Format:
+            persona=tts.entity;persona2=tts.entity2
+          default: "rick=tts.elevenlabs_text_to_speech;quark=tts.elevenlabs_quark_text_to_speech;deadpool=tts.deepee_text_to_speech;kramer=tts.elevenlabs_kramer_text_to_speech;doctor portuondo=tts.dr_portuondo_text_to_speech"
+          selector:
+            text:
+              multiline: true
+
+        tts_priority:
+          name: TTS Priority
+          description: >-
+            Queue priority (0=emergency, 4=low). Default 2.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+
+        tts_output_volume:
+          name: TTS Output Volume (optional)
+          description: >-
+            Volume level (0.0\u20131.0) during exchange. Speakers are
+            restored after the exchange. Set to 0 to disable.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        tts_volume_restore_delay:
+          name: TTS Volume Restore Delay (seconds)
+          description: >-
+            Seconds after exchange before restoring speaker volumes.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+
+        tts_playback_buffer:
+          name: Playback Buffer (seconds)
+          description: >-
+            Extra seconds after speaker idle before next turn.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 10
+              step: 1
+
+    # \u2500\u2500 \u2467 Stinger \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    stinger:
+      name: "\u2467 Stinger"
+      icon: mdi:music-note
+      description: Optional chime before the exchange starts.
+      collapsed: true
+      input:
+        enable_pre_exchange_stinger:
+          name: Enable Pre-Exchange Stinger
+          description: >-
+            Play a chime before the first agent speaks.
+          default: false
+          selector:
+            boolean:
+
+        stinger_fallback_media_url:
+          name: Stinger Fallback Media URL
+          description: >-
+            URL or /local/ path to a chime file.
+          default: ""
+          selector:
+            text:
+
+    # \u2500\u2500 \u2468 Prompt \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    prompt:
+      name: "\u2468 Prompt"
+      icon: mdi:text-box-outline
+      description: Debate prompt template and I-45a safety prefix.
+      collapsed: true
+      input:
+        theatrical_prompt_template:
+          name: Debate Prompt Template
+          description: >-
+            Jinja2 template for each turn's prompt. Available
+            variables: {topic}, {context_text}, {persona},
+            {turn}, {total_turns}. I-45a prefix is prepended
+            automatically.
+          default: >-
+            Topic: {topic}
+
+            {context_text}
+
+            You are {persona}. It's your turn in this debate.
+            Argue your position. Respond to what others said.
+            Be brief and punchy. Stay in character.
+          selector:
+            text:
+              multiline: true
+
+        i45a_prefix:
+          name: I-45a Safety Prefix
+          description: >-
+            Tool-suppression prefix prepended to every LLM call.
+          default: >-
+            [THEATRICAL DEBATE \u2014 Do NOT call any functions or tools.
+            Respond ONLY with a brief in-character argument.
+            No entity IDs, no JSON, no tool names in your response.
+            Do not narrate what you are doing.]
+          selector:
+            text:
+              multiline: true
+
+    # \u2500\u2500 \u2469 Banter Escalation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    escalation:
+      name: "\u2469 Banter Escalation"
+      icon: mdi:trending-up
+      description: >-
+        When enabled, this instance responds to banter_escalation
+        source events from reactive_banter.yaml.
+      collapsed: true
+      input:
+        enable_banter_escalation:
+          name: Accept Banter Escalation Events
+          description: >-
+            When off, only responds to user_request and
+            automation source events.
+          default: true
+          selector:
+            boolean:
+
+    # \u2500\u2500 \u246a Infrastructure \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    infrastructure:
+      name: "\u246a Infrastructure"
+      icon: mdi:cog
+      description: Bypass scripts and internal wiring.
+      collapsed: true
+      input:
+        bypass_claim_script:
+          name: Refcount Claim Script
+          description: >-
+            Claims follow-me + ducking bypass during the exchange.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount Release Script
+          description: >-
+            Releases bypass when the exchange ends.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: event
+    event_type: ai_theatrical_request
+    id: theatrical_request
+
+conditions:
+  # Gate 1: Instance enable toggle
+  - alias: "Gate 1 \u2014 Enable toggle"
+    condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # Gate 2: Not already running
+  - alias: "Gate 2 \u2014 Not already active"
+    condition: state
+    entity_id: input_boolean.ai_theatrical_mode_active
+    state: "off"
+
+  # Gate 3: Budget floor
+  - alias: "Gate 3 \u2014 Budget check"
+    condition: template
+    value_template: >-
+      {{ (states('sensor.ai_llm_budget_remaining') | float(100))
+         >= (budget_floor_val | float(70)) }}
+
+  # Gate 4: Cooldown
+  - alias: "Gate 4 \u2014 Cooldown check"
+    condition: template
+    value_template: >-
+      {% set last = states(cooldown_helper) %}
+      {% if last in ['unknown', 'unavailable', ''] %}
+        true
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last, 0))
+           > (cooldown_min | int(60)) * 60 }}
+      {% endif %}
+
+  # Gate 5: Satellite idle
+  - alias: "Gate 5 \u2014 Satellite idle"
+    condition: template
+    value_template: >-
+      {{ states(satellite_entity) not in ['listening', 'responding'] }}
+
+variables:
+  # Blueprint inputs → template variables
+  satellite_entity: !input satellite
+  satellite_speaker_entity: !input satellite_speaker
+  v_use_dispatcher: !input use_dispatcher
+  v_use_tts_queue: !input use_tts_queue
+  v_use_whisper: !input use_whisper
+  v_conversation_agent: !input conversation_agent
+  budget_floor_val: !input budget_floor
+  cooldown_min: !input cooldown_minutes
+  cooldown_helper: !input cooldown_helper
+  v_agent_pool: !input agent_pool_list
+  v_min_participants: !input min_participants
+  v_max_participants: !input max_participants
+  v_turn_limit: !input turn_limit
+  v_turn_order: !input turn_order
+  v_max_words: !input max_words
+  v_inter_turn_pause: !input inter_turn_pause
+  v_interrupt_mode: !input interrupt_mode
+  v_mic_gap_question: !input mic_gap_question
+  v_mic_gap_stop: !input mic_gap_stop_phrases
+  v_mic_gap_redirect: !input mic_gap_redirect_phrases
+  v_context_mode: !input context_mode
+  v_context_window: !input context_window
+  v_speaker_list: !input speaker_list
+  v_tts_voice_map: !input tts_voice_map
+  v_tts_priority: !input tts_priority
+  v_tts_output_vol: !input tts_output_volume
+  v_tts_vol_restore_delay: !input tts_volume_restore_delay
+  v_tts_playback_buffer: !input tts_playback_buffer
+  v_stinger_enabled: !input enable_pre_exchange_stinger
+  v_stinger_url: !input stinger_fallback_media_url
+  v_prompt_template: !input theatrical_prompt_template
+  v_i45a_prefix: !input i45a_prefix
+  v_enable_escalation: !input enable_banter_escalation
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+
+  # Extract from trigger event data
+  v_topic: >-
+    {{ trigger.event.data.get('topic', 'Open discussion') }}
+  v_participants: >-
+    {{ trigger.event.data.get('participants', '') }}
+  v_source: >-
+    {{ trigger.event.data.get('source', 'automation') }}
+  v_initial_context: >-
+    {{ trigger.event.data.get('initial_context', '') }}
+  v_opener: >-
+    {{ trigger.event.data.get('opener_persona', '') }}
+
+actions:
+  # ── Source filter: reject banter_escalation if disabled ──
+  - alias: "Step 1 \u2014 Source filter"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_source == 'banter_escalation'
+             and not v_enable_escalation }}
+    then:
+      - stop: "Banter escalation disabled for this instance"
+
+  # ── Claim refcount bypass ──
+  - alias: "Step 2 \u2014 Claim follow-me bypass"
+    action: "{{ v_bypass_claim }}"
+    continue_on_error: true
+    data:
+      owner: "{{ this.entity_id }}"
+
+  # ── Optional pre-exchange stinger ──
+  - alias: "Step 3 \u2014 Pre-exchange stinger"
+    if:
+      - condition: template
+        value_template: "{{ v_stinger_enabled and v_stinger_url | length > 0 }}"
+    then:
+      - action: media_player.play_media
+        target:
+          entity_id: "{{ satellite_speaker_entity }}"
+        data:
+          media_content_id: "{{ v_stinger_url }}"
+          media_content_type: music
+        continue_on_error: true
+      - delay:
+          seconds: 2
+
+  # ── Choose: dispatcher path vs native fallback (H1) ──
+  - alias: "Step 4 \u2014 Orchestration"
+    choose:
+      - alias: "Dispatcher path \u2014 pyscript orchestration"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ v_use_dispatcher
+                 and is_state('input_boolean.ai_dispatcher_enabled', 'on') }}
+        sequence:
+          - alias: "Step 4a \u2014 Call theatrical_mode_start"
+            action: pyscript.theatrical_mode_start
+            response_variable: theatrical_result
+            continue_on_error: true
+            data:
+              topic: "{{ v_topic }}"
+              participants: >-
+                {{ v_participants if v_participants | length > 0
+                   else v_agent_pool }}
+              satellite: "{{ satellite_entity }}"
+              turn_limit: "{{ v_turn_limit | int(6) }}"
+              turn_order: "{{ v_turn_order }}"
+              context_mode: "{{ v_context_mode }}"
+              context_window: "{{ v_context_window | int(6) }}"
+              interrupt_mode: "{{ v_interrupt_mode }}"
+              mic_gap_question: "{{ v_mic_gap_question }}"
+              mic_gap_stop_phrases: "{{ v_mic_gap_stop }}"
+              mic_gap_redirect_phrases: "{{ v_mic_gap_redirect }}"
+              speaker_list_csv: "{{ v_speaker_list | join(',') if v_speaker_list else '' }}"
+              tts_voice_map: "{{ v_tts_voice_map }}"
+              priority: "{{ v_tts_priority | int(2) }}"
+              tts_output_volume: "{{ v_tts_output_vol | float(0) }}"
+              tts_volume_restore_delay: "{{ v_tts_vol_restore_delay | int(5) }}"
+              tts_playback_buffer: "{{ v_tts_playback_buffer | int(1) }}"
+              max_words: "{{ v_max_words | int(40) }}"
+              budget_floor: "{{ budget_floor_val | int(70) }}"
+              prompt_template: "{{ v_prompt_template }}"
+              i45a_prefix: "{{ v_i45a_prefix }}"
+              source: "{{ v_source }}"
+              initial_context: "{{ v_initial_context }}"
+              opener_persona: "{{ v_opener }}"
+              inter_turn_pause: "{{ v_inter_turn_pause | float(0.8) }}"
+              use_tts_queue: "{{ v_use_tts_queue }}"
+              use_whisper: "{{ v_use_whisper }}"
+
+    default:
+      # ── Native fallback: single-agent loop without pyscript ──
+      - alias: "Step 4b \u2014 Native fallback"
+        if:
+          - condition: template
+            value_template: "{{ v_conversation_agent | length > 0 }}"
+        then:
+          - alias: "Native fallback \u2014 activate"
+            action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.ai_theatrical_mode_active
+          - alias: "Native fallback \u2014 repeat loop"
+            repeat:
+              count: "{{ v_turn_limit | int(6) }}"
+              sequence:
+                - condition: state
+                  entity_id: input_boolean.ai_theatrical_mode_active
+                  state: "on"
+                - action: conversation.process
+                  data:
+                    agent_id: "{{ v_conversation_agent }}"
+                    text: >-
+                      [THEATRICAL DEBATE \u2014 Do NOT call any functions or tools.
+                      Respond ONLY with a brief in-character argument.
+                      Stay under {{ v_max_words | int(40) }} words.]
+
+                      Topic: {{ v_topic }}
+
+                      Give your take. Be brief. Stay in character.
+                  response_variable: native_result
+                  continue_on_error: true
+                - variables:
+                    native_speech: >-
+                      {{ (native_result | default({})).get('response', {})
+                         .get('speech', {}).get('plain', {})
+                         .get('speech', '') }}
+                - if:
+                    - condition: template
+                      value_template: "{{ native_speech | length > 0 }}"
+                  then:
+                    - action: tts.speak
+                      data:
+                        entity_id: "{{ v_tts_voice_map.split(';')[0].split('=')[1] | default('tts.google_en_com') }}"
+                        media_player_entity_id: "{{ satellite_speaker_entity }}"
+                        message: "{{ native_speech[:200] }}"
+                      continue_on_error: true
+                    - wait_template: >-
+                        {{ states(satellite_speaker_entity)
+                           in ['idle', 'standby', 'off'] }}
+                      timeout: "00:01:30"
+                      continue_on_timeout: true
+                    - delay:
+                        seconds: "{{ v_inter_turn_pause | float(0.8) }}"
+          - alias: "Native fallback \u2014 deactivate"
+            action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.ai_theatrical_mode_active
+
+  # ── Release refcount bypass ──
+  - alias: "Step 5 \u2014 Release follow-me bypass"
+    action: "{{ v_bypass_release }}"
+    continue_on_error: true
+    data:
+      owner: "{{ this.entity_id }}"

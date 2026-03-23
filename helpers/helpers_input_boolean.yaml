@@ -682,3 +682,16 @@ ai_winddown_active:
   name: "AI Wind-Down - Active"
   initial: false
   icon: mdi:moon-waning-crescent
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_mode_enabled:
+  name: "AI Theatrical Mode - Enabled"
+  icon: mdi:drama-masks
+  initial: true
+
+ai_theatrical_mode_active:
+  name: "AI Theatrical Mode - Active Session"
+  icon: mdi:drama-masks
+  initial: false
