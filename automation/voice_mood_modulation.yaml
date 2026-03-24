@@ -1,0 +1,269 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Voice Mood Modulation — v3 Audio Tag Pivot
+# ═══════════════════════════════════════════════════════════════════════════
+# One instance per character. Fires hourly + on startup. Writes current
+# time block's stability value to input_number and audio tag prefix to
+# input_text helpers. tts_queue._play_tts() and tts.py read those helpers
+# and inject stability + tag prefix for per-request dynamic voice.
+#
+# v3 pivot: ElevenLabs v3 ignores similarity_boost, style, and speed.
+# Voice modulation in v3 works through audio tags in text ([slurring],
+# [whispers], [excited], etc.) and the stability VoiceSettings param.
+# ═══════════════════════════════════════════════════════════════════════════
+blueprint:
+  name: "Voice Mood Modulation"
+  description: >-
+    Shifts a character's ElevenLabs voice throughout the day using the two
+    mechanisms v3 supports: the stability VoiceSettings parameter and audio
+    tag prefixes ([slurring], [whispers], [excited], etc.). Five configurable
+    time blocks, each with a stability value and a tag prefix string. Values
+    are written to input_number (stability) and input_text (tags) helpers
+    that tts_queue and tts.py read on every TTS call.
+  domain: automation
+  homeassistant:
+    min_version: "2024.6.0"
+
+  input:
+    # ── § 1 — Character ──────────────────────────────────────────────────
+    agent_name:
+      name: "Agent Name"
+      description: >-
+        Character identifier (e.g., "rick", "quark"). Used to construct
+        helper entity names: input_number.ai_voice_mood_{agent}_stability
+        and input_text.ai_voice_mood_{agent}_tags.
+      selector:
+        text:
+
+    enabled:
+      name: "Enabled"
+      description: "Per-instance kill switch."
+      default: true
+      selector:
+        boolean:
+
+    global_kill_switch:
+      name: "Global Kill Switch"
+      description: "Boolean helper that gates all mood modulation system-wide."
+      default: input_boolean.ai_voice_mood_enabled
+      selector:
+        entity:
+          domain: input_boolean
+
+    # ── § 2 — Time Block Boundaries ──────────────────────────────────────
+    # Sequence: → B5 (late night, wraps past midnight) → B1 → B2 → B3 → B4 → B5 →
+    block_1_start:
+      name: "Block 1 Start Hour (Early Morning)"
+      description: >-
+        Hour (0-23) when Block 1 begins. Block 5 (late night) wraps past
+        midnight and runs until this hour.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          mode: box
+
+    block_2_start:
+      name: "Block 2 Start Hour (Morning)"
+      description: "Hour (0-23) when Block 2 begins."
+      default: 9
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          mode: box
+
+    block_3_start:
+      name: "Block 3 Start Hour (Afternoon)"
+      default: 12
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          mode: box
+
+    block_4_start:
+      name: "Block 4 Start Hour (Evening)"
+      default: 17
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          mode: box
+
+    block_5_start:
+      name: "Block 5 Start Hour (Late Night)"
+      default: 21
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          mode: box
+
+    # ── § 3 — Block 1: Early Morning ─────────────────────────────────────
+    b1_stability:
+      name: "Block 1 — Stability"
+      description: "ElevenLabs v3 stability (0=Creative, 1=Robust)."
+      default: 0.25
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+
+    b1_tags:
+      name: "Block 1 — Audio Tags"
+      description: >-
+        Tag prefix for non-agent TTS text. Empty string = no prefix.
+        Agent conversation responses already include their own tags and
+        won't be double-tagged. Combine multiple tags for layered effects.
+        Available v3 tags — Emotions: [happy], [sad], [angry], [annoyed],
+        [excited], [sarcastic], [curious], [mischievously], [surprised],
+        [appalled], [thoughtful], [crying]. Speech: [whispers], [sighs],
+        [laughs], [chuckles], [snorts], [wheezing], [muttering],
+        [clears throat], [exhales], [exhales sharply], [inhales deeply],
+        [swallows], [gulps]. Pacing: [short pause], [long pause].
+        Experimental: [slurring], [sings], [strong X accent].
+        Effectiveness varies by voice — test combinations.
+      default: ""
+      selector:
+        text:
+
+    # ── § 4 — Block 2: Morning ───────────────────────────────────────────
+    b2_stability:
+      name: "Block 2 — Stability"
+      default: 0.35
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+
+    b2_tags:
+      name: "Block 2 — Audio Tags"
+      default: ""
+      selector:
+        text:
+
+    # ── § 5 — Block 3: Afternoon ─────────────────────────────────────────
+    b3_stability:
+      name: "Block 3 — Stability"
+      default: 0.45
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+
+    b3_tags:
+      name: "Block 3 — Audio Tags"
+      default: ""
+      selector:
+        text:
+
+    # ── § 6 — Block 4: Evening ───────────────────────────────────────────
+    b4_stability:
+      name: "Block 4 — Stability"
+      default: 0.30
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+
+    b4_tags:
+      name: "Block 4 — Audio Tags"
+      default: ""
+      selector:
+        text:
+
+    # ── § 7 — Block 5: Late Night (wraps past midnight) ──────────────────
+    b5_stability:
+      name: "Block 5 — Stability"
+      default: 0.20
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+
+    b5_tags:
+      name: "Block 5 — Audio Tags"
+      default: ""
+      selector:
+        text:
+
+mode: single
+
+triggers:
+  - trigger: time_pattern
+    hours: "/1"
+  - trigger: homeassistant
+    event: start
+
+variables:
+  v_agent: !input agent_name
+  v_enabled: !input enabled
+  v_b1_start: !input block_1_start
+  v_b2_start: !input block_2_start
+  v_b3_start: !input block_3_start
+  v_b4_start: !input block_4_start
+  v_b5_start: !input block_5_start
+  # Block params
+  v_b1_stability: !input b1_stability
+  v_b1_tags: !input b1_tags
+  v_b2_stability: !input b2_stability
+  v_b2_tags: !input b2_tags
+  v_b3_stability: !input b3_stability
+  v_b3_tags: !input b3_tags
+  v_b4_stability: !input b4_stability
+  v_b4_tags: !input b4_tags
+  v_b5_stability: !input b5_stability
+  v_b5_tags: !input b5_tags
+  # Derived
+  h: "{{ now().hour }}"
+  current_block: >-
+    {% set hr = h | int %}
+    {% set b1 = v_b1_start | int %}
+    {% set b5 = v_b5_start | int %}
+    {% if hr >= b5 or hr < b1 %}5
+    {% elif hr >= v_b4_start | int %}4
+    {% elif hr >= v_b3_start | int %}3
+    {% elif hr >= v_b2_start | int %}2
+    {% else %}1{% endif %}
+  cur_stability: >-
+    {% set vals = [v_b1_stability, v_b2_stability, v_b3_stability, v_b4_stability, v_b5_stability] %}
+    {{ vals[current_block | int - 1] | float }}
+  cur_tags: >-
+    {% set vals = [v_b1_tags, v_b2_tags, v_b3_tags, v_b4_tags, v_b5_tags] %}
+    {{ vals[current_block | int - 1] }}
+
+conditions:
+  - condition: template
+    value_template: "{{ v_enabled }}"
+  - condition: state
+    entity_id: !input global_kill_switch
+    state: "on"
+
+actions:
+  - service: input_number.set_value
+    target:
+      entity_id: "input_number.ai_voice_mood_{{ v_agent }}_stability"
+    data:
+      value: "{{ cur_stability }}"
+
+  - service: input_text.set_value
+    target:
+      entity_id: "input_text.ai_voice_mood_{{ v_agent }}_tags"
+    data:
+      value: "{{ cur_tags }}"

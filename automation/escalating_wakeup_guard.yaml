@@ -994,6 +994,7 @@ actions:
           data:
             text: "{{ resolved_message | default('Wake up.') }}"
             voice: "{{ dispatch_voice }}"
+            voice_id: "{{ dispatch_tts_voice }}"
             priority: "{{ 0 if is_last else (1 if not is_first else 2) }}"
             target_mode: explicit
             target: "{{ v_tts_output_player }}"

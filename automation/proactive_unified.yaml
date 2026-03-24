@@ -1368,6 +1368,7 @@ actions:
       source: "proactive_unified"
       text: "{{ proactive_message }}"
       voice: "{{ dispatch_voice }}"
+      voice_id: "{{ dispatch_tts_voice }}"
       priority: "{{ tts_priority | int }}"
       target_mode: presence
       ttl_hours: "{{ ((cooldown | float - 1) / 60) | round(2) if cooldown | float > 1 else 0.01 }}"

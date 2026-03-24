@@ -947,6 +947,7 @@ actions:
     data:
       text: "{{ wake_message }}"
       voice: "{{ dispatch_voice }}"
+      voice_id: "{{ dispatch_tts_voice }}"
       chime_path: "{{ v_wake_chime_path | default('') }}"
       priority: 1
       target_mode: explicit
@@ -1157,6 +1158,7 @@ actions:
             data:
               text: "{{ wake_message }}"
               voice: "{{ dispatch_voice }}"
+              voice_id: "{{ dispatch_tts_voice }}"
               chime_path: "{{ v_wake_chime_path | default('') }}"
               priority: 1
               target_mode: explicit

@@ -1735,6 +1735,7 @@ actions:
           - alias: "Set wd tts engine"
             variables:
               _wd_tts_engine: "{{ (_wd_dispatch | default({})).get('tts_engine', '') }}"
+              _wd_tts_voice: "{{ (_wd_dispatch | default({})).get('tts_voice', '') }}"
           - alias: "Log watchdog recovery attempt"
             action: system_log.write
             continue_on_error: true
@@ -1766,6 +1767,7 @@ actions:
                 data:
                   text: "Hey, you still have unread messages. Check your phone."
                   voice: "{{ _wd_tts_engine }}"
+                  voice_id: "{{ _wd_tts_voice }}"
                   target_mode: explicit
                   target: "{{ _wd_satellite }}"
                   announce: "{{ tts_announce | bool(false) }}"
@@ -3206,6 +3208,7 @@ actions:
                         data:
                           text: "{{ _safe_announcement }}"
                           voice: "{{ dispatch_voice }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
                           chime_path: "{{ v_chime_path }}"
                           chime_duration_ms: "{{ v_chime_duration_ms | default(0) | int }}"
                           target_mode: explicit
@@ -3227,6 +3230,7 @@ actions:
                     data:
                       text: "{{ _safe_announcement }}"
                       voice: "{{ dispatch_voice }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       target_mode: explicit
                       target: "{{ target_satellite }}"
                       volume_level: "{{ tts_output_vol | float(0) }}"
@@ -3561,6 +3565,7 @@ actions:
                           You also have additional messages.
                         {% endif %}
                       voice: "{{ dispatch_voice }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       target_mode: explicit
                       target: "{{ target_satellite }}"
                       volume_level: "{{ tts_output_vol | float(0) }}"
@@ -4594,6 +4599,7 @@ actions:
                           data:
                             text: "{{ _r_safe_announcement }}"
                             voice: "{{ dispatch_voice }}"
+                            voice_id: "{{ dispatch_tts_voice }}"
                             target_mode: explicit
                             target: "{{ _r_satellite }}"
                             volume_level: "{{ tts_output_vol | float(0) }}"

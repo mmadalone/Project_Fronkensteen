@@ -656,6 +656,7 @@ actions:
             variables:
               dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
               dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
 
       - alias: "Manual pipeline path (prompt mode, dispatcher off)"
         conditions:
@@ -672,11 +673,13 @@ actions:
             variables:
               dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
               dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
     default:
       - alias: "Set dispatch agent, dispatch voice"
         variables:
           dispatch_agent: ""
           dispatch_voice: ""
+          dispatch_tts_voice: ""
 
   - alias: "Route by trigger"
     choose:
@@ -752,6 +755,7 @@ actions:
                           data:
                             text: "{{ _message }}"
                             voice: "{{ dispatch_voice | default('') }}"
+                            voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 3
                             target_mode: explicit
@@ -764,6 +768,7 @@ actions:
                       data:
                         text: "{{ _message }}"
                         voice: "{{ dispatch_voice | default('') }}"
+                        voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 3
                       response_variable: tts_result
@@ -849,6 +854,7 @@ actions:
                           data:
                             text: "{{ _message }}"
                             voice: "{{ dispatch_voice | default('') }}"
+                            voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 2
                             target_mode: explicit
@@ -861,6 +867,7 @@ actions:
                       data:
                         text: "{{ _message }}"
                         voice: "{{ dispatch_voice | default('') }}"
+                        voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 2
                       response_variable: tts_result
@@ -946,6 +953,7 @@ actions:
                           data:
                             text: "{{ _message }}"
                             voice: "{{ dispatch_voice | default('') }}"
+                            voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 1
                             target_mode: explicit
@@ -958,6 +966,7 @@ actions:
                       data:
                         text: "{{ _message }}"
                         voice: "{{ dispatch_voice | default('') }}"
+                        voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 1
                       response_variable: tts_result
@@ -1034,6 +1043,7 @@ actions:
                     data:
                       text: "{{ _message }}"
                       voice: "{{ dispatch_voice | default('') }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       volume_level: "{{ v_tts_volume }}"
                       priority: 3
                       target_mode: explicit
@@ -1046,6 +1056,7 @@ actions:
                 data:
                   text: "{{ _message }}"
                   voice: "{{ dispatch_voice | default('') }}"
+                  voice_id: "{{ dispatch_tts_voice }}"
                   volume_level: "{{ v_tts_volume }}"
                   priority: 3
                 response_variable: tts_result
@@ -1112,6 +1123,7 @@ actions:
                     data:
                       text: "{{ _message }}"
                       voice: "{{ dispatch_voice | default('') }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       volume_level: "{{ v_tts_volume }}"
                       priority: 3
                       target_mode: explicit
@@ -1124,6 +1136,7 @@ actions:
                 data:
                   text: "{{ _message }}"
                   voice: "{{ dispatch_voice | default('') }}"
+                  voice_id: "{{ dispatch_tts_voice }}"
                   volume_level: "{{ v_tts_volume }}"
                   priority: 3
                 response_variable: tts_result
@@ -1234,6 +1247,7 @@ actions:
                       data:
                         text: "{{ _message }}"
                         voice: "{{ dispatch_voice | default('') }}"
+                        voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: "{{ _tier_priority | int(3) }}"
                         target_mode: explicit
@@ -1246,6 +1260,7 @@ actions:
                   data:
                     text: "{{ _message }}"
                     voice: "{{ dispatch_voice | default('') }}"
+                    voice_id: "{{ dispatch_tts_voice }}"
                     volume_level: "{{ v_tts_volume }}"
                     priority: "{{ _tier_priority | int(3) }}"
                   response_variable: tts_result

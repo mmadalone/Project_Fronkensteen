@@ -701,6 +701,7 @@ actions:
             data:
               text: "{{ wake_message }}"
               voice: "{{ dispatch_voice | default('') }}"
+              voice_id: "{{ dispatch_tts_voice }}"
               priority: 1
               target_mode: explicit
               target: "{{ v_tts_output_player }}"

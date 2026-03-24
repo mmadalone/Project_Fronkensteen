@@ -98,8 +98,97 @@ def _get_fallback_tts_voice(): return _helper_str("input_text.ai_default_tts_voi
 def _is_elevenlabs_voice(voice: str) -> bool:
     return "elevenlabs" in (voice or "").lower()
 
-def _voice_to_agent(voice: str) -> str:
-    """Extract agent name from TTS entity naming convention."""
+# ── Dynamic remap: built from config entries at load time ──
+# Maps old per-character TTS entities → (hacs_entity, profile_name, agent_name)
+# by matching voice IDs between official entries and HACS profiles.
+# Also builds UUID → profile_name reverse map for callers that pass raw voice IDs.
+_TTS_ENTITY_REMAP = {}
+_PROFILE_TO_AGENT = {}
+_VOICE_UUID_TO_PROFILE = {}
+
+@pyscript_compile  # noqa: F821
+def _build_tts_remap():
+    """Read config entries to build old-entity → HACS-profile remap dynamically."""
+    import json as _json
+    remap = {}
+    profile_to_agent = {}
+    uuid_to_profile = {}
+    # Load profile→agent map (shared with HACS component)
+    _mood_map = {}
+    try:
+        with open("/config/pyscript/voice_mood_profile_map.json", "r") as f:
+            _mood_map = _json.load(f)
+    except Exception:
+        pass
+    try:
+        with open("/config/.storage/core.config_entries", "r") as f:
+            data = _json.load(f)
+        entries = data.get("data", {}).get("entries", [])
+        # Collect HACS custom TTS profiles: voice_id → profile_name
+        vid_to_profile = {}
+        for entry in entries:
+            if entry.get("domain") == "elevenlabs_custom_tts":
+                for pname, pdata in entry.get("options", {}).get("voice_profiles", {}).items():
+                    vid = pdata.get("voice", "")
+                    if vid:
+                        vid_to_profile[vid] = pname
+                        uuid_to_profile[vid] = pname
+                        agent = _mood_map.get(pname.lower().strip(), pname.split(" - ")[0].split()[0].lower())
+                        profile_to_agent[pname.lower()] = agent
+        # Collect official ElevenLabs entries and resolve via entity registry
+        entry_id_to_vid = {}
+        for entry in entries:
+            if entry.get("domain") != "elevenlabs":
+                continue
+            vid = entry.get("options", {}).get("voice") or entry.get("data", {}).get("voice", "")
+            if vid and entry.get("entry_id"):
+                entry_id_to_vid[entry["entry_id"]] = vid
+        # Resolve entry_ids to entity_ids via entity registry
+        entity_remap = {}
+        try:
+            with open("/config/.storage/core.entity_registry", "r") as f:
+                ereg = _json.load(f)
+            for ent in ereg.get("data", {}).get("entities", []):
+                if ent.get("platform") != "elevenlabs":
+                    continue
+                if not ent.get("entity_id", "").startswith("tts."):
+                    continue
+                cid = ent.get("config_entry_id", "")
+                vid = entry_id_to_vid.get(cid)
+                if vid and vid in vid_to_profile:
+                    pname = vid_to_profile[vid]
+                    agent = _mood_map.get(pname.lower().strip(), pname.split(" - ")[0].split()[0].lower())
+                    entity_remap[ent["entity_id"]] = ("tts.elevenlabs_custom_tts", pname, agent)
+        except Exception:
+            pass
+        return entity_remap, profile_to_agent, uuid_to_profile
+    except Exception:
+        return {}, {}, {}
+
+try:
+    _TTS_ENTITY_REMAP, _PROFILE_TO_AGENT, _VOICE_UUID_TO_PROFILE = _build_tts_remap()
+    if _TTS_ENTITY_REMAP:
+        log.info(  # noqa: F821
+            f"tts_queue: dynamic remap loaded — {len(_TTS_ENTITY_REMAP)} entities: "
+            f"{list(_TTS_ENTITY_REMAP.keys())}"
+        )
+except Exception as e:
+    log.warning(f"tts_queue: remap init failed ({e}) — old entities pass through unchanged")  # noqa: F821
+
+def _voice_to_agent(voice: str, voice_id: str = "", agent: str = "") -> str:
+    """Extract agent name from explicit param, profile name, or TTS entity convention."""
+    if agent:
+        return agent
+    # Check remap dict (old entity → agent)
+    remap = _TTS_ENTITY_REMAP.get(voice)
+    if remap:
+        return remap[2]
+    # Profile name → agent (HACS custom TTS path)
+    if voice_id:
+        agent_match = _PROFILE_TO_AGENT.get(voice_id.lower())
+        if agent_match:
+            return agent_match
+    # Legacy: extract from entity naming convention
     if not voice:
         return "unknown"
     parts = voice.replace("tts.", "").split("_")
@@ -809,6 +898,16 @@ async def _play_tts(
     if not stripped:
         log.warning(f"tts_queue: skipping empty-after-strip text: {text!r}")  # noqa: F821
         return
+    # ── Transparent remap: old per-character entities → HACS custom TTS ──
+    remap = _TTS_ENTITY_REMAP.get(voice)
+    if remap:
+        voice = remap[0]       # tts.elevenlabs_custom_tts
+        voice_id = remap[1]    # profile name (e.g., "Quark - Kwork v0.6")
+    elif voice == "tts.elevenlabs_custom_tts" and voice_id:
+        # Already targeting HACS entity — resolve UUID → profile name if needed
+        profile = _VOICE_UUID_TO_PROFILE.get(voice_id)
+        if profile:
+            voice_id = profile
     targets = speaker if isinstance(speaker, list) else [speaker]
     if volume_level is not None and volume_level > 0:
         for s in targets:
@@ -817,6 +916,25 @@ async def _play_tts(
                              entity_id=s, volume_level=volume_level)
             except Exception:
                 pass
+    # ── Voice mood modulation (v3): stability + tag prefix ──
+    _mood_opts = {}
+    _mood_tags = ""
+    if state.get("input_boolean.ai_voice_mood_enabled") == "on":  # noqa: F821
+        _agent = _voice_to_agent(voice, voice_id=voice_id)
+        if _agent and _agent != "unknown":
+            # Stability — the one VoiceSettings param v3 respects
+            _sv = state.get(f"input_number.ai_voice_mood_{_agent}_stability")  # noqa: F821
+            if _sv not in (None, "unknown", "unavailable"):
+                _mood_opts["stability"] = float(_sv)
+            # Tag prefix for non-tagged text
+            _tv = state.get(f"input_text.ai_voice_mood_{_agent}_tags")  # noqa: F821
+            if _tv not in (None, "unknown", "unavailable", ""):
+                _mood_tags = _tv.strip()
+    # Inject mood tags for non-tagged messages (notifications, announcements).
+    # Messages from agents already contain tags — "[" check avoids double-tagging.
+    if _mood_tags and "[" not in text:
+        text = f"{_mood_tags} {text}"
+
     for s in targets:
         try:
             kwargs = dict(
@@ -826,6 +944,11 @@ async def _play_tts(
             )
             if voice_id:
                 kwargs["options"] = {"voice": voice_id}
+            # Merge mood modulation values into options
+            if _mood_opts:
+                opts = kwargs.get("options", {})
+                opts.update(_mood_opts)
+                kwargs["options"] = opts
             service.call("tts", "speak", **kwargs)  # noqa: F821
         except Exception as e:
             # ── T24-1a: ElevenLabs outage fallback → HA Cloud ──
@@ -836,10 +959,12 @@ async def _play_tts(
                     f"retrying with {fallback_voice}"
                 )
                 try:
+                    # Strip stage directions for HA Cloud (can't process them)
+                    fallback_text = re.sub(r'\[.*?\]', '', text).strip() or text
                     service.call("tts", "speak",  # noqa: F821
                                  entity_id=fallback_voice,
                                  media_player_entity_id=s,
-                                 message=text)
+                                 message=fallback_text)
                 except Exception as e2:
                     log.error(f"tts_queue: HA Cloud fallback also failed for {s}: {e2}")  # noqa: F821
             else:
@@ -1101,18 +1226,19 @@ async def _process_queue() -> None:
 async def _play_item(item: dict) -> None:
     """Play a single queue item via tts.speak or media_player.play_media."""
     text = item.get("text")
+    voice = item.get("voice")
     # Strip LLM stage directions like [thoughtful pause], [sigh], [pause]
+    # Preserve for ElevenLabs eleven_v3 (processes [tags] as performative cues)
     if text:
         try:
             strip_dirs = state.get("input_boolean.ai_tts_strip_stage_directions") != "off"
         except Exception:
             strip_dirs = True
-        if strip_dirs:
+        if strip_dirs and not _is_elevenlabs_voice(voice):
             text = re.sub(r'\[.*?\]', '', text).strip() or None
     # Strip leaked tool/function narration from LLM responses
     if text:
         text = _sanitize_tool_narration(text)
-    voice = item.get("voice")
     speaker = item.get("resolved_speaker")
     volume_level = item.get("volume_level")
     announce = item.get("announce", True)
@@ -1180,7 +1306,7 @@ async def _play_item(item: dict) -> None:
 
     # I-33 Phase 2: Per-agent TTS tracking
     try:
-        tts_agent = _voice_to_agent(voice) if voice else "unknown"
+        tts_agent = _voice_to_agent(voice, voice_id=voice_id, agent=item.get("agent", ""))
         service.call(  # noqa: F821
             "pyscript", "budget_track_call",
             service_type="tts",
@@ -1435,6 +1561,7 @@ async def tts_queue_speak(
     voice_id: str = "",
     restore_volume: bool = False,
     volume_restore_delay: int = 8,
+    agent: str = "",
     metadata=None,
 ):
     """
@@ -1633,7 +1760,7 @@ async def tts_queue_speak(
             "chime_path": chime_path or None,
             "chime_duration_ms": int(chime_duration_ms) if chime_duration_ms else 0,
             "media_file": media_file or None,
-            "voice_id": voice_id or None,
+            "voice_id": voice_id or None, "agent": agent or "",
             "restore_volume": restore_volume, "volume_restore_delay": volume_restore_delay,
             "test_mode": test_mode, "added_at": time.time(),
             "metadata": _parsed_meta,

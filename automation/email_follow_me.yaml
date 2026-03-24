@@ -1924,6 +1924,7 @@ actions:
                         data:
                           text: "{{ _safe_announcement }}"
                           voice: "{{ dispatch_voice }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
                           chime_path: "{{ v_chime_path }}"
                           chime_duration_ms: "{{ v_chime_duration_ms | default(0) | int }}"
                           target_mode: explicit
@@ -1940,6 +1941,7 @@ actions:
                     data:
                       text: "{{ _safe_announcement }}"
                       voice: "{{ dispatch_voice }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       target_mode: explicit
                       target: "{{ target_satellite }}"
                       volume_level: "{{ tts_output_vol | float(0) }}"
@@ -2529,6 +2531,7 @@ actions:
                             Reminder: check your inbox.
                           {% endif %}
                         voice: "{{ dispatch_voice }}"
+                        voice_id: "{{ dispatch_tts_voice }}"
                         target_mode: explicit
                         target: "{{ _r_satellite }}"
                         volume_level: "{{ tts_output_vol | float(0) }}"

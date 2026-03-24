@@ -671,7 +671,12 @@ async def theatrical_mode_start(
             else:
                 body = f"Topic: {topic}\nGive your take."
 
-            full_prompt = f"{prefix}\n\n{body}"
+            lang_hint = (
+                "\n\nCRITICAL: Respond in your character's native language. "
+                "If your character speaks a language other than English, "
+                "your ENTIRE response must be in that language, not English."
+            )
+            full_prompt = f"{prefix}\n\n{body}{lang_hint}"
 
             # ── LLM call — C2 (timeout via conversation_with_timeout) ──
             try:
@@ -707,9 +712,19 @@ async def theatrical_mode_start(
             # Truncate to word limit
             speech = _truncate_words(speech, mw)
 
-            # Update context buffer
+            # Update context buffer (clean speech, no TTS tags)
             ctx_buf.append(f"{cur['display']}: {speech}")
             turns_done += 1
+
+            # Prepend voice mood tags (bypass tts_queue bracket guard)
+            tts_text = speech
+            if state.get("input_boolean.ai_voice_mood_enabled") == "on":
+                _agent_key = cur["name"].replace(" ", "_")
+                _vtags = state.get(
+                    f"input_text.ai_voice_mood_{_agent_key}_tags"
+                )
+                if _vtags not in (None, "unknown", "unavailable", ""):
+                    tts_text = f"{_vtags.strip()} {speech}"
 
             # Update status sensor
             state.set(
@@ -740,7 +755,7 @@ async def theatrical_mode_start(
                 try:
                     tts_result = service.call(  # noqa: F841
                         "pyscript", "tts_queue_speak",
-                        text=speech,
+                        text=tts_text,
                         voice=cur["tts"],
                         voice_id=cur.get("tts_voice", ""),
                         priority=priority,
@@ -760,7 +775,7 @@ async def theatrical_mode_start(
                         "tts", "speak",
                         entity_id=cur["tts"],
                         media_player_entity_id=cur["speaker"],
-                        message=speech,
+                        message=tts_text,
                     )
                 except Exception as e:
                     log.warning("theatrical: tts.speak failed: %s", e)

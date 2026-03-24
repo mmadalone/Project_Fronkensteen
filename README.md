@@ -31,7 +31,7 @@ Five AI personas with distinct personalities run a house from a Raspberry Pi 5. 
 
 ## The Cast
 
-Five AI personas run the house, each with a dedicated conversation agent, custom ElevenLabs TTS voice, and a personality that shifts with time of day. Every persona supports up to 4 conversation modes — Standard, Bedtime, Music Compose, and Music Transfer — each with a different tool set and prompt. All agents run on [Llama 4 Maverick](https://ai.meta.com/) via [OpenRouter](https://openrouter.ai/).
+Five AI personas run the house, each with a dedicated conversation agent, custom ElevenLabs TTS voice, and a personality that shifts with time of day — including the voice itself (stability modulation + audio tag prefixes like `[slurring]`, `[whispers]`, `[excited]` injected into non-agent TTS via a per-character mood schedule). Every persona supports up to 4 conversation modes — Standard, Bedtime, Music Compose, and Music Transfer — each with a different tool set and prompt. All agents run on [Llama 4 Maverick](https://ai.meta.com/) via [OpenRouter](https://openrouter.ai/).
 
 ### Rick Sanchez — Workshop satellite
 *Rick and Morty* (Adult Swim). The smartest man in any dimension, running your smart home because nothing else is challenging enough. Brilliant, snarky, perpetually annoyed — but deep down he cares and would never admit it. Mandatory burps mid-sentence (`[burps]`, `[burps loudly]`), multiverse references, and a drinking schedule that defines his entire personality: severely hungover before 9am (every response starts with `[groaning]`), casually drinking by noon, noticeably drunk by evening (`[slurring]`), and completely hammered after 9pm with heavy stutters and barely coherent speech.
@@ -72,9 +72,9 @@ A 4,800-line notification routing engine (`notification_follow_me.yaml`) that in
 
 Maximum effort. Say "pass me to Deadpool" mid-conversation and the satellite switches personas live. The `voice_handoff.py` module saves the current pipeline state, switches to the target agent, plays farewell TTS from the source and a greeting from the target, then reopens the mic. Supports persona aliases (deadpool to deepee), expertise-based routing where agents proactively suggest handing off for out-of-domain questions, and configurable restore behavior. One of four deployed inter-agent communication patterns — alongside reactive banter, the whisper network, and theatrical mode.
 
-### Theatrical Mode *(testing)*
+### Theatrical Mode
 
-Say "debate this" and the house becomes a stage. `theatrical_mode.py` orchestrates multi-turn debates between 2–5 AI personas — each arguing in character, each on their own TTS voice, optionally on different physical speakers for a spatial staging effect. The `theatrical_mode.yaml` blueprint (42 knobs across 11 collapsible sections) exposes everything: turn limits, word count caps, speaker-to-agent mapping, three interrupt modes (turn limit, mic gap with `ask_question`, wake word detection), three context modes (sliding window of previous turns, topic-only, or L2 whisper network), budget gating, cooldown, and banter escalation (a reactive banter comment can probabilistically escalate into a full debate). The pyscript engine resolves participants from its own pipeline cache in a single pass, builds I-45a tool-suppression prompts, calls each agent via `conversation_with_timeout`, sanitizes the output, and delivers through the TTS queue with per-agent speaker targeting. Currently deployed but awaiting live testing.
+Say "debate this" and the house becomes a stage. `theatrical_mode.py` orchestrates multi-turn debates between 2–5 AI personas — each arguing in character, each on their own TTS voice, optionally on different physical speakers for a spatial staging effect. The `theatrical_mode.yaml` blueprint (42 knobs across 11 collapsible sections) exposes everything: turn limits, word count caps, speaker-to-agent mapping, three interrupt modes (turn limit, mic gap with `ask_question`, wake word detection), three context modes (sliding window of previous turns, topic-only, or L2 whisper network), budget gating, cooldown, and banter escalation (a reactive banter comment can probabilistically escalate into a full debate). The pyscript engine resolves participants from its own pipeline cache in a single pass, builds I-45a tool-suppression prompts with language preservation (non-English agents like Portuondo respond in their native language), calls each agent via `conversation_with_timeout`, sanitizes the output, and delivers through the TTS queue with per-agent speaker targeting. Inter-turn coordination uses event-driven playback wait (`tts_queue_item_completed`) instead of speaker state polling, preventing agents from talking over each other. Voice mood tags (ElevenLabs v3 audio tags like `[thick Cuban accent]`, `[whispers]`, `[excited]`) are injected per-agent from the mood schedule, so each persona sounds like themselves even in debate.
 
 ### Memory System
 
@@ -172,6 +172,7 @@ Three deployed patterns for agent-to-agent interaction:
 - **Agent Escalation** — 7 escalation action types with per-type probability gates: persona switch, play media, flash lights, volume boost, mobile notification, prompt barrage (fire a prompt at another agent and play their response), and run script.
 - **Theatrical Mode** *(testing)* — Multi-agent orchestrated debate. 2–5 personas take turns arguing a topic on separate speakers. Three interrupt modes, three context modes, banter escalation, 42 blueprint knobs.
 - **Agent Whisper** — Silent inter-agent context sharing. Post-interaction mood detection (happy/sad/neutral/angry), topic tracking, auto-keyword learning for the dispatcher. Zero LLM calls.
+- **Voice Mood Modulation** — Time-of-day voice shaping via ElevenLabs v3. Per-agent stability slider (the one VoiceSettings param v3 respects) + audio tag prefixes (`[slurring]`, `[whispers]`, `[excited]`, etc.) injected into non-agent TTS text (notifications, announcements, briefings). Agent conversation responses already inject their own tags via system prompts — the mood system fills the gap for non-agent TTS routed through the queue. Five time blocks per character, tunable via blueprint instances.
 - **Voice Session Manager** — Mic lifecycle management: continuous listening mode, audio device discovery, session timeouts, pending queue.
 - **Confirmation Dialog** — PIN-protected voice actions for critical commands.
 
@@ -212,7 +213,7 @@ Three deployed patterns for agent-to-agent interaction:
 - **Interaction Summarizer** — Nightly batch compresses whisper logs via cheap LLM into digests. 3 retention modes. ~$0.001/run.
 
 ### Budget & Infrastructure
-- **TTS Queue** — Priority queue (5 levels: emergency through ambient). Dynamic speaker discovery from zone config JSON. Ranked speaker preference, volume ducking, playback tuning, TTS completion events, caching.
+- **TTS Queue** — Priority queue (5 levels: emergency through ambient). Dynamic speaker discovery from zone config JSON. Ranked speaker preference, volume ducking, playback tuning, TTS completion events, caching, voice mood injection (stability + audio tag prefixes for non-agent messages).
 - **Duck Manager** — Reference-counted volume ducking coordinator. 3 behavior modes (volume, pause, both). Snapshot/restore with user-adjustment protection.
 - **Focus Guard** — Anti-ADHD nudge system. 6 nudge types (hydration, movement, screen break, meal, medication, custom). Escalating delivery, focus mode suppression, meal detection with voice interaction.
 - **Phone Call Detection** — Defers all TTS during active phone calls.
@@ -323,7 +324,7 @@ No YAML in this repository was written by hand. Budget sustainability is a desig
 | [Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation) | jekalmin | Apache 2.0 | Conversation agent framework — execution backend for all 22 voice pipeline agents |
 | [Pyscript](https://github.com/custom-components/pyscript) | Craig Barratt (@craigbarratt) | Apache 2.0 | Python scripting runtime for all 29 orchestration modules |
 | [Voice Assistant Long-term Memory](https://github.com/luuquangvu/tutorials) | luuquangvu | — | Foundation of L2 memory system (SQLite+FTS5); extended with auto-relationships, scopes, tag linking, embeddings, archiving |
-| [ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) | Loryan Strant (@loryanstrant) | MIT | Voice profile system — time-based voice personality progressions (cadence voice layer) |
+| [ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) | Loryan Strant (@loryanstrant) | MIT | Voice profile system — patched with v3 mood modulation: stability slider + audio tag prefix injection for non-agent TTS. HACS auto-updates disabled. |
 | [microWakeWord](https://github.com/kahrendt/microWakeWord) | Kevin Ahrendt (@kahrendt) | — | On-device wake word detection for ESP32-S3; custom wake word models trained with this |
 | [calendar_utils](https://github.com/) | — | — | Google Calendar UID access and event deletion for voice CRUD operations |
 
@@ -355,7 +356,7 @@ No YAML in this repository was written by hand. Budget sustainability is a desig
 | Component | Role |
 |-----------|------|
 | HA Voice Assistants (Assist Pipelines) | Centralized pipeline configuration — routing layer for all 22 persona variants |
-| ElevenLabs (official integration) | Primary TTS — multi-entity pattern (one per persona) |
+| ElevenLabs (HACS custom + official) | Primary TTS via custom component (voice profiles + mood modulation); official integration as secondary entity source |
 | Google Calendar | L3 data source for calendar promotion, alarm scheduling, and voice CRUD |
 | IMAP | L3 data source for email priority filtering |
 | Aqara (via ha_aqara_devices) | FP2 presence detection across 8 zones |

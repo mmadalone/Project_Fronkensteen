@@ -1783,3 +1783,61 @@ ai_theatrical_budget_floor:
   step: 5
   initial: 70
   unit_of_measurement: "%"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Voice Mood Modulation — Per-Character ElevenLabs stability (v3)
+# Written hourly by voice_mood_modulation.yaml blueprint instances.
+# Read by tts_queue._play_tts() and tts.py on every TTS call.
+# v3 pivot: similarity_boost, style, speed removed (v3 ignores them).
+# Tag prefixes stored in input_text helpers (helpers_input_text.yaml).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Rick ─────────────────────────────────────────────────────────────────
+ai_voice_mood_rick_stability:
+  name: "Voice Mood - Rick Stability"
+  icon: mdi:waveform
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.45
+  mode: slider
+
+# ── Quark ────────────────────────────────────────────────────────────────
+ai_voice_mood_quark_stability:
+  name: "Voice Mood - Quark Stability"
+  icon: mdi:waveform
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.55
+  mode: slider
+
+# ── Kramer ───────────────────────────────────────────────────────────────
+ai_voice_mood_kramer_stability:
+  name: "Voice Mood - Kramer Stability"
+  icon: mdi:waveform
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.35
+  mode: slider
+
+# ── Deadpool ─────────────────────────────────────────────────────────────
+ai_voice_mood_deadpool_stability:
+  name: "Voice Mood - Deadpool Stability"
+  icon: mdi:waveform
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.30
+  mode: slider
+
+# ── Doctor Portuondo ─────────────────────────────────────────────────────
+ai_voice_mood_doctor_portuondo_stability:
+  name: "Voice Mood - Dr. Portuondo Stability"
+  icon: mdi:waveform
+  min: 0
+  max: 1
+  step: 0.05
+  initial: 0.60
+  mode: slider

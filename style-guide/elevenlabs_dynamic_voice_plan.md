@@ -2,10 +2,18 @@
 
 **Option B: Full HACS Custom Migration + Dynamic Voice Modulation**
 
-**Status:** PLANNING  
-**Date:** 2026-03-24  
-**Risk Level:** Medium-High  
-**Estimated Effort:** 3–4 sessions  
+**Status:** COMPLETE (v3 pivot)
+**Date:** 2026-03-24
+**Risk Level:** Low (v3 tags are text-only, stability is the only API param)
+**Completed in:** 1 session
+
+> **v3 Pivot (Phase 5c):** ElevenLabs v3 ignores `similarity_boost`, `style`, and `speed`
+> VoiceSettings. Voice modulation in v3 works through **audio tags** in text (`[slurring]`,
+> `[whispers]`, `[excited]`, etc.) and the **stability** slider (the one working param).
+> The system was slimmed to: stability helpers + tag prefix helpers per agent.
+> Agent conversation responses already inject their own tags via system prompts —
+> the mood system only adds tag prefixes for **non-agent TTS** (notifications,
+> announcements, briefings) routed through `tts_queue.py`.  
 
 ---
 

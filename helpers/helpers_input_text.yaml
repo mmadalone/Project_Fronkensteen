@@ -901,3 +901,37 @@ notification_follow_me_last_post_time:
   icon: mdi:clock-digital
   max: 35
   initial: "0"
+
+########################################
+# Voice Mood Modulation — v3 Audio Tags
+########################################
+
+ai_voice_mood_rick_tags:
+  name: "Voice Mood - Rick Tags"
+  icon: mdi:tag-text
+  initial: ""
+  max: 100
+
+ai_voice_mood_quark_tags:
+  name: "Voice Mood - Quark Tags"
+  icon: mdi:tag-text
+  initial: ""
+  max: 100
+
+ai_voice_mood_kramer_tags:
+  name: "Voice Mood - Kramer Tags"
+  icon: mdi:tag-text
+  initial: ""
+  max: 100
+
+ai_voice_mood_deadpool_tags:
+  name: "Voice Mood - Deadpool Tags"
+  icon: mdi:tag-text
+  initial: ""
+  max: 100
+
+ai_voice_mood_doctor_portuondo_tags:
+  name: "Voice Mood - Dr. Portuondo Tags"
+  icon: mdi:tag-text
+  initial: ""
+  max: 100

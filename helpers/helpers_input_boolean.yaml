@@ -695,3 +695,11 @@ ai_theatrical_mode_active:
   name: "AI Theatrical Mode - Active Session"
   icon: mdi:drama-masks
   initial: false
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Voice Mood Modulation — Global kill switch
+# ═══════════════════════════════════════════════════════════════════════════
+ai_voice_mood_enabled:
+  name: "AI Voice Mood Modulation - Enabled"
+  icon: mdi:waveform
+  initial: true
