@@ -47,6 +47,7 @@ from shared_utils import build_result_entity_name, load_entity_config, reload_en
 # P1 (critical) always bypass focus mode AND snooze.
 #
 # Dependencies:
+#   pyscript/agent_dispatcher.py (agent_dispatch — TTS voice selection)
 #   pyscript/tts_queue.py (tts_queue_speak)
 #   pyscript/notification_dedup.py (dedup_check, dedup_register)
 #   pyscript/memory.py (memory_set — L2 snooze pattern logging)
@@ -59,6 +60,18 @@ from shared_utils import build_result_entity_name, load_entity_config, reload_en
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_focus_guard_status"
+
+
+def _get_fallback_tts_voice():
+    """Return the default TTS voice from helper, or HA Cloud as fallback."""
+    try:
+        v = state.get("input_text.ai_default_tts_voice")  # noqa: F821
+        if v and v not in ("unknown", "unavailable", ""):
+            return str(v)
+    except Exception:
+        pass
+    return "tts.home_assistant_cloud"
+
 
 # Nudge cooldown: minimum seconds between same-type nudges
 # NUDGE_COOLDOWN_SECONDS — now read from input_number.ai_focus_nudge_cooldown_minutes  # 30 minutes
@@ -955,6 +968,22 @@ async def _evaluate_all(test_mode: bool = False) -> dict:
     else:
         evaluations["bedtime_approach"] = {"fire": False, "reason": "disabled"}
 
+    # ── Dispatcher: resolve TTS voice for nudge delivery ──
+    voice = _get_fallback_tts_voice()
+    voice_id = ""
+    try:
+        dispatch_call = pyscript.agent_dispatch(  # noqa: F821
+            wake_word="focus_guard",
+            intent_text="focus guard nudge",
+            skip_continuity=True,
+        )
+        dispatch_resp = await dispatch_call
+        if dispatch_resp and dispatch_resp.get("tts_engine"):
+            voice = dispatch_resp["tts_engine"]
+            voice_id = dispatch_resp.get("tts_voice", "")
+    except Exception:
+        pass  # fallback voice is fine
+
     # Fire nudges via TTS queue
     fired = []
     for nudge in nudges_to_fire:
@@ -982,6 +1011,8 @@ async def _evaluate_all(test_mode: bool = False) -> dict:
         try:
             tts_call = pyscript.tts_queue_speak(  # noqa: F821
                 text=text,
+                voice=voice,
+                voice_id=voice_id,
                 priority=priority,
                 target_mode="presence",
             )

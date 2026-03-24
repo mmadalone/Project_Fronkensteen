@@ -571,6 +571,7 @@ async def dedup_announce(
     ttl_hours: float = 0,
     text: str = "",
     voice: str = "",
+    voice_id: str = "",
     priority: int = 3,
     target_mode: str = "presence",
     volume_level: float = None,
@@ -623,8 +624,17 @@ async def dedup_announce(
             multiline: true
       voice:
         name: Voice
-        description: TTS entity (e.g., tts.elevenlabs_quark_text_to_speech).
+        description: TTS entity (e.g., tts.elevenlabs_custom_tts).
         required: true
+        selector:
+          text:
+      voice_id:
+        name: Voice ID
+        description: >-
+          Voice profile name for unified HACS TTS entity
+          (e.g., "Kramer - That Neighbor v0.0.10"). Passed through to
+          tts_queue_speak. Empty = use entity default.
+        default: ""
         selector:
           text:
       priority:
@@ -720,6 +730,8 @@ async def dedup_announce(
                 restore_volume=restore_volume,
                 volume_restore_delay=volume_restore_delay,
             )
+            if voice_id:
+                tts_kwargs["voice_id"] = voice_id
             if chime_path:
                 tts_kwargs["chime_path"] = chime_path
             if metadata and isinstance(metadata, dict):
@@ -805,6 +817,8 @@ async def dedup_announce(
             restore_volume=restore_volume,
             volume_restore_delay=volume_restore_delay,
         )
+        if voice_id:
+            tts_kwargs["voice_id"] = voice_id
         if chime_path:
             tts_kwargs["chime_path"] = chime_path
         if metadata and isinstance(metadata, dict):

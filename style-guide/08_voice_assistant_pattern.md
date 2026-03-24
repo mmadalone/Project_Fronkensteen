@@ -861,6 +861,7 @@ Blueprints that produce repeated or periodic announcements MUST use `pyscript.de
     source: "proactive"
     text: "{{ message }}"
     voice: "{{ dispatch_voice }}"
+    voice_id: "{{ dispatch_tts_voice }}"
     priority: 4
     target_mode: presence
     ttl_hours: 1
@@ -1233,22 +1234,36 @@ Blueprints call `pyscript.tts_queue_speak` instead of raw `tts.speak`/`media_pla
 
 #### ElevenLabs Voice Profile Routing (loryanstrant Custom TTS)
 
-The **ElevenLabs Custom TTS** integration (loryanstrant, HACS) provides per-call voice parameter control that the native HA ElevenLabs integration does not expose: **speed** (0.25-4.0x), **stability** (0.0-1.0), **similarity boost**, **style**, and **speaker boost**.
+The **ElevenLabs Custom TTS** integration ([loryanstrant/HA-ElevenLabs-Custom-TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS), HACS, MIT license) provides named voice profiles and per-call parameter control that the native HA ElevenLabs integration does not expose. **Patched locally** against v0.6.3 with voice mood modulation — HACS auto-updates disabled.
 
-Named voice profiles (e.g., `Rick-Hungover`, `Rick-Baseline`, `Rick-Hammered`) are created via the integration's UI and can be referenced in `tts.speak` calls via the `voice_profile` option. This enables a **voice dimension** to the time-based personality progressions — the agent's cadence formula (§8.3) controls what the LLM *generates*, while voice profiles control how ElevenLabs *renders* that text.
+Named voice profiles (e.g., `Rick Sanchez - Rock Scientist v0.1.2`, `Quark - Kwork v0.6`) are created via the integration's UI. Each profile maps to an ElevenLabs voice UUID + default VoiceSettings. Profiles are referenced in `tts.speak` calls via the `voice` or `voice_profile` option.
+
+##### v3 Audio Tag Pivot (2026-03-24)
+
+ElevenLabs **v3 (`eleven_v3`) ignores** `similarity_boost`, `style`, and `speed` VoiceSettings. Voice modulation in v3 works through:
+
+1. **Stability slider** — the one VoiceSettings param v3 respects (0=Creative, 1=Robust)
+2. **Audio tags in text** — `[slurring]`, `[whispers]`, `[excited]`, `[laughs]`, `[sighs]`, `[sarcastic]`, `[angry]`, `[happy]`, `[sad]`, `[muttering]`, `[chuckles]`, `[clears throat]`, `[short pause]`, `[long pause]`, `[groaning]`, `[tired]`, etc.
+
+The mood modulation system writes per-agent values hourly via the `voice_mood_modulation.yaml` blueprint (5 time blocks per agent):
+- `input_number.ai_voice_mood_{agent}_stability` — stability slider value
+- `input_text.ai_voice_mood_{agent}_tags` — audio tag prefix (e.g., `[slurring]`, `[groaning] [tired]`, or empty)
+
+Both `tts.py` (HACS component) and `tts_queue.py` (pyscript) read these helpers and inject:
+- Stability into VoiceSettings (overrides profile default)
+- Tag prefix into message text — **only for non-tagged messages** (`"[" not in message` guard prevents double-tagging agent conversation responses that already include their own tags via system prompts)
 
 ```yaml
-# Example: TTS queue speak with voice profile (time-based)
+# Example: TTS queue speak — mood tags auto-injected by tts_queue
 pyscript.tts_queue_speak:
-  text: "{{ agent_response }}"
+  text: "You have a meeting in 30 minutes"   # becomes "[slurring] You have a meeting in 30 minutes" at night
   voice: tts.elevenlabs_custom_tts
-  voice_profile: "Rick-Hammered"   # Resolved from now().hour mapping
+  voice_id: "Rick Sanchez - Rock Scientist v0.1.2"
   target_mode: presence
   priority: 2
-  cache: none
 ```
 
-**Caution:** Keep stability ≥ 0.3 even at "hammered" level. At very low stability, ElevenLabs may garble content unpredictably. Test with actual prompts before committing profile values.
+**Tag effectiveness varies:** `[whispers]` and `[shouts]` produce strong audible effects. `[slurring]` and `[sarcastic]` are subtle hints. Tag presets are tunable per-agent per-block via blueprint instances — no code changes needed.
 
 ### `ask_question` — Full Capabilities (HA 2025.7+)
 

@@ -653,6 +653,7 @@ async def _process_email(
         # Get TTS voice + agent entity from dispatcher (pipeline-aware)
         announce_voice = _helper_str("input_text.ai_default_tts_voice", "tts.home_assistant_cloud")
         agent_entity = ""
+        announce_voice_id = ""
         dispatch_resp = None
         try:
             dispatch_call = pyscript.agent_dispatch(  # noqa: F821
@@ -665,6 +666,7 @@ async def _process_email(
                 announce_voice = dispatch_resp["tts_engine"]
             if dispatch_resp:
                 agent_entity = dispatch_resp.get("agent", "")
+                announce_voice_id = dispatch_resp.get("tts_voice", "")
         except Exception:
             pass  # Fallback voice is fine
 
@@ -718,6 +720,7 @@ async def _process_email(
                 source="email_follow_me",
                 text=speech_text,
                 voice=announce_voice,
+                voice_id=announce_voice_id,
                 priority=3,
                 target_mode="presence",
                 metadata={

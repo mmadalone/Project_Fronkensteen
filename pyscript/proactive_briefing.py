@@ -898,6 +898,7 @@ async def _deliver_briefing(
     persona = "unknown"
     agent_entity = ""
     voice = _get_fallback_tts_voice()
+    voice_id = ""
     dispatch_reason = "default"
 
     if not stripped:
@@ -917,6 +918,7 @@ async def _deliver_briefing(
                     voice = dispatch_resp.get(
                         "tts_engine", _get_fallback_tts_voice(),
                     )
+                    voice_id = dispatch_resp.get("tts_voice", "")
             except Exception as exc:
                 log.warning(  # noqa: F821
                     f"briefing: dispatch failed ({exc}), "
@@ -944,6 +946,7 @@ async def _deliver_briefing(
                     voice = dispatch_resp.get(
                         "tts_engine", _get_fallback_tts_voice(),
                     )
+                    voice_id = dispatch_resp.get("tts_voice", "")
             except Exception as exc:
                 log.warning(  # noqa: F821
                     f"briefing: pipeline dispatch failed ({exc}), "
@@ -1024,6 +1027,7 @@ async def _deliver_briefing(
         tts_kwargs = {
             "text": speech_text,
             "voice": voice,
+            "voice_id": voice_id,
             "priority": 3,
             "target_mode": tts_target_mode,
         }

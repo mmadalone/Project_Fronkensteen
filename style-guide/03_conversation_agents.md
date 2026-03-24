@@ -283,7 +283,7 @@ Persona prompts can include `now().hour` Jinja2 conditionals that shift personal
 Your current drunk level: {% if now().hour < 9 %}severely hungover{% elif now().hour < 12 %}hungover but functional{% elif now().hour < 17 %}casually drinking{% elif now().hour < 21 %}noticeably drunk{% else %}completely hammered{% endif %}.
 ```
 
-The cadence formula is a TEXT layer — it affects LLM output. A separate VOICE layer (via ElevenLabs Custom TTS voice profiles with per-call speed/stability parameters) can make the actual audio delivery match the personality state. See §14.8 for TTS voice profile routing.
+The cadence formula is a TEXT layer — it affects LLM output (including audio tags like `[slurring]`, `[burps]` that ElevenLabs v3 processes as voice direction). A separate VOICE layer adds mood modulation for non-agent TTS (notifications, announcements, briefings) via per-agent helpers: `input_number.ai_voice_mood_{agent}_stability` (v3's one working VoiceSettings param) + `input_text.ai_voice_mood_{agent}_tags` (audio tag prefixes like `[slurring]`, `[whispers]`). Written hourly by the `voice_mood_modulation.yaml` blueprint. See §14.8 for TTS voice profile routing.
 
 **Rules for cadence formulas:**
 - Keep the `now().hour` breakpoints consistent between the prompt formula and the TTS voice profile mapping.
