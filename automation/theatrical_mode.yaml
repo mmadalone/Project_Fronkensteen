@@ -199,7 +199,7 @@ blueprint:
           name: Max Words Per Turn
           description: >-
             Maximum word count per agent response. Enforced in
-            the I-45a prefix AND by post-generation truncation.
+            the safety prefix AND by post-generation truncation.
           default: 40
           selector:
             number:
@@ -406,7 +406,7 @@ blueprint:
     prompt:
       name: "\u2468 Prompt"
       icon: mdi:text-box-outline
-      description: Debate prompt template and I-45a safety prefix.
+      description: Debate prompt template and safety prefix.
       collapsed: true
       input:
         theatrical_prompt_template:
@@ -414,7 +414,7 @@ blueprint:
           description: >-
             Jinja2 template for each turn's prompt. Available
             variables: {topic}, {context_text}, {persona},
-            {turn}, {total_turns}. I-45a prefix is prepended
+            {turn}, {total_turns}. Safety prefix is prepended
             automatically.
           default: >-
             Topic: {topic}
@@ -429,7 +429,7 @@ blueprint:
               multiline: true
 
         i45a_prefix:
-          name: I-45a Safety Prefix
+          name: Safety Prefix
           description: >-
             Tool-suppression prefix prepended to every LLM call.
           default: >-
@@ -580,7 +580,7 @@ variables:
   v_opener: >-
     {{ trigger.event.data.get('opener_persona', '') }}
 
-actions:
+action:
   # ── Source filter: reject banter_escalation if disabled ──
   - alias: "Step 1 \u2014 Source filter"
     if:

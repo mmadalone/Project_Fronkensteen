@@ -4,7 +4,7 @@
 # Generic refcount bypass for any shared boolean toggle. Increments an HA
 # counter helper. First claim (0→1) turns OFF the toggle. Zero JSON parsing.
 #
-# Part of the I-45b refcount bypass system. Pair with refcount_bypass_release.
+# Part of the refcount bypass system. Pair with refcount_bypass_release.
 # =============================================================================
 
 blueprint:

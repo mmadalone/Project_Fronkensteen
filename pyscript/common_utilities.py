@@ -1411,6 +1411,7 @@ async def llm_task_call(
     max_tokens: int = 500,
     temperature: float = 0.3,
     priority_tier: str = "standard",
+    instance: str | None = None,
 ) -> dict[str, Any]:
     """
     yaml
@@ -1466,6 +1467,14 @@ async def llm_task_call(
               - essential
               - standard
               - luxury
+      instance:
+        name: Instance
+        description: >-
+          ha_text_ai instance entity override. Falls back to
+          input_text.ai_task_instance helper, then default.
+        selector:
+          entity:
+            integration: ha_text_ai
     """
     # Returns: {status, response_text, tokens_used?, model_used?, error?, budget_remaining?}
     if _is_test_mode():
@@ -1485,12 +1494,16 @@ async def llm_task_call(
         )
         return {"status": "budget_exhausted", "budget_remaining": budget_pct, "response_text": None}
 
-    # Read ha_text_ai instance entity
-    try:
-        instance_entity = state.get("input_text.ai_task_instance") or ""  # noqa: F821
-        instance_entity = instance_entity.strip()
-    except (TypeError, AttributeError):
-        instance_entity = ""
+    # Resolve ha_text_ai instance: param → helper → hardcoded default
+    instance_entity = ""
+    if instance:
+        instance_entity = str(instance).strip()
+    if not instance_entity:
+        try:
+            instance_entity = state.get("input_text.ai_task_instance") or ""  # noqa: F821
+            instance_entity = instance_entity.strip()
+        except (TypeError, AttributeError):
+            instance_entity = ""
     if not instance_entity:
         instance_entity = "sensor.ha_text_ai_deepseek_chat"
 

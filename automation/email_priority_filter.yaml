@@ -64,7 +64,7 @@ blueprint:
             boolean: {}
 
     # ===========================================================================
-    # ③ BYPASS — Follow-Me (I-45b)
+    # ③ BYPASS — Follow-Me
     # ===========================================================================
     bypass:
       name: "③ Bypass"
@@ -156,13 +156,13 @@ conditions:
     state: "on"
 
 actions:
-  # Save & bypass follow-me (I-45b)
-  - alias: "0 · Save & bypass follow-me (I-45b)"
+  # Save & bypass follow-me
+  - alias: "0 · Save & bypass follow-me"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | bool(false) }}
 
-  - alias: "0 · Disable follow-me (if configured) (I-45b)"
+  - alias: "0 · Disable follow-me (if configured)"
     choose:
       - conditions:
           - condition: template
@@ -182,8 +182,8 @@ actions:
       subject: "{{ trigger.event.data.subject }}"
       suppress_tts: "{{ suppress_urgent_tts }}"
 
-  # Restore follow-me (I-45b)
-  - alias: "1 · Restore follow-me (if bypassed) (I-45b)"
+  # Restore follow-me
+  - alias: "1 · Restore follow-me (if bypassed)"
     choose:
       - conditions:
           - condition: template

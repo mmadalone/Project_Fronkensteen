@@ -153,8 +153,8 @@ blueprint:
             static: farewell_text/greeting_text spoken literally via TTS.
             ha_text_ai: Prompt sent to pyscript.llm_task_call — no tools.
             pipeline_agent: Prompt sent via conversation.process to the agent
-            resolved from the active pipeline. Re-entry mitigated by I-45a
-            prompt prefix + tool guard.
+            resolved from the active pipeline. Re-entry mitigated by
+            tool-suppression prompt prefix + tool guard.
             conversation_agent: Same as pipeline_agent but you manually pick
             the agent in llm_lines_agent.
           default: "static"
@@ -171,7 +171,7 @@ blueprint:
           description: >-
             Conversation agent entity for farewell/greeting generation. ONLY used
             when llm_lines_mode = conversation_agent. Standard agents are safe
-            (I-45a prompt prefix + tool guard prevent re-entry).
+            (tool-suppression prompt prefix + tool guard prevent re-entry).
           default: ""
           selector:
             entity:
@@ -337,7 +337,7 @@ blueprint:
     expertise_routing:
       name: "⑥ Expertise Routing"
       icon: mdi:head-lightbulb-outline
-      description: Proactive expertise-based agent handoff (I-45).
+      description: Proactive expertise-based agent handoff.
       collapsed: true
       input:
         enable_expertise_handoff:
@@ -459,10 +459,11 @@ blueprint:
               domain: input_select
         privacy_gate_person:
           name: "Privacy gate person"
-          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
-          default: "miquel"
+          description: "Person entity for tier suppression lookups."
+          default: person.miquel
           selector:
-            text:
+            entity:
+              domain: person
 
     # ===========================================================================
     # ⑧ Music    # ===========================================================================
@@ -581,6 +582,7 @@ variables:
   v_privacy_enabled: !input privacy_gate_enabled
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   stale_guard_timeout: !input stale_guard_timeout
   v_handoff_enabled: !input voice_handoff_enabled
 
@@ -599,7 +601,7 @@ conditions:
       {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
         false
       {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
   - condition: template
     value_template: "{{ is_state(v_handoff_enabled, 'on') }}"
@@ -656,7 +658,7 @@ actions:
       do_greeting: !input enable_greeting
       echo_guard_seconds: !input echo_guard_delay
       processing_guard_entity: !input processing_guard
-      # I-45: Expertise routing inputs
+      # Expertise routing inputs
       enable_expertise: !input enable_expertise_handoff
       expertise_commentary_tpl: !input expertise_commentary_prompt
       expertise_greeting_tpl: !input expertise_greeting_prompt
@@ -674,7 +676,7 @@ actions:
       # Mic behavior + extra system prompt
       mic_behavior: !input mic_behavior
       extra_system_prompt_input: !input extra_system_prompt
-      # Bypass follow-me (I-45b)
+      # Bypass follow-me
       v_bypass_follow_me: !input bypass_follow_me
       v_bypass_claim: !input bypass_claim_script
       v_bypass_release: !input bypass_release_script
@@ -713,14 +715,14 @@ actions:
       rendered_extra_prompt: >-
         {{ [mic_instruction | trim, extra_system_prompt_input | trim, continuous_stop_instruction | trim] | reject('eq', '') | join(' ') }}
 
-  # 1c. Save & bypass follow-me (I-45b) — after step 1 so v_bypass_* are defined
-  - alias: "1c · Save & bypass follow-me (I-45b)"
+  # 1c. Save & bypass follow-me — after step 1 so v_bypass_* are defined
+  - alias: "1c · Save & bypass follow-me"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
            and is_state('input_boolean.notification_follow_me', 'on') }}
 
-  - alias: "1c · Disable follow-me (if configured) (I-45b)"
+  - alias: "1c · Disable follow-me (if configured)"
     choose:
       - conditions:
           - condition: template
@@ -792,7 +794,7 @@ actions:
         {% endfor %}
         {{ ns.result }}
 
-  # 2c. Expertise handoff gate — extract reason + block if disabled (I-45)
+  # 2c. Expertise handoff gate — extract reason + block if disabled
   - alias: "Set handoff reason"
     variables:
       handoff_reason: >-
@@ -807,7 +809,7 @@ actions:
         value_template: >-
           {{ handoff_reason == 'expertise' and not enable_expertise }}
     then:
-      - alias: "Restore follow-me (if bypassed) (I-45b)"
+      - alias: "Restore follow-me (if bypassed)"
         choose:
           - conditions:
               - condition: template
@@ -864,7 +866,7 @@ actions:
       - condition: template
         value_template: "{{ target_option | length == 0 }}"
     then:
-      - alias: "Restore follow-me (if bypassed) (I-45b)"
+      - alias: "Restore follow-me (if bypassed)"
         choose:
           - conditions:
               - condition: template
@@ -903,7 +905,7 @@ actions:
           start_media_id: "{{ silence_media_url }}"
           preannounce: false
           extra_system_prompt: "{{ rendered_extra_prompt }}"
-      - alias: "Restore follow-me (if bypassed) (I-45b)"
+      - alias: "Restore follow-me (if bypassed)"
         choose:
           - conditions:
               - condition: template
@@ -1770,8 +1772,8 @@ actions:
               satellite: "{{ satellite_entity }}"
             continue_on_error: true
 
-  # 12b. Restore follow-me (I-45b) — normal end path
-  - alias: "12b · Restore follow-me (if bypassed) (I-45b)"
+  # 12b. Restore follow-me — normal end path
+  - alias: "12b · Restore follow-me (if bypassed)"
     choose:
       - conditions:
           - condition: template

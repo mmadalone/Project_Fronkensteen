@@ -730,8 +730,8 @@ blueprint:
 
         privacy_gate_person:
           name: "Privacy gate person"
-          description: "Person entity whose presence triggers privacy suppression."
-          default: ""
+          description: "Person entity for tier suppression lookups."
+          default: person.miquel
           selector:
             entity:
               domain: person
@@ -877,7 +877,8 @@ variables:
   privacy_tier: !input privacy_tier
   v_privacy_gate_enabled: !input privacy_gate_enabled
   v_privacy_gate_mode: !input privacy_gate_mode
-  privacy_gate_person: !input privacy_gate_person
+  v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
   v_dispatcher_enabled: !input dispatcher_enabled
@@ -1050,7 +1051,7 @@ conditions:
       {% elif mode == 'force_allow_all' %}
         true
       {% else %}
-        true
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ privacy_tier ~ '_suppressed', 'off') }}
       {% endif %}
 
 # ═══════════════════════════════════════════════════════════════════════════════

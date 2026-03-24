@@ -1,7 +1,7 @@
 # =============================================================================
 # Memory Threshold Alert (v1.0.0)
 # =============================================================================
-# Scheduled monitor + notification for L2 memory lifecycle (I-42 Phase 1).
+# Scheduled monitor + notification for L2 memory lifecycle (Phase 1).
 #
 # Dual-trigger:
 #   1. Daily time trigger — calls pyscript.memory_health_check
@@ -36,7 +36,7 @@ blueprint:
     embedding batch (03:30) complete.
 
 
-    Part of I-42: Memory Lifecycle Policy (Phase 1 — monitoring).
+    Part of Memory Lifecycle Policy (Phase 1 — monitoring).
 
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/memory_threshold_alert.yaml

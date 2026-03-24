@@ -1,5 +1,5 @@
 # =============================================================================
-# Memory Auto-Archive Blueprint — I-42 Phase 2
+# Memory Auto-Archive Blueprint
 # =============================================================================
 # Triggered reactively (threshold exceeded event) or on schedule.
 # Moves coldest unprotected L2 entries to mem_archive cold storage.

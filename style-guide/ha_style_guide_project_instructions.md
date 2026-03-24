@@ -57,6 +57,7 @@ When a troubleshooting session requires editing YAML to fix the issue, escalate 
 | Music Assistant integration | `05_music_assistant_patterns.md` + `02_automation_patterns.md` (§5.1 timeouts) | |
 | Edit an existing file | `06_anti_patterns_and_workflow.md` (§11.3) + the relevant pattern doc | |
 | Generate/update a README | `06_anti_patterns_and_workflow.md` (§11.14) + the relevant pattern doc for context | |
+| Add privacy gate to a blueprint | `Readme/privacy_gate.md` (developer guide section) | |
 
 **Task-specific routing (TROUBLESHOOT mode):**
 
@@ -98,6 +99,12 @@ The section numbers are preserved across files for cross-referencing.
 | [Troubleshooting & Debugging](07_troubleshooting.md) | §13 | ~9.2K | Traces, Developer Tools, failure modes, log analysis, domain-specific debugging, pyscript debugging (§13.11) |
 | [Voice Assistant Pattern](08_voice_assistant_pattern.md) | §14 | ~17.6K | End-to-end voice stack architecture: ESPHome satellites, pipelines, agents, blueprints, tool scripts, helpers, TTS |
 | [QA Audit Checklist](09_qa_audit_checklist.md) | §15 | ~15.4K | QA audit checks, trigger rules, cross-reference index, audit tiers (§15.4), and user commands for guide maintenance |
+
+**Reference Documents** (not part of numbered section system — load by task):
+
+| Doc | Covers |
+|-----|--------|
+| [Privacy Gate](Readme/privacy_gate.md) | Architecture, helpers, hysteresis blueprint, gated blueprint list, package reference, developer guide for adding the gate to a new blueprint |
 
 *Token estimates measured Mar 2026. Re-measure after structural changes. Budget ceiling: keep total loaded style guide content under ~15K tokens per task (§1.9). Total across all files: ~126K.*
 

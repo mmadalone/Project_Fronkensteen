@@ -12,7 +12,7 @@
 #   - Stores summary with configurable long TTL
 #   - Tags/deletes source entries per retention mode
 #
-# Summaries auto-embed on the next embedding_batch run (I-2).
+# Summaries auto-embed on the next embedding_batch run.
 # Cost: ~$0.001/run at gpt-4o-mini. Budget-gated at standard tier.
 # =============================================================================
 

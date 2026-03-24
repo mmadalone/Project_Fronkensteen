@@ -326,7 +326,7 @@ blueprint:
       name: "⑥ Music"
       icon: mdi:music-note
       description: >-
-        I-10 music composition integration for play_media escalations.
+        Music composition integration for play_media escalations.
         When enabled, resolves audio from the music library or composes
         on the fly instead of using static media folder clips.
       collapsed: true
@@ -445,7 +445,7 @@ actions:
       event_message: "{{ trigger.event.data.message | default('') | trim }}"
       current_agent: "{{ states('input_text.ai_last_agent_name') | default('unknown') }}"
       now_ts: "{{ now().timestamp() }}"
-      # ── I-10: Music composition inputs ──
+      # ── Music composition inputs ──
       v_enable_escalation_music: !input enable_escalation_music
       v_escalation_music_agent: !input escalation_music_agent
       v_escalation_library_id: !input escalation_library_id_override

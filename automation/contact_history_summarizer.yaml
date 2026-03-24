@@ -2,7 +2,7 @@
 # Contact History Summarizer (v1.0.0)
 # =============================================================================
 # Scheduled/event-driven job that compresses raw per-contact message entries
-# into LLM-compressed digests. Part of I-47: Per-Contact Message History.
+# into LLM-compressed digests. Part of Per-Contact Message History.
 #
 # Calls pyscript.contact_history_summarize, which:
 #   - Searches L2 for unsummarized contact_msg_* entries
@@ -28,7 +28,7 @@ blueprint:
 
 
     Batch job that compresses raw per-contact message entries into LLM-compressed
-    digests for the notification follow-me contact history feature (I-47).
+    digests for the notification follow-me contact history feature.
 
 
     **Trigger modes:**

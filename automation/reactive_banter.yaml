@@ -7,7 +7,7 @@
 # Trigger: ai_conversation_response_ready event fired from conversation_sensor.py
 #          after each LLM response. Per-satellite instances.
 #
-# Safety: Uses conversation.process with I-45a tool-suppression prefix.
+# Safety: Uses conversation.process with tool-suppression prefix.
 #         Banter whisper logged with source: "automation" to prevent re-trigger.
 #
 # Requires:
@@ -28,7 +28,7 @@ blueprint:
     Pattern 1 of inter-agent communication. After Agent A responds to the user,
     another agent probabilistically chimes in with a brief, in-character reaction
     via TTS. Uses conversation.process for full agent personality + hot context.
-    I-45a tool-suppression prefix prevents re-entry. Per-satellite instances.
+    Tool-suppression prefix prevents re-entry. Per-satellite instances.
     Foundation for Pattern 4 (Theatrical Mode).
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/reactive_banter.yaml
@@ -512,8 +512,14 @@ conditions:
         {{ (as_timestamp(now()) - as_timestamp(last | as_datetime)) > (cooldown_minutes | int(30) * 60) }}
       {% endif %}
 
-  # ── Gate 6: Satellite not in active voice session ──
-  - alias: "Gate 6 — Satellite idle check"
+  # ── Gate 6: Not during theatrical exchange ──
+  - alias: "Gate 6 — Theatrical mode not active"
+    condition: state
+    entity_id: input_boolean.ai_theatrical_mode_active
+    state: "off"
+
+  # ── Gate 7: Satellite not in active voice session ──
+  - alias: "Gate 7 — Satellite idle check"
     condition: template
     value_template: >-
       {% if trigger.id == 'notification' %}
@@ -594,12 +600,14 @@ action:
     data:
       pipeline_name: "{{ agent_b }}"
 
-  - alias: "Step 4c — Extract engine + TTS"
+  - alias: "Step 4c — Extract engine + TTS + voice ID"
     variables:
       agent_b_engine: >-
         {{ (agent_b_resolve | default({})).get('engine', '') }}
       agent_b_tts_engine: >-
         {{ (agent_b_resolve | default({})).get('tts_engine', '') }}
+      agent_b_tts_voice: >-
+        {{ (agent_b_resolve | default({})).get('tts_voice', '') }}
 
   - alias: "Step 4d — Guard: engine resolution"
     if:
@@ -608,7 +616,7 @@ action:
     then:
       - stop: "Could not resolve engine for {{ agent_b }}"
 
-  # ── Step 5: Build banter prompt (I-45a prefix + user template) ──
+  # ── Step 5: Build banter prompt (safety prefix + user template) ──
   - alias: "Step 5 — Render banter prompt"
     variables:
       rendered_prompt: >-
@@ -678,7 +686,7 @@ action:
       - delay:
           seconds: "{{ playback_buffer | int(1) }}"
 
-  # ── Step 6e: Resolve pre-TTS stinger (I-10 pattern) ──
+  # ── Step 6e: Resolve pre-TTS stinger ──
   - alias: "Step 6e — Init chime path"
     variables:
       v_chime_path: ""
@@ -785,8 +793,9 @@ action:
       restore_volume: "{{ tts_output_vol | float(0) > 0 }}"
       volume_restore_delay: "{{ restore_delay | int(8) }}"
       chime_path: "{{ v_chime_path | default('') }}"
+      voice_id: "{{ agent_b_tts_voice | default('') }}"
 
-  # ── Step 7b: Release follow-me bypass (I-45b) ──
+  # ── Step 7b: Release follow-me bypass ──
   - alias: "Step 7b — Release follow-me bypass"
     action: "{{ v_bypass_release }}"
     continue_on_error: true

@@ -39,7 +39,7 @@ blueprint:
 
     Respects the Voice PE ducking flag — pauses sync while TTS is
     playing. Optionally marks manual volume adjustments during
-    ducking (I-22) and updates the duck manager snapshot after
+    ducking and updates the duck manager snapshot after
     each volume sync.
 
   homeassistant:
@@ -150,7 +150,7 @@ blueprint:
               mode: slider
 
         duck_allow_manual_override:
-          name: Allow manual volume override during ducking (I-22)
+          name: Allow manual volume override during ducking
           description: >
             When enabled and ducking is active, manual volume changes
             are reported to the duck manager (so it knows not to restore
@@ -428,7 +428,7 @@ actions:
       {{ states(source_entity) | default('unavailable')
          not in ['unavailable', 'unknown'] }}
 
-  # 1) Ducking gate — I-22 manual override or block entirely
+  # 1) Ducking gate — manual override or block entirely
   - alias: "Ducking gate — override or block"
     choose:
       # Ducking is active
@@ -439,7 +439,7 @@ actions:
               {{ states(ducking_flag_entity) | default('off') == 'on' }}
         sequence:
           # If manual override enabled, notify duck manager and stop
-          - alias: "I-22 — mark user adjustment if override enabled and volume differs from duck level"
+          - alias: "Mark user adjustment if override enabled and volume differs from duck level"
             if:
               - condition: template
                 value_template: >-

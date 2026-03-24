@@ -1059,7 +1059,7 @@ blueprint:
           selector:
             text:
 
-        # ── Bypass Follow-Me (I-45b) ────────────────────────────────
+        # ── Bypass Follow-Me ────────────────────────────────
         bypass_follow_me:
           name: Bypass Notification Follow-Me
           description: >
@@ -1132,10 +1132,11 @@ blueprint:
               domain: input_select
         privacy_gate_person:
           name: "Privacy gate person"
-          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
-          default: "miquel"
+          description: "Person entity for tier suppression lookups."
+          default: person.miquel
           selector:
-            text:
+            entity:
+              domain: person
 
     # =========================================================================
     # ⑪ CONTACT HISTORY
@@ -1579,6 +1580,7 @@ variables:
   v_privacy_enabled: !input privacy_gate_enabled
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   contact_history_on: !input enable_contact_history
   contact_window: !input contact_context_window
   contact_storage: !input contact_storage_mode
@@ -1595,7 +1597,7 @@ variables:
   environment_intro_text: !input environment_context_intro
   burst_rules_text: !input burst_rules
   burst_combine_text: !input burst_combine_rules
-  # ── I-10: Music stinger inputs ──
+  # ── Music stinger inputs ──
   v_enable_stinger: !input enable_pre_tts_stinger
   v_stinger_agent: !input stinger_agent
   v_stinger_library_id: !input stinger_library_id_override
@@ -1669,7 +1671,7 @@ conditions:
       {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
         false
       {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
 
 # =============================================================================
@@ -2612,9 +2614,9 @@ actions:
       agent_name: "{{ _swap.name | default(agent_name) }}"
 
   # ---------------------------------------------------------------------------
-  # 6z. Fetch contact history for LLM context injection (I-47)
+  # 6z. Fetch contact history for LLM context injection
   # ---------------------------------------------------------------------------
-  - alias: "6z · Fetch contact history (I-47)"
+  - alias: "6z · Fetch contact history"
     if:
       - condition: template
         value_template: >-
@@ -2864,9 +2866,9 @@ actions:
     continue_on_error: true
 
   # ---------------------------------------------------------------------------
-  # 7a-history · Log message to L2 for contact history (I-47)
+  # 7a-history · Log message to L2 for contact history
   # ---------------------------------------------------------------------------
-  - alias: "7a-history · Log message to contact history (I-47)"
+  - alias: "7a-history · Log message to contact history"
     if:
       - condition: template
         value_template: >-
@@ -2976,14 +2978,14 @@ actions:
 
   # ---------------------------------------------------------------------------
   # 7x. Save & bypass follow-me — moved past all bare-condition gates
-  #     so a gate halt can never leave follow-me stuck OFF  (I-45b)
+  #     so a gate halt can never leave follow-me stuck OFF
   # ---------------------------------------------------------------------------
-  - alias: "7x · Save & bypass follow-me (I-45b)"
+  - alias: "7x · Save & bypass follow-me"
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | bool(false) }}
 
-  - alias: "7x · Disable follow-me (if configured) (I-45b)"
+  - alias: "7x · Disable follow-me (if configured)"
     choose:
       - conditions:
           - condition: template
@@ -3059,9 +3061,9 @@ actions:
             continue_on_error: true
 
   # ---------------------------------------------------------------------------
-  # 7f. I-10: Resolve chime path (before TTS delivery)
+  # 7f. Resolve chime path (before TTS delivery)
   # ---------------------------------------------------------------------------
-  - alias: "7f · I-10: Resolve pre-TTS chime path"
+  - alias: "7f · Resolve pre-TTS chime path"
     variables:
       v_chime_path: ""
       v_chime_duration_ms: 0
@@ -3671,13 +3673,13 @@ actions:
           - condition: template
             value_template: "{{ not (_should_own_loop | bool(false)) }}"
         then:
-          - alias: "Restore follow-me (if bypassed) (I-45b)"
+          - alias: "Restore follow-me (if bypassed)"
             choose:
               - conditions:
                   - condition: template
                     value_template: "{{ follow_me_was_on }}"
                 sequence:
-                  - alias: "Release follow-me bypass refcount (I-45b)"
+                  - alias: "Release follow-me bypass refcount"
                     action: "{{ v_bypass_release }}"
                     continue_on_error: true
                     data:
@@ -3845,13 +3847,13 @@ actions:
                       Notification Follow-Me: reminder loop stopping —
                       sensor changed to {{ _r_sender_raw }} / {{ _r_package }}.
                     level: info
-                - alias: "Restore follow-me (if bypassed) (I-45b)"
+                - alias: "Restore follow-me (if bypassed)"
                   choose:
                     - conditions:
                         - condition: template
                           value_template: "{{ follow_me_was_on }}"
                       sequence:
-                        - alias: "Release follow-me bypass refcount (I-45b)"
+                        - alias: "Release follow-me bypass refcount"
                           action: "{{ v_bypass_release }}"
                           continue_on_error: true
                           data:
@@ -3918,13 +3920,13 @@ actions:
                       value_template: >-
                         {{ (last_app_entity | default('', true)) == '' }}
                   then:
-                    - alias: "Restore follow-me (if bypassed) (I-45b)"
+                    - alias: "Restore follow-me (if bypassed)"
                       choose:
                         - conditions:
                             - condition: template
                               value_template: "{{ follow_me_was_on }}"
                           sequence:
-                            - alias: "Release follow-me bypass refcount (I-45b)"
+                            - alias: "Release follow-me bypass refcount"
                               action: "{{ v_bypass_release }}"
                               continue_on_error: true
                               data:
@@ -4007,13 +4009,13 @@ actions:
                           value_template: >-
                             {{ _r3c_evicted | length == 0 }}
                       then:
-                        - alias: "Restore follow-me (if bypassed) (I-45b)"
+                        - alias: "Restore follow-me (if bypassed)"
                           choose:
                             - conditions:
                                 - condition: template
                                   value_template: "{{ follow_me_was_on }}"
                               sequence:
-                                - alias: "Release follow-me bypass refcount (I-45b)"
+                                - alias: "Release follow-me bypass refcount"
                                   action: "{{ v_bypass_release }}"
                                   continue_on_error: true
                                   data:
@@ -4198,13 +4200,13 @@ actions:
                     message: >-
                       Notification Follow-Me: ledger empty after eviction — exiting loop.
                     level: info
-                - alias: "Restore follow-me (if bypassed) (I-45b)"
+                - alias: "Restore follow-me (if bypassed)"
                   choose:
                     - conditions:
                         - condition: template
                           value_template: "{{ follow_me_was_on }}"
                       sequence:
-                        - alias: "Release follow-me bypass refcount (I-45b)"
+                        - alias: "Release follow-me bypass refcount"
                           action: "{{ v_bypass_release }}"
                           continue_on_error: true
                           data:
@@ -4306,13 +4308,13 @@ actions:
                         entity_id: "{{ reminder_watchdog_entity }}"
                       data:
                         datetime: "1970-01-01 00:00:00"
-                    - alias: "Restore follow-me (if bypassed) (I-45b)"
+                    - alias: "Restore follow-me (if bypassed)"
                       choose:
                         - conditions:
                             - condition: template
                               value_template: "{{ follow_me_was_on }}"
                           sequence:
-                            - alias: "Release follow-me bypass refcount (I-45b)"
+                            - alias: "Release follow-me bypass refcount"
                               action: "{{ v_bypass_release }}"
                               continue_on_error: true
                               data:
@@ -4841,15 +4843,15 @@ actions:
       level: info
 
   # ---------------------------------------------------------------------------
-  # 11. Restore follow-me (I-45b) — normal end path
+  # 11. Restore follow-me — normal end path
   # ---------------------------------------------------------------------------
-  - alias: "11 · Restore follow-me (if bypassed) (I-45b)"
+  - alias: "11 · Restore follow-me (if bypassed)"
     choose:
       - conditions:
           - condition: template
             value_template: "{{ follow_me_was_on }}"
         sequence:
-          - alias: "Release follow-me bypass refcount (I-45b)"
+          - alias: "Release follow-me bypass refcount"
             action: "{{ v_bypass_release }}"
             continue_on_error: true
             data:

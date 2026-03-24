@@ -28,7 +28,7 @@ blueprint:
       messages — falls back to static/random when daily budget drops
       below threshold. Reactive Banter — after the announcement, a
       different agent probabilistically chimes in with a brief
-      in-character reaction via conversation.process + I-45a
+      in-character reaction via conversation.process +
       tool-suppression prefix. Both features off by default (zero
       behavioral change on upgrade).
 
@@ -284,7 +284,7 @@ blueprint:
       collapsed: true
       description: >
         After the follow-me announcement, another agent may chime in with
-        a brief, in-character reaction. I-45a tool-suppression prefix
+        a brief, in-character reaction. Tool-suppression prefix
         prevents re-entry. Gated by probability and budget floor.
       input:
         enable_banter:
@@ -518,6 +518,10 @@ sequence:
             data:
               agent_id: "{{ llm_agent }}"
               text: >-
+                [MUSIC ANNOUNCE — do NOT call handoff_agent, execute_service,
+                agent_interaction_log, end_conversation, music_library, or
+                any other tools except web_search. Respond with ONLY the
+                spoken announcement text.]
                 {{
                   prompt_tpl
                   | replace('{player_name}', player_name)
@@ -796,7 +800,7 @@ sequence:
                       {{ '' }}
                     {%- endif -%}
 
-              - alias: "Banter — sanitize (I-45a leakage filter)"
+              - alias: "Banter — sanitize (leakage filter)"
                 variables:
                   banter_text: >-
                     {%- set _msg = _raw_banter | default('')

@@ -462,13 +462,13 @@ blueprint:
               domain: script
 
     # ===========================================================================
-    # ⑦ MUSIC (I-10)
+    # ⑦ MUSIC
     # ===========================================================================
     music:
-      name: "⑦ Music (I-10)"
+      name: "⑦ Music"
       icon: mdi:music-note
       description: >-
-        Pre-TTS stinger/chime via I-10 music composition. Resolved chime
+        Pre-TTS stinger/chime via music composition. Resolved chime
         path is passed to tts_queue_speak chime_path parameter.
       collapsed: true
       input:
@@ -592,10 +592,11 @@ blueprint:
               domain: input_select
         privacy_gate_person:
           name: "Privacy gate person"
-          description: "Person name used for tier suppression lookups (e.g. miquel, jessica)."
-          default: "miquel"
+          description: "Person entity for tier suppression lookups."
+          default: person.miquel
           selector:
-            text:
+            entity:
+              domain: person
 
 mode: single
 max_exceeded: silent
@@ -636,7 +637,8 @@ variables:
   v_privacy_enabled: !input privacy_gate_enabled
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
-  # ── I-10: Music stinger inputs ──
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  # ── Music stinger inputs ──
   v_enable_stinger: !input enable_pre_tts_stinger
   v_stinger_agent: !input stinger_agent
   v_stinger_library_id: !input stinger_library_id_override
@@ -710,7 +712,7 @@ conditions:
       {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
         false
       {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
 
 actions:
@@ -752,7 +754,7 @@ actions:
           dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
           dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
 
-  # ── I-29: Bypass follow-me during wake-up sequence ──────────────────
+  # ── Bypass follow-me during wake-up sequence ──────────────────
   - alias: "Set follow me was on"
     variables:
       follow_me_was_on: >-
@@ -874,12 +876,12 @@ actions:
     default: []
 
   # ---------------------------------------------------------------------------
-  # I-10: Resolve chime path (before TTS delivery)
+  # Resolve chime path (before TTS delivery)
   # ---------------------------------------------------------------------------
-  - alias: "I-10: Resolve pre-TTS chime path"
+  - alias: "Resolve pre-TTS chime path"
     variables:
       v_wake_chime_path: ""
-  - alias: "I-10: Chime resolution (when stinger enabled)"
+  - alias: "Chime resolution (when stinger enabled)"
     if:
       - condition: template
         value_template: "{{ v_enable_stinger | bool(false) }}"

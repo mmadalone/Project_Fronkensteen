@@ -222,7 +222,7 @@ def _on_conversation_finished(**kwargs):
     )
 
     # Guard: skip banter/internal/notification automation calls
-    if user_text.startswith(("[BANTER", "[INTERNAL", "[NOTIFICATION")):
+    if user_text.startswith(("[BANTER", "[INTERNAL", "[NOTIFICATION", "[MUSIC ANNOUNCE")):
         return
 
     # Extract response from last message

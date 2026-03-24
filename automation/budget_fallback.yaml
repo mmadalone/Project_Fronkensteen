@@ -1,5 +1,5 @@
 # =============================================================================
-# Budget Fallback — Per-Satellite Pipeline Switch (I-46)
+# Budget Fallback — Per-Satellite Pipeline Switch
 # =============================================================================
 # When ai_budget_fallback_active turns ON:
 #   1. Save current pipeline to shared JSON helper

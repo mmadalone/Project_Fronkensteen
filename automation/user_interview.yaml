@@ -1,5 +1,5 @@
 # =============================================================================
-# User Interview Blueprint — I-36 Orchestration
+# User Interview Blueprint — Orchestration
 # =============================================================================
 # Manages interview mode lifecycle: activate, auto-timeout, deactivate.
 # The actual interview is conducted by the LLM agent using hot context

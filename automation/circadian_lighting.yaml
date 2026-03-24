@@ -306,10 +306,11 @@ blueprint:
 
         privacy_gate_person:
           name: "Privacy gate person"
-          description: "Person name used for tier suppression lookups."
-          default: "miquel"
+          description: "Person entity for tier suppression lookups."
+          default: person.miquel
           selector:
-            text:
+            entity:
+              domain: person
 
 variables:
   v_enable: !input enable_toggle
@@ -332,6 +333,7 @@ variables:
   v_privacy_enabled: !input privacy_gate_enabled
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
 
 mode: single
 max_exceeded: silent
@@ -379,7 +381,7 @@ conditions:
       {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
         false
       {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_person ~ '_' ~ tier ~ '_suppressed', 'off') }}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
 
 actions:

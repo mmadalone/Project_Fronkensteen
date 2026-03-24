@@ -819,10 +819,13 @@ All new blueprints MUST use `pyscript.tts_queue_speak` instead of direct `tts.sp
   data:
     text: "{{ message }}"
     voice: "{{ dispatch_voice }}"
+    voice_id: "{{ resolved_tts_voice | default('') }}"
     priority: 2
     target_mode: presence
   continue_on_error: true
 ```
+
+> **`voice_id` (ElevenLabs voice override):** When using pipeline-resolved TTS, always pass `voice_id` from the dispatcher's `tts_voice` field. This overrides the default voice on the TTS entity with the persona-specific ElevenLabs voice ID (e.g., `bXZ1T4m4v4meSADkLhJY` for Doctor Portuondo). Without it, all agents sound the same. Empty string = no override (entity default voice). See `voice_handoff.yaml` for the proven pattern.
 
 **Priority levels:**
 

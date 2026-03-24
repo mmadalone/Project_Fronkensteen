@@ -1,5 +1,5 @@
 # =============================================================================
-# sqlite-vec Recompile (v1.0.0) — I-2a
+# sqlite-vec Recompile (v1.0.0)
 # =============================================================================
 # When HA Core updates, the Alpine base image (and its SQLite version) may
 # change, making the compiled vec0.so incompatible. This blueprint detects
@@ -12,7 +12,7 @@ blueprint:
   name: "sqlite-vec Recompile (v1.0.0)"
   author: madalone
   description: >
-    # sqlite-vec Recompile (I-2a)
+    # sqlite-vec Recompile
 
 
     Monitors Home Assistant Core updates and recompiles `vec0.so` if the

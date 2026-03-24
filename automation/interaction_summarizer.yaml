@@ -2,7 +2,7 @@
 # Interaction Summarizer (v1.0.0)
 # =============================================================================
 # Scheduled job that compresses whisper interaction logs into per-agent
-# summaries using a cheap LLM call. Part of I-3: L2 interaction
+# summaries using a cheap LLM call. Part of L2 interaction
 # summarization.
 #
 # Calls pyscript.summarize_interactions, which:
@@ -12,7 +12,7 @@
 #   - Stores summary with configurable long TTL
 #   - Tags/deletes source entries per retention mode
 #
-# Summaries auto-embed on the next embedding_batch run (I-2).
+# Summaries auto-embed on the next embedding_batch run.
 # Cost: ~$0.001/run at gpt-4o-mini. Budget-gated at standard tier.
 # =============================================================================
 
@@ -49,7 +49,7 @@ blueprint:
     If budget drops below 30%, summarization pauses gracefully.
 
 
-    **I-2 integration:** Summaries auto-embed on the next nightly
+    **Embedding integration:** Summaries auto-embed on the next nightly
     embedding batch run — no special wiring needed.
 
   domain: automation

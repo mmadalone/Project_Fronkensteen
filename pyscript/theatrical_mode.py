@@ -42,6 +42,16 @@ _cache = None
 _cache_ts = 0
 _SANITIZE_PATTERNS = None
 
+# ── TTS completion tracking (event-driven playback wait) ─────────────────
+_tts_completion = {"count": 0, "last_speaker": ""}
+
+
+@event_trigger("tts_queue_item_completed")  # noqa: F821
+async def _on_tts_completed(**kwargs):
+    """Track TTS queue completion events for inter-turn coordination."""
+    _tts_completion["count"] += 1
+    _tts_completion["last_speaker"] = kwargs.get("speaker", "")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Helper readers
@@ -96,6 +106,7 @@ def _load_pipelines_sync():
         personas = []
         name_to_engine = {}
         name_to_tts = {}
+        name_to_tts_voice = {}
 
         for p in items:
             name = (p.get("name") or "").strip()
@@ -105,6 +116,7 @@ def _load_pipelines_sync():
             base_name = name.split(" - ")[0].strip().lower()
             conv_engine = p.get("conversation_engine") or ""
             tts_engine = p.get("tts_engine") or ""
+            tts_voice = p.get("tts_voice") or ""
 
             personas.append(name)
             name_to_engine[name_lower] = conv_engine
@@ -113,15 +125,20 @@ def _load_pipelines_sync():
             name_to_tts[name_lower] = tts_engine
             if base_name != name_lower:
                 name_to_tts.setdefault(base_name, tts_engine)
+            name_to_tts_voice[name_lower] = tts_voice
+            if base_name != name_lower:
+                name_to_tts_voice.setdefault(base_name, tts_voice)
 
         return {
             "personas": personas,
             "name_to_engine": name_to_engine,
             "name_to_tts": name_to_tts,
+            "name_to_tts_voice": name_to_tts_voice,
         }
     except Exception as e:
         return {
             "personas": [], "name_to_engine": {}, "name_to_tts": {},
+            "name_to_tts_voice": {},
             "error": str(e),
         }
 
@@ -133,6 +150,9 @@ async def _ensure_cache():
     if _cache and _cache.get("personas") and (time.monotonic() - _cache_ts) < ttl:
         return _cache
     log.info("theatrical: loading pipeline cache")
+    if not callable(_load_pipelines_sync):
+        log.error("theatrical: _load_pipelines_sync not callable (executor registration failed)")
+        return {"personas": [], "name_to_engine": {}, "name_to_tts": {}, "name_to_tts_voice": {}, "error": "executor_not_registered"}
     _cache = await _load_pipelines_sync()
     _cache_ts = time.monotonic()
     if _cache.get("error"):
@@ -188,6 +208,13 @@ def _build_sanitize_patterns_sync():
             r"\b(?:light|switch|sensor|input_boolean|input_number|"
             r"input_select|media_player|climate|cover|fan|lock|"
             r"binary_sensor|automation|script|scene)\.[a-z_0-9]+\b"
+        ),
+        # Implicit action narration: "playing X in the Y", "turning on X"
+        _re.compile(
+            r"(?:playing|turning\s+(?:on|off)|setting|adjusting|activating|"
+            r"deactivating|enabling|disabling|starting|stopping|pausing)"
+            r"\s+[^.!?]{3,30}\s+(?:in\s+the|on\s+the|for\s+the)\s+\w+[^.!?]*[.!?]?",
+            _re.IGNORECASE,
         ),
         # JSON fragments: {"key": "value"}
         _re.compile(r'\{["\']?\w+["\']?\s*:\s*["\']?[^}]+\}'),
@@ -302,6 +329,31 @@ async def _wait_for_tts_playback(speaker, buffer=1):
         await asyncio.sleep(buffer)
 
 
+async def _wait_for_tts_completion(speaker, timeout=90, buffer=1, pre_count=None):
+    """Event-driven TTS wait using tts_queue_item_completed.
+
+    Captures completion counter before TTS dispatch, polls until
+    a matching completion event arrives (filtered by speaker).
+    """
+    if not speaker:
+        await asyncio.sleep(buffer)
+        return
+    if pre_count is None:
+        pre_count = _tts_completion["count"]
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if (_tts_completion["count"] > pre_count
+                and _tts_completion["last_speaker"] == speaker):
+            break
+        await asyncio.sleep(0.5)
+    else:
+        log.warning(
+            "theatrical: tts_completion timeout (%ds) for %s", timeout, speaker
+        )
+    if buffer > 0:
+        await asyncio.sleep(buffer)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Main orchestration service
 # ═══════════════════════════════════════════════════════════════════════════
@@ -412,6 +464,7 @@ async def theatrical_mode_start(
         cache = await _ensure_cache()
         name_to_engine = cache.get("name_to_engine", {})
         name_to_tts = cache.get("name_to_tts", {})
+        name_to_tts_voice = cache.get("name_to_tts_voice", {})
         voice_map = _parse_voice_map(tts_voice_map)
 
         if participants:
@@ -445,6 +498,7 @@ async def theatrical_mode_start(
             nl = n.lower()
             engine = name_to_engine.get(nl, "")
             tts_e = voice_map.get(nl, "") or name_to_tts.get(nl, "")
+            tts_v = name_to_tts_voice.get(nl, "")
 
             if not engine:
                 # C3 fallback: call dispatcher_resolve_engine per participant
@@ -457,6 +511,8 @@ async def theatrical_mode_start(
                     engine = (r or {}).get("engine", "")
                     if not tts_e:
                         tts_e = (r or {}).get("tts_engine", "")
+                    if not tts_v:
+                        tts_v = (r or {}).get("tts_voice", "")
                 except Exception as e:
                     log.warning(
                         "theatrical: dispatcher fallback failed for %s: %s",
@@ -469,6 +525,7 @@ async def theatrical_mode_start(
                     "display": n,
                     "engine": engine,
                     "tts": tts_e,
+                    "tts_voice": tts_v,
                     "speaker": "",
                 })
 
@@ -491,7 +548,11 @@ async def theatrical_mode_start(
             sat_attrs = state.getattr(sat)
             if isinstance(sat_attrs, dict):
                 zone = (sat_attrs.get("zone") or "").replace("zone.", "")
-            spk_data = await _resolve_speakers_sync(zone)
+            if callable(_resolve_speakers_sync):
+                spk_data = await _resolve_speakers_sync(zone)
+            else:
+                log.error("theatrical: _resolve_speakers_sync not callable")
+                spk_data = {"explicit": False, "speakers": []}
             zone_spk = spk_data.get("speakers", [])
             for i, p in enumerate(resolved):
                 p["speaker"] = zone_spk[i % len(zone_spk)] if zone_spk else ""
@@ -538,7 +599,11 @@ async def theatrical_mode_start(
             "Respond ONLY with a brief in-character argument. "
             f"Stay under {mw} words. No entity IDs, no JSON, "
             "no tool names in your response. "
-            "Do not narrate what you are doing.]"
+            "Do not narrate actions (no 'playing X', 'turning on X', 'setting X'). "
+            "Do not address other agents by name at the start of your response. "
+            "Respond in your natural language and style. "
+            "If your character speaks a language other than English, respond in that language. "
+            "ONLY speak your debate argument, nothing else.]"
         )
 
         # ── CONTEXT BUFFER ─────────────────────────────────────────────
@@ -549,7 +614,11 @@ async def theatrical_mode_start(
         # ── LAZY-INIT SANITIZE PATTERNS ────────────────────────────────
         global _SANITIZE_PATTERNS
         if _SANITIZE_PATTERNS is None:
-            _SANITIZE_PATTERNS = await _build_sanitize_patterns_sync()
+            if callable(_build_sanitize_patterns_sync):
+                _SANITIZE_PATTERNS = await _build_sanitize_patterns_sync()
+            else:
+                log.error("theatrical: _build_sanitize_patterns_sync not callable")
+                _SANITIZE_PATTERNS = []
 
         # ── MAIN TURN LOOP ─────────────────────────────────────────────
         for turn in range(tl):
@@ -588,7 +657,9 @@ async def theatrical_mode_start(
             elif cm == "topic_only":
                 body = (
                     f"Topic: {topic}\n"
-                    "Other agents are also debating this. Give your take. "
+                    f"This is turn {turn + 1} of {tl}. "
+                    "Other agents are also debating this. "
+                    "Give a fresh angle you haven't used before. "
                     "Be brief. Stay in character."
                 )
             elif cm == "whisper":
@@ -626,7 +697,10 @@ async def theatrical_mode_start(
                 continue
 
             # Sanitize (M2 — @pyscript_executor for regex)
-            speech = await _apply_sanitize_sync(speech, _SANITIZE_PATTERNS)
+            if _SANITIZE_PATTERNS and callable(_apply_sanitize_sync):
+                speech = await _apply_sanitize_sync(speech, _SANITIZE_PATTERNS)
+            elif _SANITIZE_PATTERNS:
+                log.error("theatrical: _apply_sanitize_sync not callable")
             if not speech:
                 continue
 
@@ -658,6 +732,9 @@ async def theatrical_mode_start(
                     log.warning("theatrical: satellite stuck, skipping TTS")
                     continue
 
+            # Snapshot completion counter before dispatch (race guard)
+            _pre_tts_count = _tts_completion["count"]
+
             # ── TTS delivery — H4 (capture response) ──────────────────
             if use_tts_queue and cur.get("speaker"):
                 try:
@@ -665,11 +742,13 @@ async def theatrical_mode_start(
                         "pyscript", "tts_queue_speak",
                         text=speech,
                         voice=cur["tts"],
+                        voice_id=cur.get("tts_voice", ""),
                         priority=priority,
                         target_mode="explicit",
                         target=cur["speaker"],
                         announce=True,
                         duck=False,
+                        metadata={"source": "theatrical", "turn": turn + 1},
                         return_response=True,
                     )
                 except Exception as e:
@@ -686,10 +765,19 @@ async def theatrical_mode_start(
                 except Exception as e:
                     log.warning("theatrical: tts.speak failed: %s", e)
 
-            # Wait for TTS playback (two-phase speaker wait)
-            await _wait_for_tts_playback(
-                cur.get("speaker", ""), buffer=tts_playback_buffer
-            )
+            # Wait for TTS playback
+            if use_tts_queue and cur.get("speaker"):
+                # Event-driven wait (tts_queue fires completion event)
+                await _wait_for_tts_completion(
+                    cur.get("speaker", ""), timeout=90,
+                    buffer=tts_playback_buffer,
+                    pre_count=_pre_tts_count,
+                )
+            else:
+                # Speaker state polling fallback (direct tts.speak path)
+                await _wait_for_tts_playback(
+                    cur.get("speaker", ""), buffer=tts_playback_buffer,
+                )
 
             # Inter-turn pause
             if inter_turn_pause > 0:

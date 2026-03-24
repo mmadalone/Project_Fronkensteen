@@ -1602,13 +1602,13 @@ ai_wifi_score_primary:
   initial: 40
 
 ai_wifi_score_secondary:
-  name: "WiFi Score - Secondary Device"
+  name: "WiFi Score - Secondary Device (GPS)"
   icon: mdi:wifi-strength-3
   min: 0
   max: 100
   step: 5
   mode: box
-  initial: 30
+  initial: 50
 
 ai_wifi_score_tertiary:
   name: "WiFi Score - Tertiary Device"

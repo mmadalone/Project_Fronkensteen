@@ -80,8 +80,9 @@ template:
 
   - sensor:
       # ── MIQUEL CONFIDENCE ─────────────────────────────────────────────────
-      #   WiFi 40 + GPS 30 + FP2 solo 20 + sustained 10 = max 100 pts
-      #   Dual occupancy: WiFi 40 + GPS 30 = max 70 pts (FP2 ambiguous)
+      #   WiFi 40 + GPS 50 + FP2 solo 20 + sustained 10 = max 120 pts
+      #   Dual occupancy: WiFi 40 + GPS 50 = max 90 pts (FP2 ambiguous)
+      #   GPS-only (WiFi off): 50 pts — meets default 50 pt identity gate
       - name: "Identity Confidence Miquel"
         unique_id: identity_confidence_miquel
         icon: mdi:account-check

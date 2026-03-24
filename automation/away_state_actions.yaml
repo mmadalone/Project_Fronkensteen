@@ -1,11 +1,11 @@
 blueprint:
-  name: "Away state actions (I-40)"
+  name: "Away state actions"
   author: madalone
   description: >
     # Away State Actions
 
     Per-person automation that fires on departure, arrival, predicted pre-return,
-    and extended away events. Uses the I-40 away prediction engine for pre-return
+    and extended away events. Uses the away prediction engine for pre-return
     timing.
 
     ### Trigger types
@@ -111,7 +111,7 @@ blueprint:
       icon: mdi:home-clock
       collapsed: true
       description: >
-        Actions to run before the predicted return time. Uses the I-40 away
+        Actions to run before the predicted return time. Uses the away
         prediction engine.
       input:
         pre_return_actions:
