@@ -709,7 +709,6 @@ ai_openrouter_usage_midnight:
   min: 0
   max: 99999
   step: 0.0001
-  initial: 0
   mode: box
   unit_of_measurement: "$"
   icon: mdi:router-wireless
@@ -743,7 +742,6 @@ ai_model_cost_today:
   min: 0
   max: 100
   step: 0.001
-  initial: 0
   mode: box
   unit_of_measurement: "€"
   icon: mdi:cash-multiple

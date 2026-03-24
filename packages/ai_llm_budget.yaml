@@ -743,18 +743,122 @@ automation:
             true
           {% endif %}
     actions:
-      # Startup: wait for REST sensors before snapshotting OpenRouter
-      - if:
-          - condition: trigger
-            id: startup
-        then:
-          - alias: "Wait for OpenRouter REST sensor to load"
-            wait_template: >-
-              {{ states('sensor.openrouter_credits') not in ['unknown', 'unavailable'] }}
-            timeout:
-              minutes: 3
-            continue_on_timeout: true
-      - action: script.ai_budget_reset
+      - choose:
+          # ── Startup: two-phase reset ──────────────────────────────────
+          # Phase 1 (immediate): log yesterday, zero counters, unblock gate.
+          # Phase 2 (delayed):   wait for REST sensors, then snapshot.
+          - conditions:
+              - condition: trigger
+                id: startup
+            sequence:
+              # Phase 1a: Log yesterday's data while counters still hold it
+              - alias: "Log daily totals to L2 memory"
+                continue_on_error: true
+                action: pyscript.memory_set
+                response_variable: _result
+                data:
+                  key: >-
+                    budget_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
+                  value: >-
+                    llm_calls={{ states('input_number.ai_llm_calls_today') | int(0) }},
+                    llm_tokens={{ states('input_number.ai_llm_tokens_today') | int(0) }},
+                    tts_calls={{ states('input_number.ai_tts_calls_today') | int(0) }},
+                    tts_chars={{ states('input_number.ai_tts_chars_today') | int(0) }},
+                    stt_calls={{ states('input_number.ai_stt_calls_today') | int(0) }},
+                    music_gens={{ states('input_number.ai_music_generations_today') | int(0) }},
+                    cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
+                    serper_credits={{ states('sensor.serper_daily_usage') | int(0) }},
+                    source=startup_catchup
+                  scope: "system"
+                  tags: "budget,daily,llm,tts,stt,serper"
+              - alias: "Record daily usage to budget_history"
+                continue_on_error: true
+                action: pyscript.budget_history_record
+                response_variable: _hist
+                data:
+                  date: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+                  usage_usd: "0"
+                  exchange_rate: "{{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}"
+                  llm_calls: "{{ states('input_number.ai_llm_calls_today') | int(0) }}"
+                  llm_tokens: "{{ states('input_number.ai_llm_tokens_today') | int(0) }}"
+                  tts_chars: "{{ states('input_number.ai_tts_chars_today') | int(0) }}"
+                  stt_calls: "{{ states('input_number.ai_stt_calls_today') | int(0) }}"
+                  serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
+                  model_cost_eur: "{{ states('input_number.ai_model_cost_today') | float(0) }}"
+                  model_breakdown: "{}"
+                  music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
+              # Phase 1b: Zero all counters — budget gate unblocks immediately
+              - alias: "Reset all budget counters to zero"
+                action: input_number.set_value
+                target:
+                  entity_id:
+                    - input_number.ai_llm_calls_today
+                    - input_number.ai_llm_tokens_today
+                    - input_number.ai_tts_calls_today
+                    - input_number.ai_tts_chars_today
+                    - input_number.ai_stt_calls_today
+                    - input_number.ai_model_cost_today
+                data:
+                  value: 0
+              - alias: "Reset per-agent budget breakdown"
+                continue_on_error: true
+                action: pyscript.budget_track_call
+                data:
+                  service_type: "llm"
+                  agent: "_reset"
+                  reset: true
+              - alias: "Deactivate budget fallback"
+                if:
+                  - condition: state
+                    entity_id: input_boolean.ai_budget_fallback_active
+                    state: "on"
+                then:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.ai_budget_fallback_active
+              - alias: "Record reset date for startup detection"
+                action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.ai_budget_last_reset
+                data:
+                  date: "{{ now().strftime('%Y-%m-%d') }}"
+              # Phase 2: Wait for REST sensors, then snapshot for today's delta
+              - alias: "Wait for OpenRouter REST sensor to load"
+                wait_template: >-
+                  {{ states('sensor.openrouter_credits') not in ['unknown', 'unavailable'] }}
+                timeout:
+                  minutes: 3
+                continue_on_timeout: true
+              - alias: "Snapshot OpenRouter cumulative usage"
+                continue_on_error: true
+                action: input_number.set_value
+                target:
+                  entity_id: input_number.ai_openrouter_usage_midnight
+                data:
+                  value: >-
+                    {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(
+                       states('input_number.ai_openrouter_usage_midnight') | float(0)) }}
+              - alias: "Snapshot ElevenLabs cumulative usage"
+                continue_on_error: true
+                action: input_number.set_value
+                target:
+                  entity_id: input_number.ai_elevenlabs_chars_midnight
+                data:
+                  value: >-
+                    {{ state_attr('sensor.elevenlabs_subscription', 'character_count')
+                       | int(states('input_number.ai_elevenlabs_chars_midnight') | int(0)) }}
+              - alias: "Snapshot Serper remaining credits"
+                continue_on_error: true
+                action: input_number.set_value
+                target:
+                  entity_id: input_number.ai_serper_credits_midnight
+                data:
+                  value: >-
+                    {{ states('sensor.serper_account')
+                       | int(states('input_number.ai_serper_credits_midnight') | int(0)) }}
+        # ── Midnight / Manual: run the full reset script ──────────────
+        default:
+          - action: script.ai_budget_reset
 
   # ── LLM CALL COUNTER (pipeline + direct conversation.process) ────────────
   - id: ai_llm_call_counter
