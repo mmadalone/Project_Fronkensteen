@@ -184,10 +184,22 @@ conditions:
       {% endif %}
 
 actions:
+  # ── Dispatcher: resolve TTS voice ──
+  - alias: "Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "bedtime_advisory"
+      intent_text: "bedtime advisory announcement"
+      skip_continuity: true
+
   - alias: "Set recommendation, minutes until"
     variables:
       recommendation: "{{ trigger.event.data.recommendation | default('') }}"
       minutes_until: "{{ trigger.event.data.minutes_until | default(15) }}"
+      _voice: "{{ (_dispatch | default({})).get('tts_engine', 'tts.home_assistant_cloud') }}"
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
 
   # ── TTS announcement ──
   - alias: "TTS announcement"
@@ -202,6 +214,8 @@ actions:
             continue_on_error: true
             data:
               text: "{{ v_tts_message }}"
+              voice: "{{ _voice }}"
+              voice_id: "{{ _voice_id }}"
               target_mode: explicit
               target: "{{ v_tts_speaker }}"
               announce: true
@@ -224,6 +238,8 @@ actions:
             continue_on_error: true
             data:
               text: "{{ (llm_response | default({})).get('response', {}).get('speech', {}).get('plain', {}).get('speech', v_tts_message) }}"
+              voice: "{{ _voice }}"
+              voice_id: "{{ _voice_id }}"
               target_mode: explicit
               target: "{{ v_tts_speaker }}"
               announce: true

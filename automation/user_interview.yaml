@@ -222,13 +222,29 @@ actions:
     response_variable: preseed_result
     continue_on_error: true
 
-  # 1a. Speak opening question via TTS queue (speaker only, correct voice)
-  - alias: "1a · Speak opening question"
+  # 1a. Resolve voice via dispatcher (fall back to user-provided entity)
+  - alias: "1a · Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "user_interview"
+      intent_text: "user interview"
+      skip_continuity: true
+
+  - variables:
+      _voice: >-
+        {% set d = (_dispatch | default({})).get('tts_engine', '') %}
+        {{ d if d else v_tts_voice }}
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
+
+  # 1b. Speak opening question via TTS queue (speaker only, correct voice)
+  - alias: "1b · Speak opening question"
     if:
       - condition: template
         value_template: >-
           {{ v_start_message | length > 0
-             and v_tts_voice not in ['', 'none', 'unknown', 'unavailable'] }}
+             and _voice not in ['', 'none', 'unknown', 'unavailable'] }}
     then:
       - alias: "Speak opening interview question via TTS queue"
         action: pyscript.tts_queue_speak
@@ -236,7 +252,8 @@ actions:
         response_variable: _tts_result
         data:
           text: "{{ v_start_message }}"
-          voice: "{{ v_tts_voice }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1

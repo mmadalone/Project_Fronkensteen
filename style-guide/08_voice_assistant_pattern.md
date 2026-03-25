@@ -957,7 +957,8 @@ data:
   target_mode: presence          # presence | explicit | broadcast | source_room
   target: "media_player.xxx"    # only required for explicit mode
   priority: 2                    # 0=emergency … 4=ambient
-  voice: "{{ dispatch_voice }}"  # TTS engine entity
+  voice: "{{ dispatch_voice }}"       # TTS engine entity
+  voice_id: "{{ dispatch_tts_voice }}" # voice profile name (ElevenLabs)
   cache: session                 # static | daily | session | none
 continue_on_error: true
 ```
@@ -993,6 +994,7 @@ Does the user need to hear this in a specific place?
     target_mode: presence
     priority: 3
     voice: "{{ dispatch_voice }}"
+    voice_id: "{{ dispatch_tts_voice }}"
     cache: session
   continue_on_error: true
 ```
@@ -1007,6 +1009,7 @@ Does the user need to hear this in a specific place?
     target: "media_player.bedroom_speaker"
     priority: 1
     voice: "{{ dispatch_voice }}"
+    voice_id: "{{ dispatch_tts_voice }}"
     cache: daily
   continue_on_error: true
 ```
@@ -1020,6 +1023,7 @@ Does the user need to hear this in a specific place?
     target_mode: broadcast
     priority: 0
     voice: "{{ dispatch_voice }}"
+    voice_id: "{{ dispatch_tts_voice }}"
     cache: none
   continue_on_error: true
 ```

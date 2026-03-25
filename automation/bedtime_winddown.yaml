@@ -1255,6 +1255,11 @@ actions:
               and dispatch_result.tts_engine is defined %}
           {{ dispatch_result.tts_engine }}
         {% else %}{% endif %}
+      resolved_voice_id: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.tts_voice is defined %}
+          {{ dispatch_result.tts_voice }}
+        {% else %}{% endif %}
       resolved_persona: >-
         {% if use_dispatcher and dispatch_result is defined
               and dispatch_result.persona is defined %}
@@ -1333,6 +1338,7 @@ actions:
             data:
               text: "{{ auto_speech }}"
               voice: "{{ resolved_voice }}"
+              voice_id: "{{ resolved_voice_id | default('') }}"
               target_mode: explicit
               target: "{{ tts_speaker }}"
               priority: 1
@@ -1487,6 +1493,7 @@ actions:
                 data:
                   text: "{{ fallback_offer_text }}"
                   voice: "{{ resolved_voice }}"
+                  voice_id: "{{ resolved_voice_id | default('') }}"
                   target_mode: explicit
                   target: "{{ tts_speaker }}"
                   priority: 2

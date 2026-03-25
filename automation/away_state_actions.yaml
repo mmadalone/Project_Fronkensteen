@@ -311,6 +311,20 @@ conditions:
     state: "on"
 
 actions:
+  # ── Dispatcher: resolve TTS voice ──
+  - alias: "Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "away_state"
+      intent_text: "away state announcement"
+      skip_continuity: true
+
+  - variables:
+      _voice: "{{ (_dispatch | default({})).get('tts_engine', 'tts.home_assistant_cloud') }}"
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
+
   - alias: "Choose action path"
     choose:
       # ══════════════════════════════════════════════════════════════════════
@@ -332,6 +346,8 @@ actions:
                 continue_on_error: true
                 data:
                   text: "{{ v_dep_message }}"
+                  voice: "{{ _voice }}"
+                  voice_id: "{{ _voice_id }}"
                   target_mode: explicit
                   target: "{{ v_tts_speaker }}"
                   announce: true
@@ -385,6 +401,8 @@ actions:
                 continue_on_error: true
                 data:
                   text: "{{ v_arr_message }}"
+                  voice: "{{ _voice }}"
+                  voice_id: "{{ _voice_id }}"
                   target_mode: explicit
                   target: "{{ v_tts_speaker }}"
                   announce: true

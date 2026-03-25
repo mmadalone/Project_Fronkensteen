@@ -2688,7 +2688,8 @@ actions:
                               text: >-
                                 Test mode. Autonomous bedtime triggered
                                 at stage {{ current_stage | int(0) + 1 }}.
-                              voice: "{{ dispatch_proactive_tts_voice }}"
+                              voice: "{{ dispatch_proactive_voice }}"
+                              voice_id: "{{ dispatch_proactive_tts_voice }}"
                               target: "{{ media_player_val }}"
                               target_mode: explicit
                               priority: 1
@@ -2715,7 +2716,8 @@ actions:
                             {% else %}
                               Alright, that's it. Bedtime. No more negotiations.
                             {% endif %}
-                          voice: "{{ dispatch_proactive_tts_voice }}"
+                          voice: "{{ dispatch_proactive_voice }}"
+                          voice_id: "{{ dispatch_proactive_tts_voice }}"
                           target: "{{ media_player_val }}"
                           target_mode: explicit
                           priority: 1
@@ -2904,6 +2906,7 @@ actions:
                   source: "proactive_bedtime_escalation"
                   text: "{{ proactive_message }}"
                   voice: "{{ dispatch_proactive_voice }}"
+                  voice_id: "{{ dispatch_proactive_tts_voice }}"
                   priority: 3
                   target_mode: presence
                   ttl_hours: "{{ ((effective_cooldown | float - 1) / 60) | round(2) }}"
@@ -2959,7 +2962,8 @@ actions:
                           - alias: "Fallback: one-shot TTS bedtime question"
                             action: pyscript.tts_queue_speak
                             data:
-                              voice: "{{ dispatch_proactive_tts_voice }}"
+                              voice: "{{ dispatch_proactive_voice }}"
+                              voice_id: "{{ dispatch_proactive_tts_voice }}"
                               target: "{{ media_player_val }}"
                               text: "{{ bedtime_question_fallback_val | default('Ready for bed?') }}"
                             continue_on_error: true
@@ -3124,7 +3128,8 @@ actions:
                           - alias: "Deliver settling TTS"
                             action: pyscript.tts_queue_speak
                             data:
-                              voice: "{{ dispatch_bedtime_tts_voice }}"
+                              voice: "{{ dispatch_bedtime_voice }}"
+                              voice_id: "{{ dispatch_bedtime_tts_voice }}"
                               target: "{{ media_player_val }}"
                               text: "{{ bedtime_tts_message }}"
                               priority: 2
@@ -3181,7 +3186,8 @@ actions:
               - alias: "Deliver bedtime announcement TTS"
                 action: pyscript.tts_queue_speak
                 data:
-                  voice: "{{ dispatch_bedtime_tts_voice }}"
+                  voice: "{{ dispatch_bedtime_voice }}"
+                  voice_id: "{{ dispatch_bedtime_tts_voice }}"
                   target: "{{ media_player_val }}"
                   text: "{{ bedtime_tts_message }}"
                   priority: 1
@@ -3653,7 +3659,8 @@ actions:
                   - alias: "Speak settling-in message via TTS"
                     action: pyscript.tts_queue_speak
                     data:
-                      voice: "{{ dispatch_bedtime_tts_voice }}"
+                      voice: "{{ dispatch_bedtime_voice }}"
+                      voice_id: "{{ dispatch_bedtime_tts_voice }}"
                       target: "{{ media_player_val }}"
                       text: "{{ settling_message }}"
                       priority: 2
@@ -3716,7 +3723,8 @@ actions:
           - alias: "Speak goodnight message via TTS"
             action: pyscript.tts_queue_speak
             data:
-              voice: "{{ dispatch_bedtime_tts_voice }}"
+              voice: "{{ dispatch_bedtime_voice }}"
+              voice_id: "{{ dispatch_bedtime_tts_voice }}"
               target: "{{ media_player_val }}"
               text: "{{ goodnight_message }}"
               priority: 2

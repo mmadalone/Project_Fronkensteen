@@ -241,6 +241,9 @@ actions:
       _tts_engine: >-
         {{ _dispatch.tts_engine | default('tts.home_assistant_cloud')
            if use_dispatcher else 'tts.home_assistant_cloud' }}
+      _tts_voice_id: >-
+        {{ _dispatch.tts_voice | default('')
+           if use_dispatcher else '' }}
 
   - alias: "Announce via dedup or direct TTS"
     if:
@@ -256,6 +259,7 @@ actions:
           text: >-
             Hey, heads up — you've got {{ _event_name }} coming up soon.
           voice: "{{ _tts_engine }}"
+          voice_id: "{{ _tts_voice_id }}"
           priority: 2
           target_mode: "presence"
     else:
@@ -265,4 +269,6 @@ actions:
         data:
           text: >-
             Hey, heads up — you've got {{ _event_name }} coming up soon.
+          voice: "{{ _tts_engine }}"
+          voice_id: "{{ _tts_voice_id }}"
           priority: 2

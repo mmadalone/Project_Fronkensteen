@@ -166,11 +166,23 @@ conditions:
       {% endif %}
 
 actions:
+  # ── Dispatcher: resolve TTS voice ──
+  - alias: "Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "routine_deviation"
+      intent_text: "routine deviation check-in"
+      skip_continuity: true
+
   - alias: "Set expected, actual, fingerprint id"
     variables:
       expected: "{{ trigger.event.data.expected_zone | default('unknown') }}"
       actual: "{{ trigger.event.data.actual_zone | default('unknown') }}"
       fingerprint_id: "{{ trigger.event.data.fingerprint_id | default('unknown') }}"
+      _voice: "{{ (_dispatch | default({})).get('tts_engine', 'tts.home_assistant_cloud') }}"
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
 
   # ── TTS announcement ──
   - alias: "TTS announcement"
@@ -184,6 +196,8 @@ actions:
         continue_on_error: true
         data:
           text: "{{ v_tts_message }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
           target_mode: explicit
           target: "{{ v_tts_speaker }}"
           announce: true
