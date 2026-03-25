@@ -272,7 +272,7 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 **Key Integrations:**
 - [Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation) — LLM-driven conversation agents with function calling and custom personas
 - [Llama 4 Maverick](https://ai.meta.com/) via [OpenRouter](https://openrouter.ai/) — LLM backend for all conversation agents
-- [ElevenLabs](https://elevenlabs.io/) — text-to-speech with custom character voices (5 personas)
+- [ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) (HACS, forked at v0.6.3) — unified TTS entity with per-profile voice selection (`voice_id` passthrough), ElevenLabs v3 model support, and voice mood modulation (stability injection + audio tag prefixes). HACS auto-updates disabled.
 - [Music Assistant](https://music-assistant.io/) — multi-room audio management
 - [ESPHome](https://esphome.io/) — device firmware and voice pipelines
 - [microWakeWord](https://github.com/kahrendt/microWakeWord) — on-device custom wake word detection
