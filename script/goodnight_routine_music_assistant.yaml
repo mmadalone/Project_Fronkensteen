@@ -978,6 +978,7 @@ sequence:
                 data:
                   text: "{{ pre_tts_final }}"
                   voice: "{{ dispatch_voice }}"
+                  voice_id: "{{ dispatch_tts_voice | default('') }}"
                   target_mode: explicit
                   target: "{{ tts_media_player }}"
                   announce: true
@@ -1385,6 +1386,7 @@ sequence:
                 data:
                   text: "{{ post_tts_final }}"
                   voice: "{{ dispatch_voice }}"
+                  voice_id: "{{ dispatch_tts_voice | default('') }}"
                   target_mode: explicit
                   target: "{{ tts_media_player }}"
                   announce: true

@@ -1556,7 +1556,8 @@ actions:
         action: pyscript.tts_queue_speak
         data:
           text: "{{ bedtime_message }}"
-          voice: "{{ dispatch_tts_voice }}"
+          voice: "{{ dispatch_voice }}"
+          voice_id: "{{ dispatch_tts_voice }}"
           target: "{{ kodi_tts_player }}"
           target_mode: explicit
           priority: 3
@@ -1828,7 +1829,8 @@ actions:
                             action: pyscript.tts_queue_speak
                             data:
                               text: "{{ settling_message }}"
-                              voice: "{{ dispatch_tts_voice }}"
+                              voice: "{{ dispatch_voice }}"
+                              voice_id: "{{ dispatch_tts_voice }}"
                               target: "{{ kodi_tts_player }}"
                               target_mode: explicit
                               priority: 3
@@ -1952,7 +1954,8 @@ actions:
                     action: pyscript.tts_queue_speak
                     data:
                       text: "{{ gn_context_message }}"
-                      voice: "{{ dispatch_tts_voice }}"
+                      voice: "{{ dispatch_voice }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
                       target: "{{ kodi_tts_player }}"
                       target_mode: explicit
                       priority: 3
@@ -2371,7 +2374,8 @@ actions:
                                     action: pyscript.tts_queue_speak
                                     data:
                                       text: "{{ settling_message }}"
-                                      voice: "{{ dispatch_tts_voice }}"
+                                      voice: "{{ dispatch_voice }}"
+                                      voice_id: "{{ dispatch_tts_voice }}"
                                       target: "{{ kodi_tts_player }}"
                                       target_mode: explicit
                                       priority: 3
@@ -2407,7 +2411,8 @@ actions:
         action: pyscript.tts_queue_speak
         data:
           text: "{{ goodnight_message }}"
-          voice: "{{ dispatch_tts_voice }}"
+          voice: "{{ dispatch_voice }}"
+          voice_id: "{{ dispatch_tts_voice }}"
           target: "{{ kodi_tts_player }}"
           target_mode: explicit
           priority: 3
@@ -2539,7 +2544,8 @@ actions:
                 action: pyscript.tts_queue_speak
                 data:
                   text: "{{ gn_context_message_conv }}"
-                  voice: "{{ dispatch_tts_voice }}"
+                  voice: "{{ dispatch_voice }}"
+                  voice_id: "{{ dispatch_tts_voice }}"
                   target: "{{ kodi_tts_player }}"
                   target_mode: explicit
                   priority: 3
