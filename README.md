@@ -252,7 +252,6 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 ## On the Roadmap
 
 - **Therapy mode** — A Portuondo-exclusive psychoanalysis conversation variant. The prompt is written. The pipeline will run on `anthropic/claude-opus-4.6` — a different model from the Llama 4 Maverick used by all other agents. Escuchame bien: this one practices with fire.
-- **Theatrical mode** — Two agents openly debate a topic, staged as entertainment or decision support. The debate blueprint generates opposing prompts from the same seed and plays both responses.
 - **Deliberation mode** — Multi-agent internal consensus. Multiple agents respond internally, a synthesis agent presents the unified answer or the disagreement.
 - **Multi-turn negotiation improvements** — Configurable turn limits, explicit mic passing, interrupt handling.
 
