@@ -406,6 +406,7 @@ Trained models available at [mmadalone/microwakeword](https://github.com/mmadalo
 - *Hey Rick* / *Yo Rick*
 - *Hey Quark* / *Yo Quark*
 
+But currently using "Okay Nabu" cause mine need better training.
 ---
 
 ## License
