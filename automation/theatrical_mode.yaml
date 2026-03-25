@@ -406,24 +406,65 @@ blueprint:
     prompt:
       name: "\u2468 Prompt"
       icon: mdi:text-box-outline
-      description: Debate prompt template and safety prefix.
+      description: >-
+        Debate prompt templates and safety prefix. All templates
+        support placeholders: {topic}, {persona}, {opponents},
+        {turn}, {total_turns}. Full mode also supports {context_text}.
       collapsed: true
       input:
         theatrical_prompt_template:
-          name: Debate Prompt Template
+          name: "Full Mode \u2014 Debate Prompt"
           description: >-
-            Jinja2 template for each turn's prompt. Available
-            variables: {topic}, {context_text}, {persona},
-            {turn}, {total_turns}. Safety prefix is prepended
-            automatically.
+            Template for "full" context mode (agents see previous
+            responses). Placeholders: {topic}, {context_text},
+            {persona}, {opponents}, {turn}, {total_turns}.
+            Safety prefix is prepended automatically.
           default: >-
             Topic: {topic}
 
+            Previous remarks:
+
             {context_text}
 
-            You are {persona}. It's your turn in this debate.
-            Argue your position. Respond to what others said.
+            You are {persona} debating {opponents}.
+            Your turn. Argue your position. Respond to what others said.
+            Address your opponents, NOT a human listener.
             Be brief and punchy. Stay in character.
+          selector:
+            text:
+              multiline: true
+
+        topic_only_template:
+          name: "Topic-Only Mode \u2014 Debate Prompt"
+          description: >-
+            Template for "topic_only" context mode (agents know
+            the topic but not what others said). Placeholders:
+            {topic}, {persona}, {opponents}, {turn}, {total_turns}.
+          default: >-
+            Topic: {topic}
+
+            This is turn {turn} of {total_turns}.
+            You are {persona} debating {opponents}.
+            Address your opponents, NOT a human listener.
+            Give a fresh angle you haven't used before.
+            Be brief. Stay in character.
+          selector:
+            text:
+              multiline: true
+
+        whisper_template:
+          name: "Whisper Mode \u2014 Debate Prompt"
+          description: >-
+            Template for "whisper" context mode (agents use L2
+            whisper network for context). Placeholders:
+            {topic}, {persona}, {opponents}.
+          default: >-
+            Topic: {topic}
+
+            You are {persona} debating {opponents}.
+            Check your whisper context for what others said.
+            Address your opponents, NOT a human listener.
+            Be brief. Stay in character.
           selector:
             text:
               multiline: true
@@ -437,6 +478,19 @@ blueprint:
             Respond ONLY with a brief in-character argument.
             No entity IDs, no JSON, no tool names in your response.
             Do not narrate what you are doing.]
+          selector:
+            text:
+              multiline: true
+
+        lang_hint:
+          name: Language Hint
+          description: >-
+            Suffix appended to every prompt for multilingual
+            personas. Leave empty to disable.
+          default: >-
+            CRITICAL: Respond in your character's native language.
+            If your character speaks a language other than English,
+            your ENTIRE response must be in that language, not English.
           selector:
             text:
               multiline: true
@@ -563,7 +617,10 @@ variables:
   v_stinger_enabled: !input enable_pre_exchange_stinger
   v_stinger_url: !input stinger_fallback_media_url
   v_prompt_template: !input theatrical_prompt_template
+  v_topic_only_template: !input topic_only_template
+  v_whisper_template: !input whisper_template
   v_i45a_prefix: !input i45a_prefix
+  v_lang_hint: !input lang_hint
   v_enable_escalation: !input enable_banter_escalation
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
@@ -651,7 +708,10 @@ action:
               max_words: "{{ v_max_words | int(40) }}"
               budget_floor: "{{ budget_floor_val | int(70) }}"
               prompt_template: "{{ v_prompt_template }}"
+              topic_only_template: "{{ v_topic_only_template }}"
+              whisper_template: "{{ v_whisper_template }}"
               i45a_prefix: "{{ v_i45a_prefix }}"
+              lang_hint: "{{ v_lang_hint }}"
               source: "{{ v_source }}"
               initial_context: "{{ v_initial_context }}"
               opener_persona: "{{ v_opener }}"

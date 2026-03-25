@@ -20,6 +20,8 @@ Fixes applied (plan audit 2026-03-23):
   M3: Dedup guard for double-fire
   M4: ask_question sequential call documentation
   M5: input_datetime update via service call
+  Fix-mic_gap: question_media_id voice override (last speaker asks)
+  Fix-wake_word: task.wait_until replaces sleep+poll (event-driven)
 
 Dependencies:
   pyscript/common_utilities.py  (conversation_with_timeout)
@@ -287,6 +289,20 @@ def _parse_voice_map(voice_map_str):
     return result
 
 
+@pyscript_executor  # noqa: F821
+def _build_tts_media_uri(tts_engine, message, voice_id=""):
+    """Build media-source://tts/ URI for ask_question voice override."""
+    from urllib.parse import quote
+    import json as _json
+    if not tts_engine or not message:
+        return ""
+    uri = f"media-source://tts/{tts_engine}?message={quote(message)}"
+    if voice_id:
+        opts = _json.dumps({"voice": voice_id}, separators=(",", ":"))
+        uri += f"&tts_options={quote(opts)}"
+    return uri
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Satellite & speaker wait helpers
 # ═══════════════════════════════════════════════════════════════════════════
@@ -381,6 +397,9 @@ async def theatrical_mode_start(
     budget_floor=0,
     prompt_template="",
     i45a_prefix="",
+    topic_only_template="",
+    whisper_template="",
+    lang_hint="",
     source="automation",
     initial_context="",
     opener_persona="",
@@ -620,6 +639,13 @@ async def theatrical_mode_start(
                 log.error("theatrical: _build_sanitize_patterns_sync not callable")
                 _SANITIZE_PATTERNS = []
 
+        # ── LANG HINT (computed once) ─────────────────────────────────
+        _lang_suffix = lang_hint if lang_hint else (
+            "\n\nCRITICAL: Respond in your character's native language. "
+            "If your character speaks a language other than English, "
+            "your ENTIRE response must be in that language, not English."
+        )
+
         # ── MAIN TURN LOOP ─────────────────────────────────────────────
         for turn in range(tl):
             # Kill switch check each iteration
@@ -633,6 +659,13 @@ async def theatrical_mode_start(
             else:  # round_robin
                 cur = resolved[turn % len(resolved)]
 
+            # Opponents list (used by all context modes)
+            others = [
+                r["display"] for r in resolved
+                if r["name"] != cur["name"]
+            ]
+            others_str = ", ".join(others) if others else "the other agents"
+
             # ── Build prompt (H3 — context via text param) ─────────────
             if cm == "full":
                 window = ctx_buf[-context_window:]
@@ -644,39 +677,53 @@ async def theatrical_mode_start(
                     body = body.replace("{topic}", topic)
                     body = body.replace("{context_text}", ctx_text)
                     body = body.replace("{persona}", cur["display"])
+                    body = body.replace("{opponents}", others_str)
                     body = body.replace("{turn}", str(turn + 1))
                     body = body.replace("{total_turns}", str(tl))
                 else:
                     body = (
                         f"Topic: {topic}\n\n"
                         f"Previous remarks:\n{ctx_text}\n\n"
-                        f"You are {cur['display']}. Your turn. "
-                        "Argue your position. Respond to what others said. "
+                        f"You are {cur['display']} debating {others_str}. "
+                        "Your turn. Argue your position. "
+                        "Address your opponents, NOT a human listener. "
                         "Be brief and punchy. Stay in character."
                     )
             elif cm == "topic_only":
-                body = (
-                    f"Topic: {topic}\n"
-                    f"This is turn {turn + 1} of {tl}. "
-                    "Other agents are also debating this. "
-                    "Give a fresh angle you haven't used before. "
-                    "Be brief. Stay in character."
-                )
+                if topic_only_template:
+                    body = topic_only_template
+                    body = body.replace("{topic}", topic)
+                    body = body.replace("{persona}", cur["display"])
+                    body = body.replace("{opponents}", others_str)
+                    body = body.replace("{turn}", str(turn + 1))
+                    body = body.replace("{total_turns}", str(tl))
+                else:
+                    body = (
+                        f"Topic: {topic}\n"
+                        f"This is turn {turn + 1} of {tl}. "
+                        f"You are debating {others_str}. "
+                        "Address them, NOT a human listener. "
+                        "Give a fresh angle you haven't used before. "
+                        "Be brief. Stay in character."
+                    )
             elif cm == "whisper":
-                body = (
-                    f"Topic: {topic}\n"
-                    "Check your whisper context for what others said. "
-                    "Be brief. Stay in character."
-                )
+                if whisper_template:
+                    body = whisper_template
+                    body = body.replace("{topic}", topic)
+                    body = body.replace("{persona}", cur["display"])
+                    body = body.replace("{opponents}", others_str)
+                else:
+                    body = (
+                        f"Topic: {topic}\n"
+                        f"You are {cur['display']} debating {others_str}. "
+                        "Check your whisper context for what others said. "
+                        "Address your opponents, NOT a human listener. "
+                        "Be brief. Stay in character."
+                    )
             else:
                 body = f"Topic: {topic}\nGive your take."
 
-            lang_hint = (
-                "\n\nCRITICAL: Respond in your character's native language. "
-                "If your character speaks a language other than English, "
-                "your ENTIRE response must be in that language, not English."
-            )
-            full_prompt = f"{prefix}\n\n{body}{lang_hint}"
+            full_prompt = f"{prefix}\n\n{body}{_lang_suffix}"
 
             # ── LLM call — C2 (timeout via conversation_with_timeout) ──
             try:
@@ -809,9 +856,15 @@ async def theatrical_mode_start(
             if im == "mic_gap" and turn < tl - 1:
                 # M4: ask_question sequential call safe here —
                 # each call separated by full LLM+TTS cycle.
+                # Build media URI for last speaker's voice
+                _mic_uri = ""
+                if cur.get("tts") and callable(_build_tts_media_uri):
+                    _mic_uri = await _build_tts_media_uri(
+                        cur["tts"], mic_gap_question,
+                        voice_id=cur.get("tts_voice", ""),
+                    )
                 try:
-                    answer = service.call(
-                        "assist_satellite", "ask_question",
+                    _ask_kwargs = dict(
                         entity_id=sat,
                         question=mic_gap_question,
                         preannounce=False,
@@ -833,6 +886,12 @@ async def theatrical_mode_start(
                         ],
                         return_response=True,
                     )
+                    if _mic_uri:
+                        _ask_kwargs["question_media_id"] = _mic_uri
+                    answer = service.call(
+                        "assist_satellite", "ask_question",
+                        **_ask_kwargs,
+                    )
                     aid = ""
                     if isinstance(answer, dict):
                         aid = answer.get("id", "")
@@ -851,15 +910,22 @@ async def theatrical_mode_start(
                 except Exception:
                     pass  # Timeout / no answer = continue debate
 
-            elif im == "wake_word" and turn < tl - 1:
-                await asyncio.sleep(1.5)  # Gap for wake word detection
-                sat_st = state.get(sat)
-                if sat_st not in [None, "idle", "", "unknown", "unavailable"]:
-                    log.info(
-                        "theatrical: wake word detected (sat=%s)", sat_st
+            elif im == "wake_word" and turn < tl - 1 and sat:
+                try:
+                    trig = task.wait_until(
+                        state_trigger=f"{sat} not in ['idle', 'unknown', 'unavailable']",
+                        timeout=5.0,
+                        state_check_now=False,
                     )
-                    exchange_status = "wake_word_interrupt"
-                    break
+                    if isinstance(trig, dict) and trig.get("trigger_type") == "state":
+                        log.info(
+                            "theatrical: wake word detected (sat=%s, new=%s)",
+                            sat, trig.get("value", ""),
+                        )
+                        exchange_status = "wake_word_interrupt"
+                        break
+                except Exception:
+                    pass  # Timeout / error = continue debate
 
         # ── TEARDOWN ───────────────────────────────────────────────────
         duration = round(time.time() - started_at, 1)

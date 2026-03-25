@@ -122,8 +122,11 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
     @property
     def default_options(self) -> dict[str, Any]:
         """Return dict of default options."""
+        voice_profiles = self._config_entry.options.get("voice_profiles", {})
+        first_profile = next(iter(voice_profiles.values()), None)
+        default_voice = first_profile.get("voice", "21m00Tcm4TlvDq8ikWAM") if first_profile else "21m00Tcm4TlvDq8ikWAM"
         return {
-            "voice": "21m00Tcm4TlvDq8ikWAM",  # Default Rachel voice
+            "voice": default_voice,  # First configured profile; Rachel as final fallback
             "model_id": DEFAULT_MODEL,
             "stability": DEFAULT_STABILITY,
             "similarity_boost": DEFAULT_SIMILARITY_BOOST,
@@ -134,36 +137,26 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         }
 
     @callback
-    def async_get_supported_voices(self, language: str) -> list[Voice]:
+    def async_get_supported_voices(self, language: str) -> list[Voice] | None:
         """Return list of supported voices for Assist pipeline."""
-        voices = []
-        
-        # Get voice profiles from config entry
         voice_profiles = self._config_entry.options.get("voice_profiles", {})
-        
-        _LOGGER.debug("Getting supported voices for language %s, found %d voice profiles", 
-                     language, len(voice_profiles))
-        
-        # Add each configured voice profile as a selectable voice
+
+        if not voice_profiles:
+            _LOGGER.debug("No voice profiles configured, hiding voice picker")
+            return None  # None hides picker; [] shows empty picker and triggers clearing
+
+        voices = []
         for profile_name, profile_data in voice_profiles.items():
             voice_id = profile_data.get("voice", "")
-            
-            # Create a Voice object for this profile
-            # The voice_id in Voice() becomes the identifier used in the Assist pipeline
-            # When selected, it will be passed as the "voice" option to async_get_tts_audio
             voices.append(
                 Voice(
-                    voice_id=profile_name,  # Use profile name as the voice identifier
-                    name=profile_name,  # Display name in UI
+                    voice_id=profile_name,
+                    name=profile_name,
                 )
             )
-            _LOGGER.debug("Added voice profile '%s' (ElevenLabs voice: %s) to supported voices", 
+            _LOGGER.debug("Added voice profile '%s' (ElevenLabs voice: %s) to supported voices",
                          profile_name, voice_id)
-        
-        # If no profiles configured, return empty list to use default
-        if not voices:
-            _LOGGER.debug("No voice profiles configured, Assist will use default voice")
-        
+
         return voices
 
     async def async_get_tts_audio(

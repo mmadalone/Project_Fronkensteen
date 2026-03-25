@@ -393,7 +393,7 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 | `email_promote.py` | Gmail IMAP priority filter, L3→L2 promotion | `pyscript.email_promote_process` |
 | `common_utilities.py` | SQLite cache layer, `conversation.process` timeout wrapper | (utility, no public service) |
 | `volume_sync.py` | Alexa ↔ MA volume synchronization | (trigger-based, no public service) |
-| `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging) — **testing pending** | `pyscript.theatrical_mode_start/stop` |
+| `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging) — **tested** | `pyscript.theatrical_mode_start/stop` |
 
 **Supporting infrastructure:** 18 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config), `ai_theatrical.yaml` (theatrical mode config).
 
@@ -1241,6 +1241,8 @@ Blueprints call `pyscript.tts_queue_speak` instead of raw `tts.speak`/`media_pla
 The **ElevenLabs Custom TTS** integration ([loryanstrant/HA-ElevenLabs-Custom-TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS), HACS, MIT license) provides named voice profiles and per-call parameter control that the native HA ElevenLabs integration does not expose. **Patched locally** against v0.6.3 with voice mood modulation — HACS auto-updates disabled.
 
 Named voice profiles (e.g., `Rick Sanchez - Rock Scientist v0.1.2`, `Quark - Kwork v0.6`) are created via the integration's UI. Each profile maps to an ElevenLabs voice UUID + default VoiceSettings. Profiles are referenced in `tts.speak` calls via the `voice` or `voice_profile` option.
+
+**Null-resilient default voice (Decision #81):** The HA frontend has a race condition in `ha-tts-voice-picker.ts` that can write `tts_voice: null` to pipeline storage. When `tts_voice` is null, HA core sends no voice option to the TTS entity and `default_options` kicks in. Our patch changed `default_options` to use the first configured profile's voice UUID instead of ElevenLabs' Rachel (`21m00Tcm4TlvDq8ikWAM`). Additionally, `async_get_supported_voices` returns `None` (hides picker) instead of `[]` (shows empty picker that triggers clearing) when no profiles are configured. This makes the component resilient to the frontend bug.
 
 ##### v3 Audio Tag Pivot (2026-03-24)
 
