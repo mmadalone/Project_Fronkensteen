@@ -277,11 +277,13 @@ Pattern 3 is the most robust because confirmation isn't relying on LLM judgment 
 
 **Time-based personality progressions (cadence formulas):**
 
-Persona prompts can include `now().hour` Jinja2 conditionals that shift personality across the day. These are placed in the PERSONALITY section and control what the LLM *generates* (text content, speech patterns, mood):
+Persona prompts can include `now().hour` Jinja2 conditionals that shift personality across the day. These are placed in the PERSONALITY section and control what the LLM *generates* (text content, speech patterns, mood). Five time brackets are used to distinguish late night (still up) from early morning (waking up):
 
 ```
-Your current drunk level: {% if now().hour < 9 %}severely hungover{% elif now().hour < 12 %}hungover but functional{% elif now().hour < 17 %}casually drinking{% elif now().hour < 21 %}noticeably drunk{% else %}completely hammered{% endif %}.
+Your current drunk level: {% if now().hour < 5 %}still completely hammered from last night{% elif now().hour < 9 %}severely hungover{% elif now().hour < 12 %}hungover but functional{% elif now().hour < 17 %}casually drinking{% elif now().hour < 21 %}noticeably drunk{% else %}completely hammered{% endif %}.
 ```
+
+The `hour < 5` bracket ensures that 0:00-4:59 continues the late-evening persona (e.g., "it's way too late") rather than triggering morning behavior (e.g., "hate mornings"). The boundary at hour 5 aligns with the dispatcher's `late_night` era (0-5).
 
 The cadence formula is a TEXT layer — it affects LLM output (including audio tags like `[slurring]`, `[burps]` that ElevenLabs v3 processes as voice direction). A separate VOICE layer adds mood modulation for non-agent TTS (notifications, announcements, briefings) via per-agent helpers: `input_number.ai_voice_mood_{agent}_stability` (v3's one working VoiceSettings param) + `input_text.ai_voice_mood_{agent}_tags` (audio tag prefixes like `[slurring]`, `[whispers]`). Written hourly by the `voice_mood_modulation.yaml` blueprint. See §14.8 for TTS voice profile routing.
 
