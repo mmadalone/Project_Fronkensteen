@@ -1274,12 +1274,13 @@ async def _play_item(item: dict) -> None:
         except Exception:
             pass
 
-    # ── I-46: ElevenLabs credit gate + budget fallback TTS swap ──
+    # ── I-46: ElevenLabs credit gate + budget fallback + test session TTS swap ──
     if voice and _is_elevenlabs_voice(voice):
         try:
+            tts_test = state.get("input_boolean.ai_tts_test_mode") == "on"  # noqa: F821
             fallback_on = state.get("input_boolean.ai_budget_fallback_active") == "on"  # noqa: F821
             credits_low = False
-            if not fallback_on:
+            if not tts_test and not fallback_on:
                 credits = int(float(
                     state.get("sensor.elevenlabs_credits_remaining") or "999999"  # noqa: F821
                 ))
@@ -1287,14 +1288,19 @@ async def _play_item(item: dict) -> None:
                     state.get("input_number.ai_elevenlabs_credit_floor") or "5000"  # noqa: F821
                 ))
                 credits_low = credits <= floor
-            if fallback_on or credits_low:
+            if tts_test or fallback_on or credits_low:
                 original_voice = voice
                 voice = _get_fallback_tts_voice()
                 item["voice"] = voice
+                item["voice_id"] = ""
+                voice_id = ""
+                reason = "test_session" if tts_test else ("fallback" if fallback_on else "credits_low")
                 log.info(  # noqa: F821
-                    f"tts_queue: I-46 TTS swap {original_voice} → {voice} "
-                    f"(fallback={'on' if fallback_on else 'off'}, credits_low={credits_low})"
+                    f"tts_queue: TTS swap {original_voice} → {voice} ({reason})"
                 )
+                # Strip ElevenLabs stage direction tags — HA Cloud speaks them literally
+                if text:
+                    text = re.sub(r'\[.*?\]', '', text).strip() or text
         except Exception:
             pass  # fail-open: play with original voice
 
@@ -2067,6 +2073,126 @@ async def _budget_save_to_l2() -> None:
         log.warning(f"tts_queue: budget save to L2 failed: {exc}")  # noqa: F821
 
 
+# ── TTS Test Mode: Pipeline Swap (ElevenLabs ↔ HA Cloud) ─────────────────────
+# When ai_tts_test_mode toggles ON, all ElevenLabs pipelines swap to HA Cloud
+# via HA internal API (async_update_pipeline). Original configs backed up to
+# pipeline_tts_backup.json. Toggle OFF restores originals.
+
+_PIPELINE_BACKUP = Path("/config/pyscript/pipeline_tts_backup.json")
+_HA_CLOUD_ENGINE = "tts.home_assistant_cloud"
+_HA_CLOUD_VOICE = "DavisNeural"
+_HA_CLOUD_LANG = "en-US"
+
+
+@pyscript_executor  # noqa: F821
+def _save_pipeline_backup(data):
+    import json as _json
+    with open("/config/pyscript/pipeline_tts_backup.json", "w") as f:
+        _json.dump(data, f, indent=2)
+
+
+@pyscript_executor  # noqa: F821
+def _load_pipeline_backup():
+    import json as _json
+    try:
+        with open("/config/pyscript/pipeline_tts_backup.json", "r") as f:
+            return _json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+@pyscript_executor  # noqa: F821
+def _delete_pipeline_backup():
+    import os as _os
+    try:
+        _os.remove("/config/pyscript/pipeline_tts_backup.json")
+    except OSError:
+        pass
+
+
+@state_trigger("input_boolean.ai_tts_test_mode")  # noqa: F821
+async def _on_tts_test_mode_changed(**kwargs):
+    new_state = kwargs.get("value", "")
+    enable = new_state == "on"
+    log.info(  # noqa: F821
+        "tts_queue: TTS test mode %s — swapping pipelines",
+        "ENABLED" if enable else "DISABLED",
+    )
+    try:
+        from homeassistant.components.assist_pipeline.pipeline import (
+            async_get_pipelines,
+            async_update_pipeline,
+        )
+
+        pipelines = async_get_pipelines(hass)  # noqa: F821
+
+        if enable:
+            # Collect originals FIRST — backup must exist before any swap
+            backup = {}
+            to_swap = []
+            for p in pipelines:
+                if "elevenlabs" not in (p.tts_engine or "").lower():
+                    continue
+                backup[p.id] = {
+                    "name": p.name,
+                    "tts_engine": p.tts_engine,
+                    "tts_voice": p.tts_voice or "",
+                    "tts_language": p.tts_language or "",
+                }
+                to_swap.append(p)
+
+            if not to_swap:
+                log.info("tts_queue: no ElevenLabs pipelines to swap")  # noqa: F821
+                return
+
+            # Write backup BEFORE modifying any pipeline
+            _save_pipeline_backup(backup)
+
+            updated = []
+            for p in to_swap:
+                await async_update_pipeline(
+                    hass,  # noqa: F821
+                    p,
+                    tts_engine=_HA_CLOUD_ENGINE,
+                    tts_voice=_HA_CLOUD_VOICE,
+                    tts_language=_HA_CLOUD_LANG,
+                )
+                updated.append(p.name)
+
+            log.info(  # noqa: F821
+                "tts_queue: pipelines swapped to HA Cloud: %d (%s)",
+                len(updated), ", ".join(updated),
+            )
+        else:
+            backup = _load_pipeline_backup()
+            if not backup:
+                log.warning("tts_queue: no backup file — nothing to restore")  # noqa: F821
+                return
+
+            pipe_map = {p.id: p for p in pipelines}
+            restored = []
+            for pid, cfg in backup.items():
+                p = pipe_map.get(pid)
+                if not p:
+                    continue
+                await async_update_pipeline(
+                    hass,  # noqa: F821
+                    p,
+                    tts_engine=cfg["tts_engine"],
+                    tts_voice=cfg["tts_voice"],
+                    tts_language=cfg.get("tts_language", "en"),
+                )
+                restored.append(cfg["name"])
+
+            _delete_pipeline_backup()
+            log.info(  # noqa: F821
+                "tts_queue: pipelines restored to ElevenLabs: %d (%s)",
+                len(restored), ", ".join(restored),
+            )
+    except Exception as e:
+        log.error("tts_queue: pipeline swap error: %s", e)  # noqa: F821
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @time_trigger("startup")  # noqa: F821
@@ -2084,6 +2210,48 @@ async def tts_queue_startup():
     await _budget_restore_from_l2()
 
     _set_result("idle", op="startup", cache_dir=str(CACHE_DIR))
+
+    # TTS Test Mode: auto-restore pipelines if backup exists but toggle is OFF
+    # Handles crash/restart during an active test session.
+    try:
+        test_on = state.get("input_boolean.ai_tts_test_mode") == "on"  # noqa: F821
+        backup = _load_pipeline_backup()
+        if backup and not test_on:
+            log.info(  # noqa: F821
+                "tts_queue: orphaned TTS test backup found — auto-restoring %d pipelines",
+                len(backup),
+            )
+            from homeassistant.components.assist_pipeline.pipeline import (
+                async_get_pipelines as _agp,
+                async_update_pipeline as _aup,
+            )
+            pipe_map = {p.id: p for p in _agp(hass)}  # noqa: F821
+            restored = []
+            for pid, cfg in backup.items():
+                p = pipe_map.get(pid)
+                if not p:
+                    continue
+                await _aup(
+                    hass, p,  # noqa: F821
+                    tts_engine=cfg["tts_engine"],
+                    tts_voice=cfg["tts_voice"],
+                    tts_language=cfg.get("tts_language", "en"),
+                )
+                restored.append(cfg["name"])
+            _delete_pipeline_backup()
+            log.info(  # noqa: F821
+                "tts_queue: auto-restored %d pipelines to ElevenLabs (%s)",
+                len(restored), ", ".join(restored),
+            )
+        elif backup and test_on:
+            log.info(  # noqa: F821
+                "tts_queue: TTS test mode still ON after restart — "
+                "backup retained (%d pipelines), toggle OFF to restore",
+                len(backup),
+            )
+    except Exception as e:
+        log.error("tts_queue: TTS test mode startup check failed: %s", e)  # noqa: F821
+
     log.info("tts_queue.py loaded — queue idle")  # noqa: F821
 
 

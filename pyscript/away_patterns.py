@@ -59,6 +59,9 @@ from shared_utils import (
 #   - Statistical foundation: MAD outlier filtering, exponential decay weights,
 #     weighted percentile, KDE mode detection, empirical MRL for remaining time,
 #     cross-bucket blending, prediction intervals, accuracy tracking
+#   - G13 Phase 1 (observe only): Miller-Madow Shannon entropy + Fano
+#     predictability score on return-time distributions. Diagnostic metric —
+#     published as sensor attributes, no behavior change.
 #
 # Dependencies:
 #   - HA recorder database (/config/home-assistant_v2.db) — READ ONLY
@@ -68,6 +71,7 @@ from shared_utils import (
 #   - packages/ai_test_harness.yaml (test mode toggle)
 #
 # I-40a hardening: G1–G12, G14 (2026-03-12)
+# G13 Phase 1: entropy-based predictability — observe only (2026-03-26)
 # Deployed: 2026-03-12
 # =============================================================================
 
@@ -488,6 +492,87 @@ def _get_confidence(sample_count: int, high: int, medium: int, std_dev: float = 
         elif std_dev > 2.0:
             base = max(base - 1, 0)
     return ("low", "medium", "high")[base]
+
+
+# ── G13: Entropy-Based Predictability (Phase 1 — observe only) ───────────────
+# Miller-Madow corrected Shannon entropy on discretized return-time histograms.
+# Fano's inequality converts entropy to a 0–1 predictability upper bound.
+# Phase 1: diagnostic metric only — no behavior change, no confidence gating.
+# References: Miller (1955), Nowozin (2014), Fano (1961).
+
+ENTROPY_BIN_WIDTH = 0.25  # 15-min bins for return-time discretization (hours)
+
+
+@pyscript_compile  # noqa: F821
+def _shannon_entropy_mm(values: list[float], bin_width: float) -> tuple[float, int]:
+    """Miller-Madow corrected Shannon entropy on discretized values.
+
+    Discretizes continuous return-time hours into bins, computes plugin
+    Shannon entropy, applies Miller-Madow bias correction.
+    Formula: H_MM = -sum(p_i * log2(p_i)) + (K_observed - 1) / (2N)
+    Reference: Miller (1955), Nowozin (2014).
+
+    Returns (entropy_bits, n_bins_observed).
+    """
+    import math as _math
+    n = len(values)
+    if n < 2:
+        return (0.0, 0)
+    # Discretize into bins
+    counts: dict[int, int] = {}
+    for v in values:
+        b = int(v / bin_width)
+        counts[b] = counts.get(b, 0) + 1
+    k_observed = len(counts)
+    if k_observed < 2:
+        return (0.0, k_observed)  # single bin = perfectly predictable
+    # Plugin Shannon entropy (bits)
+    h = 0.0
+    for c in counts.values():
+        p = c / n
+        if p > 0:
+            h -= p * _math.log2(p)
+    # Miller-Madow correction: (K-1) / (2N)
+    h += (k_observed - 1) / (2 * n)
+    return (max(h, 0.0), k_observed)
+
+
+@pyscript_compile  # noqa: F821
+def _fano_predictability(entropy: float, n_bins: int) -> float:
+    """Predictability upper bound via Fano's inequality.
+
+    Given entropy S (bits) and alphabet size N, finds Pi_max in (1/N, 1)
+    such that: S = -Pi*log2(Pi) - (1-Pi)*log2(1-Pi) + (1-Pi)*log2(N-1).
+    Solved by binary search (guaranteed convergence, monotonic function).
+    Reference: Song et al. (2010), Fano (1961).
+
+    Returns predictability score in [0.0, 1.0].
+    """
+    import math as _math
+    # Edge cases
+    if n_bins <= 1 or entropy <= 0.0:
+        return 1.0
+    max_entropy = _math.log2(n_bins)
+    if entropy >= max_entropy:
+        return 1.0 / n_bins
+    # Binary search for Pi_max on (1/N, 1)
+    lo = 1.0 / n_bins + 1e-10
+    hi = 1.0 - 1e-10
+    for _ in range(64):  # 64 iterations = ~19 decimal digits precision
+        mid = (lo + hi) / 2.0
+        # Compute H(Pi) + (1-Pi)*log2(N-1)
+        h_pi = 0.0
+        if mid > 0:
+            h_pi -= mid * _math.log2(mid)
+        if mid < 1:
+            h_pi -= (1.0 - mid) * _math.log2(1.0 - mid)
+        if n_bins > 2:
+            h_pi += (1.0 - mid) * _math.log2(n_bins - 1)
+        if h_pi > entropy:
+            lo = mid  # need higher Pi (lower H)
+        else:
+            hi = mid
+    return round((lo + hi) / 2.0, 6)
 
 
 # ── I-40a: KDE Mode Detection (G7) ───────────────────────────────────────────
@@ -1366,6 +1451,9 @@ async def _predict_return_inner(person=""):
                 "trip_ordinal": trip_ordinal,
                 "ordinal_sample_count": 0,
                 "prob_another_trip": prob_another_trip,
+                # G13 Phase 1: observe only
+                "bucket_entropy": 0.0,
+                "predictability": 0.0,
             })
             continue
 
@@ -1381,6 +1469,9 @@ async def _predict_return_inner(person=""):
                 "trip_ordinal": trip_ordinal,
                 "ordinal_sample_count": ordinal_sample_count,
                 "prob_another_trip": prob_another_trip,
+                # G13 Phase 1: observe only
+                "bucket_entropy": 0.0,
+                "predictability": 0.0,
             })
             continue
 
@@ -1448,6 +1539,21 @@ async def _predict_return_inner(person=""):
 
         avg_duration = round(sum(filtered_dur) / len(filtered_dur), 1) if filtered_dur else 0
 
+        # ── Step 7b: Entropy-based predictability (G13 Phase 1 — observe only) ──
+        bucket_entropy = 0.0
+        predictability = 0.0
+        entropy_n_bins = 0
+        min_entropy_n = int(float(
+            state.get("input_number.ai_away_min_entropy_samples") or 50  # noqa: F821
+        ))
+        if sample_count >= min_entropy_n and filtered_ret:
+            bucket_entropy, entropy_n_bins = _shannon_entropy_mm(
+                filtered_ret, ENTROPY_BIN_WIDTH,
+            )
+            predictability = _fano_predictability(
+                bucket_entropy, max(entropy_n_bins, 2),
+            )
+
         # ── Step 8: Calendar fusion v2 (G10) ──
         if cal_summary:
             fused_hour, cal_method = _calendar_fusion_v2(
@@ -1493,6 +1599,9 @@ async def _predict_return_inner(person=""):
             "trip_ordinal": trip_ordinal,
             "ordinal_sample_count": ordinal_sample_count,
             "prob_another_trip": prob_another_trip,
+            # G13 Phase 1: observe only
+            "bucket_entropy": round(bucket_entropy, 4),
+            "predictability": predictability,
         }
 
         predictions.append(pred_dict)

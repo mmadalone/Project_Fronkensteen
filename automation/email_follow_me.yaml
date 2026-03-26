@@ -1050,12 +1050,12 @@ actions:
          if trigger.event is defined else false }}
 
   # ---------------------------------------------------------------------------
-  # 0b. Gate — skip initial events (IMAP fires on startup for existing emails)
+  # 0b. Gate — UID dedup at action/12 handles duplicates; initial flag is
+  #      unreliable (IMAP reconnections set it to true for new emails too)
   # ---------------------------------------------------------------------------
-  - alias: "0b · Gate: skip duplicate IMAP re-notifications"
+  - alias: "0b · Gate: always pass (dedup handled by UID gate)"
     condition: template
-    value_template: >-
-      {{ trigger.event.data.get('initial', true) | bool(true) }}
+    value_template: "{{ true }}"
 
   # ---------------------------------------------------------------------------
   # 1. Extract email fields from IMAP event data

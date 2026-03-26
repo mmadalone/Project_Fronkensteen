@@ -602,6 +602,14 @@ ai_test_mode:
   initial: false
   icon: mdi:flask-outline
 
+# TTS test session: swap ElevenLabs → HA Cloud to save credits.
+# Unlike ai_test_mode (which skips LLM+TTS entirely), this runs the
+# full pipeline but uses free HA Cloud TTS instead of ElevenLabs.
+ai_tts_test_mode:
+  name: "AI TTS Test Session — Use HA Cloud"
+  initial: false
+  icon: mdi:flask-round-bottom
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_tts_queue — TTS Queue
 # ═══════════════════════════════════════════════════════════════════

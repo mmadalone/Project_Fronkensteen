@@ -138,6 +138,18 @@ ai_away_ordinal_min_samples:
   mode: slider
   icon: mdi:counter
 
+# G13: Entropy-based predictability — minimum samples before entropy is computed.
+# Below this, entropy/predictability are not calculated (insufficient data for
+# reliable Miller-Madow estimation). Falls back to existing confidence logic.
+ai_away_min_entropy_samples:
+  name: "AI Away - Min Entropy Samples"
+  initial: 50
+  min: 20
+  max: 200
+  step: 5
+  mode: slider
+  icon: mdi:chart-bell-curve
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_dispatcher — Agent Dispatcher
