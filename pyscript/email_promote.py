@@ -721,7 +721,7 @@ async def _process_email(
                 text=speech_text,
                 voice=announce_voice,
                 voice_id=announce_voice_id,
-                priority=3,
+                priority=1 if is_urgent else 2,
                 target_mode="presence",
                 metadata={
                     "agent_name": persona or "rick",
