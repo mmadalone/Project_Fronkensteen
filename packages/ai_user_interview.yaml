@@ -3,6 +3,7 @@
 # ══════════════════════════════════════════════════════════════════════
 # Status: Active
 # Deployed: 2026-03-11
+# Hardened: 2026-03-26
 # LLM-driven user preference interview for personalisation data.
 # Engine: pyscript/user_interview.py
 #
@@ -10,10 +11,19 @@
 #   States: ok, error, idle
 #   Key attributes: interview progress, last completed topic
 #
+# Services:
+#   pyscript.user_interview_save       — Save a preference (L1 or L2)
+#   pyscript.user_interview_status     — Interview progress per user
+#   pyscript.user_interview_reset      — Clear interview progress
+#   pyscript.user_interview_preseed    — Pre-seed from existing data
+#   pyscript.user_interview_exchanges  — Recent exchange logs
+#
 # Helpers: Consolidated into helpers_input_*.yaml
 #   - helpers_input_boolean.yaml: ai_interview_mode
+#   - helpers_input_select.yaml: ai_privacy_gate_user_interview
 #
 # Dependencies:
 #   - Blueprints: user_interview.yaml
 #   - Context: ai_context_hot.yaml (reads ai_interview_mode for gate)
+#   - Privacy: helpers_input_select.yaml (ai_privacy_gate_user_interview)
 # ══════════════════════════════════════════════════════════════════════

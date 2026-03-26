@@ -556,7 +556,7 @@ async def _daily_aggregate():
 async def _startup():
     """Restore taste profile from L2 on startup."""
     task.sleep(10)  # noqa: F821
-    reload_entity_config()
+    await asyncio.to_thread(reload_entity_config)
 
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup", message="initializing")

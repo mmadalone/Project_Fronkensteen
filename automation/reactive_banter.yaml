@@ -389,6 +389,20 @@ blueprint:
               step: 5
               unit_of_measurement: "%"
 
+    # ── ⑨ User Preferences ──────────────────────────────────────────────
+    user_preferences:
+      name: "⑨ User Preferences"
+      icon: mdi:account-cog
+      description: User preference injection for banter prompts.
+      collapsed: true
+      input:
+        enable_user_preferences:
+          name: "Enable user preference injection"
+          description: "Inject user humor, off-limits, and pet peeve preferences into banter prompts."
+          default: true
+          selector:
+            boolean:
+
 mode: single
 max_exceeded: silent
 
@@ -435,7 +449,16 @@ variables:
   enable_theatrical_escalation: !input enable_theatrical_escalation
   escalation_probability: !input escalation_probability
   escalation_budget_floor: !input escalation_budget_floor
+  enable_user_prefs: !input enable_user_preferences
   # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
+  # ── User preference context for banter shaping ──
+  _banter_user: >-
+    {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+    {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% else %}miquel{% endif %}
+  _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _banter_user) | default('', true) }}"
+  _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _banter_user) | default('', true) }}"
+  _user_pet_peeves: "{{ states('input_text.ai_context_user_pet_peeves_' ~ _banter_user) | default('', true) }}"
 
 conditions:
   # ── Gate 1: Enable toggle (voice = master toggle, notification = own knob) ──
@@ -608,6 +631,17 @@ action:
            | replace('{excerpt}', agent_a_response)
            | replace('{mood}', mood)
            | replace('{max_words}', max_words_val | string) }}
+        {% if enable_user_prefs | bool(true) %}
+        {% if _user_off_limits not in ['unknown', 'unavailable', '', 'None'] %}
+        NEVER mention or joke about: {{ _user_off_limits }}.
+        {% endif %}
+        {% if _user_humor not in ['unknown', 'unavailable', '', 'None'] %}
+        User humor preference: {{ _user_humor }}.
+        {% endif %}
+        {% if _user_pet_peeves not in ['unknown', 'unavailable', '', 'None'] %}
+        Avoid triggering these pet peeves: {{ _user_pet_peeves }}.
+        {% endif %}
+        {% endif %}
 
   # ── Step 5a: Claim follow-me bypass BEFORE conversation.process ──
   # Prevents notification_follow_me from intercepting banter's

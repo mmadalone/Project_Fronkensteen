@@ -1011,7 +1011,7 @@ async def _daily_rebuild():
 async def _startup():
     """Initialize on startup: set entity name, load cache from L2."""
     task.sleep(10)  # noqa: F821
-    reload_entity_config()
+    await asyncio.to_thread(reload_entity_config)
 
     _ensure_result_entity_name(force=True)
     _set_result("ok", op="startup", message="initializing")

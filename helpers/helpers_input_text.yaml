@@ -935,3 +935,142 @@ ai_voice_mood_doctor_portuondo_tags:
   icon: mdi:tag-text
   initial: ""
   max: 100
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_user_interview — Individual Preference Helpers (I-36b)
+# ═══════════════════════════════════════════════════════════════════
+# Written by pyscript after interview save/import. Read by pyscript
+# sensor for hot context injection. Editable in UI.
+
+# ── Communication Preferences ──
+ai_context_user_verbosity_miquel:
+  name: "AI Context - Verbosity (Miquel)"
+  icon: mdi:text-short
+  max: 255
+ai_context_user_verbosity_jessica:
+  name: "AI Context - Verbosity (Jessica)"
+  icon: mdi:text-short
+  max: 255
+
+ai_context_user_humor_miquel:
+  name: "AI Context - Humor (Miquel)"
+  icon: mdi:emoticon-happy
+  max: 255
+ai_context_user_humor_jessica:
+  name: "AI Context - Humor (Jessica)"
+  icon: mdi:emoticon-happy
+  max: 255
+
+ai_context_user_language_context_miquel:
+  name: "AI Context - Language Context (Miquel)"
+  icon: mdi:translate
+  max: 255
+ai_context_user_language_context_jessica:
+  name: "AI Context - Language Context (Jessica)"
+  icon: mdi:translate
+  max: 255
+
+ai_context_user_persona_miquel:
+  name: "AI Context - Persona Preference (Miquel)"
+  icon: mdi:account-voice
+  max: 255
+ai_context_user_persona_jessica:
+  name: "AI Context - Persona Preference (Jessica)"
+  icon: mdi:account-voice
+  max: 255
+
+ai_context_user_notify_threshold_miquel:
+  name: "AI Context - Notification Threshold (Miquel)"
+  icon: mdi:bell-cog
+  max: 255
+ai_context_user_notify_threshold_jessica:
+  name: "AI Context - Notification Threshold (Jessica)"
+  icon: mdi:bell-cog
+  max: 255
+
+# ── Personality Preferences ──
+ai_context_user_social_style_miquel:
+  name: "AI Context - Social Style (Miquel)"
+  icon: mdi:account-group
+  max: 255
+ai_context_user_social_style_jessica:
+  name: "AI Context - Social Style (Jessica)"
+  icon: mdi:account-group
+  max: 255
+
+ai_context_user_morning_or_night_miquel:
+  name: "AI Context - Morning/Night (Miquel)"
+  icon: mdi:weather-night
+  max: 255
+ai_context_user_morning_or_night_jessica:
+  name: "AI Context - Morning/Night (Jessica)"
+  icon: mdi:weather-night
+  max: 255
+
+ai_context_user_values_miquel:
+  name: "AI Context - Values (Miquel)"
+  icon: mdi:heart
+  max: 255
+ai_context_user_values_jessica:
+  name: "AI Context - Values (Jessica)"
+  icon: mdi:heart
+  max: 255
+
+ai_context_user_pet_peeves_miquel:
+  name: "AI Context - Pet Peeves (Miquel)"
+  icon: mdi:alert-circle
+  max: 255
+ai_context_user_pet_peeves_jessica:
+  name: "AI Context - Pet Peeves (Jessica)"
+  icon: mdi:alert-circle
+  max: 255
+
+ai_context_user_stress_relief_miquel:
+  name: "AI Context - Stress Relief (Miquel)"
+  icon: mdi:spa
+  max: 255
+ai_context_user_stress_relief_jessica:
+  name: "AI Context - Stress Relief (Jessica)"
+  icon: mdi:spa
+  max: 255
+
+# ── Schedule Context ──
+ai_context_user_wake_schedule_miquel:
+  name: "AI Context - Wake Schedule (Miquel)"
+  icon: mdi:alarm
+  max: 255
+ai_context_user_wake_schedule_jessica:
+  name: "AI Context - Wake Schedule (Jessica)"
+  icon: mdi:alarm
+  max: 255
+
+# ── Privacy Preferences ──
+ai_context_user_off_limits_miquel:
+  name: "AI Context - Off-Limits Topics (Miquel)"
+  icon: mdi:cancel
+  max: 255
+ai_context_user_off_limits_jessica:
+  name: "AI Context - Off-Limits Topics (Jessica)"
+  icon: mdi:cancel
+  max: 255
+
+ai_context_user_proactive_comfort_miquel:
+  name: "AI Context - Proactive Comfort (Miquel)"
+  icon: mdi:lightbulb-on
+  max: 255
+ai_context_user_proactive_comfort_jessica:
+  name: "AI Context - Proactive Comfort (Jessica)"
+  icon: mdi:lightbulb-on
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context — Alt-Weekday Days (Preference Consumption B1)
+# ═══════════════════════════════════════════════════════════════════
+ai_context_wake_time_alt_days_miquel:
+  name: "AI Context - Alt Weekday Days (Miquel)"
+  icon: mdi:calendar-week
+  max: 255
+ai_context_wake_time_alt_days_jessica:
+  name: "AI Context - Alt Weekday Days (Jessica)"
+  icon: mdi:calendar-week
+  max: 255

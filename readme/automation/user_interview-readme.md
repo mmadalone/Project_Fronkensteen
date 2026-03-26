@@ -9,19 +9,19 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 │ Triggers:                   │
 │  A. Interview toggle → ON   │
 │  B. Interview toggle → OFF  │
+│  C. HA start (auto-import)  │
 └──────────────┬──────────────┘
                │
-          ┌────┴────┐
-          ▼         ▼
-     ┌────────┐ ┌─────────────┐
-     │ START  │ │ STOP        │
-     └───┬────┘ │ • Deactivate│
-         │      │   continuous│
-         │      │ • Restore   │
-         │      │   suppressed│
-         │      │   toggles   │
-         │      │ • Exit      │
-         │      └─────────────┘
+     ┌────┴─────┬──────────┐
+     ▼          ▼          ▼
+┌────────┐ ┌─────────┐ ┌──────────┐
+│ START  │ │ STOP    │ │ HA START │
+└───┬────┘ │•Deactiv.│ │•Auto-    │
+    │      │ contin. │ │ import   │
+    │      │•Restore │ │ interview│
+    │      │ toggles │ │ files    │
+    │      │•Exit    │ │•Exit     │
+    │      └─────────┘ └──────────┘
          ▼
 ┌─────────────────────────────┐
 │ 0. Suppress notification    │
@@ -80,6 +80,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 - **Toggle suppression** -- temporarily disables notification/follow-me toggles during the interview, restores on exit
 - **TTS opening question** -- speaks the first question via TTS queue in the correct agent voice
 - **Echo guard** -- delays mic open after TTS to prevent the agent from hearing its own speech
+- **Auto-import on startup** -- on HA start, scans `/config/interview/` for `interview_*.yaml` files and imports any matching a configured person (toggleable via `auto_import_on_startup`)
 
 ## Prerequisites
 
@@ -90,7 +91,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 - `input_boolean.ai_interview_mode` (or custom toggle)
 - `input_boolean.ai_continuous_conversation_active`
 - `input_text.ai_interview_progress` for progress tracking
-- `pyscript.user_interview_preseed` and `pyscript.tts_queue_speak` services
+- `pyscript.user_interview_preseed`, `pyscript.user_interview_auto_import`, and `pyscript.tts_queue_speak` services
 - A silence media file accessible via URL
 
 ## Installation
@@ -123,6 +124,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 | Input | Default | Description |
 |-------|---------|-------------|
 | **Silence media URL** | `http://homeassistant.local:8123/local/silence.wav` | URL to a short silence clip for reopening mic without speaking |
+| **Auto-import on startup** | `true` | Scan `/config/interview/` on HA start for `interview_{user}.yaml` files and import matching persons |
 
 ## Technical Notes
 
@@ -136,6 +138,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 
 ## Changelog
 
+- **v2 (2026-03-26):** Added `ha_start` trigger + `auto_import_on_startup` input for automatic interview file import on HA restart. Added budget gate, privacy gate, dispatcher toggle, user resolution, follow-me bypass, voice mood toggle, configurable prompts, tool suppression, exchange logging, interview style/depth, custom topics.
 - **v1:** Initial blueprint
 
 ## Author

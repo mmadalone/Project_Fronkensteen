@@ -1320,7 +1320,7 @@ async def _zone_change_re_eval(**kwargs):
 async def _startup():
     """Initialize focus guard status sensor and workshop tracking."""
     task.sleep(10)  # noqa: F821
-    reload_entity_config()
+    await asyncio.to_thread(reload_entity_config)
 
     global _last_zone_change_time, _last_active_zone
 

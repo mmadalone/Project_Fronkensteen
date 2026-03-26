@@ -377,6 +377,57 @@ blueprint:
             entity:
               domain: person
 
+    # ── ⑧ User Preferences ──────────────────────────────────────────────
+    user_preferences:
+      name: "⑧ User Preferences"
+      icon: mdi:account-cog
+      description: "User preference injection and preference-based wake time."
+      collapsed: true
+      input:
+        enable_user_preferences:
+          name: "Enable user preference injection"
+          description: "Inject user preferences (humor, off-limits, verbosity) into wake-up prompts."
+          default: true
+          selector:
+            boolean:
+        use_preference_wake_time:
+          name: "Use preference wake time"
+          description: >
+            Override the static wake-up time with the user's preference wake time
+            helpers. Supports weekday, weekend, and alt-day schedules.
+          default: false
+          selector:
+            boolean:
+        pref_wake_weekday_entity:
+          name: "Weekday wake time entity"
+          description: "input_datetime helper for weekday wake time."
+          default: input_datetime.ai_context_wake_time_weekday_miquel
+          selector:
+            entity:
+              domain: input_datetime
+        pref_wake_weekend_entity:
+          name: "Weekend wake time entity"
+          description: "input_datetime helper for weekend wake time."
+          default: input_datetime.ai_context_wake_time_weekend_miquel
+          selector:
+            entity:
+              domain: input_datetime
+        pref_wake_alt_entity:
+          name: "Alt weekday wake time entity"
+          description: "input_datetime helper for alternate weekday wake time."
+          default: input_datetime.ai_context_wake_time_alt_weekday_miquel
+          selector:
+            entity:
+              domain: input_datetime
+        pref_wake_alt_days:
+          name: "Alt wake days"
+          description: >
+            Comma-separated English 3-letter day abbreviations that use the alt
+            wake time (e.g., "thu" or "tue,thu"). Leave empty to disable.
+          default: ""
+          selector:
+            text:
+
 mode: single
 max_exceeded: silent
 
@@ -407,14 +458,77 @@ variables:
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  enable_user_prefs: !input enable_user_preferences
+  use_pref_wake: !input use_preference_wake_time
+  pref_alt_days_val: !input pref_wake_alt_days
+  # ── User preference context ──
+  _resolved_user: >-
+    {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+    {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
+    {% else %}miquel{% endif %}
+  _user_prefs_block: >-
+    {% set ns = namespace(lines=[]) %}
+    {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}
+    {% set off_limits = states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) %}
+    {% set verbosity = states('input_text.ai_context_user_verbosity_' ~ _resolved_user) | default('', true) %}
+    {% set morning_night = states('input_text.ai_context_user_morning_or_night_' ~ _resolved_user) | default('', true) %}
+    {% if off_limits not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['NEVER mention: ' ~ off_limits ~ '.'] %}
+    {% endif %}
+    {% if humor not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Humor preference: ' ~ humor ~ '.'] %}
+    {% endif %}
+    {% if verbosity not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Verbosity: ' ~ verbosity ~ '.'] %}
+    {% endif %}
+    {% if morning_night not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['User is a ' ~ morning_night ~ '.'] %}
+    {% endif %}
+    {{ ns.lines | join(' ') if ns.lines else '' }}
 
 triggers:
   - alias: "Wake-up time"
     trigger: time
     at: !input wakeup_time
+    id: static
+  - alias: "Preference weekday wake time"
+    trigger: time
+    at: !input pref_wake_weekday_entity
+    id: pref_weekday
+  - alias: "Preference weekend wake time"
+    trigger: time
+    at: !input pref_wake_weekend_entity
+    id: pref_weekend
+  - alias: "Preference alt weekday wake time"
+    trigger: time
+    at: !input pref_wake_alt_entity
+    id: pref_alt
 
 # No native weekday condition exists — template is the only option here.
 conditions:
+  - alias: "Gate — trigger source (static vs preference)"
+    condition: template
+    value_template: >-
+      {% set trig = trigger.id | default('static') %}
+      {% if not (use_pref_wake | bool(false)) %}
+        {{ trig not in ['pref_weekday', 'pref_weekend', 'pref_alt'] }}
+      {% else %}
+        {% if trig not in ['pref_weekday', 'pref_weekend', 'pref_alt'] %}
+          false
+        {% else %}
+          {% set today_dow = now().strftime('%a')[:3] | lower %}
+          {% set alt_list = pref_alt_days_val.lower().split(',') | map('trim') | list if pref_alt_days_val not in ['','unknown','unavailable','None'] else [] %}
+          {% if today_dow in alt_list %}
+            {{ trig == 'pref_alt' }}
+          {% elif today_dow in ['sat','sun'] %}
+            {{ trig == 'pref_weekend' }}
+          {% else %}
+            {{ trig == 'pref_weekday' }}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
   - alias: "Today is in active_days"
     condition: template
     value_template: >-
@@ -565,6 +679,11 @@ actions:
                    ~ '- priority_emails: ' ~ (states('input_number.ai_email_priority_count') | int(0) | string) ~ '\n'
                    ~ '- sensor_context: ' ~ (sensor_context | string)
                 }}
+                {% if enable_user_prefs | bool(true) %}
+                {% if _user_prefs_block | trim | length > 0 %}
+                User context: {{ _user_prefs_block }}
+                {% endif %}
+                {% endif %}
             response_variable: wake_llm
             continue_on_error: true
           # Defensive traversal — any intermediate key could be None

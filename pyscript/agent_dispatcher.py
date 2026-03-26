@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name
+from shared_utils import build_result_entity_name, resolve_active_user
 
 # =============================================================================
 # Agent Dispatcher — DC-7 of Voice Context Architecture (Task 11)
@@ -1304,12 +1304,24 @@ async def agent_dispatch(
                 )
                 reason = f"time_of_day_{era}_rotate"
 
-        # ── Priority 5: User preference from L2 (only if still None) ──
+        # ── Priority 5: User persona preference (L1 helper → L2 fallback) ──
         if persona is None:
-            pref = await _check_user_preference(personas)
-            if pref:
-                persona = pref
-                reason = "user_preference_l2"
+            _user = resolve_active_user()
+            _pref_entity = f"input_text.ai_context_user_persona_{_user}"
+            _pref_val = state.get(_pref_entity)
+            if _pref_val and str(_pref_val) not in ("unknown", "unavailable", "", "None", "no preference"):
+                _pref_lower = str(_pref_val).strip().lower()
+                for p in personas:
+                    if p in _pref_lower:
+                        persona = p
+                        reason = "user_preference_l1"
+                        break
+            # L2 fallback (existing behavior)
+            if persona is None:
+                pref = await _check_user_preference(personas)
+                if pref:
+                    persona = pref
+                    reason = "user_preference_l2"
 
         # ── Priority 6: Fallback random ──
         if persona is None:

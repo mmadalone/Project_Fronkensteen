@@ -731,7 +731,23 @@ blueprint:
             text:
 
     # ===========================================================================
-    # ⑩ INFRASTRUCTURE
+    # ⑩ USER PREFERENCES
+    # ===========================================================================
+    user_preferences:
+      name: "⑩ User preferences"
+      icon: mdi:account-cog
+      collapsed: true
+      description: "Toggle injection of user preferences and sleep budget into proactive prompts."
+      input:
+        enable_user_preferences:
+          name: "Enable user preference injection"
+          description: "Inject user preferences and sleep budget into proactive prompts."
+          default: true
+          selector:
+            boolean:
+
+    # ===========================================================================
+    # ⑪ INFRASTRUCTURE
     # ===========================================================================
     infrastructure:
       name: "⑩ Infrastructure"
@@ -808,6 +824,54 @@ variables:
   v_stinger_library_id: !input stinger_library_id_override
   v_compose_if_missing: !input compose_stinger_if_missing
   v_stinger_fallback_url: !input stinger_fallback_media_url
+  enable_user_prefs: !input enable_user_preferences
+
+  # ── User preference context (Preference Consumption B3) ──
+  _resolved_user: >-
+    {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+    {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
+    {% else %}miquel{% endif %}
+  _user_prefs_block: >-
+    {% set ns = namespace(lines=[]) %}
+    {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}
+    {% set off_limits = states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) %}
+    {% set verbosity = states('input_text.ai_context_user_verbosity_' ~ _resolved_user) | default('', true) %}
+    {% set morning_night = states('input_text.ai_context_user_morning_or_night_' ~ _resolved_user) | default('', true) %}
+    {% if off_limits not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['NEVER mention: ' ~ off_limits ~ '.'] %}
+    {% endif %}
+    {% if humor not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Humor preference: ' ~ humor ~ '.'] %}
+    {% endif %}
+    {% if verbosity not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Verbosity: ' ~ verbosity ~ '.'] %}
+    {% endif %}
+    {% if morning_night not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['User is a ' ~ morning_night ~ '.'] %}
+    {% endif %}
+    {{ ns.lines | join(' ') if ns.lines else '' }}
+  _sleep_budget: >-
+    {% set day_names = ['mon','tue','wed','thu','fri','sat','sun'] %}
+    {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
+    {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
+    {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
+    {% set is_weekend = tomorrow in ['sat','sun'] %}
+    {% set is_alt = tomorrow in alt_days %}
+    {% if is_alt %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_alt_weekday_' ~ _resolved_user) %}
+    {% elif is_weekend %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekend_' ~ _resolved_user) %}
+    {% else %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekday_' ~ _resolved_user) %}
+    {% endif %}
+    {% if wake_raw not in ['unknown','unavailable','','None','00:00:00'] %}
+      {% set wake_today = today_at(wake_raw) %}
+      {% set wake_ts = wake_today if wake_today > now() else wake_today + timedelta(days=1) %}
+      {% set hours = ((wake_ts - now()).total_seconds() / 3600) | round(1) %}
+      {{ hours }}h until wake ({{ wake_raw[:5] }} tomorrow)
+    {% else %}
+    {% endif %}
 
   tts_priority: >-
     {% if tts_collision_mode == 'barge_in' %}
@@ -1272,6 +1336,11 @@ actions:
                 respond with ONE short, natural sentence you would say out loud to {{ chosen_llm_name }}
                 in this situation. maximum 220 characters. do not include quotation marks
                 or any surrounding formatting.
+                {% if enable_user_prefs | bool(true) %}
+                {% if _user_prefs_block | trim | length > 0 %}
+                User context: {{ _user_prefs_block }}
+                {% endif %}
+                {% endif %}
               timeout_secs: 60
             response_variable: ai_result
 
@@ -1437,6 +1506,14 @@ actions:
             respond with ONE short yes/no question to ask {{ chosen_llm_name }} about whether
             they want to go to bed now or start their bedtime routine.
             maximum 200 characters. do not include quotation marks.
+            {% if enable_user_prefs | bool(true) %}
+            {% if _user_prefs_block | trim | length > 0 %}
+            User context: {{ _user_prefs_block }}
+            {% endif %}
+            {% if _sleep_budget | trim | length > 0 %}
+            Sleep: {{ _sleep_budget }}
+            {% endif %}
+            {% endif %}
           timeout_secs: 60
         response_variable: bedtime_llm_result
 

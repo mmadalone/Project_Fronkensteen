@@ -813,7 +813,7 @@ async def presence_identity_startup():
     task.sleep(10)  # noqa: F821
 
     # Force re-read of entity_config.yaml (cache may be stale from early import)
-    reload_entity_config()
+    await asyncio.to_thread(reload_entity_config)
 
     log.info("presence_identity: initializing")  # noqa: F821
 

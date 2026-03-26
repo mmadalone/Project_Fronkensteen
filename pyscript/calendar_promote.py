@@ -6,6 +6,7 @@ Promotes Google Calendar events from L3 (API) to L2 (memory) and L1
 hot-context helpers. Exposes pyscript.calendar_promote_now with a
 5-minute promote cache to debounce rapid triggers.
 """
+import asyncio
 import json
 import re
 import time
@@ -1758,7 +1759,7 @@ async def calendar_promote_startup():
     """Initialize status sensor and run initial promotion."""
     # Wait for SMB mount + force re-read of entity_config.yaml
     task.sleep(10)  # noqa: F821
-    reload_entity_config()
+    await asyncio.to_thread(reload_entity_config)
 
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")

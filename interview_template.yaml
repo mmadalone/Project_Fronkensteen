@@ -1,0 +1,193 @@
+# =============================================================================
+# User Interview — USERNAME
+# =============================================================================
+# Fill in your answers below. Delete or leave blank any fields you want to
+# skip — the import service will ignore empty values.
+#
+# Format:
+#   - Built-in categories (identity → privacy) map to HA helpers or L2 memory.
+#   - Custom categories (cooking, fitness, etc.) go to L2 memory automatically.
+#   - Times use HH:MM format. Dates use YYYY-MM-DD.
+#   - Free-text answers can be as long as you like.
+#
+# To import: press the "Import Interview" button on the dashboard, or call
+# pyscript.user_interview_import with file: interview_USERNAME.yaml
+# =============================================================================
+
+user: USERNAME
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUILT-IN CATEGORIES
+# These map to the 9 standard interview topics. Keys with HA helpers (L1)
+# update those helpers directly. Everything else is stored in L2 memory.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Identity ──────────────────────────────────────────────────────────────────
+# Who you are — name, language, personal details the AI uses to address you.
+identity:
+  name:                          # Full legal name
+  name_spoken:                   # How you want the AI to say your name (pronunciation)
+  nickname:                      # Casual name / what friends call you
+  birthday:                      # YYYY-MM-DD
+  languages:                     # Languages you speak (comma-separated)
+  preferred_language:             # Primary language for AI interactions (English, Spanish, Valencian, Dutch, Portuguese)
+
+# ── Household ─────────────────────────────────────────────────────────────────
+# Who lives with you — helps the AI understand your home context.
+household:
+  members:                       # People living in the house (e.g., "OTHERUSERNAME (partner), Luna (daughter)")
+  pets:                          # Pets and their names (e.g., "Pixel (cat), Byte (dog)")
+  pet_details:                   # Breed, age, personality per pet (e.g., "Pixel: tabby, 3yo, shy. Byte: golden retriever, 5yo, hyper")
+  pet_care:                      # Care notes (e.g., "Pixel: indoor only, grain-free food. Byte: walks 2x/day, allergic to chicken")
+  guests:                        # Regular visitors the AI should know about
+
+# ── Work ──────────────────────────────────────────────────────────────────────
+# Your work setup — schedule, commute, calendar filtering.
+work:
+  location:                      # Where you work (office, remote, hybrid, specific address)
+  hybrid_schedule:               # Which days in office vs home (e.g., "Mon-Wed office, Thu-Fri home")
+  hours:                         # Typical working hours (e.g., "09:00–17:30")
+  commute:                       # How you commute and how long (e.g., "bike, 20 min")
+  calendar_keywords:             # Keywords that mark work events (e.g., "standup, sprint, 1:1")
+
+# ── Schedule ──────────────────────────────────────────────────────────────────
+# Daily routine — wake, sleep, meals. Used by automations for timing.
+schedule:
+  wake_weekday:                  # Weekday alarm time (HH:MM)
+  wake_weekend:                  # Weekend wake time (HH:MM)
+  bedtime:                       # Target bedtime (HH:MM)
+  meal_times:                    # Typical meal times (e.g., "08:00 breakfast, 13:00 lunch, 20:30 dinner")
+  nap:                           # Do you nap? When? (e.g., "yes, 14:00–14:30" or "no")
+  exercise:                      # Exercise routine and time (e.g., "morning run 07:00, gym Tue/Thu 18:00")
+
+# ── Health ────────────────────────────────────────────────────────────────────
+# Dietary and medical info — used for meal suggestions, caffeine/bedtime logic.
+health:
+  diet:                          # Dietary restrictions or preferences (e.g., "vegetarian, no shellfish")
+  caffeine_cutoff:               # Latest time for coffee/caffeine (HH:MM)
+  medical:                       # Anything the AI should be aware of (e.g., "pollen allergy, takes melatonin")
+
+# ── Environment ───────────────────────────────────────────────────────────────
+# Home comfort — temperature, lights, sound. Feeds predictive automations.
+environment:
+  climate:                       # Temperature preference (e.g., "21°C daytime, 18°C sleeping")
+  lighting:                      # Lighting preference (e.g., "warm white evenings, bright for work")
+  tts_volume:                    # Comfortable TTS volume (e.g., "40% daytime, 20% night")
+  sleep_sounds:                  # Sounds for sleeping (e.g., "white noise", "rain", "none")
+
+# ── Media ─────────────────────────────────────────────────────────────────────
+# Entertainment preferences — what you watch, listen to, read.
+media:
+  genres:                        # Favorite movie/TV genres (e.g., "sci-fi, comedy, documentaries")
+  streaming:                     # Streaming services you use (e.g., "Netflix, Spotify, YouTube")
+  news:                          # News sources or topics (e.g., "tech news, BBC, no politics")
+  sports:                        # Sports you follow (e.g., "F1, Valencia CF" or "none")
+  audiobooks:                    # Audiobook preferences (e.g., "sci-fi, history" or "don't listen")
+  podcasts:                      # Podcast preferences (e.g., "tech, true crime, Lex Fridman")
+
+# ── Communication ─────────────────────────────────────────────────────────────
+# How you want the AI to interact with you.
+communication:
+  persona:                       # Preferred AI persona (e.g., "rick", "quark", "no preference")
+  verbosity:                     # How much the AI should say (e.g., "brief", "normal", "detailed")
+  humor:                         # Humor level (e.g., "lots of jokes", "occasional", "keep it serious")
+  notify_threshold:              # What's worth a notification? (e.g., "urgent only", "everything", "smart filtering")
+  language_context:              # When to switch languages? (e.g., "Spanish with OTHERUSERNAME, English otherwise")
+
+# ── Privacy ───────────────────────────────────────────────────────────────────
+# Boundaries — what the AI should avoid and how proactive it should be.
+privacy:
+  off_limits_topics:             # Topics the AI should NEVER bring up (e.g., "weight, politics, religion")
+  proactive_comfort:             # How proactive should the AI be? (e.g., "suggest freely", "only when asked", "minimal")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CUSTOM CATEGORIES
+# Add your own topics below. These all go to L2 memory. Use any category
+# and key names you like — the system handles them automatically.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Cooking & Food ────────────────────────────────────────────────────────────
+cooking:
+  skill_level:                   # Cooking ability (e.g., "beginner", "intermediate", "chef-level")
+  favorite_cuisine:              # Cuisines you love (e.g., "Mediterranean, Japanese, Mexican")
+  dietary_restrictions:          # Allergies or things you avoid (e.g., "lactose, gluten")
+  kitchen_tools:                 # Equipment you have (e.g., "air fryer, stand mixer, sous vide")
+  meal_prep:                     # Do you meal prep? (e.g., "yes, Sundays", "no")
+  comfort_food:                  # Go-to comfort meal (e.g., "pasta carbonara")
+  cooking_for:                   # Usually cooking for how many? (e.g., "2", "just myself", "family of 4")
+
+# ── Fitness & Wellness ────────────────────────────────────────────────────────
+fitness:
+  current_routine:               # What you do now (e.g., "run 3x/week, yoga Saturdays")
+  goals:                         # Fitness goals (e.g., "lose 5kg", "run a half marathon", "maintain")
+  injuries:                      # Current or past injuries to be mindful of (e.g., "bad left knee")
+  preferred_activities:          # What you enjoy (e.g., "cycling, swimming, hiking")
+  gym_or_home:                   # Where you work out (e.g., "home gym", "local gym", "outdoor")
+  tracking:                      # How you track fitness (e.g., "Apple Watch", "Strava", "don't track")
+
+# ── Hobbies & Interests ──────────────────────────────────────────────────────
+hobbies:
+  types:                         # Your hobbies (e.g., "3D printing, gaming, woodworking, reading")
+  frequency:                     # How often (e.g., "gaming daily, woodworking weekends")
+  solo_or_social:                # Prefer solo or group? (e.g., "mostly solo, gaming with friends")
+  equipment:                     # Notable gear (e.g., "Prusa MK4, Steam Deck, RetroPie")
+  learning:                      # Hobbies you're learning (e.g., "piano, Spanish cooking")
+
+# ── Travel ────────────────────────────────────────────────────────────────────
+travel:
+  favorite_destinations:         # Places you love (e.g., "Japan, Iceland, Barcelona")
+  travel_style:                  # How you travel (e.g., "budget backpacking", "city breaks", "road trips")
+  upcoming_trips:                # Anything planned (e.g., "Tokyo in October 2026")
+  languages_for_travel:          # Languages useful for your travels
+  packing_style:                 # Light packer or overpacker?
+  accommodation:                 # Preference (e.g., "Airbnb", "hotels", "camping")
+
+# ── Music & Audio ─────────────────────────────────────────────────────────────
+music:
+  favorite_artists:              # Top artists/bands (e.g., "Radiohead, Daft Punk, Miles Davis")
+  favorite_genres:               # Music genres (e.g., "electronic, jazz, indie rock")
+  instruments_played:            # Do you play anything? (e.g., "guitar, drums" or "none")
+  listening_habits:              # When/how you listen (e.g., "Spotify while working, vinyl evenings")
+  concert_frequency:             # How often you go to live shows
+  mood_music:                    # Music for specific moods (e.g., "lo-fi for focus, metal for gym")
+
+# ── Social & Relationships ────────────────────────────────────────────────────
+social:
+  social_style:                  # Introvert/extrovert/ambivert
+  close_friends:                 # Names the AI might hear in conversation (first names only)
+  family_nearby:                 # Family in the area? (e.g., "parents 20 min away, sister in Madrid")
+  social_frequency:              # How often you socialize (e.g., "dinner with friends weekly")
+  communication_preference:      # How you keep in touch (e.g., "WhatsApp, rarely calls, hate voicemail")
+
+# ── Tech & Gadgets ────────────────────────────────────────────────────────────
+tech:
+  phone:                         # Your phone (e.g., "iPhone 15 Pro")
+  computer:                      # Main computer (e.g., "Mac Mini M2, gaming PC")
+  smart_home_experience:         # How technical are you? (e.g., "power user", "casual", "expert")
+  favorite_apps:                 # Apps you use daily (e.g., "Obsidian, Spotify, Home Assistant")
+  coding_languages:              # If you code (e.g., "Python, JavaScript" or "don't code")
+
+# ── Productivity & Focus ──────────────────────────────────────────────────────
+productivity:
+  work_style:                    # How you work best (e.g., "deep focus blocks", "pomodoro", "flow state")
+  peak_hours:                    # When you're most productive (e.g., "morning 09–12")
+  distraction_triggers:          # What breaks your focus (e.g., "phone notifications, noise")
+  tools:                         # Productivity tools (e.g., "Todoist, Notion, paper notebook")
+  meeting_preference:            # Meeting style (e.g., "async first, meetings only when necessary")
+
+# ── Personality & Values ──────────────────────────────────────────────────────
+personality:
+  values:                        # What matters most to you (e.g., "honesty, creativity, family time")
+  pet_peeves:                    # Things that annoy you (e.g., "being interrupted, small talk, loud chewing")
+  decision_style:                # How you make decisions (e.g., "research everything", "gut feeling", "ask others")
+  stress_relief:                 # What helps you decompress (e.g., "long walk, gaming, cooking")
+  morning_or_night:              # Are you a morning person or night owl?
+
+# ── Goals & Aspirations ──────────────────────────────────────────────────────
+goals:
+  short_term:                    # Next 3–6 months (e.g., "finish home office setup, learn Spanish B2")
+  long_term:                     # 1–5 years (e.g., "buy a house, start a side project")
+  habits_building:               # Habits you're trying to form (e.g., "meditate daily, read before bed")
+  habits_breaking:               # Habits you want to stop (e.g., "doomscrolling, late-night snacking")

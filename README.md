@@ -218,7 +218,7 @@ Three deployed patterns for agent-to-agent interaction:
 ### Memory & Learning
 - **Routine Fingerprinting** — Greedy Markov chains from zone transition sequences. Stage tracking, ETA calculation, deviation detection with automated actions.
 - **Scene Learner** — Learns lighting and scene preferences from user behavior. Per-zone, per-context scene storage.
-- **User Interview** — 9-category preference elicitation (identity, household, work, schedule, health, environment, media, communication, privacy). Pre-seeds from existing memory.
+- **User Interview** — 9-category preference elicitation (identity, household, work, schedule, health, environment, media, communication, privacy). Pre-seeds from existing memory. Preferences consumed by 14 blueprints/modules for LLM prompt shaping (humor, off-limits, verbosity), sleep budget calculation (hours until wake with weekday/weekend/alt-day routing), and schedule-aware alarm/routine trigger overrides. Day-name normalization on ingest (Spanish → English).
 - **Contact History** — Per-contact message logging with LLM-powered batch compression.
 - **Interaction Summarizer** — Nightly batch compresses whisper logs via cheap LLM into digests. 3 retention modes. ~$0.001/run.
 

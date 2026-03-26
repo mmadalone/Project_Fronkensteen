@@ -28,6 +28,7 @@ The Agent Dispatcher is DC-7 of the Voice Context Architecture. It discovers ava
 - `_check_continuity()` — Priority 2: return same agent if conversation is within continuity window
 - `_check_topic_affinity()` — Priority 3: match intent text against per-agent topic keywords from L2 memory
 - `_check_time_of_day()` — Priority 4: time-based routing from `input_text.ai_dispatcher_time_rules`
+- Priority 5: User persona preference — reads `input_text.ai_context_user_persona_{user}` (L1 helper via `resolve_active_user()` from `shared_utils`). Falls back to L2 memory search for `"preference agent"` if helper is empty or "no preference". Skipped when P4 sets a persona via round-robin.
 - `_resolve_tts_stt()` — Resolve TTS engine, voice, and STT engine from pipeline config for the selected agent
 
 ## State Dependencies
@@ -37,6 +38,7 @@ The Agent Dispatcher is DC-7 of the Voice Context Architecture. It discovers ava
 - `input_number.ai_dispatcher_continuity_window` — Minutes to maintain conversation continuity
 - `input_text.ai_dispatcher_time_rules` — JSON time-of-day routing rules
 - `input_boolean.ai_budget_fallback_active` — Budget exhaustion flag (early return to homeassistant agent)
+- `input_text.ai_context_user_persona_{user}` — User's preferred persona (L1 preference, read at Priority 5)
 - `input_select.ai_dispatcher_keyword_agent` — Dashboard: selected agent for keyword management
 
 ## Package Pairing

@@ -10,7 +10,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name
+from shared_utils import build_result_entity_name, resolve_active_user
 
 # =============================================================================
 # Proactive Briefing — Task 19 of Voice Context Architecture
@@ -158,13 +158,28 @@ def _briefing_framing_for_hour(hour: int) -> str:
         )
 
 
+def _verbosity_word_range() -> str:
+    """Read user verbosity preference, return word count range for prompt."""
+    user = resolve_active_user()
+    raw = state.get(f"input_text.ai_context_user_verbosity_{user}")
+    if raw is None or str(raw) in ("unknown", "unavailable", "", "None"):
+        return "200-400 words"
+    v = str(raw).strip().lower()
+    if v in ("brief", "short", "concise", "minimal"):
+        return "80-150 words"
+    if v in ("detailed", "thorough", "verbose", "long"):
+        return "400-600 words"
+    return "200-400 words"  # "normal" or unrecognized → default
+
+
 def _briefing_prompt_for_hour(hour: int) -> str:
     """Return a time-appropriate default LLM prompt for the briefing."""
     framing = _briefing_framing_for_hour(hour)
+    _wrange = _verbosity_word_range()
     return (
         "Deliver this briefing naturally in your personality. "
         "Keep it conversational — not a bullet-point list. Be warm but concise "
-        f"(aim for 30-60 seconds of speech, about 200-400 words). {framing}"
+        f"(aim for {_wrange} of concise speech). {framing}"
         "\n\nHere is the information:\n\n{content}"
     )
 

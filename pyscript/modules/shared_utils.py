@@ -48,6 +48,9 @@ def reload_entity_config() -> dict:
     return load_entity_config()
 
 
+
+
+
 def parse_csv_helper(entity_id: str, prefix: str = "") -> list:
     """Read a CSV input_text helper and return a list of stripped, non-empty values.
 
@@ -157,3 +160,26 @@ def build_result_entity_name(entity_id: str) -> dict:
     tail = entity_id.split(".")[-1]
     parts = [part.capitalize() for part in tail.split("_") if part]
     return {"friendly_name": " ".join(parts) or tail}
+
+
+# ── Active User Resolution ─────────────────────────────────────────────────
+
+def resolve_active_user() -> str:
+    """Resolve active user via identity confidence (highest wins).
+
+    Falls back to first person from discover_persons() if no confidence
+    data available.
+    """
+    best_slug, best_conf = "", 0
+    for eid in state.names("person"):  # noqa: F821
+        slug = eid.split(".", 1)[1]
+        try:
+            conf = int(float(state.get(f"sensor.identity_confidence_{slug}") or 0))  # noqa: F821
+        except (TypeError, ValueError):
+            conf = 0
+        if conf > best_conf:
+            best_slug, best_conf = slug, conf
+    if not best_slug:
+        slugs = get_person_slugs()
+        best_slug = slugs[0] if slugs else "miquel"
+    return best_slug

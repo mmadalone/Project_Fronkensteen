@@ -224,3 +224,17 @@ ai_theatrical_last_exchange:
   has_date: true
   has_time: true
   icon: mdi:drama-masks
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context — Alt-Weekday Wake Time (Preference Consumption B1)
+# ═══════════════════════════════════════════════════════════════════
+ai_context_wake_time_alt_weekday_miquel:
+  name: "AI Context - Alt Weekday Wake Time (Miquel)"
+  has_date: false
+  has_time: true
+  icon: mdi:alarm-plus
+ai_context_wake_time_alt_weekday_jessica:
+  name: "AI Context - Alt Weekday Wake Time (Jessica)"
+  has_date: false
+  has_time: true
+  icon: mdi:alarm-plus

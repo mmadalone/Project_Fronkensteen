@@ -106,8 +106,8 @@ _TTS_ENTITY_REMAP = {}
 _PROFILE_TO_AGENT = {}
 _VOICE_UUID_TO_PROFILE = {}
 
-@pyscript_compile  # noqa: F821
-def _build_tts_remap():
+@pyscript_executor  # noqa: F821
+def _build_tts_remap_sync():
     """Read config entries to build old-entity → HACS-profile remap dynamically."""
     import json as _json
     remap = {}
@@ -165,15 +165,9 @@ def _build_tts_remap():
     except Exception:
         return {}, {}, {}
 
-try:
-    _TTS_ENTITY_REMAP, _PROFILE_TO_AGENT, _VOICE_UUID_TO_PROFILE = _build_tts_remap()
-    if _TTS_ENTITY_REMAP:
-        log.info(  # noqa: F821
-            f"tts_queue: dynamic remap loaded — {len(_TTS_ENTITY_REMAP)} entities: "
-            f"{list(_TTS_ENTITY_REMAP.keys())}"
-        )
-except Exception as e:
-    log.warning(f"tts_queue: remap init failed ({e}) — old entities pass through unchanged")  # noqa: F821
+async def _build_tts_remap() -> tuple:
+    """Async wrapper — @pyscript_executor handles threading automatically."""
+    return _build_tts_remap_sync()
 
 def _voice_to_agent(voice: str, voice_id: str = "", agent: str = "") -> str:
     """Extract agent name from explicit param, profile name, or TTS entity convention."""
@@ -2198,6 +2192,17 @@ async def _on_tts_test_mode_changed(**kwargs):
 @time_trigger("startup")  # noqa: F821
 async def tts_queue_startup():
     _ensure_result_entity_name(force=True)
+    # Load TTS entity remap (deferred from module level to avoid blocking event loop)
+    global _TTS_ENTITY_REMAP, _PROFILE_TO_AGENT, _VOICE_UUID_TO_PROFILE
+    try:
+        _TTS_ENTITY_REMAP, _PROFILE_TO_AGENT, _VOICE_UUID_TO_PROFILE = await _build_tts_remap()
+        if _TTS_ENTITY_REMAP:
+            log.info(  # noqa: F821
+                f"tts_queue: dynamic remap loaded — {len(_TTS_ENTITY_REMAP)} entities: "
+                f"{list(_TTS_ENTITY_REMAP.keys())}"
+            )
+    except Exception as e:
+        log.warning(f"tts_queue: remap init failed ({e}) — old entities pass through unchanged")  # noqa: F821
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as e:

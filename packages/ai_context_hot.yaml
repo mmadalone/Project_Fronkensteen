@@ -503,6 +503,12 @@ template:
           lines: |-
             {%- set ns = namespace(lines=[]) -%}
 
+            {# ── USER PREFERENCES (I-36b) — assembled by pyscript from interview data ── #}
+            {%- set pref_ctx = state_attr('sensor.ai_preferences_context', 'context') | default('', true) -%}
+            {%- if pref_ctx | length > 0 -%}
+              {%- set ns.lines = ns.lines + [pref_ctx] -%}
+            {%- endif -%}
+
             {# ── MEMORY CONTEXT (I-4) ── #}
             {%- set mem_ctx = state_attr('sensor.ai_memory_context', 'context') | default('', true) -%}
             {%- if mem_ctx %}

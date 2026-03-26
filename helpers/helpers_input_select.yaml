@@ -528,3 +528,13 @@ ai_theatrical_turn_order:
     - random
   initial: round_robin
 
+# ═══════════════════════════════════════════════════════════════════
+# ai_user_interview — User Preference Interview
+# ═══════════════════════════════════════════════════════════════════
+
+ai_privacy_gate_user_interview:
+  name: "Privacy Override — User Interview"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:account-voice
+

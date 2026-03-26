@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name, get_person_slugs, load_entity_config
+from shared_utils import build_result_entity_name, get_person_slugs, load_entity_config, resolve_active_user
 
 # =============================================================================
 # User Preference Interview Engine — I-36
@@ -49,6 +49,10 @@ from shared_utils import build_result_entity_name, get_person_slugs, load_entity
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_user_interview_status"
+PREFERENCES_ENTITY = "sensor.ai_preferences_context"
+
+# Keys already shown in hot context Component 1 — skip to avoid duplication
+_SKIP_IN_PREFS = {"name", "name_spoken", "languages"}
 
 # ── L1 Mapping ──────────────────────────────────────────────────────────────
 # Preferences that map to existing HA helpers. {user} is replaced at runtime.
@@ -61,6 +65,25 @@ _L1_MAP = {
     ("household", "members"): "input_text.ai_context_household",
     ("household", "pets"): "input_text.ai_context_pets",
     ("work", "calendar_keywords"): "input_text.ai_work_calendar_keywords",
+    # I-36b: Communication preferences → hot context via sensor
+    ("communication", "verbosity"): "input_text.ai_context_user_verbosity_{user}",
+    ("communication", "humor"): "input_text.ai_context_user_humor_{user}",
+    ("communication", "language_context"): "input_text.ai_context_user_language_context_{user}",
+    ("communication", "persona"): "input_text.ai_context_user_persona_{user}",
+    ("communication", "notify_threshold"): "input_text.ai_context_user_notify_threshold_{user}",
+    # I-36b: Personality preferences → hot context via sensor
+    ("personality", "social_style"): "input_text.ai_context_user_social_style_{user}",
+    ("personality", "morning_or_night"): "input_text.ai_context_user_morning_or_night_{user}",
+    ("personality", "values"): "input_text.ai_context_user_values_{user}",
+    ("personality", "pet_peeves"): "input_text.ai_context_user_pet_peeves_{user}",
+    ("personality", "stress_relief"): "input_text.ai_context_user_stress_relief_{user}",
+    # I-36b: Privacy preferences → hot context via sensor
+    ("privacy", "off_limits_topics"): "input_text.ai_context_user_off_limits_{user}",
+    ("privacy", "proactive_comfort"): "input_text.ai_context_user_proactive_comfort_{user}",
+    # I-36b: Schedule alt-day routing
+    ("schedule", "wake_alt_days"): "input_text.ai_context_wake_time_alt_days_{user}",
+    # I-36b: Cross-category aliases (file may use "social" instead of "personality")
+    ("social", "social_style"): "input_text.ai_context_user_social_style_{user}",
 }
 
 # L1 entities that need input_select.select_option instead of input_text.set_value
@@ -72,8 +95,28 @@ _L1_SELECT_MAP = {
 _L1_DATETIME_MAP = {
     ("schedule", "wake_weekday"): "input_datetime.ai_context_wake_time_weekday_{user}",
     ("schedule", "wake_weekend"): "input_datetime.ai_context_wake_time_weekend_{user}",
+    ("schedule", "wake_alt_weekday"): "input_datetime.ai_context_wake_time_alt_weekday_{user}",
     ("schedule", "bedtime"): "input_datetime.ai_context_bed_time_{user}",
 }
+
+# Day abbreviation normalization — maps common Spanish (and other) abbrevs to
+# English 3-letter codes used by strftime('%a') in HA's C/en_US locale.
+_DAY_ABBREV_NORM = {
+    "lun": "mon", "mar": "tue", "mié": "wed", "mie": "wed",
+    "jue": "thu", "vie": "fri", "sáb": "sat", "sab": "sat", "dom": "sun",
+}
+
+# L1 keys whose values need day-abbreviation normalization on save.
+_DAY_NORM_KEYS = {("schedule", "wake_alt_days")}
+
+
+def _normalize_l1_value(lookup: tuple, value: str) -> str:
+    """Normalize an L1 value before saving. Currently handles day abbreviations."""
+    if lookup not in _DAY_NORM_KEYS:
+        return value
+    parts = [p.strip().lower() for p in value.split(",") if p.strip()]
+    normalized = [_DAY_ABBREV_NORM.get(p, p) for p in parts]
+    return ",".join(normalized)
 
 # ── Interview Categories ────────────────────────────────────────────────────
 # Ordered list of categories with their data points.
@@ -129,6 +172,9 @@ def _get_first_person() -> str:
 
 
 result_entity_name: dict[str, str] = {}
+
+# Module-level import flag — suppresses per-save refresh during bulk import
+_importing = False
 
 
 # ── Entity Name Helpers (standard pattern) ───────────────────────────────────
@@ -300,6 +346,9 @@ async def _save_preference(
     key_lower = key.lower().strip()
     lookup = (cat_lower, key_lower)
 
+    # ── Normalize value if needed (e.g. day abbreviation translation) ──
+    value = _normalize_l1_value(lookup, value)
+
     # ── Try L1 text map ──
     if lookup in _L1_MAP:
         entity_tpl = _L1_MAP[lookup]
@@ -339,6 +388,20 @@ async def _save_preference(
             "status": "ok" if ok else "error",
             "target": "l1_datetime",
             "entity_id": entity_id,
+            "saved": ok,
+        }
+
+    # ── Auto-detect: matching input_text helper exists ──
+    auto_entity = f"input_text.ai_context_user_{key_lower}_{user_lower}"
+    existing = state.get(auto_entity)  # noqa: F821
+    if existing is not None:  # Entity exists (even if "unknown")
+        ok = _save_to_l1_text(auto_entity, value)
+        if ok:
+            _mark_done(user_lower, cat_lower, key_lower)
+        return {
+            "status": "ok" if ok else "error",
+            "target": "l1_auto",
+            "entity_id": auto_entity,
             "saved": ok,
         }
 
@@ -425,6 +488,24 @@ async def user_interview_save(
 
     result = await _save_preference(user, category, key, value)
 
+    # Exchange log (fire-and-forget, must not disrupt save)
+    if result.get("saved"):
+        try:
+            _ts = int(time.time())
+            _log_key = f"interview_exchange:{user.lower().strip()}:{_ts}"
+            _log_val = json.dumps({
+                "category": category.lower().strip(),
+                "key": key.lower().strip(),
+                "value": value[:200],
+                "target": result.get("target", "unknown"),
+                "timestamp": _ts,
+            })
+            await _l2_set(_log_key, _log_val,
+                          tags=f"interview exchange {user.lower().strip()}",
+                          expiration_days=30)
+        except Exception:
+            pass
+
     elapsed = round((time.monotonic() - t_start) * 1000, 1)
     result["elapsed_ms"] = elapsed
     result["user"] = user
@@ -437,6 +518,13 @@ async def user_interview_save(
         f"({'ok' if result.get('saved') else 'FAILED'}) "
         f"{elapsed}ms"
     )
+
+    # Refresh preferences context sensor (fire-and-forget, skip during bulk import)
+    if result.get("saved") and not _importing:
+        try:
+            await _refresh_preferences_context(user.lower().strip())
+        except Exception:
+            pass
 
     return result
 
@@ -665,11 +753,330 @@ async def user_interview_preseed(user: str = ""):
     }
 
 
+@service(supports_response="only")  # noqa: F821
+async def user_interview_exchanges(user: str = "", limit: int = 20):
+    """
+    yaml
+    name: User Interview Exchanges
+    description: >-
+      Return recent interview exchange logs for a user. Each exchange
+      records a preference save: category, key, value, and target.
+    fields:
+      user:
+        name: User
+        description: "Username (e.g., miquel, jessica)"
+        default: miquel
+        selector:
+          text: {}
+      limit:
+        name: Limit
+        description: "Maximum number of exchanges to return"
+        default: 20
+        selector:
+          number:
+            min: 1
+            max: 100
+    """
+    if not user:
+        user = _get_first_person()
+    user_lower = user.lower().strip()
+    result = pyscript.memory_search(  # noqa: F821
+        query=f"interview exchange {user_lower}", limit=limit,
+    )
+    resp = await result
+    entries = resp if isinstance(resp, list) else resp.get("results", [])
+    _set_result("idle", op="exchanges", user=user_lower, count=len(entries))
+    return {"status": "ok", "user": user_lower, "count": len(entries), "exchanges": entries}
+
+
+# ── File Import (needs @pyscript_executor for file I/O) ──────────────────────
+
+@pyscript_executor  # noqa: F821
+def _read_interview_file(file_path: str) -> dict:
+    """Read and parse a YAML interview file. Runs in executor thread."""
+    import yaml as _yaml
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = _yaml.safe_load(f)
+    if not isinstance(data, dict):
+        return {"error": "File did not parse as a YAML dictionary"}
+    return data
+
+
+@pyscript_executor  # noqa: F821
+def _scan_interview_directory() -> list:
+    """Scan /config/interview/ for interview_*.yaml files."""
+    import os as _os
+
+    interview_dir = "/config/interview"
+    if not _os.path.isdir(interview_dir):
+        return []
+    results = []
+    for fname in sorted(_os.listdir(interview_dir)):
+        if fname.startswith("interview_") and fname.endswith(".yaml"):
+            slug = fname[len("interview_"):-len(".yaml")]
+            results.append({"file": fname, "user": slug})
+    return results
+
+
+@service(supports_response="optional")  # noqa: F821
+async def user_interview_auto_import():
+    """
+    yaml
+    name: User Interview Auto Import
+    description: >-
+      Scan /config/interview/ and import files for configured persons.
+      Called automatically on HA startup when auto_import_on_startup is
+      enabled, or manually via this service.
+    """
+    files = await _scan_interview_directory()
+    person_slugs = set(get_person_slugs())
+    imported, skipped = [], []
+    for entry in files:
+        if entry["user"] in person_slugs:
+            try:
+                await user_interview_import(file=entry["file"])
+                imported.append(entry["file"])
+            except Exception as exc:
+                log.warning(f"user_interview: auto-import failed {entry['file']}: {exc}")  # noqa: F821
+        else:
+            skipped.append(entry["file"])
+            log.info(f"user_interview: skipped {entry['file']} — no matching person")  # noqa: F821
+    log.info(  # noqa: F821
+        f"user_interview: auto-import complete — {len(imported)} imported, {len(skipped)} skipped"
+    )
+    return {"imported": imported, "skipped": skipped}
+
+
+@service(supports_response="only")  # noqa: F821
+async def user_interview_import(file: str = ""):
+    """
+    yaml
+    name: User Interview Import
+    description: >-
+      Import interview answers from a YAML file in /config/interview/.
+      Each category/key with a non-empty value is saved via the same
+      L1/L2 pipeline as the voice interview. Progress is tracked.
+    fields:
+      file:
+        name: File name
+        description: >-
+          YAML file name inside /config/interview/ (e.g., interview_miquel.yaml).
+          Do not include the directory path — just the file name.
+        selector:
+          text: {}
+    """
+    if not file:
+        return {"status": "error", "reason": "No file specified"}
+
+    file_path = f"/config/interview/{file}"
+    _set_result("importing", op="import", file=file)
+
+    # Read file in executor thread (pyscript sandbox blocks open())
+    try:
+        data = await _read_interview_file(file_path)
+    except FileNotFoundError:
+        _set_result("error", op="import", reason="file_not_found")
+        return {"status": "error", "reason": f"File not found: {file_path}"}
+    except Exception as exc:
+        _set_result("error", op="import", reason=str(exc))
+        return {"status": "error", "reason": f"Failed to read file: {exc}"}
+
+    if "error" in data:
+        _set_result("error", op="import", reason=data["error"])
+        return {"status": "error", "reason": data["error"]}
+
+    # Extract user from file or fall back to first person
+    user = str(data.get("user", "")).strip()
+    if not user:
+        user = _get_first_person()
+    user_lower = user.lower().strip()
+
+    if _is_test_mode():
+        log.info("user_interview [TEST]: would import file %s for %s", file, user_lower)  # noqa: F821
+        return {"status": "test_mode_skip"}
+
+    global _importing
+    _importing = True
+    t_start = time.monotonic()
+    saved = 0
+    skipped = 0
+    errors = []
+    done_keys = []
+
+    # Build lookup sets once before the loop
+    all_input_texts = set(state.names(domain="input_text"))  # noqa: F821
+    all_l1 = {**_L1_MAP, **_L1_SELECT_MAP, **_L1_DATETIME_MAP}
+
+    # Iterate categories — skip the "user" key
+    for category, keys in data.items():
+        if category == "user":
+            continue
+        if not isinstance(keys, dict):
+            continue
+        cat_lower = str(category).lower().strip()
+
+        for key, value in keys.items():
+            key_lower = str(key).lower().strip()
+            val_str = str(value).strip() if value is not None else ""
+
+            # Skip empty / blank values
+            if val_str in ("", "None"):
+                skipped += 1
+                continue
+
+            lookup = (cat_lower, key_lower)
+            val_str = _normalize_l1_value(lookup, val_str)
+            ok = False
+
+            try:
+                # Route: L1 map → auto-detect helper → L2 fallback
+                if lookup in all_l1:
+                    entity_id = all_l1[lookup].replace("{user}", user_lower)
+                    if entity_id.startswith("input_select."):
+                        ok = _save_to_l1_select(entity_id, val_str)
+                    elif entity_id.startswith("input_datetime."):
+                        ok = _save_to_l1_datetime(entity_id, val_str)
+                    else:
+                        ok = _save_to_l1_text(entity_id, val_str)
+                else:
+                    auto_entity = f"input_text.ai_context_user_{key_lower}_{user_lower}"
+                    if auto_entity in all_input_texts:
+                        ok = _save_to_l1_text(auto_entity, val_str)
+                    else:
+                        l2_key = f"preference:{cat_lower}:{key_lower}:{user_lower}"
+                        l2_tags = f"preference {cat_lower} {user_lower}"
+                        ok = await _l2_set(l2_key, val_str, l2_tags)
+
+                if ok:
+                    saved += 1
+                    done_keys.append((cat_lower, key_lower))
+                else:
+                    errors.append(f"{cat_lower}.{key_lower}: save failed")
+            except Exception as exc:
+                errors.append(f"{cat_lower}.{key_lower}: {exc}")
+
+    # Batch progress write — single load/save instead of per-key
+    if done_keys:
+        progress = _load_progress(user_lower)
+        for cat, key in done_keys:
+            if cat not in progress:
+                progress[cat] = []
+            if key not in progress[cat]:
+                progress[cat].append(key)
+        _save_progress(user_lower, progress)
+
+    _importing = False
+    elapsed = round((time.monotonic() - t_start) * 1000, 1)
+
+    log.info(  # noqa: F821
+        f"user_interview: import {file} for {user_lower} — "
+        f"{saved} saved, {skipped} skipped, {len(errors)} errors, {elapsed}ms"
+    )
+
+    _set_result("idle", op="import", user=user_lower,
+                saved=saved, skipped=skipped, errors=len(errors))
+
+    # Single preferences refresh at end of import
+    try:
+        await _refresh_preferences_context(user_lower)
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "user": user_lower,
+        "file": file,
+        "saved": saved,
+        "skipped": skipped,
+        "errors": errors,
+        "elapsed_ms": elapsed,
+    }
+
+
+# ── Preferences Context Sensor (I-36b) ───────────────────────────────────────
+
+
+def _format_preferences_text(user: str) -> str:
+    """Auto-discover ai_context_user_* helpers and format for hot context."""
+    prefix = "input_text.ai_context_user_"
+    suffix = f"_{user}"
+    prefs = {}
+    for eid in state.names(domain="input_text"):  # noqa: F821
+        if not eid.startswith(prefix) or not eid.endswith(suffix):
+            continue
+        key = eid[len(prefix):-len(suffix)]
+        if key in _SKIP_IN_PREFS:
+            continue
+        raw = state.get(eid)  # noqa: F821
+        if raw is None or str(raw) in _EMPTY_STATES:
+            continue
+        v = str(raw).strip()
+        if v:
+            prefs[key] = v
+
+    if not prefs:
+        return ""
+    u_name = state.get(f"input_text.ai_context_user_name_{user}") or user.title()  # noqa: F821
+    if str(u_name) in _EMPTY_STATES:
+        u_name = user.title()
+    lines = [f"User preferences ({u_name}):"]
+    for key in sorted(prefs):
+        lines.append(f"{key.replace('_', ' ')}: {prefs[key]}")
+    return "\n".join(lines)
+
+
+async def _refresh_preferences_context(user: str = ""):
+    """Rebuild the preferences context sensor from L1 helpers."""
+    if not user:
+        user = resolve_active_user()
+    context_text = _format_preferences_text(user)
+    state.set(  # noqa: F821
+        PREFERENCES_ENTITY,
+        value="ok" if context_text else "empty",
+        new_attributes={
+            "friendly_name": "AI Preferences Context",
+            "context": context_text,
+            "user": user,
+            "icon": "mdi:account-cog",
+        },
+    )
+
+
+@service(supports_response="optional")  # noqa: F821
+async def user_interview_refresh_preferences(user: str = ""):
+    """
+    yaml
+    name: User Interview Refresh Preferences
+    description: >-
+      Rebuild the preferences context sensor from L1 helpers. Called
+      automatically after save/import, or manually via this service.
+    fields:
+      user:
+        name: User
+        description: "Username (e.g., miquel). Empty = active user."
+        default: ""
+        selector:
+          text: {}
+    """
+    if not user:
+        user = resolve_active_user()
+    await _refresh_preferences_context(user)
+    log.info(f"user_interview: refreshed preferences context for {user}")  # noqa: F821
+    return {"status": "ok", "user": user}
+
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 @time_trigger("startup")  # noqa: F821
 async def _startup():
-    """Initialize user interview status sensor."""
+    """Initialize user interview status sensor and preferences context."""
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")
+    # Refresh preferences context for all persons
+    for slug in get_person_slugs():
+        try:
+            await _refresh_preferences_context(slug)
+        except Exception:
+            pass
     log.info("user_interview.py loaded")  # noqa: F821

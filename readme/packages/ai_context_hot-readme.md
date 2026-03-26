@@ -34,6 +34,7 @@ This package reads from a wide range of entities across the system:
 - **Media tracking:** `input_text.ai_media_upcoming_sonarr`, `input_text.ai_media_upcoming_radarr`
 - **Music taste:** `sensor.ai_music_taste_status`
 - **Away patterns:** `input_text.ai_away_prediction_raw`
+- **Schedule preferences:** `input_datetime.ai_context_wake_time_weekday_{user}`, `_weekend_{user}`, `_alt_weekday_{user}`, `input_datetime.ai_context_bed_time_{user}`, `input_text.ai_context_wake_time_alt_days_{user}`
 - **Privacy:** Privacy gate helpers
 - **Packages:** `ai_identity.yaml`, `ai_away_patterns.yaml`, `ai_focus_guard.yaml`, `ai_media_tracking.yaml`, `ai_music_taste.yaml`, `ai_calendar_promotion.yaml`, `ai_email_promotion.yaml`
 
@@ -49,4 +50,5 @@ This package reads from a wide range of entities across the system:
 - Per-user references are currently hardcoded to `_miquel` helpers. Task 22 will add dynamic user switching based on identity confidence.
 - Interview mode (I-36) injects a large instruction block that makes the agent lead a structured preference-gathering conversation.
 - The Kodi (MadTeeVee) media block strips BBCode tags and file extensions from titles.
-- Deployed: 2026-02-28. Updated: 2026-03-03 (Task 20 focus/meal line).
+- User preference consumption (2026-03-26): 14 blueprints/modules now read from `ai_context_user_*_{user}` helpers for LLM prompt shaping. Sleep budget calculation uses weekday/weekend/alt-day wake time routing. Alarm/routine blueprints support `use_preference_wake_time` / `use_preference_bed_time` toggles for schedule-aware triggers.
+- Deployed: 2026-02-28. Updated: 2026-03-26 (preference consumption wiring).

@@ -219,7 +219,7 @@ async def sleep_config_populate_pickers():
             eid for eid in state.names(domain="light")  # noqa: F821
             if state.get(eid) not in ("unavailable",)  # noqa: F821
         ])
-        options = light_ids if light_ids else ["(none)"]
+        options = ["(none)"] + light_ids if light_ids else ["(none)"]
         service.call(  # noqa: F821
             "input_select", "set_options",
             entity_id="input_select.ai_sleep_lights_light_picker",
