@@ -892,6 +892,7 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
+  _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
   # --- Infrastructure ---
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
@@ -1245,7 +1246,7 @@ actions:
             response_variable: bedtime_response
             data:
               agent_id: "{{ dispatch_agent }}"
-              text: "{{ bedtime_prompt_tpl }}"
+              text: "{{ _pfx }}{{ bedtime_prompt_tpl }}"
 
           - alias: "Extract bedtime announcement with defensive fallback"
             variables:
@@ -1448,7 +1449,7 @@ actions:
                     data:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
-                        {{ settling_prompt_tpl }}
+                        {{ _pfx }}{{ settling_prompt_tpl }}
 
                         Current sensor readings:
                         {{ settling_sensor_context }}
@@ -1588,7 +1589,7 @@ actions:
                     data:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
-                        {{ gn_context_prompt_tpl }}
+                        {{ _pfx }}{{ gn_context_prompt_tpl }}
 
                         Current sensor readings:
                         {{ gn_sensor_context }}
@@ -1721,7 +1722,7 @@ actions:
         response_variable: bedtime_response
         data:
           agent_id: "{{ dispatch_agent }}"
-          text: "{{ bedtime_prompt_tpl }}"
+          text: "{{ _pfx }}{{ bedtime_prompt_tpl }}"
 
       - alias: "Extract bedtime announcement with defensive fallback"
         variables:
@@ -1939,7 +1940,7 @@ actions:
         response_variable: goodnight_response
         data:
           agent_id: "{{ dispatch_agent }}"
-          text: "{{ goodnight_prompt_tpl }}"
+          text: "{{ _pfx }}{{ goodnight_prompt_tpl }}"
 
       - alias: "Extract goodnight message with defensive fallback"
         variables:

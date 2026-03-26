@@ -541,6 +541,7 @@ variables:
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  _pfx: "[REMINDER — do NOT call any functions or tools. Respond only with speech text, no actions.] "
 
 mode: restart
 max_exceeded: silent
@@ -715,7 +716,7 @@ actions:
                           data:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
-                              {{ low_prompt
+                              {{ _pfx }}{{ low_prompt
                                  | replace('{battery}', _battery | string) }}
                           response_variable: llm_result
                           continue_on_error: true
@@ -814,7 +815,7 @@ actions:
                           data:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
-                              {{ critical_prompt
+                              {{ _pfx }}{{ critical_prompt
                                  | replace('{battery}', _battery | string) }}
                           response_variable: llm_result
                           continue_on_error: true
@@ -913,7 +914,7 @@ actions:
                           data:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
-                              {{ urgent_prompt
+                              {{ _pfx }}{{ urgent_prompt
                                  | replace('{battery}', _battery | string) }}
                           response_variable: llm_result
                           continue_on_error: true
@@ -1004,7 +1005,7 @@ actions:
                     data:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
-                        {{ congrats_prompt
+                        {{ _pfx }}{{ congrats_prompt
                            | replace('{battery}', _battery | string) }}
                     response_variable: llm_result
                     continue_on_error: true
@@ -1086,7 +1087,7 @@ actions:
                     action: conversation.process
                     data:
                       agent_id: "{{ dispatch_agent }}"
-                      text: "{{ fully_charged_prompt }}"
+                      text: "{{ _pfx }}{{ fully_charged_prompt }}"
                     response_variable: llm_result
                     continue_on_error: true
                   - alias: "Set message"
@@ -1207,7 +1208,7 @@ actions:
                       data:
                         agent_id: "{{ dispatch_agent }}"
                         text: >-
-                          {{ _tier_prompt
+                          {{ _pfx }}{{ _tier_prompt
                              | replace('{battery}', _battery | string) }}
                       response_variable: llm_result
                       continue_on_error: true

@@ -70,6 +70,7 @@ from shared_utils import build_result_entity_name
 
 RESULT_ENTITY = "sensor.ai_dispatcher_status"
 PIPELINE_FILE = "/config/.storage/assist_pipeline.pipelines"
+ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
 # Variants are auto-discovered from pipeline display names.
 # Any pipeline named "<Persona> - <Variant>" registers as variant
 # <variant> (lowercased, spaces→underscores). No allowlist needed.
@@ -119,6 +120,8 @@ def _get_cache_ttl():
 #   pipeline_id_map: dict[pipeline_id → pipeline_record]    reverse lookup by ID
 #   name_to_engine:  dict[display_name_lower → entity_id]   pipeline name → conversation_engine
 #   topic_keywords:  dict[persona → list[str]]              from memory
+#   satellite_select_map:  dict[sat → select_entity]        for pipeline switching
+#   satellite_speaker_map: dict[sat → media_player_entity]  for TTS routing
 _cache: dict | None = None
 _cache_ts: float = 0.0
 _CACHE_EMPTY_RETRY: int = 30  # seconds — fast retry when pipelines were empty
@@ -157,6 +160,55 @@ def _load_pipelines_from_file_sync(pipeline_file: str) -> list:
 async def _load_pipelines_from_file(pipeline_file: str) -> list:
     """Async wrapper — @pyscript_executor handles threading automatically."""
     return _load_pipelines_from_file_sync(pipeline_file)
+
+
+# ── Satellite Device Discovery ──────────────────────────────────────────────
+
+@pyscript_executor  # noqa: F821
+def _discover_satellite_devices_sync(registry_file: str) -> tuple:
+    """Read entity registry, group by device_id, build satellite maps.
+
+    For each device with an assist_satellite entity, find:
+      - select.*_assistant  (pipeline picker, excludes _assistant_2)
+      - media_player.* with platform=esphome + device_class=speaker
+    """
+    import json as _json
+    select_map = {}
+    speaker_map = {}
+    try:
+        with open(registry_file, "r") as fh:
+            data = _json.loads(fh.read())
+        entities = data.get("data", {}).get("entities", [])
+
+        by_device = {}
+        for e in entities:
+            did = e.get("device_id")
+            if did and not e.get("disabled_by"):
+                by_device.setdefault(did, []).append(e)
+
+        for did, ents in by_device.items():
+            sat = None
+            sel = None
+            spk = None
+            for e in ents:
+                eid = e.get("entity_id", "")
+                if eid.startswith("assist_satellite."):
+                    sat = eid
+                elif (eid.startswith("select.")
+                      and eid.endswith("_assistant")
+                      and not eid.endswith("_assistant_2")):
+                    sel = eid
+                elif (eid.startswith("media_player.")
+                      and e.get("platform") == "esphome"
+                      and e.get("original_device_class") == "speaker"):
+                    spk = eid
+            if sat and sel:
+                select_map[sat] = sel
+            if sat and spk:
+                speaker_map[sat] = spk
+    except Exception:
+        pass
+    return select_map, speaker_map
 
 
 @pyscript_compile  # noqa: F821
@@ -426,6 +478,9 @@ async def _ensure_cache() -> None:
         if pname and engine:
             name_to_engine[pname.lower()] = engine
 
+    # Discover satellite device mappings from entity registry
+    sat_sel, sat_spk = _discover_satellite_devices_sync(ENTITY_REGISTRY_FILE)
+
     _cache = {
         "personas": personas,
         "entity_map": entity_map,
@@ -438,6 +493,8 @@ async def _ensure_cache() -> None:
         "handoff_aliases": handoff_aliases,
         "display_map": display_map,
         "persona_pipeline_map": persona_pipeline_map,
+        "satellite_select_map": sat_sel,
+        "satellite_speaker_map": sat_spk,
     }
     _cache_ts = time.monotonic()
 
@@ -447,7 +504,8 @@ async def _ensure_cache() -> None:
         f"{len(pipeline_id_map)} pipeline IDs, "
         f"{len(name_to_engine)} name→engine mappings, "
         f"{len(topic_keywords)} keyword sets, "
-        f"{len(user_handoff_patterns)} handoff patterns"
+        f"{len(user_handoff_patterns)} handoff patterns, "
+        f"{len(sat_sel)} satellites"
     )
 
     if personas:
@@ -520,6 +578,26 @@ async def dispatcher_resolve_engine(pipeline_name: str = ""):
             tts_engine = item.get("tts_engine", "")
             break
     return {"engine": engine, "tts_voice": tts_voice, "tts_engine": tts_engine}
+
+
+@service(supports_response="only")  # noqa: F821
+async def dispatcher_get_satellite_maps():
+    """Return satellite device maps from dispatcher cache.
+
+    yaml
+    name: Dispatcher Get Satellite Maps
+    description: >-
+      Returns satellite_select_map and satellite_speaker_map from the
+      dispatcher cache. Used by voice_handoff and voice_session to avoid
+      duplicating entity registry discovery.
+    """
+    await _ensure_cache()
+    if _cache is None:
+        return {"satellite_select_map": {}, "satellite_speaker_map": {}}
+    return {
+        "satellite_select_map": _cache.get("satellite_select_map", {}),
+        "satellite_speaker_map": _cache.get("satellite_speaker_map", {}),
+    }
 
 
 def _get_pipeline_info(persona: str, variant: str) -> dict:

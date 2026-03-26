@@ -565,7 +565,7 @@ actions:
             action: conversation.process
             data:
               agent_id: "{{ dispatch_agent }}"
-              text: "{{ v_llm_wake_prompt | default('') | string }}"
+              text: "[ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ v_llm_wake_prompt | default('') | string }}"
             response_variable: wake_llm
             continue_on_error: true
 

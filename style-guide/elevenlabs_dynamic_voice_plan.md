@@ -49,16 +49,15 @@ throughout the day, not just the words.
 | Deadpool (Deepee) | `tts.deepee_text_to_speech`                 | Same as above (NOTE: may not be ElevenLabs — verify)   |
 | Dr. Portuondo     | `tts.dr_portuondo_text_to_speech`           | Same as above (NOTE: may be HA Cloud — verify)         |
 
-### Voice Maps (hardcoded semicolon-delimited strings)
-Found in: `theatrical_mode.yaml`, `reactive_banter.yaml`, `voice_handoff.yaml`,
-`automations.yaml` (instances), `agent_escalation.yaml`
-
-Default pattern:
-```
-rick=tts.elevenlabs_text_to_speech;quark=tts.elevenlabs_quark_text_to_speech;
-deadpool=tts.deepee_text_to_speech;kramer=tts.elevenlabs_kramer_text_to_speech;
-doctor portuondo=tts.dr_portuondo_text_to_speech
-```
+### Voice Maps — MIGRATED (2026-03-25)
+All hardcoded `tts_voice_map` inputs and internal `voice_map` dicts have been removed.
+TTS voice is now resolved dynamically via `pyscript.dispatcher_resolve_engine` from the
+Assist Pipeline configuration. Affected files:
+- `agent_escalation.yaml` — internal `voice_map` dict removed, dispatcher calls added
+- `reactive_banter.yaml` — `tts_voice_map` input removed, uses `agent_b_tts_engine` from dispatcher
+- `theatrical_mode.yaml` — `tts_voice_map` input removed, pyscript uses pipeline cache
+- `voice_handoff.yaml` — `tts_voice_map` input removed, dispatcher calls added at farewell + greeting
+- `theatrical_mode.py` — `_parse_voice_map` function and `voice_map` variable removed
 
 ### HACS Custom Component (Already Installed)
 - Location: `custom_components/elevenlabs_custom_tts/`

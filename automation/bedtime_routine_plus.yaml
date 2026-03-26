@@ -1073,6 +1073,7 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
+  _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
   # --- Blueprint version ---
   blueprint_version: "5.4.14"
 
@@ -1501,7 +1502,7 @@ actions:
     data:
       agent_id: "{{ dispatch_agent }}"
       text: >-
-        {{ bedtime_prompt_tpl }}
+        {{ _pfx }}{{ bedtime_prompt_tpl }}
         {% if not (enable_negotiation | bool(false)) or (is_preset_mode | bool(false)) %}
         IMPORTANT: Do NOT ask if the user wants more time. Countdown is fixed at {{ default_countdown }} minutes — just announce bedtime.
         {% endif %}
@@ -1798,7 +1799,7 @@ actions:
                     data:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
-                        {{ settling_prompt_tpl }}
+                        {{ _pfx }}{{ settling_prompt_tpl }}
 
                         Kodi is currently playing: {{ kodi_now_playing }}.
 
@@ -1930,7 +1931,7 @@ actions:
                     data:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
-                        {{ gn_context_prompt_tpl }}
+                        {{ _pfx }}{{ gn_context_prompt_tpl }}
 
                         Kodi is playing: {{ kodi_now_playing }}.
 
@@ -2343,7 +2344,7 @@ actions:
                             data:
                               agent_id: "{{ dispatch_agent }}"
                               text: >-
-                                {{ settling_prompt_tpl }}
+                                {{ _pfx }}{{ settling_prompt_tpl }}
 
                                 Kodi is currently playing: {{ kodi_now_playing }}.
 
@@ -2392,7 +2393,7 @@ actions:
         response_variable: goodnight_response
         data:
           agent_id: "{{ dispatch_agent }}"
-          text: "{{ goodnight_prompt_tpl }}"
+          text: "{{ _pfx }}{{ goodnight_prompt_tpl }}"
 
       - alias: "Extract goodnight message with defensive fallback"
         variables:
@@ -2520,7 +2521,7 @@ actions:
                 data:
                   agent_id: "{{ dispatch_agent }}"
                   text: >-
-                    {{ gn_context_prompt_tpl }}
+                    {{ _pfx }}{{ gn_context_prompt_tpl }}
 
                     Kodi is playing: {{ kodi_now_playing }}.
 

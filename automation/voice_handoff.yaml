@@ -17,8 +17,7 @@
 #   - input_text.ai_handoff_pending
 #   - pyscript/agent_dispatcher.py (fires ai_handoff_request event)
 #   - pyscript/tts_queue.py (tts_queue_speak for commentary only)
-#   - input_select.ai_handoff_restore_mode (source/preferred/never)
-#   - input_number.ai_handoff_restore_seconds (timeout for source + preferred)
+#   (restore_mode and restore_timeout are now blueprint inputs, not helpers)
 # =============================================================================
 blueprint:
   name: Voice Handoff — Agent Switching
@@ -90,15 +89,6 @@ blueprint:
           selector:
             entity:
               domain: media_player
-
-        tts_voice_map:
-          name: TTS Voice Map
-          description: >-
-            Persona-to-TTS entity mapping. Format: persona=tts.entity;persona2=tts.entity2
-          default: "rick=tts.elevenlabs_text_to_speech;quark=tts.elevenlabs_quark_text_to_speech;deadpool=tts.deepee_text_to_speech;deepee=tts.deepee_text_to_speech;kramer=tts.elevenlabs_kramer_text_to_speech;doctor portuondo=tts.dr_portuondo_text_to_speech;doctor_portuondo=tts.dr_portuondo_text_to_speech"
-          selector:
-            text:
-              multiline: true
 
         persona_aliases:
           name: Persona Aliases
@@ -424,6 +414,40 @@ blueprint:
               unit_of_measurement: seconds
               mode: slider
 
+        restore_mode:
+          name: "Restore Mode"
+          description: >-
+            After a handoff, how should the pipeline be restored?
+            Source = restore to the pre-handoff pipeline.
+            Preferred = restore to the "Preferred" pipeline option.
+            Never = don't auto-restore (idle monitor handles era reset).
+          default: "source"
+          selector:
+            select:
+              options:
+                - label: "Source (pre-handoff)"
+                  value: "source"
+                - label: "Preferred"
+                  value: "preferred"
+                - label: "Never"
+                  value: "never"
+              mode: dropdown
+
+        restore_timeout:
+          name: "Restore Timeout (seconds)"
+          description: >-
+            How many seconds to wait before restoring the pipeline after
+            a handoff. Only applies when Restore Mode is source or preferred.
+            Set to 0 to disable timed restore.
+          default: 300
+          selector:
+            number:
+              min: 0
+              max: 3600
+              step: 30
+              unit_of_measurement: s
+              mode: box
+
         privacy_tier:
           name: Privacy gate tier
           description: >
@@ -689,17 +713,7 @@ actions:
       v_stinger_library_id: !input stinger_library_id_override
       v_music_delay_after: !input music_delay_after
       v_music_fallback_url: !input music_fallback_media_url
-      # TTS voice map — parsed from configurable input (semicolon-delimited)
-      tts_voice_map_raw: !input tts_voice_map
-      voice_map: >-
-        {% set ns = namespace(items=[]) %}
-        {% for pair in tts_voice_map_raw.split(';') %}
-          {% set kv = pair.split('=') %}
-          {% if kv | length == 2 %}
-            {% set ns.items = ns.items + ['"' ~ kv[0] | trim | lower ~ '":"' ~ kv[1] | trim ~ '"'] %}
-          {% endif %}
-        {% endfor %}
-        {{ ('{' ~ ns.items | join(',') ~ '}') | from_json | default({}) }}
+      # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
 
   # 1b. Compose extra_system_prompt from mic_behavior + custom prompt
   - alias: "Set mic instruction and 2 more variables"
@@ -998,7 +1012,7 @@ actions:
                 continue_on_error: true
                 data:
                   agent_id: "{{ llm_lines_agent }}"
-                  text: "{{ farewell_prompt }}"
+                  text: "[HANDOFF — do NOT call any functions or tools. Respond only with speech text.] {{ farewell_prompt }}"
               - alias: "Set farewell speech"
                 variables:
                   farewell_speech: >-
@@ -1033,7 +1047,7 @@ actions:
                     continue_on_error: true
                     data:
                       agent_id: "{{ resolved_agent }}"
-                      text: "{{ farewell_prompt }}"
+                      text: "[HANDOFF — do NOT call any functions or tools. Respond only with speech text.] {{ farewell_prompt }}"
                   - alias: "Set farewell speech"
                     variables:
                       farewell_speech: >-
@@ -1050,14 +1064,26 @@ actions:
             variables:
               farewell_speech: "{{ farewell_prompt }}"
 
+      - alias: "Resolve source agent TTS via dispatcher (farewell)"
+        action: pyscript.dispatcher_resolve_engine
+        response_variable: farewell_resolve
+        continue_on_error: true
+        data:
+          pipeline_name: "{{ saved_persona }}"
+      - alias: "Extract farewell TTS voice"
+        variables:
+          farewell_tts_engine: >-
+            {{ (farewell_resolve | default({})).get('tts_engine', '') }}
+          farewell_tts_voice_id: >-
+            {{ (farewell_resolve | default({})).get('tts_voice', '') }}
       - alias: "Speak farewell in source agent's voice"
         action: pyscript.tts_queue_speak
         continue_on_error: true
         response_variable: tts_result
         data:
           text: "{{ farewell_speech }}"
-          voice: "{{ voice_map.get(saved_persona, '') }}"
-          voice_id: "{{ resolved_farewell_tts_voice | default('') }}"
+          voice: "{{ farewell_tts_engine }}"
+          voice_id: "{{ resolved_farewell_tts_voice | default(farewell_tts_voice_id) | default('') }}"
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
@@ -1418,7 +1444,7 @@ actions:
                 continue_on_error: true
                 data:
                   agent_id: "{{ llm_lines_agent }}"
-                  text: "{{ greeting_prompt }}"
+                  text: "[HANDOFF — do NOT call any functions or tools. Respond only with speech text.] {{ greeting_prompt }}"
               - alias: "Set greeting speech"
                 variables:
                   greeting_speech: >-
@@ -1453,7 +1479,7 @@ actions:
                     continue_on_error: true
                     data:
                       agent_id: "{{ resolved_agent }}"
-                      text: "{{ greeting_prompt }}"
+                      text: "[HANDOFF — do NOT call any functions or tools. Respond only with speech text.] {{ greeting_prompt }}"
                   - alias: "Set greeting speech"
                     variables:
                       greeting_speech: >-
@@ -1470,14 +1496,26 @@ actions:
             variables:
               greeting_speech: "{{ greeting_prompt }}"
 
+      - alias: "Resolve target agent TTS via dispatcher (greeting)"
+        action: pyscript.dispatcher_resolve_engine
+        response_variable: greeting_resolve
+        continue_on_error: true
+        data:
+          pipeline_name: "{{ handoff_target }}"
+      - alias: "Extract greeting TTS voice"
+        variables:
+          greeting_tts_engine: >-
+            {{ (greeting_resolve | default({})).get('tts_engine', '') }}
+          greeting_tts_voice_id: >-
+            {{ (greeting_resolve | default({})).get('tts_voice', '') }}
       - alias: "10a · Play greeting via TTS (speaker only, mic stays closed)"
         action: pyscript.tts_queue_speak
         continue_on_error: true
         response_variable: greeting_tts
         data:
           text: "{{ greeting_speech }}"
-          voice: "{{ voice_map.get(handoff_target, '') }}"
-          voice_id: "{{ resolved_tts_voice | default('') }}"
+          voice: "{{ greeting_tts_engine }}"
+          voice_id: "{{ resolved_tts_voice | default(greeting_tts_voice_id) | default('') }}"
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
@@ -1713,14 +1751,8 @@ actions:
   # 12. Restore pipeline after timeout (3-mode: source / preferred / never)
   - alias: "Set restore mode, restore timeout"
     variables:
-      restore_mode: >-
-        {{ states('input_select.ai_handoff_restore_mode') | default('source') }}
-      restore_timeout: >-
-        {% if restore_mode != 'never' %}
-          {{ states('input_number.ai_handoff_restore_seconds') | float(0) }}
-        {% else %}
-          0
-        {% endif %}
+      restore_mode: !input restore_mode
+      restore_timeout: !input restore_timeout
   - alias: "Choose action path"
     choose:
       # source mode — restore to pre-handoff pipeline

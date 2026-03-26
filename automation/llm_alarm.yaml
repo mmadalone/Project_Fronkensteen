@@ -553,6 +553,7 @@ actions:
             data:
               agent_id: "{{ dispatch_agent }}"
               text: >-
+                [ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.]
                 {{ (v_llm_wake_prompt | default('') | string)
                    ~ '\n\nmeta:\n'
                    ~ '- configured_wakeup_time: ' ~ (v_wakeup_time | default('07:00:00') | string) ~ '\n'

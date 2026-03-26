@@ -27,8 +27,6 @@ import time  # noqa: F401
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
-
 # Persona alias (display name → conversation entity prefix)
 # This is a business rule, not a device mapping — stays manual.
 PERSONA_ALIAS = {
@@ -46,55 +44,6 @@ _speaker_map = {}  # satellite_entity → media_player_entity (ESP speaker)
 _restore_tasks = {}  # satellite_entity → asyncio.Future
 _restore_info = {}   # satellite_entity → (pipeline_select, restore_target)
 _handoff_lock = threading.Lock()
-
-
-# ── Device Discovery ────────────────────────────────────────────────────────
-
-@pyscript_executor  # noqa: F821
-def _discover_satellite_devices_sync(registry_file: str) -> tuple:
-    """Read entity registry, group by device_id, build satellite maps.
-
-    For each device with an assist_satellite entity, find:
-      - select.*_assistant  (pipeline picker, excludes _assistant_2)
-      - media_player.* with platform=esphome + device_class=speaker
-    """
-    import json as _json
-    select_map = {}
-    speaker_map = {}
-    try:
-        with open(registry_file, "r") as fh:
-            data = _json.loads(fh.read())
-        entities = data.get("data", {}).get("entities", [])
-
-        by_device = {}
-        for e in entities:
-            did = e.get("device_id")
-            if did and not e.get("disabled_by"):
-                by_device.setdefault(did, []).append(e)
-
-        for did, ents in by_device.items():
-            sat = None
-            sel = None
-            spk = None
-            for e in ents:
-                eid = e.get("entity_id", "")
-                if eid.startswith("assist_satellite."):
-                    sat = eid
-                elif (eid.startswith("select.")
-                      and eid.endswith("_assistant")
-                      and not eid.endswith("_assistant_2")):
-                    sel = eid
-                elif (eid.startswith("media_player.")
-                      and e.get("platform") == "esphome"
-                      and e.get("original_device_class") == "speaker"):
-                    spk = eid
-            if sat and sel:
-                select_map[sat] = sel
-            if sat and spk:
-                speaker_map[sat] = spk
-    except Exception:
-        pass
-    return select_map, speaker_map
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -328,6 +277,8 @@ async def voice_handoff(
     extra_system_prompt: str = "",
     mic_behavior: str = "llm_decides",
     reason: str = "user_request",
+    restore_mode: str = "source",
+    restore_timeout: float = 300,
 ):
     """
     yaml
@@ -743,13 +694,7 @@ async def voice_handoff(
             pass
 
     # ── Schedule restore (3-mode: source / preferred / never) ────────
-    restore_mode = (
-        state.get("input_select.ai_handoff_restore_mode") or "source"  # noqa: F821
-    )
-    delay = (
-        float(state.get("input_number.ai_handoff_restore_seconds") or 0)  # noqa: F821
-        if restore_mode != "never" else 0
-    )
+    delay = float(restore_timeout) if restore_mode != "never" else 0
 
     if delay > 0:
         restore_target = current_pipeline if restore_mode == "source" else "preferred"
@@ -893,11 +838,19 @@ async def voice_handoff_clear_restore(satellite: str = ""):
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 async def _run_discovery():
-    """Discover satellite device mappings from entity registry."""
+    """Fetch satellite device mappings from dispatcher cache."""
     global _select_map, _speaker_map
-    sel, spk = _discover_satellite_devices_sync(ENTITY_REGISTRY_FILE)
-    _select_map = sel
-    _speaker_map = spk
+    try:
+        result = service.call(  # noqa: F821
+            "pyscript", "dispatcher_get_satellite_maps",
+            return_response=True,
+        )
+        _select_map = (result or {}).get("satellite_select_map", {})
+        _speaker_map = (result or {}).get("satellite_speaker_map", {})
+    except Exception as exc:
+        log.warning(  # noqa: F821
+            f"voice_handoff: dispatcher_get_satellite_maps failed: {exc}"
+        )
     log.warning(  # noqa: F821
         f"voice_handoff.py — discovered "
         f"{len(_select_map)} satellites: {list(_select_map.keys())}"
@@ -906,6 +859,8 @@ async def _run_discovery():
 
 @time_trigger("startup")  # noqa: F821
 async def _voice_handoff_startup():
+    # Wait for dispatcher cache to populate (satellite maps live there now)
+    await asyncio.sleep(25)
     await _run_discovery()
 
 
@@ -914,7 +869,7 @@ async def voice_handoff_rediscover():
     """
     yaml
     name: Voice Handoff Rediscover
-    description: Re-scan entity registry for satellite device mappings.
+    description: Re-fetch satellite device mappings from dispatcher cache.
     """
     if _is_test_mode():
         log.info("voice_handoff [TEST]: would rediscover satellite mappings")  # noqa: F821

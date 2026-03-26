@@ -536,6 +536,7 @@ actions:
     data:
       agent_id: "{{ dispatch_agent }}"
       text: >-
+        [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
         {{ llm_prompt }}
 
         context:

@@ -173,17 +173,6 @@ blueprint:
                 - presence
                 - explicit
 
-        tts_voice_map:
-          name: TTS Voice Map
-          description: >-
-            Optional persona-to-TTS override. Format: persona=tts.entity;persona2=tts.entity2
-            Persona names must be lowercase. If empty or persona not found, the
-            pipeline's configured TTS engine is used automatically.
-          default: "rick=tts.elevenlabs_text_to_speech;quark=tts.elevenlabs_quark_text_to_speech;deadpool=tts.deepee_text_to_speech;kramer=tts.elevenlabs_kramer_text_to_speech;doctor portuondo=tts.dr_portuondo_text_to_speech"
-          selector:
-            text:
-              multiline: true
-
         tts_priority:
           name: TTS Priority
           description: >-
@@ -446,17 +435,7 @@ variables:
   enable_theatrical_escalation: !input enable_theatrical_escalation
   escalation_probability: !input escalation_probability
   escalation_budget_floor: !input escalation_budget_floor
-  # ── TTS voice map parsing (proven pattern from voice_handoff.yaml) ──
-  tts_voice_map_raw: !input tts_voice_map
-  voice_map: >-
-    {% set ns = namespace(items=[]) %}
-    {% for pair in tts_voice_map_raw.split(';') %}
-      {% set kv = pair.split('=') %}
-      {% if kv | length == 2 %}
-        {% set ns.items = ns.items + ['"' ~ kv[0] | trim | lower ~ '":"' ~ kv[1] | trim ~ '"'] %}
-      {% endif %}
-    {% endfor %}
-    {{ ('{' ~ ns.items | join(',') ~ '}') | from_json | default({}) }}
+  # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
 
 conditions:
   # ── Gate 1: Enable toggle (voice = master toggle, notification = own knob) ──
@@ -780,10 +759,7 @@ action:
     continue_on_error: true
     data:
       text: "{{ banter_text }}"
-      voice: >-
-        {% set persona = agent_b.split(' - ')[0] | trim | lower %}
-        {% set vm_voice = voice_map.get(persona, '') %}
-        {{ vm_voice if vm_voice | length > 0 else agent_b_tts_engine }}
+      voice: "{{ agent_b_tts_engine }}"
       priority: "{{ tts_priority_val | int(2) }}"
       target_mode: "{{ tts_target_mode_val }}"
       target: "{{ tts_speaker_entity if tts_target_mode_val == 'explicit' else '' }}"

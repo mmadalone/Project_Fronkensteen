@@ -706,7 +706,7 @@ sequence:
         data:
           agent_id: "{{ dispatch_agent if dispatch_agent else '' }}"
           text: >-
-            {{ notification_prompt }}
+            [NOTIFICATION] {{ notification_prompt }}
 
             The sender's preferred name is {{ display_sender }}. Always
             refer to them by this name exactly — do not use any other

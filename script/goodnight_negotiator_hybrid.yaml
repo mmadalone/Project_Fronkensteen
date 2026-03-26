@@ -781,6 +781,7 @@ max_exceeded: silent
 sequence:
   - alias: "Set skip stage3 due to tv and 21 more variables"
     variables:
+      _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]"
       skip_stage3_due_to_tv: false
       user_name: !input user_name
       area: !input area_name
@@ -1095,6 +1096,7 @@ sequence:
             data:
               agent_id: "{{ agent_id }}"
               text: >
+                {{ _pfx }}
                 {% if (open_prompt_custom | trim) != '' %}{{ open_prompt_custom }}{% else %}{{ baked_open_prompt }}{% endif %}
                 context:
                 {{ context_block }}
@@ -1169,6 +1171,7 @@ sequence:
                     data:
                       agent_id: "{{ agent_id }}"
                       text: >
+                        {{ _pfx }}
                         ask a brief yes/no question: should i turn off {{ s1_name }}?
                         context:
                         {{ context_block }}
@@ -1245,7 +1248,7 @@ sequence:
                             continue_on_error: true
                             data:
                               agent_id: "{{ agent_id }}"
-                              text: "acknowledge briefly that it's already off. one short sentence."
+                              text: "{{ _pfx }} acknowledge briefly that it's already off. one short sentence."
                             response_variable: s1_state_no_resp
                           - alias: "Stage 1: announce TV already off via satellite"
                             action: assist_satellite.announce
@@ -1355,6 +1358,7 @@ sequence:
                         data:
                           agent_id: "{{ agent_id }}"
                           text: >
+                            {{ _pfx }}
                             {% if s1_fallback == 'do_it_anyway' %}
                               say briefly that you didn't understand but you're doing it anyway. one short sentence.
                             {% else %}
@@ -1396,7 +1400,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "say briefly that you're cancelling the bedtime routine. one short sentence."
+                          text: "{{ _pfx }} say briefly that you're cancelling the bedtime routine. one short sentence."
                         response_variable: cancel_resp
                       - alias: "Stage 1: announce abort via satellite"
                         action: assist_satellite.announce
@@ -1418,7 +1422,7 @@ sequence:
                     continue_on_error: true
                     data:
                       agent_id: "{{ agent_id }}"
-                      text: "acknowledge briefly that you'll leave the tv on. say you'll continue with lights only and skip bedtime audio. one short sentence."
+                      text: "{{ _pfx }} acknowledge briefly that you'll leave the tv on. say you'll continue with lights only and skip bedtime audio. one short sentence."
                     response_variable: s1_no_resp
                   - alias: "Stage 1: announce TV stays on via satellite"
                     action: assist_satellite.announce
@@ -1471,7 +1475,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say a very brief confirmation that you turned off {{ s1_name }}. one or two words max."
+                                  text: "{{ _pfx }} say a very brief confirmation that you turned off {{ s1_name }}. one or two words max."
                                 response_variable: confirm_resp
                               - alias: "Stage 1: announce completion via satellite"
                                 action: assist_satellite.announce
@@ -1524,6 +1528,7 @@ sequence:
                     data:
                       agent_id: "{{ agent_id }}"
                       text: >
+                        {{ _pfx }}
                         ask a brief yes/no question: should i turn off {{ s2_name }}?
                         context:
                         {{ context_block }}
@@ -1615,6 +1620,7 @@ sequence:
                         data:
                           agent_id: "{{ agent_id }}"
                           text: >
+                            {{ _pfx }}
                             {% if s2_fallback == 'do_it_anyway' %}
                               say briefly that you didn't understand but you're doing it anyway. one short sentence.
                             {% else %}
@@ -1656,7 +1662,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "say briefly that you're cancelling the bedtime routine. one short sentence."
+                          text: "{{ _pfx }} say briefly that you're cancelling the bedtime routine. one short sentence."
                         response_variable: cancel_resp2
                       - alias: "Stage 2: announce via satellite"
                         action: assist_satellite.announce
@@ -1700,7 +1706,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say a very brief confirmation that you turned off {{ s2_name }}. one or two words max."
+                                  text: "{{ _pfx }} say a very brief confirmation that you turned off {{ s2_name }}. one or two words max."
                                 response_variable: confirm_resp2
                               - alias: "Stage 2: announce via satellite"
                                 action: assist_satellite.announce
@@ -1758,7 +1764,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "say briefly that Music Assistant config is missing so you can't play audio. one sentence."
+                          text: "{{ _pfx }} say briefly that Music Assistant config is missing so you can't play audio. one sentence."
                         response_variable: ma_err_resp
                       - alias: "Stage 3: announce via satellite"
                         action: assist_satellite.announce
@@ -1828,6 +1834,7 @@ sequence:
                             data:
                               agent_id: "{{ agent_id }}"
                               text: >
+                                {{ _pfx }}
                                 ask briefly: something is already playing. should i replace it with bedtime audio?
                                 context:
                                 {{ context_block }}
@@ -1919,6 +1926,7 @@ sequence:
                                         data:
                                           agent_id: "{{ agent_id }}"
                                           text: >
+                                            {{ _pfx }}
                                             {% if s3_fallback == 'safe_default' %}
                                               say briefly that you didn't understand but you're continuing anyway. one short sentence.
                                             {% else %}
@@ -1960,7 +1968,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
                                 response_variable: cancel_resp3
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2075,6 +2083,7 @@ sequence:
                                         data:
                                           agent_id: "{{ agent_id }}"
                                           text: >
+                                            {{ _pfx }}
                                             {% if s3_fallback == 'safe_default' %}
                                               say briefly that you didn't understand but you're continuing anyway. one short sentence.
                                             {% else %}
@@ -2116,7 +2125,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
                                 response_variable: cancel_resp4
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2204,7 +2213,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
                                 response_variable: cancel_resp5
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2238,7 +2247,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "say briefly that you didn't hear anything so you're skipping bedtime audio. one short sentence."
+                                  text: "{{ _pfx }} say briefly that you didn't hear anything so you're skipping bedtime audio. one short sentence."
                                 response_variable: empty_resp
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2276,6 +2285,7 @@ sequence:
                             data:
                               agent_id: "{{ agent_id }}"
                               text: >
+                                {{ _pfx }}
                                 you control music assistant playback for bedtime.
 
                                 user request: "{{ user_query_raw | default('', true) | trim }}"
@@ -2324,7 +2334,7 @@ sequence:
                                         continue_on_error: true
                                         data:
                                           agent_id: "{{ agent_id }}"
-                                          text: "say one short sentence confirming you will start bedtime audio now."
+                                          text: "{{ _pfx }} say one short sentence confirming you will start bedtime audio now."
                                         response_variable: playing_resp
                                       - alias: "Stage 3: announce via satellite"
                                         action: assist_satellite.announce
@@ -2444,7 +2454,7 @@ sequence:
                                     continue_on_error: true
                                     data:
                                       agent_id: "{{ agent_id }}"
-                                      text: "say briefly that you couldn't find anything to play. one short sentence."
+                                      text: "{{ _pfx }} say briefly that you couldn't find anything to play. one short sentence."
                                     response_variable: s3_notfound
                                   - alias: "Stage 3: announce via satellite"
                                     action: assist_satellite.announce
@@ -2481,6 +2491,7 @@ sequence:
             data:
               agent_id: "{{ agent_id }}"
               text: >
+                {{ _pfx }}
                 {% if (close_prompt_custom | trim) != '' %}{{ close_prompt_custom }}{% else %}{{ baked_close_prompt }}{% endif %}
                 context:
                 {{ context_block }}

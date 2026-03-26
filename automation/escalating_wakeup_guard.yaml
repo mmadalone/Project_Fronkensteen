@@ -957,6 +957,7 @@ actions:
               data:
                 agent_id: "{{ dispatch_agent }}"
                 text: >-
+                  [ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.]
                   {{ llm_prompt_raw
                      | replace('{STAGE}', stage | string)
                      | replace('{TOTAL}', total | string)

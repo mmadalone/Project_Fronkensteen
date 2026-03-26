@@ -32,62 +32,12 @@ import time  # noqa: F401
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
 SILENCE_MEDIA_ID = "http://homeassistant.local:8123/local/silence.wav"
 
 # ── Auto-discovered maps (populated at startup) ─────────────────────────────
 
 _speaker_map = {}   # satellite_entity → media_player_entity (ESP speaker)
 _select_map = {}    # satellite_entity → select_entity (pipeline picker)
-
-
-# ── Device Discovery ────────────────────────────────────────────────────────
-
-@pyscript_executor  # noqa: F821
-def _discover_satellite_devices_sync(registry_file: str) -> tuple:
-    """Read entity registry, group by device_id, build satellite maps.
-
-    For each device with an assist_satellite entity, find:
-      - select.*_assistant  (pipeline picker, excludes _assistant_2)
-      - media_player.* with platform=esphome + device_class=speaker
-    """
-    import json as _json_inner
-    select_map = {}
-    speaker_map = {}
-    try:
-        with open(registry_file, "r") as fh:
-            data = _json_inner.loads(fh.read())
-        entities = data.get("data", {}).get("entities", [])
-
-        by_device = {}
-        for e in entities:
-            did = e.get("device_id")
-            if did and not e.get("disabled_by"):
-                by_device.setdefault(did, []).append(e)
-
-        for did, ents in by_device.items():
-            sat = None
-            sel = None
-            spk = None
-            for e in ents:
-                eid = e.get("entity_id", "")
-                if eid.startswith("assist_satellite."):
-                    sat = eid
-                elif (eid.startswith("select.")
-                      and eid.endswith("_assistant")
-                      and not eid.endswith("_assistant_2")):
-                    sel = eid
-                elif (eid.startswith("media_player.")
-                      and e.get("platform") == "esphome"
-                      and e.get("original_device_class") == "speaker"):
-                    spk = eid
-            if sat and sel:
-                select_map[sat] = sel
-            if sat and spk:
-                speaker_map[sat] = spk
-    except Exception:
-        pass
-    return select_map, speaker_map
 
 
 # ── Wait for Audio ──────────────────────────────────────────────────────────
@@ -634,11 +584,19 @@ async def voice_session_request(
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 async def _run_discovery():
-    """Discover satellite device mappings from entity registry."""
+    """Fetch satellite device mappings from dispatcher cache."""
     global _select_map, _speaker_map
-    sel, spk = _discover_satellite_devices_sync(ENTITY_REGISTRY_FILE)
-    _select_map = sel
-    _speaker_map = spk
+    try:
+        result = service.call(  # noqa: F821
+            "pyscript", "dispatcher_get_satellite_maps",
+            return_response=True,
+        )
+        _select_map = (result or {}).get("satellite_select_map", {})
+        _speaker_map = (result or {}).get("satellite_speaker_map", {})
+    except Exception as exc:
+        log.warning(  # noqa: F821
+            f"voice_session: dispatcher_get_satellite_maps failed: {exc}"
+        )
     log.warning(  # noqa: F821
         f"voice_session.py — discovered "
         f"{len(_speaker_map)} speakers, {len(_select_map)} satellites: "
@@ -648,6 +606,8 @@ async def _run_discovery():
 
 @time_trigger("startup")  # noqa: F821
 async def _voice_session_startup():
+    # Wait for dispatcher cache to populate (satellite maps live there now)
+    await asyncio.sleep(25)
     await _run_discovery()
 
 
@@ -656,7 +616,7 @@ async def voice_session_rediscover():
     """
     yaml
     name: Voice Session — Rediscover
-    description: Re-scan entity registry for satellite device mappings.
+    description: Re-fetch satellite device mappings from dispatcher cache.
     """
     await _run_discovery()
     return {"speaker_map": _speaker_map, "select_map": _select_map}

@@ -1866,6 +1866,7 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════════
 variables:
+  _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
   # -------------------------------------------------------------------------
   # Privacy
   # -------------------------------------------------------------------------
@@ -2701,7 +2702,7 @@ actions:
                         response_variable: auto_bedtime_response
                         data:
                           agent_id: "{{ dispatch_bedtime_agent }}"
-                          text: "{{ autonomous_execution_prompt_val }}"
+                          text: "{{ _pfx }}{{ autonomous_execution_prompt_val }}"
 
                       - alias: "TTS — autonomous bedtime announcement"
                         action: pyscript.tts_queue_speak
@@ -2806,7 +2807,7 @@ actions:
                         data:
                           agent_id: "{{ dispatch_bedtime_agent }}"
                           text: >-
-                            Use the memory tool to search for recent entries with tags:
+                            {{ _pfx }}Use the memory tool to search for recent entries with tags:
                             {{ memory_search_tags_val | default('bedtime sleep routine') }}.
                             Return ONLY the raw data — dates and times. No commentary.
                             If no entries found, say "no history".
@@ -2837,7 +2838,7 @@ actions:
                 data:
                   agent_id: "{{ dispatch_proactive_agent }}"
                   text: >-
-                    {{ effective_llm_prompt }}
+                    {{ _pfx }}{{ effective_llm_prompt }}
                     {% if stage_prompt_overlay | default('') | trim != effective_llm_prompt | trim %}
                     Tone: {{ stage_prompt_overlay }}
                     {% endif %}
@@ -3102,7 +3103,7 @@ actions:
                             response_variable: bed_settle_announce
                             data:
                               agent_id: "{{ dispatch_bedtime_agent }}"
-                              text: "{{ bed_confirm_prompt_val }}"
+                              text: "{{ _pfx }}{{ bed_confirm_prompt_val }}"
 
                           - alias: "Extract settling message"
                             variables:
@@ -3155,7 +3156,7 @@ actions:
                 data:
                   agent_id: "{{ dispatch_bedtime_agent }}"
                   text: >-
-                    {% if enable_negotiation_val | default(true) | bool %}
+                    {{ _pfx }}{% if enable_negotiation_val | default(true) | bool %}
                       {{ bedtime_prompt_val }}
                     {% else %}
                       {{ bedtime_prompt_val | regex_replace('[Aa]sk if the user wants more time\.?\s*', '') | regex_replace('[Oo]ffer more time\.?\s*', '') }}
@@ -3621,7 +3622,7 @@ actions:
             data:
               agent_id: "{{ dispatch_bedtime_agent }}"
               text: >-
-                {{ settling_prompt_active }}
+                {{ _pfx }}{{ settling_prompt_active }}
 
                 {% if is_kodi_target | bool %}
                 Kodi is currently playing: {{ kodi_now_playing }}.
@@ -3688,7 +3689,7 @@ actions:
     response_variable: goodnight_response
     data:
       agent_id: "{{ dispatch_bedtime_agent }}"
-      text: "{{ goodnight_prompt_val | default('Say goodnight. Be warm but brief — one or two sentences max.') }}"
+      text: "{{ _pfx }}{{ goodnight_prompt_val | default('Say goodnight. Be warm but brief — one or two sentences max.') }}"
 
   - alias: "Extract goodnight message with defensive fallback"
     variables:
@@ -4024,7 +4025,7 @@ actions:
             data:
               agent_id: "{{ dispatch_bedtime_agent }}"
               text: >-
-                Use the memory tool to store this fact:
+                {{ _pfx }}Use the memory tool to store this fact:
                 Key: {{ memory_store_key_val | default('bedtime.actual') }}
                 Value: {{ now().strftime('%Y-%m-%d %H:%M') }}
                 Scope: {{ memory_scope_val | default('user') }}

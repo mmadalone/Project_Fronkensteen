@@ -45,14 +45,15 @@ _cache_ts = 0
 _SANITIZE_PATTERNS = None
 
 # ── TTS completion tracking (event-driven playback wait) ─────────────────
-_tts_completion = {"count": 0, "last_speaker": ""}
+_tts_completion = {}  # {speaker_entity: count}
 
 
 @event_trigger("tts_queue_item_completed")  # noqa: F821
 async def _on_tts_completed(**kwargs):
-    """Track TTS queue completion events for inter-turn coordination."""
-    _tts_completion["count"] += 1
-    _tts_completion["last_speaker"] = kwargs.get("speaker", "")
+    """Track TTS queue completion events per speaker for inter-turn coordination."""
+    spk = kwargs.get("speaker", "")
+    if spk:
+        _tts_completion[spk] = _tts_completion.get(spk, 0) + 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -131,16 +132,26 @@ def _load_pipelines_sync():
             if base_name != name_lower:
                 name_to_tts_voice.setdefault(base_name, tts_voice)
 
+        # Load voice mood profile map for agent key resolution (F2)
+        profile_agent_map = {}
+        try:
+            with open("/config/pyscript/voice_mood_profile_map.json", "r") as f:
+                raw = _json.load(f)
+            profile_agent_map = {k.lower().strip(): v for k, v in raw.items()}
+        except Exception:
+            pass
+
         return {
             "personas": personas,
             "name_to_engine": name_to_engine,
             "name_to_tts": name_to_tts,
             "name_to_tts_voice": name_to_tts_voice,
+            "profile_agent_map": profile_agent_map,
         }
     except Exception as e:
         return {
             "personas": [], "name_to_engine": {}, "name_to_tts": {},
-            "name_to_tts_voice": {},
+            "name_to_tts_voice": {}, "profile_agent_map": {},
             "error": str(e),
         }
 
@@ -154,7 +165,7 @@ async def _ensure_cache():
     log.info("theatrical: loading pipeline cache")
     if not callable(_load_pipelines_sync):
         log.error("theatrical: _load_pipelines_sync not callable (executor registration failed)")
-        return {"personas": [], "name_to_engine": {}, "name_to_tts": {}, "name_to_tts_voice": {}, "error": "executor_not_registered"}
+        return {"personas": [], "name_to_engine": {}, "name_to_tts": {}, "name_to_tts_voice": {}, "profile_agent_map": {}, "error": "executor_not_registered"}
     _cache = await _load_pipelines_sync()
     _cache_ts = time.monotonic()
     if _cache.get("error"):
@@ -276,18 +287,6 @@ def _truncate_words(text, max_words):
     return truncated.rstrip(".,;:\u2014\u2013- ") + "..."
 
 
-def _parse_voice_map(voice_map_str):
-    """Parse 'persona=tts.entity;persona2=tts.entity2' into dict."""
-    result = {}
-    if not voice_map_str:
-        return result
-    for pair in voice_map_str.split(";"):
-        pair = pair.strip()
-        if "=" in pair:
-            name, voice = pair.split("=", 1)
-            result[name.strip().lower()] = voice.strip()
-    return result
-
 
 @pyscript_executor  # noqa: F821
 def _build_tts_media_uri(tts_engine, message, voice_id=""):
@@ -317,49 +316,57 @@ async def _wait_for_satellite_idle(satellite, timeout_secs=10):
     return False
 
 
-async def _wait_for_tts_playback(speaker, buffer=1):
-    """Two-phase speaker wait (reactive_banter Step 6c pattern).
+async def _wait_for_tts_playback(speaker, buffer=1, text_len=0):
+    """Two-phase speaker wait with text-length fallback.
 
     Phase 1: Wait for speaker to leave idle (start playing).
     Phase 2: Wait for speaker to return to idle (finish playing).
+    Fallback: If Phase 1 times out, use text-length estimate.
     """
     if not speaker:
         await asyncio.sleep(buffer)
         return
     # Phase 1: Wait for speaker to start playing (max 15s)
+    phase1_hit = False
     for _ in range(30):
         sp_state = state.get(speaker)
         if sp_state not in [
             "idle", "standby", "off", "unavailable", "unknown", None, "",
         ]:
+            phase1_hit = True
             break
         await asyncio.sleep(0.5)
-    # Phase 2: Wait for speaker to finish playing (max 90s)
-    for _ in range(180):
-        sp_state = state.get(speaker)
-        if sp_state in ["idle", "standby", "off", None, ""]:
-            break
-        await asyncio.sleep(0.5)
+    if phase1_hit:
+        # Phase 2: Wait for speaker to finish playing (max 90s)
+        for _ in range(180):
+            sp_state = state.get(speaker)
+            if sp_state in ["idle", "standby", "off", None, ""]:
+                break
+            await asyncio.sleep(0.5)
+    elif text_len > 0:
+        # Phase 1 timed out — use text-length estimate
+        gen_buf = _helper_float("input_number.ai_tts_generation_buffer", 2.0)
+        est_secs = max(2.0, text_len / 11.0) + gen_buf
+        log.info(
+            "theatrical: phase1 timeout, text-length wait %.1fs (%d chars)",
+            est_secs, text_len,
+        )
+        await asyncio.sleep(est_secs)
     # Playback buffer
     if buffer > 0:
         await asyncio.sleep(buffer)
 
 
 async def _wait_for_tts_completion(speaker, timeout=90, buffer=1, pre_count=None):
-    """Event-driven TTS wait using tts_queue_item_completed.
-
-    Captures completion counter before TTS dispatch, polls until
-    a matching completion event arrives (filtered by speaker).
-    """
+    """Event-driven TTS wait using per-speaker completion counter."""
     if not speaker:
         await asyncio.sleep(buffer)
         return
     if pre_count is None:
-        pre_count = _tts_completion["count"]
+        pre_count = _tts_completion.get(speaker, 0)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if (_tts_completion["count"] > pre_count
-                and _tts_completion["last_speaker"] == speaker):
+        if _tts_completion.get(speaker, 0) > pre_count:
             break
         await asyncio.sleep(0.5)
     else:
@@ -388,7 +395,6 @@ async def theatrical_mode_start(
     mic_gap_stop_phrases="stop,enough,shut up,that's enough,quiet,ok stop,stop it",
     mic_gap_redirect_phrases="actually,wait,hold on,let me,I want to",
     speaker_list_csv="",
-    tts_voice_map="",
     priority=2,
     tts_output_volume=0.0,
     tts_volume_restore_delay=5,
@@ -484,8 +490,6 @@ async def theatrical_mode_start(
         name_to_engine = cache.get("name_to_engine", {})
         name_to_tts = cache.get("name_to_tts", {})
         name_to_tts_voice = cache.get("name_to_tts_voice", {})
-        voice_map = _parse_voice_map(tts_voice_map)
-
         if participants:
             names = [n.strip() for n in participants.split(",") if n.strip()]
         else:
@@ -516,7 +520,7 @@ async def theatrical_mode_start(
         for n in names:
             nl = n.lower()
             engine = name_to_engine.get(nl, "")
-            tts_e = voice_map.get(nl, "") or name_to_tts.get(nl, "")
+            tts_e = name_to_tts.get(nl, "")
             tts_v = name_to_tts_voice.get(nl, "")
 
             if not engine:
@@ -766,7 +770,10 @@ async def theatrical_mode_start(
             # Prepend voice mood tags (bypass tts_queue bracket guard)
             tts_text = speech
             if state.get("input_boolean.ai_voice_mood_enabled") == "on":
-                _agent_key = cur["name"].replace(" ", "_")
+                _agent_key = cache.get("profile_agent_map", {}).get(
+                    (cur.get("tts_voice") or "").lower().strip(),
+                    cur["name"].replace(" ", "_"),  # fallback
+                )
                 _vtags = state.get(
                     f"input_text.ai_voice_mood_{_agent_key}_tags"
                 )
@@ -795,7 +802,7 @@ async def theatrical_mode_start(
                     continue
 
             # Snapshot completion counter before dispatch (race guard)
-            _pre_tts_count = _tts_completion["count"]
+            _pre_tts_count = _tts_completion.get(cur.get("speaker", ""), 0)
 
             # ── TTS delivery — H4 (capture response) ──────────────────
             if use_tts_queue and cur.get("speaker"):
@@ -839,6 +846,7 @@ async def theatrical_mode_start(
                 # Speaker state polling fallback (direct tts.speak path)
                 await _wait_for_tts_playback(
                     cur.get("speaker", ""), buffer=tts_playback_buffer,
+                    text_len=len(tts_text or ""),
                 )
 
             # Inter-turn pause

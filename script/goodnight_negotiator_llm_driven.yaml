@@ -488,6 +488,7 @@ sequence:
   # ─────────────────────────────────────────────────────────────
   - alias: "Variables — capture all inputs for template use"
     variables:
+      _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]"
       v_ducking_flag: !input ducking_flag
       v_duck_guard: !input duck_guard_enabled
       v_pipeline_name: !input persona_agent_id
@@ -660,6 +661,7 @@ sequence:
               agent_id: "{{ dispatch_agent }}"
               conversation_id: "{{ conv_id }}"
               text: >
+                {{ _pfx }}
                 {% set c = (pre_custom | default('') | trim) %}
                 {% if c != '' %}
                   {{ c }}
@@ -730,6 +732,7 @@ sequence:
                       agent_id: "{{ dispatch_agent }}"
                       conversation_id: "{{ conv_id }}"
                       text: >
+                        {{ _pfx }}
                         Ask {{ user_name_val }} ONE short yes/no question: should I turn off {{ tv_name }} now?
                         One sentence. No extras.
                     response_variable: tv_q
@@ -904,6 +907,7 @@ sequence:
                       agent_id: "{{ dispatch_agent }}"
                       conversation_id: "{{ conv_id }}"
                       text: >
+                        {{ _pfx }}
                         Ask {{ user_name_val }} ONE short yes/no question: should I turn off the selected devices in "{{ area_name }}"?
                         One sentence. No extras.
                     response_variable: dev_q
@@ -1311,6 +1315,7 @@ sequence:
                       agent_id: "{{ dispatch_agent }}"
                       conversation_id: "{{ conv_id }}"
                       text: >
+                        {{ _pfx }}
                         Ask {{ user_name_val }} ONE short yes/no question: should I start bedtime audio now?
                         One sentence. No extras.
                     response_variable: m_q
@@ -1611,6 +1616,7 @@ sequence:
               agent_id: "{{ dispatch_agent }}"
               conversation_id: "{{ conv_id }}"
               text: >
+                {{ _pfx }}
                 {% set c = (final_custom | default('') | trim) %}
                 {% if c != '' %}
                   {{ c }}

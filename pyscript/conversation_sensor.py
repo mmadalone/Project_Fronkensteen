@@ -221,8 +221,12 @@ def _on_conversation_finished(**kwargs):
         user_input.get("agent_id", "") if isinstance(user_input, dict) else ""
     )
 
-    # Guard: skip banter/internal/notification automation calls
-    if user_text.startswith(("[BANTER", "[INTERNAL", "[NOTIFICATION", "[MUSIC ANNOUNCE")):
+    # Guard: skip automation-driven conversation calls (prevent banter/L2 pollution)
+    if user_text.startswith((
+        "[BANTER", "[INTERNAL", "[NOTIFICATION", "[MUSIC ANNOUNCE",
+        "[BEDTIME", "[ALARM", "[GREETING", "[REMINDER",
+        "[HANDOFF", "[ESCALATION",
+    )):
         return
 
     # Extract response from last message

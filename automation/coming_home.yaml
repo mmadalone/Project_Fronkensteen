@@ -417,6 +417,7 @@ variables:
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  v_ai_greeting_prompt: !input ai_greeting_prompt
   person_name: >-
     {%- set custom = person_names_raw | string | trim -%}
     {%- if custom != '' -%}
@@ -750,7 +751,7 @@ actions:
             response_variable: ai_greeting
             data:
               agent_id: "{{ dispatch_agent }}"
-              text: !input ai_greeting_prompt
+              text: "[GREETING — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ v_ai_greeting_prompt }}"
             continue_on_error: true
 
   - alias: "Extract greeting text with fallback if LLM failed"

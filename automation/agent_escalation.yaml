@@ -26,7 +26,7 @@
 #   - input_text.ai_last_agent_name              (current agent)
 #   - pyscript/memory.py                         (L2 logging)
 #   - pyscript/agent_whisper.py                  (whisper context)
-#   - pyscript/agent_dispatcher.py               (engine resolution)
+#   - pyscript/agent_dispatcher.py               (engine + TTS voice resolution)
 #   - pyscript/tts_queue.py                      (TTS playback)
 #   - voice_handoff.yaml                         (persona switching)
 # =============================================================================
@@ -463,7 +463,7 @@ actions:
         - run_script
 
   # ── Lookup maps (second variables block — references first) ──
-  - alias: "Build permission, probability, voice, and prompt maps"
+  - alias: "Build permission, probability, and prompt maps"
     variables:
       # Permission map — action_type → toggle
       permission_map:
@@ -483,15 +483,7 @@ actions:
         send_notification: !input probability_send_notification
         prompt_barrage: !input probability_prompt_barrage
         run_script: !input probability_run_script
-      # Voice map (same as voice_handoff.yaml)
-      voice_map:
-        deadpool: "tts.deepee_text_to_speech"
-        deepee: "tts.deepee_text_to_speech"
-        quark: "tts.elevenlabs_quark_text_to_speech"
-        kramer: "tts.elevenlabs_kramer_text_to_speech"
-        rick: "tts.elevenlabs_text_to_speech"
-        doctor portuondo: "tts.dr_portuondo_text_to_speech"
-        doctor_portuondo: "tts.dr_portuondo_text_to_speech"
+      # Voice resolved dynamically via pyscript.dispatcher_resolve_engine
       # ── Prompt barrage pool ──
       # Each key is a persona name. Value is a list of prompts.
       # The blueprint picks randomly when no custom prompt is provided.
@@ -846,13 +838,22 @@ actions:
             {% else %}
               Hey! I am talking to you! Pay attention!
             {% endif %}
+      - alias: "Resolve current agent TTS voice via dispatcher"
+        action: pyscript.dispatcher_resolve_engine
+        response_variable: boost_resolve
+        continue_on_error: true
+        data:
+          pipeline_name: "{{ current_agent | replace('_', ' ') }}"
+      - alias: "Extract boost voice"
+        variables:
+          boost_voice: "{{ (boost_resolve | default({})).get('tts_engine', '') }}"
       - alias: "Speak boosted message at emergency priority and volume"
         action: pyscript.tts_queue_speak
         response_variable: _tts_boost
         continue_on_error: true
         data:
           text: "{{ boost_message }}"
-          voice: "{{ voice_map.get(current_agent | lower, '') }}"
+          voice: "{{ boost_voice }}"
           priority: 0
           target_mode: explicit
           target: "{{ speaker_entity }}"
@@ -914,10 +915,12 @@ actions:
         data:
           pipeline_name: "{{ barrage_target }}"
 
-      - alias: "Extract barrage engine from resolution"
+      - alias: "Extract barrage engine and voice from resolution"
         variables:
           barrage_engine: >-
             {{ (barrage_resolve | default({})).get('engine', '') }}
+          barrage_voice: >-
+            {{ (barrage_resolve | default({})).get('tts_engine', '') }}
 
       # 7f-3. Guard — bail if engine resolution failed
       - alias: "7f-3 · Guard — engine resolution check"
@@ -935,7 +938,7 @@ actions:
         continue_on_error: true
         data:
           agent_id: "{{ barrage_engine }}"
-          text: "{{ barrage_prompt }}"
+          text: "[ESCALATION — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ barrage_prompt }}"
 
       # 7f-5. Extract speech from response
       - alias: "7f-5 · Extract speech from barrage response"
@@ -964,7 +967,7 @@ actions:
         continue_on_error: true
         data:
           text: "{{ barrage_speech | trim }}"
-          voice: "{{ voice_map.get(barrage_target, '') }}"
+          voice: "{{ barrage_voice }}"
           priority: 1
           target_mode: explicit
           target: "{{ speaker_entity }}"

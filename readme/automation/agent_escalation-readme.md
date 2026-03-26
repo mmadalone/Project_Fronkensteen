@@ -143,7 +143,7 @@ ai_escalation_request event
 - **Event-driven:** Triggered by `ai_escalation_request` events, typically fired by the LLM `escalate_action` tool
 - **Satellite scoping:** Each instance handles one satellite; the condition block matches `input_text.ai_last_satellite` against the configured satellite entity
 - **Prompt pool:** Embedded in the variables block with per-agent prompt lists (quark, deadpool, rick, kramer, doctor portuondo). Edit the `prompt_pool` variable directly to customize
-- **Voice map:** Maps persona names to TTS engine entity IDs for correct voice output
+- **Voice resolution:** TTS voice resolved dynamically from Assist Pipeline config via `dispatcher_resolve_engine`
 - **Error handling:** All action execution steps use `continue_on_error: true`; guard checks bail early with `stop:` on validation failures
 
 ## Author

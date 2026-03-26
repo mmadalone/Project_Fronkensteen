@@ -15,15 +15,6 @@ ai_handoff_llm_lines_mode:
   icon: mdi:text-box-edit
   initial: static
 
-ai_handoff_restore_mode:
-  name: "AI Handoff - Restore Mode"
-  options:
-    - source
-    - preferred
-    - never
-  icon: mdi:timer-refresh-outline
-  initial: source
-
 ai_sleep_lights_sensor:
   name: "AI Sleep Lights - Presence Sensor"
   options:

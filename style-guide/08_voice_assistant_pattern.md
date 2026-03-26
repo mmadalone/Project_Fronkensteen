@@ -393,7 +393,7 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 | `email_promote.py` | Gmail IMAP priority filter, L3→L2 promotion | `pyscript.email_promote_process` |
 | `common_utilities.py` | SQLite cache layer, `conversation.process` timeout wrapper | (utility, no public service) |
 | `volume_sync.py` | Alexa ↔ MA volume synchronization | (trigger-based, no public service) |
-| `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging) — **tested** | `pyscript.theatrical_mode_start/stop` |
+| `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging, per-speaker TTS tracking, profile-map mood lookup, text-length fallback wait) — **tested** | `pyscript.theatrical_mode_start/stop` |
 
 **Supporting infrastructure:** 18 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config), `ai_theatrical.yaml` (theatrical mode config).
 

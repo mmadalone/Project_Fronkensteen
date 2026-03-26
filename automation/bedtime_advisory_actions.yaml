@@ -230,7 +230,7 @@ actions:
             continue_on_error: true
             data:
               agent_id: "{{ v_llm_agent }}"
-              text: "{{ v_llm_prompt | replace('{recommendation}', recommendation) }}"
+              text: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ v_llm_prompt | replace('{recommendation}', recommendation) }}"
             response_variable: llm_response
           - alias: "Speak LLM-generated bedtime advisory message"
             action: pyscript.tts_queue_speak

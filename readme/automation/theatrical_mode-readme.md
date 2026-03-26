@@ -166,7 +166,6 @@ Entry Points                          Orchestration
 | Input | Default | Description |
 |-------|---------|-------------|
 | `speaker_list` | `[]` | Media players in same order as agent pool (positional mapping) |
-| `tts_voice_map` | `"rick=tts.elevenlabs_...;..."` | Persona-to-TTS engine overrides |
 | `tts_priority` | `2` | TTS queue priority (0–4) |
 | `tts_output_volume` | `0.0` | Volume override during exchange (0 = use current) |
 | `tts_volume_restore_delay` | `5` | Seconds before restoring volume |

@@ -323,16 +323,6 @@ blueprint:
               domain: media_player
               multiple: true
 
-        tts_voice_map:
-          name: TTS Voice Map
-          description: >-
-            Persona-to-TTS engine override. Format:
-            persona=tts.entity;persona2=tts.entity2
-          default: "rick=tts.elevenlabs_text_to_speech;quark=tts.elevenlabs_quark_text_to_speech;deadpool=tts.deepee_text_to_speech;kramer=tts.elevenlabs_kramer_text_to_speech;doctor portuondo=tts.dr_portuondo_text_to_speech"
-          selector:
-            text:
-              multiline: true
-
         tts_priority:
           name: TTS Priority
           description: >-
@@ -609,7 +599,6 @@ variables:
   v_context_mode: !input context_mode
   v_context_window: !input context_window
   v_speaker_list: !input speaker_list
-  v_tts_voice_map: !input tts_voice_map
   v_tts_priority: !input tts_priority
   v_tts_output_vol: !input tts_output_volume
   v_tts_vol_restore_delay: !input tts_volume_restore_delay
@@ -700,7 +689,6 @@ action:
               mic_gap_stop_phrases: "{{ v_mic_gap_stop }}"
               mic_gap_redirect_phrases: "{{ v_mic_gap_redirect }}"
               speaker_list_csv: "{{ v_speaker_list | join(',') if v_speaker_list else '' }}"
-              tts_voice_map: "{{ v_tts_voice_map }}"
               priority: "{{ v_tts_priority | int(2) }}"
               tts_output_volume: "{{ v_tts_output_vol | float(0) }}"
               tts_volume_restore_delay: "{{ v_tts_vol_restore_delay | int(5) }}"
@@ -759,11 +747,17 @@ action:
                     - condition: template
                       value_template: "{{ native_speech | length > 0 }}"
                   then:
-                    - action: tts.speak
+                    - action: pyscript.tts_queue_speak
                       data:
-                        entity_id: "{{ v_tts_voice_map.split(';')[0].split('=')[1] | default('tts.google_en_com') }}"
-                        media_player_entity_id: "{{ satellite_speaker_entity }}"
-                        message: "{{ native_speech[:200] }}"
+                        text: "{{ native_speech[:200] }}"
+                        voice: "tts.google_en_com"
+                        target_mode: explicit
+                        target: "{{ satellite_speaker_entity }}"
+                        announce: true
+                        priority: 2
+                        metadata:
+                          source: theatrical_native
+                      response_variable: _tts_native_result
                       continue_on_error: true
                     - wait_template: >-
                         {{ states(satellite_speaker_entity)

@@ -62,30 +62,18 @@ fields:
 mode: parallel
 max: 5
 
-variables:
-  elevenlabs_entity: !input elevenlabs_entity
-
 sequence:
-  - alias: "Route TTS: ElevenLabs Custom vs standard"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ tts_engine == elevenlabs_entity }}"
-        sequence:
-          - alias: "TTS via ElevenLabs Custom (with voice_profile)"
-            action: tts.speak
-            target:
-              entity_id: "{{ tts_engine }}"
-            data:
-              media_player_entity_id: "{{ tts_output_player }}"
-              message: "{{ message }}"
-              options:
-                voice_profile: "{{ tts_voice_profile }}"
-    default:
-      - alias: "TTS via standard engine"
-        action: tts.speak
-        target:
-          entity_id: "{{ tts_engine }}"
-        data:
-          media_player_entity_id: "{{ tts_output_player }}"
-          message: "{{ message }}"
+  - alias: "TTS via queue (announce mode)"
+    action: pyscript.tts_queue_speak
+    data:
+      text: "{{ message }}"
+      voice: "{{ tts_engine }}"
+      voice_id: "{{ tts_voice_profile | default('', true) }}"
+      target_mode: explicit
+      target: "{{ tts_output_player }}"
+      announce: true
+      priority: 1
+      metadata:
+        source: wake_guard
+    response_variable: _tts_result
+    continue_on_error: true

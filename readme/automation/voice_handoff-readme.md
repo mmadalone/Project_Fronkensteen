@@ -64,7 +64,7 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 
 - Dual trigger: LLM tool flag or dispatcher event
 - Persona alias resolution (e.g., "el doctor" maps to "doctor portuondo")
-- Per-persona TTS voice mapping via configurable semicolon-delimited map
+- Per-persona TTS voice resolved dynamically from Assist Pipeline config via dispatcher
 - Four LLM text generation modes: static, ha_text_ai, pipeline_agent, conversation_agent
 - Expertise-based proactive handoff (I-45) with separate prompts
 - Continuous conversation loop with configurable timeout
@@ -107,7 +107,6 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 | Input | Default | Description |
 |---|---|---|
 | `tts_speaker` | _(empty)_ | Media player for TTS output |
-| `tts_voice_map` | _(see blueprint)_ | Persona-to-TTS entity mapping (format: `persona=tts.entity;...`) |
 | `persona_aliases` | `deadpool=deepee,...` | Map canonical names to spoken nicknames |
 
 </details>
