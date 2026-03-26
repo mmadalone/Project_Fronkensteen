@@ -1,0 +1,164 @@
+blueprint:
+  name: "Away Patterns — Entropy Correlation Report (G13)"
+  description: >
+    Weekly entropy-MAE correlation analysis for G13 Phase 1.5.
+    Runs the pyscript.entropy_correlation_report service on a
+    configurable schedule, checks the kill switch, and optionally
+    generates a cumulative report when 4+ weeks of data exist.
+  domain: automation
+  author: madalone
+  input:
+    schedule:
+      name: "① Schedule"
+      description: "When to run the weekly report."
+      icon: mdi:calendar-clock
+      collapsed: false
+      input:
+        report_time:
+          name: Report time
+          description: >
+            Time of day to run (recommend after daily rebuild at 04:15).
+          default: "04:30:00"
+          selector:
+            time: {}
+        report_day:
+          name: Report day
+          description: >
+            Day of the week to run (0 = Monday, 6 = Sunday).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 6
+              step: 1
+    analysis:
+      name: "② Analysis"
+      description: "Lookback windows and cumulative reporting."
+      icon: mdi:chart-scatter-plot
+      collapsed: false
+      input:
+        weekly_lookback_days:
+          name: Weekly lookback (days)
+          description: >
+            How many days of arrival data to include in the weekly report.
+          default: 7
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+        cumulative_enabled:
+          name: Include cumulative report
+          description: >
+            When ON and 4+ weeks of data exist, also generates a
+            cumulative all-time report alongside the weekly one.
+          default: true
+          selector:
+            boolean: {}
+        cumulative_lookback_days:
+          name: Cumulative lookback (days)
+          description: >
+            How many days of arrival data to include in the cumulative report.
+          default: 120
+          selector:
+            number:
+              min: 30
+              max: 365
+              step: 10
+        cumulative_min_entries:
+          name: Cumulative min entries
+          description: >
+            Minimum number of arrival entries required before generating
+            the cumulative report (~28 = 4 weeks of daily arrivals).
+          default: 28
+          selector:
+            number:
+              min: 10
+              max: 100
+              step: 1
+    infrastructure:
+      name: "③ Infrastructure"
+      description: "Kill switch."
+      icon: mdi:cog
+      collapsed: true
+      input:
+        kill_switch:
+          name: Correlation kill switch
+          default: input_boolean.ai_entropy_correlation_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_kill_switch: !input kill_switch
+  v_weekly_lookback: !input weekly_lookback_days
+  v_cumulative_enabled: !input cumulative_enabled
+  v_cumulative_lookback: !input cumulative_lookback_days
+  v_cumulative_min: !input cumulative_min_entries
+  v_report_day: !input report_day
+
+trigger:
+  - trigger: time
+    at: !input report_time
+
+condition:
+  - condition: template
+    value_template: "{{ is_state(v_kill_switch, 'on') }}"
+  - condition: template
+    value_template: "{{ now().weekday() == (v_report_day | int(0)) }}"
+
+action:
+  # ── Weekly report ──
+  - alias: "Run weekly entropy correlation report"
+    action: pyscript.entropy_correlation_report
+    data:
+      lookback_days: "{{ v_weekly_lookback | int(7) }}"
+    response_variable: weekly_result
+
+  # ── Cumulative report (if enabled + enough data) ──
+  - alias: "Run cumulative report (if conditions met)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ v_cumulative_enabled | bool(true)
+                 and (weekly_result.get('status', '') == 'ok')
+                 and (weekly_result.get('total_entries', 0) | int >= 1) }}
+        sequence:
+          - action: pyscript.entropy_correlation_report
+            data:
+              lookback_days: "{{ v_cumulative_lookback | int(120) }}"
+            response_variable: cum_result
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ cum_result.get('total_entries', 0) | int >= (v_cumulative_min | int(28)) }}
+                sequence:
+                  - action: persistent_notification.create
+                    data:
+                      title: "G13 Entropy Correlation — Cumulative"
+                      notification_id: g13_entropy_cumulative
+                      message: >-
+                        ## Cumulative Report ({{ v_cumulative_lookback }} days)
+
+                        **Entries:** {{ cum_result.get('total_entries', 0) }}
+                        · **Pearson r:** {{ cum_result.get('pearson_r', 'N/A') }}
+                        · **Direction:** {{ cum_result.get('direction', 'unknown') }}
+
+                        {{ cum_result.get('hypothesis', '') }}
+
+                        **Recommendation:** {{ cum_result.get('phase2_recommendation', '') }}
+
+  - alias: "Log report completion"
+    action: logbook.log
+    data:
+      name: "Entropy Correlator"
+      entity_id: "{{ v_kill_switch }}"
+      message: >-
+        Weekly G13 report — status: {{ weekly_result.get('status', 'unknown') }},
+        direction: {{ weekly_result.get('direction', 'N/A') }},
+        entries: {{ weekly_result.get('total_entries', 0) }}

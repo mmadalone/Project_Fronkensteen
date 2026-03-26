@@ -11,8 +11,12 @@
 #   input_number.ai_away_prediction_update_minutes — periodic update interval (G8)
 #   input_number.ai_away_ordinal_min_samples — ordinal filtering threshold (I-40b)
 #   input_number.ai_away_min_entropy_samples — min samples for entropy calc (G13)
+#   input_number.ai_entropy_tier_low — G13 Phase 1.5 low entropy threshold
+#   input_number.ai_entropy_tier_high — G13 Phase 1.5 high entropy threshold
+#   input_boolean.ai_entropy_correlation_enabled — G13 Phase 1.5 kill switch
 #   counter.ai_away_trip_count_{slug} — per-person daily trip counter (I-40b)
 #   sensor.ai_away_prediction — pyscript sensor with full attributes (I-54)
+#   sensor.ai_entropy_correlation — G13 Phase 1.5 correlation analysis result
 #   input_text.ai_away_prediction_accuracy — rolling MAE (G12)
 #   input_datetime.ai_away_departed_{slug} — per-person departure timestamp (Task 22)
 #   sensor.ai_away_prediction — human-readable with range or "not_away"
@@ -23,6 +27,7 @@
 #   pyscript.away_extract_cycles — extract from recorder, build tables
 #   pyscript.away_predict_return — predict return time for absent person(s)
 #   pyscript.away_rebuild_patterns — full rebuild (delete + extract + store)
+#   pyscript.entropy_correlation_report — G13 Phase 1.5 on-demand analysis
 #
 # State trigger (pyscript):
 #   device_tracker entities → log departure/arrival, update predictions
@@ -34,6 +39,7 @@
 #
 # Dependencies:
 #   pyscript/away_patterns.py
+#   pyscript/entropy_correlator.py (G13 Phase 1.5)
 #   pyscript/memory.py (L2 memory)
 #   packages/ai_identity.yaml (sensor.occupancy_mode)
 #   packages/ai_test_harness.yaml (test mode toggle)
@@ -42,6 +48,7 @@
 # I-40a hardening: G1–G12, G14 (2026-03-12)
 # I-40b multi-trip: ordinal tracking, enriched samples, ordinal gate (2026-03-18)
 # G13 Phase 1: entropy-based predictability — observe only (2026-03-26)
+# G13 Phase 1.5: entropy-MAE correlation logger + weekly reporter (2026-03-26)
 # Deployed: 2026-03-12
 # =============================================================================
 

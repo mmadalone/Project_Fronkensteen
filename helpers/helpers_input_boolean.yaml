@@ -168,6 +168,11 @@ ai_away_patterns_enabled:
   name: "AI Away Patterns - Enabled"
   icon: mdi:map-marker-question
 
+ai_entropy_correlation_enabled:
+  name: "AI Entropy Correlation - Enabled"
+  icon: mdi:chart-scatter-plot
+  initial: true
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_calendar_promotion — Calendar Promotion
 # ═══════════════════════════════════════════════════════════════════

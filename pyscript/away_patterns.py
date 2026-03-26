@@ -1164,8 +1164,13 @@ async def _check_joint_departure(person: str) -> str | None:
 
 # ── I-40a: Accuracy Tracking (G12) ──────────────────────────────────────────
 
-async def _log_prediction_accuracy(person: str, actual_return_hour: float):
-    """Log prediction accuracy for rolling MAE calculation."""
+async def _log_prediction_accuracy(person: str, actual_return_hour: float,
+                                    bucket: str = "", day_type: str = ""):
+    """Log prediction accuracy for rolling MAE calculation.
+
+    Also writes per-arrival entropy+MAE entry to L2 for G13 Phase 1.5
+    correlation analysis (when entropy was computed and kill switch is ON).
+    """
     global _prediction_log
     try:
         # I-54: Read from pyscript sensor attributes instead of input_text
@@ -1198,6 +1203,37 @@ async def _log_prediction_accuracy(person: str, actual_return_hour: float):
                         "input_text.ai_away_prediction_accuracy",
                         f"MAE: {mae} min (last {len(errors)} trips)",
                     )
+
+                # ── G13 Phase 1.5: Per-arrival entropy+MAE to L2 ──
+                try:
+                    be = float(pred.get("bucket_entropy", 0.0))
+                    corr_on = str(
+                        state.get("input_boolean.ai_entropy_correlation_enabled")  # noqa: F821
+                        or "off"
+                    ).lower()
+                    if be > 0.0 and corr_on == "on":
+                        ts_now = datetime.utcnow().isoformat(timespec="seconds")
+                        g13_val = json.dumps({
+                            "bucket_entropy": be,
+                            "predictability": pred.get("predictability", 0.0),
+                            "error_min": round(error_min, 1),
+                            "confidence": pred.get("confidence", 0),
+                            "method": pred.get("method", "unknown"),
+                            "sample_count": pred.get("sample_count", 0),
+                            "bucket": bucket,
+                            "day_type": day_type,
+                            "trip_ordinal": pred.get("trip_ordinal", 1),
+                            "timestamp": ts_now,
+                        })
+                        await _l2_set(
+                            key=f"g13_arrival:{person}:{ts_now}",
+                            value=g13_val,
+                            tags=f"g13 entropy arrival {person}",
+                            expiration_days=120,
+                        )
+                except Exception as g13_exc:
+                    log.warning(f"away: G13 L2 write failed: {g13_exc}")  # noqa: F821
+
                 break
     except Exception:
         pass
@@ -1913,8 +1949,8 @@ async def _on_tracker_change(**kwargs):
                         f"(bucket={bucket}, day_type={day_type}, trip #{trip_ordinal})"
                     )
 
-                # G12: Log prediction accuracy
-                await _log_prediction_accuracy(person, return_hour)
+                # G12: Log prediction accuracy (+ G13 Phase 1.5 L2 entry)
+                await _log_prediction_accuracy(person, return_hour, bucket, day_type)
 
         if not test_mode:
             # Clear prediction (I-54: pyscript sensor + L2)
