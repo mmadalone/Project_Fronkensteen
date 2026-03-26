@@ -173,17 +173,7 @@ blueprint:
                 - presence
                 - explicit
 
-        tts_priority:
-          name: TTS Priority
-          description: >-
-            Queue priority for banter (0=emergency, 4=low). Default 2 keeps
-            banter above ambient but below alerts.
-          default: 2
-          selector:
-            number:
-              min: 0
-              max: 4
-              step: 1
+
 
         tts_output_volume:
           name: TTS Output Volume (optional)
@@ -403,6 +393,35 @@ blueprint:
           selector:
             boolean:
 
+    # ── ⑩ Notification Threshold ─────────────────────────────────────
+    notification_threshold:
+      name: "⑩ Notification Threshold"
+      icon: mdi:bell-cancel
+      description: "Gate TTS against the active user's notification threshold preference."
+      collapsed: true
+      input:
+        enable_notify_threshold:
+          name: "Enable notification threshold"
+          description: >
+            Gate TTS announcements against the active user's notification threshold
+            preference (input_text.ai_context_user_notify_threshold_{user}).
+            Values: "everything" (default), "important" (priority 0-2 only),
+            "urgent" (priority 0-1 only), "critical" (priority 0 only), "off" (no TTS).
+          default: false
+          selector:
+            boolean:
+        tts_priority:
+          name: "TTS priority level"
+          description: >-
+            Queue priority for banter (0=emergency, 4=low). Default 2 keeps
+            banter above ambient but below alerts.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+
 mode: single
 max_exceeded: silent
 
@@ -450,6 +469,7 @@ variables:
   escalation_probability: !input escalation_probability
   escalation_budget_floor: !input escalation_budget_floor
   enable_user_prefs: !input enable_user_preferences
+  enable_threshold: !input enable_notify_threshold
   # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
   # ── User preference context for banter shaping ──
   _banter_user: >-
@@ -528,6 +548,34 @@ conditions:
         true
       {% else %}
         {{ states(satellite_entity) not in ['listening', 'responding'] }}
+      {% endif %}
+
+  # ── Gate 8: Notification threshold ──
+  - alias: "Gate — notification threshold"
+    condition: template
+    value_template: >-
+      {% if not (enable_threshold | bool(false)) %}
+        true
+      {% else %}
+        {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+        {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
+        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
+        {% set prio = tts_priority_val | int(2) %}
+        {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}
+          true
+        {% elif threshold in ['important', 'priority only'] %}
+          {{ prio <= 2 }}
+        {% elif threshold in ['urgent only', 'urgent'] %}
+          {{ prio <= 1 }}
+        {% elif threshold in ['critical only', 'critical'] %}
+          {{ prio == 0 }}
+        {% elif threshold == 'off' %}
+          false
+        {% else %}
+          true
+        {% endif %}
       {% endif %}
 
 action:

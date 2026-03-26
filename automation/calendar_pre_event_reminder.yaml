@@ -119,10 +119,42 @@ blueprint:
               domain: input_boolean
 
     # ===========================================================================
-    # ④ PRIVACY
+    # ④ NOTIFICATION THRESHOLD
+    # ===========================================================================
+    notification_threshold:
+      name: "④ Notification threshold"
+      icon: mdi:bell-cancel
+      description: "Gate TTS against the active user's notification threshold preference."
+      collapsed: true
+      input:
+        enable_notify_threshold:
+          name: "Enable notification threshold"
+          description: >
+            Gate TTS announcements against the active user's notification threshold
+            preference (input_text.ai_context_user_notify_threshold_{user}).
+            Values: "everything" (default), "important" (priority 0-2 only),
+            "urgent" (priority 0-1 only), "critical" (priority 0 only), "off" (no TTS).
+          default: false
+          selector:
+            boolean:
+
+        tts_priority:
+          name: "TTS priority level"
+          description: >
+            TTS queue priority for announcements from this instance.
+            0=emergency, 1=alert, 2=normal (default), 3=low, 4=ambient.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+
+    # ===========================================================================
+    # ⑤ PRIVACY
     # ===========================================================================
     privacy:
-      name: "④ Privacy"
+      name: "⑤ Privacy"
       icon: mdi:shield-account
       collapsed: true
       input:
@@ -178,6 +210,8 @@ variables:
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  enable_threshold: !input enable_notify_threshold
+  _tts_priority: !input tts_priority
 
 mode: single
 max_exceeded: silent
@@ -221,6 +255,33 @@ conditions:
         {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
 
+  - alias: "Gate — notification threshold"
+    condition: template
+    value_template: >-
+      {% if not (enable_threshold | bool(false)) %}
+        true
+      {% else %}
+        {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+        {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
+        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
+        {% set prio = _tts_priority | int(2) %}
+        {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}
+          true
+        {% elif threshold in ['important', 'priority only'] %}
+          {{ prio <= 2 }}
+        {% elif threshold in ['urgent only', 'urgent'] %}
+          {{ prio <= 1 }}
+        {% elif threshold in ['critical only', 'critical'] %}
+          {{ prio == 0 }}
+        {% elif threshold == 'off' %}
+          false
+        {% else %}
+          true
+        {% endif %}
+      {% endif %}
+
 actions:
   - alias: "Get TTS engine from dispatcher (optional)"
     if:
@@ -260,7 +321,7 @@ actions:
             Hey, heads up — you've got {{ _event_name }} coming up soon.
           voice: "{{ _tts_engine }}"
           voice_id: "{{ _tts_voice_id }}"
-          priority: 2
+          priority: "{{ _tts_priority | int(2) }}"
           target_mode: "presence"
     else:
       - alias: "Announce event reminder via direct TTS"
@@ -271,4 +332,4 @@ actions:
             Hey, heads up — you've got {{ _event_name }} coming up soon.
           voice: "{{ _tts_engine }}"
           voice_id: "{{ _tts_voice_id }}"
-          priority: 2
+          priority: "{{ _tts_priority | int(2) }}"

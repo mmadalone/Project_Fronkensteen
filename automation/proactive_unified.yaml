@@ -747,10 +747,42 @@ blueprint:
             boolean:
 
     # ===========================================================================
-    # ⑪ INFRASTRUCTURE
+    # ⑪ NOTIFICATION THRESHOLD
+    # ===========================================================================
+    notification_threshold:
+      name: "⑪ Notification threshold"
+      icon: mdi:bell-cancel
+      collapsed: true
+      description: "Gate TTS against the active user's notification threshold preference."
+      input:
+        enable_notify_threshold:
+          name: "Enable notification threshold"
+          description: >
+            Gate TTS announcements against the active user's notification threshold
+            preference (input_text.ai_context_user_notify_threshold_{user}).
+            Values: "everything" (default), "important" (priority 0-2 only),
+            "urgent" (priority 0-1 only), "critical" (priority 0 only), "off" (no TTS).
+          default: false
+          selector:
+            boolean:
+        tts_priority_input:
+          name: "TTS priority level"
+          description: >
+            TTS queue priority for proactive announcements from this instance.
+            0=emergency, 1=alert, 2=normal, 3=low (default), 4=ambient.
+            Overrides the collision-mode-derived priority when set.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+
+    # ===========================================================================
+    # ⑫ INFRASTRUCTURE
     # ===========================================================================
     infrastructure:
-      name: "⑩ Infrastructure"
+      name: "⑫ Infrastructure"
       icon: mdi:cog
       collapsed: true
       description: "Shared entity references for the dispatcher system."
@@ -825,6 +857,7 @@ variables:
   v_compose_if_missing: !input compose_stinger_if_missing
   v_stinger_fallback_url: !input stinger_fallback_media_url
   enable_user_prefs: !input enable_user_preferences
+  enable_threshold: !input enable_notify_threshold
 
   # ── User preference context (Preference Consumption B3) ──
   _resolved_user: >-
@@ -873,14 +906,7 @@ variables:
     {% else %}
     {% endif %}
 
-  tts_priority: >-
-    {% if tts_collision_mode == 'barge_in' %}
-      1
-    {% elif tts_collision_mode == 'queue' %}
-      2
-    {% else %}
-      4
-    {% endif %}
+  tts_priority: !input tts_priority_input
 
   # ── template settings ───────────────────────────────────────────────────
   refresh_after_run: !input refresh_after_run
@@ -1207,6 +1233,33 @@ conditions:
       {%- else -%}
         {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
       {%- endif -%}
+
+  - alias: "Gate — notification threshold"
+    condition: template
+    value_template: >-
+      {% if not (enable_threshold | bool(false)) %}
+        true
+      {% else %}
+        {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+        {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
+        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
+        {% set prio = tts_priority | int(3) %}
+        {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}
+          true
+        {% elif threshold in ['important', 'priority only'] %}
+          {{ prio <= 2 }}
+        {% elif threshold in ['urgent only', 'urgent'] %}
+          {{ prio <= 1 }}
+        {% elif threshold in ['critical only', 'critical'] %}
+          {{ prio == 0 }}
+        {% elif threshold == 'off' %}
+          false
+        {% else %}
+          true
+        {% endif %}
+      {% endif %}
 
 # =============================================================================
 # ACTIONS
