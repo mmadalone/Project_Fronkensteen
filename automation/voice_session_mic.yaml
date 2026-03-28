@@ -78,7 +78,7 @@ blueprint:
       input:
         ducking_flag:
           name: "Ducking flag entity"
-          default: input_boolean.ducking_flag
+          default: input_boolean.ai_ducking_flag
           selector:
             entity:
               domain: input_boolean
