@@ -106,7 +106,10 @@ async def _l2_set(key, value, tags):
 
 def _read_light_state(entity_id):
     """Read current light state. Returns dict or None if off/unavailable."""
-    st = state.get(entity_id)
+    try:
+        st = state.get(entity_id)
+    except NameError:
+        return None
     if st != "on":
         return None
     attrs = state.getattr(entity_id)
@@ -220,7 +223,11 @@ async def _periodic_record():
         # Check zone occupancy via FP2
         zone_occupied = False
         for sensor, z_name in _fp2_zones.items():
-            if z_name == zone and state.get(sensor) == "on":
+            try:
+                sensor_state = state.get(sensor)
+            except NameError:
+                continue
+            if z_name == zone and sensor_state == "on":
                 zone_occupied = True
                 break
         if not zone_occupied:
@@ -326,7 +333,11 @@ async def scene_learner_apply(zone=None, transition=3):
         return
 
     for eid, prefs in lights.items():
-        if state.get(eid) != "on":
+        try:
+            eid_state = state.get(eid)
+        except NameError:
+            continue
+        if eid_state != "on":
             continue
         svc_data = {"entity_id": eid, "transition": int(transition)}
         if "brightness" in prefs and prefs["brightness"]:

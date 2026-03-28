@@ -56,7 +56,7 @@ imap_sensor: sensor.gmail_messages
 # Used by: scene_learner
 scene_learner_lights:
   workshop:
-    - light.workshop_desk_1
+    - light.workshop_light
     - light.workshop_desk_2
     - light.workshop_main
   living_room:

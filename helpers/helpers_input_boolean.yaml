@@ -298,22 +298,6 @@ ai_focus_meal_reminder_enabled:
   name: "Focus Guard - Meal Reminder"
   icon: mdi:food-apple-outline
 
-ai_focus_calendar_warn_enabled:
-  name: "Focus Guard - Calendar Warning"
-  icon: mdi:calendar-alert
-
-ai_focus_social_nudge_enabled:
-  name: "Focus Guard - Social Nudge"
-  icon: mdi:account-heart-outline
-
-ai_focus_break_suggest_enabled:
-  name: "Focus Guard - Break Suggestion"
-  icon: mdi:coffee-outline
-
-ai_focus_bedtime_approach_enabled:
-  name: "Focus Guard - Bedtime Approach"
-  icon: mdi:bed-clock
-
 # When ON, meal reminder TTS is followed by opening the satellite mic
 # so the user can respond ("I ate at 14:00" or "I just ate").
 ai_focus_meal_ask_eaten:
