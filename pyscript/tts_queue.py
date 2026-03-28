@@ -339,6 +339,8 @@ _queue: list[dict] = []
 _deferred_queue: list[dict] = []  # I-30: items deferred during phone calls
 _queue_lock = threading.Lock()
 _processing = False
+_processing_started_at: float = 0.0
+_last_item_completed_at: float = 0.0
 _current_item: dict | None = None
 _preempted = False
 _pre_queue_playing: dict = {}  # entity_id → True if was playing before queue started
@@ -1179,6 +1181,8 @@ async def _process_queue() -> None:
 
                 # ── Fire completion event for downstream coordination ──
                 # Re-read preemption flag (may have changed during wait)
+                global _last_item_completed_at
+                _last_item_completed_at = time.monotonic()
                 if not item.get("test_mode"):
                     with _queue_lock:
                         _final_preempted = _preempted
@@ -1450,11 +1454,12 @@ async def _play_item(item: dict) -> None:
 
 @event_trigger("tts_queue_item_added")  # noqa: F821
 async def _on_queue_item_added(**kwargs):
-    global _processing
+    global _processing, _processing_started_at
     with _queue_lock:
         if _processing:
             return
         _processing = True
+        _processing_started_at = time.monotonic()
     try:
         await _process_queue()
     except Exception as exc:
@@ -2300,3 +2305,34 @@ async def tts_queue_daily_housekeeping():
                      entity_id="input_number.ai_tts_calls_today", value=0)
     except Exception as ex:
         log.error(f"tts_queue housekeeping counter reset failed: {ex}")  # noqa: F821
+
+
+# ── Stuck Queue Watchdog ─────────────────────────────────────────────────────
+
+@time_trigger("cron(* * * * *)")  # noqa: F821
+async def _tts_queue_stuck_watchdog():
+    """Detect and recover from stuck queue processor (every 60 s)."""
+    global _processing, _current_item
+    if not _processing:
+        return
+    stuck_minutes = _helper_float("input_number.ai_tts_stuck_timeout_minutes", 2.0)
+    stuck_timeout = stuck_minutes * 60  # convert to seconds
+    now = time.monotonic()
+    elapsed = now - _processing_started_at if _processing_started_at > 0 else 0
+    since_last = now - _last_item_completed_at if _last_item_completed_at > 0 else elapsed
+
+    if elapsed > stuck_timeout and since_last > stuck_timeout:
+        log.error(  # noqa: F821
+            "tts_queue: STUCK detected — processing=%s for %.0fs, "
+            "last item completed %.0fs ago. Force-clearing.",
+            _processing, elapsed, since_last,
+        )
+        with _queue_lock:
+            _processing = False
+            _current_item = None
+        _set_result("idle", op="stuck_recovery", stuck_duration_s=round(elapsed))
+        event.fire(  # noqa: F821
+            "ai_tts_queue_stuck",
+            duration_s=round(elapsed),
+            since_last_item_s=round(since_last),
+        )

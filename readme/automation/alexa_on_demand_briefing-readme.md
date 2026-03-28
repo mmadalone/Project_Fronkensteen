@@ -1,3 +1,5 @@
+![Alexa On-Demand Briefing](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_on_demand_briefing-header.jpeg)
+
 # Alexa On-Demand Briefing
 
 Thin orchestration layer triggered by Alexa-exposed `input_boolean` entities. Two voice commands ("Alexa, turn on Briefing" / "Alexa, turn on Mail Status") toggle the trigger booleans; the blueprint auto-resets them, determines content mode, manages follow-me refcount bypass, and hands off to `pyscript.proactive_briefing_now` for TTS delivery. Deliberately minimal -- pyscript handles TTS routing, agent selection, ducking, and volume internally.

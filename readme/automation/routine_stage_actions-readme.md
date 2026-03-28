@@ -1,3 +1,5 @@
+![Routine Stage Actions (I-40)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/routine_stage_actions-header.jpeg)
+
 # Routine Stage Actions (I-40)
 
 Triggers actions at specific points within a recognized routine. Consumes `input_text.ai_routine_stage` from `routine_fingerprint.py`. Two trigger modes: fire at a specific step number, or fire when the routine reaches a progress threshold.

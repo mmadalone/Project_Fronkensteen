@@ -515,7 +515,7 @@ actions:
             target:
               entity_id: "{{ all_targets }}"
             data:
-              is_volume_muted: "{{ source_muted }}"
+              is_volume_muted: "{{ source_muted | default(false) | bool(false) }}"
 
     # === VOLUME SYNC (default) ===
     default:
@@ -542,7 +542,7 @@ actions:
         target:
           entity_id: "{{ all_targets }}"
         data:
-          is_volume_muted: "{{ fresh_source_vol == 0 }}"
+          is_volume_muted: "{{ (fresh_source_vol | default(0) | float(0)) == 0 }}"
 
       # Sync volume level (bulk — one call, all targets)
       - alias: "Sync volume level to target device(s)"

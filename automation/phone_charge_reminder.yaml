@@ -13,6 +13,8 @@ blueprint:
     editable prompt/factual message, reminder count, and dedup window.
 
     ### Recent changes
+    - **v5:** Quiet hours & DND — optional time-based quiet window and
+      phone DND sensor gate suppress all announcements when active
     - **v4:** Optional "fully charged" TTS announcement when battery
       reaches 100% while still charging — LLM prompt or static fallback
     - **v3:** Per-tier prompts & factual messages, reminder count with
@@ -336,10 +338,60 @@ blueprint:
               mode: slider
 
     # ===========================================================================
-    # ⑤ FEATURES & PRESENCE
+    # ⑤ QUIET HOURS & DND
+    # ===========================================================================
+    quiet_hours:
+      name: "⑤ Quiet hours & DND"
+      icon: mdi:weather-night
+      description: >-
+        DND sensor gate and optional time-based quiet hours window.
+        Both gates are enforced independently — belt and suspenders.
+      collapsed: true
+      input:
+        dnd_sensor:
+          name: Do Not Disturb sensor
+          description: >-
+            Phone DND sensor from the Companion App. When state is
+            anything other than "off" or "unavailable", announcements
+            are suppressed. Leave empty to skip DND checking.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+
+        enable_quiet_hours:
+          name: Enable quiet hours window
+          description: >-
+            When enabled, announcements are suppressed between the
+            start and end times below. Stacks with DND — both are
+            checked independently.
+          default: false
+          selector:
+            boolean: {}
+
+        quiet_start:
+          name: Quiet hours start
+          description: >-
+            Time when quiet hours begin (e.g., 23:00). Only used when
+            quiet hours are enabled.
+          default: "23:00:00"
+          selector:
+            time: {}
+
+        quiet_end:
+          name: Quiet hours end
+          description: >-
+            Time when quiet hours end (e.g., 07:00). Only used when
+            quiet hours are enabled.
+          default: "07:00:00"
+          selector:
+            time: {}
+
+    # ===========================================================================
+    # ⑥ FEATURES & PRESENCE
     # ===========================================================================
     features_and_presence:
-      name: "⑤ Features & presence"
+      name: "⑥ Features & presence"
       icon: mdi:home-account
       description: Optional features and presence gating.
       collapsed: true
@@ -399,10 +451,10 @@ blueprint:
               device_class: occupancy
 
     # ===========================================================================
-    # ⑥ BYPASS CONTROLS
+    # ⑦ BYPASS CONTROLS
     # ===========================================================================
     bypass_controls:
-      name: "⑥ Bypass controls"
+      name: "⑦ Bypass controls"
       icon: mdi:shield-off
       description: >
         Temporarily disable follow-me during the reminder sequence.
@@ -439,10 +491,10 @@ blueprint:
               domain: script
 
     # ===========================================================================
-    # ⑦ PRIVACY
+    # ⑧ PRIVACY
     # ===========================================================================
     privacy:
-      name: "⑦ Privacy"
+      name: "⑧ Privacy"
       icon: mdi:shield-account
       collapsed: true
       input:
@@ -488,10 +540,10 @@ blueprint:
               domain: person
 
     # ===========================================================================
-    # ⑧ INFRASTRUCTURE
+    # ⑨ INFRASTRUCTURE
     # ===========================================================================
     infrastructure:
-      name: "⑧ Infrastructure"
+      name: "⑨ Infrastructure"
       icon: mdi:cog
       collapsed: true
       description: "Shared entity references for the dispatcher system."
@@ -541,6 +593,11 @@ variables:
   v_privacy_mode: !input privacy_gate_mode
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
+  # ── quiet hours & DND ──────────────────────────────────────────────────
+  dnd_entity: !input dnd_sensor
+  enable_quiet: !input enable_quiet_hours
+  quiet_start_val: !input quiet_start
+  quiet_end_val: !input quiet_end
   _pfx: "[REMINDER — do NOT call any functions or tools. Respond only with speech text, no actions.] "
 
 mode: restart
@@ -593,6 +650,31 @@ conditions:
     value_template: >-
       {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
 
+  - alias: "DND must not be active (skip if no sensor configured)"
+    condition: template
+    value_template: >-
+      {% set dnd = dnd_entity | default('') | string %}
+      {% if dnd | length == 0 %}
+        true
+      {% else %}
+        {{ states(dnd) | default('off') in ['off', 'unavailable', 'unknown'] }}
+      {% endif %}
+
+  - alias: "Quiet hours gate (skip if disabled)"
+    condition: template
+    value_template: >-
+      {% if not (enable_quiet | bool(false)) %}
+        true
+      {% else %}
+        {% set qs = today_at(quiet_start_val | default('23:00:00')) %}
+        {% set qe = today_at(quiet_end_val | default('07:00:00')) %}
+        {% if qs < qe %}
+          {{ not (qs <= now() < qe) }}
+        {% else %}
+          {{ qe <= now() < qs }}
+        {% endif %}
+      {% endif %}
+
   - alias: "Privacy gate"
     condition: template
     value_template: >-
@@ -620,7 +702,7 @@ actions:
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
-           and is_state('input_boolean.notification_follow_me', 'on') }}
+           and is_state('input_boolean.ai_notification_follow_me', 'on') }}
 
   - alias: "Bypass follow-me (if configured)"
     choose:

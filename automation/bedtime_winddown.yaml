@@ -123,6 +123,16 @@ blueprint:
             entity:
               domain: input_boolean
 
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
         time_window_start:
           name: "Time window start"
           default: "20:30:00"
@@ -757,6 +767,22 @@ blueprint:
             entity:
               domain: input_boolean
 
+        winddown_last_offer_entity:
+          name: "Last offer timestamp entity"
+          description: "input_datetime tracking when the last wind-down offer was made."
+          default: input_datetime.ai_winddown_last_offer
+          selector:
+            entity:
+              domain: input_datetime
+
+        winddown_last_scenario_entity:
+          name: "Last scenario entity"
+          description: "input_select tracking the last detected scenario."
+          default: input_select.ai_winddown_last_scenario
+          selector:
+            entity:
+              domain: input_select
+
     # =========================================================================
     # ⑫ TTS & SPEAKER
     # =========================================================================
@@ -834,6 +860,7 @@ variables:
   min_presence_seconds: !input min_presence_seconds
   block_if_media_playing: !input block_if_media_playing
   v_enable_toggle: !input enable_toggle
+  master_gate_entity: !input notification_master_gate
   time_window_start: !input time_window_start
   time_window_end: !input time_window_end
   run_days: !input run_days
@@ -897,6 +924,7 @@ variables:
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
   v_dispatcher_enabled: !input dispatcher_enabled
+  _last_offer: !input winddown_last_offer_entity
   tts_speaker: !input tts_speaker
   tts_volume: !input tts_volume
   enable_user_prefs: !input enable_user_preferences
@@ -927,7 +955,6 @@ variables:
     {% endif %}
     {{ ns.lines | join(' ') if ns.lines else '' }}
   _sleep_budget: >-
-    {% set day_names = ['mon','tue','wed','thu','fri','sat','sun'] %}
     {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
     {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
     {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
@@ -1082,6 +1109,12 @@ variables:
 # Conditions
 # ═══════════════════════════════════════════════════════════════════════════════
 conditions:
+  - alias: "Notification master gate must be ON"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+
   - alias: "Kill switch is ON"
     condition: template
     value_template: "{{ not kill_switch_on }}"
@@ -1263,7 +1296,7 @@ actions:
   - alias: "7. Cooldown elapsed check"
     variables:
       last_offer_raw: >-
-        {{ states('input_datetime.ai_winddown_last_offer') | default('') }}
+        {{ states(_last_offer) | default('') }}
       cooldown_ok: >-
         {% set raw = last_offer_raw | trim %}
         {% if raw in ['', 'unknown', 'unavailable'] %}
@@ -1287,7 +1320,7 @@ actions:
   - alias: "8. Record scenario"
     action: input_select.select_option
     target:
-      entity_id: input_select.ai_winddown_last_scenario
+      entity_id: !input winddown_last_scenario_entity
     data:
       option: "{{ scenario }}"
     continue_on_error: true
@@ -1471,7 +1504,7 @@ actions:
           value: 0
       - action: input_datetime.set_datetime
         target:
-          entity_id: input_datetime.ai_winddown_last_offer
+          entity_id: !input winddown_last_offer_entity
         data:
           datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
       - action: input_boolean.turn_off
@@ -1586,7 +1619,7 @@ actions:
   - alias: "15b. Record last offer timestamp"
     action: input_datetime.set_datetime
     target:
-      entity_id: input_datetime.ai_winddown_last_offer
+      entity_id: !input winddown_last_offer_entity
     data:
       datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
 

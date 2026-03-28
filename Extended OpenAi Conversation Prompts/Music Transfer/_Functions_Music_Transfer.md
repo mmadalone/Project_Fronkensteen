@@ -75,7 +75,7 @@
     resource: "https://google.serper.dev/search"
     method: POST
     headers:
-      X-API-KEY: "APIKEY"
+      X-API-KEY: "5f19c27b1a07e6fe814a7db514d6521b4a195322"
       Content-Type: "application/json"
     payload: '{"q": "{{query}}", "num": 5}'
     value_template: >-

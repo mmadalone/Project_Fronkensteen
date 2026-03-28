@@ -14,13 +14,14 @@ blueprint:
     Instantiate once per bedtime blueprint instance, then register as an
     LLM tool on the relevant conversation agent.
   domain: script
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_set_bedtime_countdown.yaml
   homeassistant:
     min_version: "2024.10.0"
 
   input:
     section_config:
-      name: "1️⃣ Configuration"
+      name: "① Configuration"
       icon: mdi:timer-cog
       collapsed: true
       input:

@@ -1,3 +1,5 @@
+![Voice -- Confirm Device Toggle (tool script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_confirm_device_toggle-header.jpeg)
+
 # Voice -- Confirm Device Toggle (tool script)
 
 Ask for voice confirmation before toggling a device on or off. Uses `assist_satellite.ask_question` to present a yes/no dialog, then toggles the device and announces the result. Supports both on and off directions from a single blueprint -- create one instance per direction per satellite.

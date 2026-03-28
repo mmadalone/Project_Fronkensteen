@@ -404,6 +404,28 @@ blueprint:
             entity:
               domain: input_boolean
 
+        follow_me_entity:
+          name: "Follow-me boolean entity"
+          description: >-
+            The input_boolean that enables/disables Notification Follow-Me.
+            Used to check whether follow-me is active before claiming a
+            bypass refcount during replay.
+          default: input_boolean.ai_notification_follow_me
+          selector:
+            entity:
+              domain: input_boolean
+
+        tts_queue_status_entity:
+          name: "TTS queue status sensor"
+          description: >-
+            Sensor that reports the current TTS queue state (idle / playing).
+            Used to wait for playback completion before releasing the
+            follow-me bypass.
+          default: sensor.ai_tts_queue_status
+          selector:
+            entity:
+              domain: sensor
+
 # =============================================================================
 # EXECUTION MODE
 # =============================================================================
@@ -432,6 +454,8 @@ variables:
   v_bypass_follow_me: !input bypass_follow_me
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
+  v_follow_me_entity: !input follow_me_entity
+  v_tts_queue_status: !input tts_queue_status_entity
 
 # =============================================================================
 # SEQUENCE
@@ -669,7 +693,7 @@ sequence:
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
-           and is_state('input_boolean.notification_follow_me', 'on') }}
+           and is_state(v_follow_me_entity, 'on') }}
 
   - alias: "5b-claim · Claim follow-me bypass"
     choose:
@@ -816,7 +840,7 @@ sequence:
         value_template: "{{ follow_me_was_on }}"
     then:
       - alias: "Wait for TTS queue idle"
-        wait_template: "{{ is_state('sensor.ai_tts_queue_status', 'idle') }}"
+        wait_template: "{{ is_state(v_tts_queue_status, 'idle') }}"
         timeout: "00:00:10"
         continue_on_timeout: true
       - alias: "Wait for template condition"

@@ -1,9 +1,15 @@
 # Input datetime helpers
 # Bedtime timestamps (bedtime_last_start/success/abort/reply_received) were orphans — removed 2026-03-04
 
-notification_last_announced:
+ai_notification_last_announced:
   name: Notification last announced
   icon: mdi:clock-check
+  has_date: true
+  has_time: true
+
+ai_email_last_announce:
+  name: "Email Last Announce"
+  icon: mdi:email-check
   has_date: true
   has_time: true
 
@@ -43,14 +49,6 @@ ai_home_since_jessica:
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context
 # ═══════════════════════════════════════════════════════════════════
-ai_context_wake_time_weekday:
-  name: "AI Context - Wake Time (Weekday)"
-  has_date: false
-  has_time: true
-ai_context_wake_time_weekend:
-  name: "AI Context - Wake Time (Weekend)"
-  has_date: false
-  has_time: true
 ai_context_bed_time:
   name: "AI Context - Bedtime Target"
   has_date: false
@@ -238,3 +236,45 @@ ai_context_wake_time_alt_weekday_jessica:
   has_date: false
   has_time: true
   icon: mdi:alarm-plus
+
+# ═══════════════════════════════════════════════════════════════════
+# Music Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_music_follow_me_last_move:
+  name: "Music Follow-Me — Last Move"
+  icon: mdi:calendar
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Therapy Session (QS-5)
+# ═══════════════════════════════════════════════════════════════════
+ai_therapy_session_start:
+  name: "AI Therapy Session Start"
+  icon: mdi:clock-start
+  has_date: true
+  has_time: true
+
+ai_therapy_last_session:
+  name: "AI Therapy Last Session"
+  icon: mdi:clock-check
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_notification_follow_me_reminder_loop_last_tick:
+  name: "Notification Follow-Me — Reminder Loop Last Tick"
+  icon: mdi:clock-alert
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Interaction Summarizer (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_interaction_summarizer_batch_time:
+  name: "Interaction Summarizer — Batch Time"
+  icon: mdi:clock-time-eight
+  has_date: false
+  has_time: true

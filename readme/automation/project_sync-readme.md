@@ -1,3 +1,5 @@
+![AI Project Sync](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/project_sync-header.jpeg)
+
 # AI Project Sync
 
 Periodically syncs project files from `/config/projects/` into L2 memory and L1 helpers for voice agent awareness. Fires persistent notifications on sync failure or project status changes. Thin orchestration wrapper -- all logic lives in `pyscript/project_promote.py`.

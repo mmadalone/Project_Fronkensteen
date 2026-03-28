@@ -371,7 +371,7 @@ Conversely, HA can also act as an **MCP server**, exposing your home's entities 
 
 ### 14.4.1 Layer 3.5 — Pyscript Orchestration
 
-Between the conversation agents and the blueprints sits a **pyscript orchestration layer** — 16 Python modules (~545KB) that handle agent routing, inter-agent communication, memory, TTS queuing, predictions, and proactive behaviors. This layer reads from `assist_pipeline.pipelines` for persona discovery and operates on top of the HA Voice Assistant pipelines.
+Between the conversation agents and the blueprints sits a **pyscript orchestration layer** — 24 Python modules that handle agent routing, inter-agent communication, memory, TTS queuing, predictions, proactive behaviors, and system health monitoring. This layer reads from `assist_pipeline.pipelines` for persona discovery and operates on top of the HA Voice Assistant pipelines.
 
 **Core modules:**
 
@@ -394,8 +394,9 @@ Between the conversation agents and the blueprints sits a **pyscript orchestrati
 | `common_utilities.py` | SQLite cache layer, `conversation.process` timeout wrapper | (utility, no public service) |
 | `volume_sync.py` | Alexa ↔ MA volume synchronization | (trigger-based, no public service) |
 | `theatrical_mode.py` | Pattern 4 multi-agent orchestrated debate (2–5 personas, turn loop, 3 interrupt modes, spatial staging, per-speaker TTS tracking, profile-map mood lookup, text-length fallback wait) — **tested** | `pyscript.theatrical_mode_start/stop` |
+| `system_health.py` | Self-diagnosing 7-category health sensor. Dynamically scans pyscript files, helper YAMLs, and entity_config.yaml — zero hardcoded entity IDs. Startup + 30min cron. Percentage-based grading. | `pyscript.system_health_check` |
 
-**Supporting infrastructure:** 18 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config), `ai_theatrical.yaml` (theatrical mode config).
+**Supporting infrastructure:** 19 AI packages (`packages/ai_*.yaml`) define the helpers, template sensors, automations, and scripts that these pyscript modules depend on. Key packages: `ai_context_hot.yaml` (L1 sensor), `ai_identity.yaml` (multi-user confidence), `ai_llm_budget.yaml` (cost gating), `ai_tts_queue.yaml` (zone routing config), `ai_theatrical.yaml` (theatrical mode config), `ai_system_health.yaml` (health alert automations).
 
 **Three-layer memory architecture:**
 - **L1 (Hot Context):** `sensor.ai_hot_context` — real-time template sensor injected into every agent's system prompt. Time, presence, media, weather, schedule, mood, focus mode, budget, history (home-since durations, temperature ranges).

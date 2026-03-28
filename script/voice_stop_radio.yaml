@@ -74,6 +74,8 @@ blueprint:
   domain: script
   author: Madalone + Assistant
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_stop_radio.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     section_core:
@@ -89,7 +91,7 @@ blueprint:
 
             In that automation, configure the "radio_players" list with the
             Music Assistant players that you treat as "radio".
-          default:
+          default: ""
           selector:
             entity:
               domain: automation

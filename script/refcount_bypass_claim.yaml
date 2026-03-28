@@ -48,6 +48,8 @@ blueprint:
     - **v1.0.0:** Initial release — JSON owner list in `input_text`.
 
   domain: script
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     refcount_entity:
@@ -65,7 +67,7 @@ blueprint:
       description: >-
         The input_boolean that gets turned OFF on the first claim
         (0→1 transition) and left alone on subsequent claims.
-      default: input_boolean.notification_follow_me
+      default: input_boolean.ai_notification_follow_me
       selector:
         entity:
           domain: input_boolean
@@ -75,7 +77,7 @@ blueprint:
       description: >-
         An input_text entity for owner visibility. Appends claiming
         entity IDs for debugging. Leave default if not needed.
-      default: input_text.notification_follow_me_bypass_log
+      default: input_text.ai_notification_follow_me_bypass_log
       selector:
         entity:
           domain: input_text

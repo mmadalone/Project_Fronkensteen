@@ -35,7 +35,7 @@ blueprint:
             Sensor from the NUT integration that reports UPS status
             (e.g. sensor.madups_status). Values typically contain:
             OL = On line (mains), OB = On battery, LB = Low battery.
-          default:
+          default: ""
           selector:
             entity:
               domain: sensor
@@ -45,7 +45,7 @@ blueprint:
           description: >
             Sensor that reports the UPS battery charge in percent
             (e.g. sensor.madups_battery_charge).
-          default:
+          default: ""
           selector:
             entity:
               domain: sensor
@@ -79,7 +79,7 @@ blueprint:
             Home Assistant notify service to use, e.g.
             notify.mobile_app_your_device. No native HA selector exists
             for notify services, so this is a free-text field.
-          default:
+          default: ""
           selector:
             text:
 

@@ -169,10 +169,10 @@ blueprint:
             boolean: {}
 
     # ===========================================================================
-    # PRIVACY
+    # ④ PRIVACY
     # ===========================================================================
     privacy:
-      name: "Privacy"
+      name: "④ Privacy"
       icon: mdi:shield-account
       collapsed: true
       input:

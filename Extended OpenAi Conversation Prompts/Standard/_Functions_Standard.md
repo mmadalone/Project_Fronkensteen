@@ -105,7 +105,7 @@
     resource: "https://google.serper.dev/search"
     method: POST
     headers:
-      X-API-KEY: "APIKEY"
+      X-API-KEY: "5f19c27b1a07e6fe814a7db514d6521b4a195322"
       Content-Type: "application/json"
     payload: '{"q": "{{query}}", "num": 5}'
     value_template: >-
@@ -130,7 +130,11 @@
       SQLite database. Use this when the user asks you to remember
       something, recall something previously stored, search memories,
       or forget a specific memory. Memories persist across conversations
-      and HA restarts.
+      and HA restarts. Memories with scope "user" are private to the
+      active user. In search results, entries marked [restricted] belong
+      to another user — acknowledge their existence but never reveal
+      their content. If you receive an "identity_uncertain" response,
+      ask the user to confirm who they are before saving personal data.
     parameters:
       type: object
       properties:
@@ -173,6 +177,13 @@
           type: integer
           description: >-
             Max number of search results to return (1-50, default 5).
+        owner:
+          type: string
+          description: >-
+            Optional. The username this memory belongs to (e.g., miquel,
+            jessica). Only set this if the user explicitly identifies
+            themselves or if you received an identity_uncertain response
+            and the user confirmed. Leave empty to auto-detect.
       required:
         - operation
         - key
@@ -189,6 +200,7 @@
           tags: "{{tags|default('')}}"
           query: "{{query|default('')}}"
           search_limit: "{{search_limit|default(5)}}"
+          owner: "{{owner|default('')}}"
         response_variable: _function_result
 
 - spec:
@@ -920,4 +932,27 @@
           player: "{{player|default('')}}"
           agent: "{{agent|default('')}}"
           content_type: "{{content_type|default('')}}"
+        response_variable: _function_result
+
+- spec:
+    name: therapy_report
+    description: >-
+      Generate a therapy session report in markdown format. Call when the
+      user asks for their therapy session report, session summary, or
+      session notes. Returns a confirmation. Never speak the file path
+      aloud — just confirm that the report is ready for download.
+    parameters:
+      type: object
+      properties:
+        session_number:
+          type: integer
+          description: >-
+            Session number to report on. 0 = most recent session.
+      required: []
+  function:
+    type: script
+    sequence:
+      - service: pyscript.therapy_session_report
+        data:
+          session_number: "{{session_number|default(0)}}"
         response_variable: _function_result

@@ -3,7 +3,7 @@
 # =============================================================================
 # Architecture spec: voice_context_architecture.md § "Identity Layer & Multi-User"
 # Provides:
-#   sensor.identity_confidence_miquel       — 0–100 confidence score (current max 100)
+#   sensor.identity_confidence_miquel       — 0–100 confidence score (clamped)
 #   sensor.identity_confidence_jessica      — 0–100 confidence score (current max 70)
 #   sensor.occupancy_mode                   — solo_{slug} | dual | away | guest (Task 22: dynamic)
 #   input_boolean.ai_guest_mode                — manual override, forces all scores to 0
@@ -80,7 +80,7 @@ template:
 
   - sensor:
       # ── MIQUEL CONFIDENCE ─────────────────────────────────────────────────
-      #   WiFi 40 + GPS 50 + FP2 solo 20 + sustained 10 = max 120 pts
+      #   WiFi 30 + GPS 50 + FP2 solo 15 + sustained 5 = max 100 pts (clamped)
       #   Dual occupancy: WiFi 40 + GPS 50 = max 90 pts (FP2 ambiguous)
       #   GPS-only (WiFi off): 50 pts — meets default 50 pt identity gate
       - name: "Identity Confidence Miquel"
@@ -108,18 +108,18 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = m_wifi and not j_wifi -%}
           {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
-          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
-          {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(30) -%}
-          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
-          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
-          {{ (w1 if m_wifi else 0)
+          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
+          {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(50) -%}
+          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(15) -%}
+          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(5) -%}
+          {{ [(w1 if m_wifi else 0)
           + (w2 if m_gps else 0)
           + (w3 if solo and fp2_on else 0)
-          + (w4 if solo and sustained else 0) }}
+          + (w4 if solo and sustained else 0), 100] | min }}
           {%- endif -%}
 
       # ── JESSICA CONFIDENCE ────────────────────────────────────────────────
-      #   WiFi 40 + FP2 solo 20 + sustained 10 = max 70 pts  (no companion app yet)
+      #   WiFi 30 + FP2 solo 15 + sustained 5 = max 50 pts (clamped, no companion app yet)
       #   Dual occupancy: WiFi 40 = max 40 pts (FP2 ambiguous, no GPS)
       - name: "Identity Confidence Jessica"
         unique_id: identity_confidence_jessica
@@ -146,12 +146,12 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = j_wifi and not m_wifi -%}
           {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
-          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
-          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
-          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
-          {{ (w1 if j_wifi and not stale else 0)
+          {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
+          {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(15) -%}
+          {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(5) -%}
+          {{ [(w1 if j_wifi and not stale else 0)
           + (w3 if solo and fp2_on else 0)
-          + (w4 if solo and sustained else 0) }}
+          + (w4 if solo and sustained else 0), 100] | min }}
           {%- endif -%}
 
       # ── OCCUPANCY MODE (Task 22: dynamic from person.* entities) ──────────

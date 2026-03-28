@@ -1,3 +1,5 @@
+![Follow-Me Refcount Watchdog](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/follow_me_refcount_watchdog-header.jpeg)
+
 # Follow-Me Refcount Watchdog
 
 Safety net for the follow-me bypass refcount system used by Notification Follow-Me, Email Follow-Me, Voice Handoff, Wake-Up Guard, Calendar Alarm, Phone Charge Reminder, and Email Priority Filter. When parallel automation instances die mid-flight (automation reload, HA restart, supersede exit), the bypass owner list stays populated and `notification_follow_me` stays OFF permanently. This watchdog detects the stranded state and force-resets everything.

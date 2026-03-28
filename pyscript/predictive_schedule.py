@@ -17,6 +17,7 @@ from shared_utils import (
     get_person_config,
     get_person_slugs,
     load_entity_config,
+    resolve_active_user,
 )
 
 # =============================================================================
@@ -614,14 +615,15 @@ async def _get_default_wake_time(for_tomorrow: bool = True) -> tuple:
     except Exception:
         pass
 
-    # Standard weekday/weekend fallback
-    entity = (
-        "input_datetime.ai_context_wake_time_weekend"
+    # Per-user weekday/weekend wake time (unified with blueprint pattern)
+    user = resolve_active_user()
+    user_entity = (
+        f"input_datetime.ai_context_wake_time_weekend_{user}"
         if is_weekend
-        else "input_datetime.ai_context_wake_time_weekday"
+        else f"input_datetime.ai_context_wake_time_weekday_{user}"
     )
     try:
-        val = str(state.get(entity) or "")  # noqa: F821
+        val = str(state.get(user_entity) or "")  # noqa: F821
         parsed = _parse_time_string(val)
         if parsed:
             return parsed

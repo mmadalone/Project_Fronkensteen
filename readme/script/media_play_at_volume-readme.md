@@ -1,3 +1,5 @@
+![Media Play at Volume (helper script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/media_play_at_volume-header.jpeg)
+
 # Media Play at Volume (helper script)
 
 Set volume on a media player and play a specific media item. Useful for routines like morning radio, background music, or podcast playback at a predetermined volume. Integrates with the duck guard system to keep volume snapshots accurate during active ducking.

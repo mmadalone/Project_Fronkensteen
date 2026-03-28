@@ -114,7 +114,7 @@ The section numbers are preserved across files for cross-referencing.
 
 ## Full Table of Contents
 
-**15 top-level sections · ~151 subsections · 57 anti-patterns (52 AP codes + 5 sub-items) · 8 security checks · 10 files · 94 madalone blueprints (62 automation + 32 script)**
+**15 top-level sections · ~151 subsections · 59 anti-patterns (54 AP codes + 5 sub-items) · 8 security checks · 10 files · 94 madalone blueprints (62 automation + 32 script)**
 
 ### [Core Philosophy](00_core_philosophy.md)
 
@@ -240,7 +240,7 @@ The section numbers are preserved across files for cross-referencing.
   - General prose (1–24, 42)
   - ESPHome (25–29)
   - Music Assistant (30–35)
-  - Pyscript Orchestration (45–52)
+  - Pyscript Orchestration (45–52, 69)
   - Development Environment (36–44)
 - **§11** — Workflow
   - §11.0 — Universal pre-flight (applies to ALL workflows)

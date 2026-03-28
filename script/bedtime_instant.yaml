@@ -12,6 +12,8 @@ blueprint:
   domain: script
   author: Madalone + Assistant
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/bedtime_instant.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     speakers:
@@ -166,7 +168,7 @@ blueprint:
         ducking_flag:
           name: "Ducking flag entity"
           description: "Boolean indicating audio ducking is active."
-          default: input_boolean.ducking_flag
+          default: input_boolean.ai_ducking_flag
           selector:
             entity:
               domain: input_boolean

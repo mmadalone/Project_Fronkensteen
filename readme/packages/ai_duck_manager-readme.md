@@ -1,3 +1,5 @@
+![AI Duck Manager](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_duck_manager-header.jpeg)
+
 # AI Duck Manager — Unified Volume Ducking
 
 Central duck/restore engine for satellite wake words, TTS queue playback, and external volume management. Handles ducking media players when voice events occur and restoring volumes afterward, with a watchdog for stale sessions.

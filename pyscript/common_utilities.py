@@ -1339,7 +1339,7 @@ def budget_breakdown_restore(data: dict = None) -> None:
         return
 
     global _budget_breakdown
-    if isinstance(data, dict) and all(k in data for k in ("llm", "tts", "stt")):
+    if isinstance(data, dict) and all([k in data for k in ("llm", "tts", "stt")]):
         _budget_breakdown = data
         _update_breakdown_sensor()
 

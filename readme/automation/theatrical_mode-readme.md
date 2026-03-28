@@ -1,6 +1,6 @@
-# Theatrical Mode — Multi-Agent Debate (v1.0)
+![Theatrical Mode](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/theatrical_mode-header.jpeg)
 
-<!-- Header image deferred — generate before publish -->
+# Theatrical Mode — Multi-Agent Debate (v1.0)
 
 Pattern 4 of inter-agent communication. Orchestrates multi-turn debate exchanges between 2–5 AI personas, each speaking in character via their own TTS voice on optionally different physical speakers for a spatial staging effect. Triggered by voice command ("debate this"), banter escalation, or direct event. Builds on Pattern 1 (Reactive Banter) and extends it into coordinated multi-turn exchanges.
 

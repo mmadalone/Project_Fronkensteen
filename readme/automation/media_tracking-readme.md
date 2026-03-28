@@ -1,3 +1,5 @@
+![Media Tracking -- Radarr/Sonarr](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/media_tracking-header.jpeg)
+
 # Media Tracking -- Radarr/Sonarr
 
 Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends download notifications. The blueprint owns all triggers and config knobs; pyscript (`media_promote_now`) is a stateless service that fetches APIs and writes helpers/memory. Supports periodic, daily, queue-change, manual, and startup triggers.

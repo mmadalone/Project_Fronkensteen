@@ -1,3 +1,5 @@
+![Away State Actions (I-40)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/away_state_actions-header.jpeg)
+
 # Away State Actions (I-40)
 
 Per-person automation that fires on departure, arrival, predicted pre-return, and extended away events. Uses the I-40 away prediction engine for pre-return timing. Supports configurable departure debounce, confidence-gated pre-return actions, optional TTS announcements with away duration, and custom action blocks for each event type.

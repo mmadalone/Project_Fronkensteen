@@ -1,3 +1,5 @@
+![Bedtime Advisory Actions (I-40)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_advisory_actions-header.jpeg)
+
 # Bedtime Advisory Actions (I-40)
 
 Fires when `predictive_schedule.py` detects the user is within 15 minutes of their target routine start time. Consumes the `ai_bedtime_advisory` event and runs configurable actions such as dimming lights, starting wind-down playlists, or setting thermostats to sleep mode. Includes a TTS announcement with static or LLM-generated message support.

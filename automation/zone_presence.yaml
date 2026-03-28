@@ -15,115 +15,158 @@ blueprint:
     reports "on" for a configurable delay. If the sensor goes back to "off"
     during the delay, the trigger is automatically cancelled.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/zone_presence.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
-    presence_sensor:
-      name: Presence Sensor
-      description: Binary sensor that detects zone occupancy (e.g. Aqara FP2).
-      selector:
-        entity:
-          domain: binary_sensor
+    # =========================================================================
+    # ① Detection
+    # =========================================================================
+    detection:
+      name: "① Detection"
+      icon: mdi:motion-sensor
+      collapsed: false
+      input:
+        presence_sensor:
+          name: Presence Sensor
+          description: Binary sensor that detects zone occupancy (e.g. Aqara FP2).
+          selector:
+            entity:
+              domain: binary_sensor
 
-    presence_delay:
-      name: Presence Delay
-      description: >-
-        How long the sensor must report "on" before turning things on.
-        If presence drops during this window, nothing happens.
-      default:
-        hours: 0
-        minutes: 5
-        seconds: 0
-      selector:
-        duration:
-          enable_day: false
+        presence_delay:
+          name: Presence Delay
+          description: >-
+            How long the sensor must report "on" before turning things on.
+            If presence drops during this window, nothing happens.
+          default:
+            hours: 0
+            minutes: 5
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
 
-    master_switch:
-      name: Master Switch
-      description: Global on/off for all auto-on zones.
-      default:
-        entity_id: input_boolean.ai_auto_off_enabled
-      selector:
-        entity:
-          domain: input_boolean
+    # =========================================================================
+    # ② Control
+    # =========================================================================
+    control:
+      name: "② Control"
+      icon: mdi:tune
+      collapsed: false
+      input:
+        master_switch:
+          name: Master Switch
+          description: Global on/off for all auto-on zones.
+          default:
+            entity_id: input_boolean.ai_auto_off_enabled
+          selector:
+            entity:
+              domain: input_boolean
 
-    lights_enabled:
-      name: Turn On Lights
-      description: Whether to turn on lights when the zone is occupied.
-      default: true
-      selector:
-        boolean: {}
+    # =========================================================================
+    # ③ Lights
+    # =========================================================================
+    lights:
+      name: "③ Lights"
+      icon: mdi:lightbulb-group
+      collapsed: true
+      input:
+        lights_enabled:
+          name: Turn On Lights
+          description: Whether to turn on lights when the zone is occupied.
+          default: true
+          selector:
+            boolean: {}
 
-    use_area_lights:
-      name: Use Area Lights
-      description: >-
-        Turn on all lights in the target area. If disabled, uses the
-        specific lights list below instead.
-      default: true
-      selector:
-        boolean: {}
+        use_area_lights:
+          name: Use Area Lights
+          description: >-
+            Turn on all lights in the target area. If disabled, uses the
+            specific lights list below instead.
+          default: true
+          selector:
+            boolean: {}
 
-    target_area:
-      name: Target Area
-      description: The HA area this zone corresponds to.
-      selector:
-        area: {}
+        target_area:
+          name: Target Area
+          description: The HA area this zone corresponds to.
+          selector:
+            area: {}
 
-    specific_lights:
-      name: Specific Lights (optional)
-      description: >-
-        Individual lights/switches to turn on. When "Use Area Lights" is
-        enabled, only switch.* entities from this list are turned on
-        (area light.turn_on handles the rest). When disabled, all
-        entities in this list are turned on.
-      default: []
-      selector:
-        entity:
-          domain:
-            - light
-            - switch
-          multiple: true
+        specific_lights:
+          name: Specific Lights (optional)
+          description: >-
+            Individual lights/switches to turn on. When "Use Area Lights" is
+            enabled, only switch.* entities from this list are turned on
+            (area light.turn_on handles the rest). When disabled, all
+            entities in this list are turned on.
+          default: []
+          selector:
+            entity:
+              domain:
+                - light
+                - switch
+              multiple: true
 
-    media_enabled:
-      name: Play Media
-      description: Whether to start media players when the zone is occupied.
-      default: false
-      selector:
-        boolean: {}
+    # =========================================================================
+    # ④ Media
+    # =========================================================================
+    media:
+      name: "④ Media"
+      icon: mdi:speaker
+      collapsed: true
+      input:
+        media_enabled:
+          name: Play Media
+          description: Whether to start media players when the zone is occupied.
+          default: false
+          selector:
+            boolean: {}
 
-    use_area_players:
-      name: Use Area Players
-      description: >-
-        Start all media players in the target area. If disabled, uses the
-        specific players list below instead.
-      default: true
-      selector:
-        boolean: {}
+        use_area_players:
+          name: Use Area Players
+          description: >-
+            Start all media players in the target area. If disabled, uses the
+            specific players list below instead.
+          default: true
+          selector:
+            boolean: {}
 
-    specific_players:
-      name: Specific Players (optional)
-      description: >-
-        Individual media players to start. Only used when "Use Area Players"
-        is disabled.
-      default: []
-      selector:
-        entity:
-          domain: media_player
-          multiple: true
+        specific_players:
+          name: Specific Players (optional)
+          description: >-
+            Individual media players to start. Only used when "Use Area Players"
+            is disabled.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
 
-    entry_script:
-      name: Entry Script (optional)
-      description: >-
-        Optional script to run after lights/media are turned on
-        (e.g. set thermostat to home mode).
-      default: []
-      selector:
-        entity:
-          domain: script
-          multiple: false
+    # =========================================================================
+    # ⑤ Entry Actions
+    # =========================================================================
+    entry_actions:
+      name: "⑤ Entry Actions"
+      icon: mdi:play-circle
+      collapsed: true
+      input:
+        entry_script:
+          name: Entry Script (optional)
+          description: >-
+            Optional script to run after lights/media are turned on
+            (e.g. set thermostat to home mode).
+          default: []
+          selector:
+            entity:
+              domain: script
+              multiple: false
 
     schedule_timing:
-      name: "Schedule & timing"
+      name: "⑥ Schedule & Timing"
       icon: mdi:clock-outline
       description: Configure when the automation is active.
       collapsed: true
@@ -176,7 +219,7 @@ blueprint:
               multiple: true
 
     weekend_overrides:
-      name: "Weekend overrides"
+      name: "⑦ Weekend Overrides"
       icon: mdi:weather-sunny
       description: >
         Optional weekend-specific schedule overrides.
@@ -234,7 +277,7 @@ blueprint:
             time: {}
 
     quiet_hours:
-      name: "Quiet hours"
+      name: "⑧ Quiet Hours"
       icon: mdi:moon-waning-crescent
       description: >
         Optional nighttime mode: use a longer presence delay or fully

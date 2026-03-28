@@ -1,3 +1,5 @@
+![Interaction Summarizer](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/interaction_summarizer-header.jpeg)
+
 # Interaction Summarizer
 
 Scheduled job that compresses whisper interaction logs into per-agent summaries using a cheap LLM call. At the scheduled time, searches L2 memory for unsummarized interaction entries older than the lookback window, groups them by agent persona, and compresses each group via LLM into a compact 2-3 sentence digest. Summaries are stored as new L2 entries with a long TTL and auto-embed on the next nightly embedding batch run.

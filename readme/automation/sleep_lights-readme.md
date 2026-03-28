@@ -1,3 +1,5 @@
+![Sleep Lights -- Turn Off Lights on Sleep Detection](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/sleep_lights-header.jpeg)
+
 # Sleep Lights -- Turn Off Lights on Sleep Detection
 
 Turns off selected lights and switches after sleep is detected. Waits a configurable delay, re-checks that sleep is still detected, then turns off the targets. Time window prevents accidental triggers outside nighttime hours. Requires the sleep detection system (`input_boolean.ai_sleep_detected`) or equivalent flag.

@@ -1,3 +1,5 @@
+![Dispatcher Profile](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/dispatcher_profile-header.jpeg)
+
 # Dispatcher Profile
 
 Centralized Agent Dispatcher configuration blueprint. Exposes all routing knobs as blueprint inputs -- dispatch mode, era personas, continuity window, handoff settings, expertise routing, TTS stage directions, and budget fallback. On trigger (HA startup or manual button press), pushes all values into the dispatcher's helpers and reloads the routing cache. Multiple instances supported (e.g., "Daytime Profile", "Guest Profile") but only one should be enabled at a time -- last-write-wins.

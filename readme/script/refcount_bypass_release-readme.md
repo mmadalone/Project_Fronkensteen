@@ -1,3 +1,5 @@
+![Refcount Bypass -- Release](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/refcount_bypass_release-header.jpeg)
+
 # Refcount Bypass -- Release
 
 Generic refcount bypass for any shared boolean toggle. Removes an owner from a JSON owner list stored in an `input_text` helper. The last release (1 to 0 transition) turns ON the protected toggle. Safe to call even if the owner was never claimed (no-op).

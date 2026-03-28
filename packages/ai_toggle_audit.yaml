@@ -1,0 +1,69 @@
+# =============================================================================
+# AI Toggle Audit Trail — kill switch change logging with source attribution
+# =============================================================================
+# Sensor owned by: pyscript/toggle_audit.py (NOT a template sensor)
+# State:  idle / monitoring / error
+# Attrs:  monitored_count, last_entity, last_source, last_detail, last_at
+#
+# Helpers:
+#   - helpers_input_boolean.yaml: ai_toggle_audit_enabled
+#   - helpers_input_number.yaml:  ai_toggle_audit_retention_days
+#
+# Storage: toggle_audit table in /config/memory.db (schema in memory.py)
+# Service: pyscript.toggle_audit_query (supports_response: only)
+# Event:   ai_toggle_audited (entity_id, old_state, new_state, source, source_detail)
+#
+# Dependencies:
+#   - pyscript/toggle_audit.py (audit engine)
+#   - pyscript/memory.py (toggle_audit table)
+#   - HA recorder DB (context attribution)
+# =============================================================================
+
+automation:
+  - alias: "AI Toggle Audit — Critical Kill Switch Off"
+    id: ai_toggle_audit_critical_alert
+    triggers:
+      - trigger: event
+        event_type: ai_toggle_audited
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.new_state == 'off'
+             and trigger.event.data.entity_id in [
+               'input_boolean.ai_notifications_master_enabled',
+               'input_boolean.ai_privacy_gate_enabled',
+               'input_boolean.ai_escalation_enabled',
+               'input_boolean.ai_dispatcher_enabled',
+               'input_boolean.ai_system_recovery_enabled',
+             ] }}
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "Critical Kill Switch Disabled"
+          message: >-
+            **{{ trigger.event.data.entity_id.split('.')[1] }}** turned OFF
+            by {{ trigger.event.data.source }}
+            {% if trigger.event.data.source_detail %}({{ trigger.event.data.source_detail }}){% endif %}
+            at {{ now().strftime('%H:%M') }}.
+          notification_id: "ai_audit_critical_{{ trigger.event.data.entity_id | replace('.', '_') }}"
+
+  - alias: "AI Toggle Audit — Critical Kill Switch Restored"
+    id: ai_toggle_audit_critical_restore
+    triggers:
+      - trigger: event
+        event_type: ai_toggle_audited
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.new_state == 'on'
+             and trigger.event.data.entity_id in [
+               'input_boolean.ai_notifications_master_enabled',
+               'input_boolean.ai_privacy_gate_enabled',
+               'input_boolean.ai_escalation_enabled',
+               'input_boolean.ai_dispatcher_enabled',
+               'input_boolean.ai_system_recovery_enabled',
+             ] }}
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: "ai_audit_critical_{{ trigger.event.data.entity_id | replace('.', '_') }}"

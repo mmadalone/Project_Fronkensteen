@@ -1,3 +1,5 @@
+![AI Hot Context](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_context_hot-header.jpeg)
+
 # AI Hot Context — Layer 1 Voice Context
 
 The central nervous system of the voice agent architecture. Assembles a live text block (`sensor.ai_hot_context`) that is injected into every agent's system prompt via `{{ state_attr('sensor.ai_hot_context', 'context') }}`. Covers time, identity, presence, media, environment, weather, schedule, projects, focus, privacy, and memory.

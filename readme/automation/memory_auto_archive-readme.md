@@ -1,3 +1,5 @@
+![AI Memory - Auto Archive](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/memory_auto_archive-header.jpeg)
+
 # AI Memory - Auto Archive
 
 Automatically archives cold L2 memory entries when storage thresholds are breached. Triggered reactively by an `ai_memory_threshold_exceeded` event (fired by the memory health check service) or on a configurable daily schedule. Archive parameters -- target percentage, recency protection window, and protection tags -- are read from helpers at runtime, keeping the blueprint configuration minimal.

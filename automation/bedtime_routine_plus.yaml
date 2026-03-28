@@ -1092,13 +1092,135 @@ blueprint:
           selector:
             text: {}
 
+    # ===========================================================================
+    # ⑮ PROMPTS
+    # ===========================================================================
+    prompts:
+      name: "⑮ Prompts"
+      icon: mdi:script-text-outline
+      description: >
+        LLM system prompts and spoken messages used during the bedtime routine.
+        Override these to change tone, language, or phrasing without touching
+        the automation logic.
+      collapsed: true
+      input:
+        safety_prefix:
+          name: "Safety prefix"
+          description: >-
+            Prepended to every LLM prompt to prevent the agent from calling
+            tools or executing actions during bedtime-only conversations.
+          default: >-
+            [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        no_negotiation_addendum:
+          name: "No-negotiation addendum"
+          description: >-
+            Appended to the bedtime announcement prompt when countdown
+            negotiation is disabled or preset mode is active.
+            Placeholders: {{ default_countdown }}.
+          default: >-
+            IMPORTANT: Do NOT ask if the user wants more time. Countdown is fixed at {{ default_countdown }} minutes — just announce bedtime.
+          selector:
+            text:
+              multiline: true
+
+        countdown_system_prompt:
+          name: "Countdown negotiation system prompt"
+          description: >-
+            System prompt for the countdown negotiation satellite conversation.
+            Placeholders: {{ default_countdown }}, {{ living_room_lamp }},
+            {{ bathroom_sensor }}.
+          default: >-
+            Bedtime routine active. Default countdown: {{ default_countdown }} minutes.
+            The user may ask for more time. Use the voice_set_bedtime_countdown tool
+            to change the countdown (min 1, max 15 minutes). Current lamp entity:
+            {{ living_room_lamp }}. Bathroom sensor: {{ bathroom_sensor }}.
+          selector:
+            text:
+              multiline: true
+
+        media_prompt_curated:
+          name: "Media prompt — curated mode"
+          description: >-
+            LLM prompt when bedtime_media_mode is curated. The Kodi catalog
+            is injected separately via extra_system_prompt context.
+          default: >-
+            Ask if they want bedtime content on the TV. Offer ONLY the curated options
+            from the catalog above. If they decline, say okay. If they pick one, call
+            the play_bedtime_kodi function with content_type "favourite" and the content_id
+            from the catalog. If they want none, that's fine.
+          selector:
+            text:
+              multiline: true
+
+        media_prompt_freeform:
+          name: "Media prompt — freeform mode"
+          description: >-
+            LLM prompt when bedtime_media_mode is freeform. The Kodi catalog
+            is injected separately via extra_system_prompt context.
+          default: >-
+            Ask if they want bedtime content on the TV. They can request anything from
+            the library catalog above — a specific movie, continue a TV show, or pick
+            a favourite. Use the play_bedtime_kodi function with the appropriate
+            content_type and content_id from the catalog.
+          selector:
+            text:
+              multiline: true
+
+        media_prompt_both:
+          name: "Media prompt — both mode"
+          description: >-
+            LLM prompt when bedtime_media_mode is both (curated + freeform).
+            The Kodi catalog is injected separately via extra_system_prompt context.
+          default: >-
+            Ask if they want bedtime content on the TV. Offer the curated favorites first,
+            but also mention they can pick from their library. Use the play_bedtime_kodi
+            function with the appropriate content_type and content_id from the catalog.
+          selector:
+            text:
+              multiline: true
+
+        media_start_curated:
+          name: "Media start message — curated list available"
+          description: >-
+            Spoken message when starting the media conversation with a
+            curated list available.
+          default: >-
+            Want something on the TV for bedtime? I've got your usual options ready.
+          selector:
+            text:
+              multiline: true
+
+        media_start_default:
+          name: "Media start message — fallback"
+          description: >-
+            Spoken message when starting the media conversation with no
+            curated list (freeform mode).
+          default: >-
+            Want something on the TV for bedtime? I've got your whole library to pick from.
+          selector:
+            text:
+              multiline: true
+
 # ═══════════════════════════════════════════════════════════════════════
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
-  _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
+  _pfx: !input safety_prefix
   # --- Blueprint version ---
   blueprint_version: "5.4.14"
+
+  # --- Prompt inputs ---
+  v_no_negotiation_addendum: !input no_negotiation_addendum
+  v_countdown_system_prompt: !input countdown_system_prompt
+  v_media_prompt_curated: !input media_prompt_curated
+  v_media_prompt_freeform: !input media_prompt_freeform
+  v_media_prompt_both: !input media_prompt_both
+  v_media_start_curated: !input media_start_curated
+  v_media_start_default: !input media_start_default
 
   # --- Infrastructure ---
   v_ducking_flag: !input ducking_flag
@@ -1297,7 +1419,6 @@ variables:
     {% endif %}
     {{ ns.lines | join(' ') if ns.lines else '' }}
   _sleep_budget: >-
-    {% set day_names = ['mon','tue','wed','thu','fri','sat','sun'] %}
     {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
     {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
     {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
@@ -1585,7 +1706,7 @@ actions:
       text: >-
         {{ _pfx }}{{ bedtime_prompt_tpl }}
         {% if not (enable_negotiation | bool(false)) or (is_preset_mode | bool(false)) %}
-        IMPORTANT: Do NOT ask if the user wants more time. Countdown is fixed at {{ default_countdown }} minutes — just announce bedtime.
+        {{ v_no_negotiation_addendum }}
         {% endif %}
 
   - alias: "Extract bedtime announcement with defensive fallback"
@@ -1624,10 +1745,7 @@ actions:
               preannounce: true
               start_message: "{{ bedtime_message }}"
               extra_system_prompt: >-
-                Bedtime routine active. Default countdown: {{ default_countdown }} minutes.
-                The user may ask for more time. Use the voice_set_bedtime_countdown tool
-                to change the countdown (min 1, max 15 minutes). Current lamp entity:
-                {{ living_room_lamp }}. Bathroom sensor: {{ bathroom_sensor }}.
+                {{ v_countdown_system_prompt }}
 
           - alias: "Wait for conversation to settle — agent has had time to set the countdown helper"
             delay:
@@ -2361,19 +2479,11 @@ actions:
                     variables:
                       media_prompt: >-
                         {% if (bedtime_media_mode | default('curated')) == 'curated' %}
-                          Ask if they want bedtime content on the TV. Offer ONLY the curated options
-                          from the catalog above. If they decline, say okay. If they pick one, call
-                          the play_bedtime_kodi function with content_type "favourite" and the content_id
-                          from the catalog. If they want none, that's fine.
+                          {{ v_media_prompt_curated }}
                         {% elif (bedtime_media_mode | default('curated')) == 'freeform' %}
-                          Ask if they want bedtime content on the TV. They can request anything from
-                          the library catalog above — a specific movie, continue a TV show, or pick
-                          a favourite. Use the play_bedtime_kodi function with the appropriate
-                          content_type and content_id from the catalog.
+                          {{ v_media_prompt_freeform }}
                         {% else %}
-                          Ask if they want bedtime content on the TV. Offer the curated favorites first,
-                          but also mention they can pick from their library. Use the play_bedtime_kodi
-                          function with the appropriate content_type and content_id from the catalog.
+                          {{ v_media_prompt_both }}
                         {% endif %}
 
                   # =========================================================
@@ -2390,12 +2500,10 @@ actions:
                     data:
                       preannounce: true
                       start_message: >-
-                        {% if (bedtime_media_mode | default('curated')) == 'curated' %}
-                          Want something on the TV for bedtime? I've got your usual options ready.
-                        {% elif (bedtime_media_mode | default('curated')) == 'freeform' %}
-                          Want something on the TV for bedtime? I've got your whole library to pick from.
+                        {% if (bedtime_media_mode | default('curated')) in ['curated', 'both'] %}
+                          {{ v_media_start_curated }}
                         {% else %}
-                          Want something on the TV for bedtime? I've got your favorites — or anything from the library.
+                          {{ v_media_start_default }}
                         {% endif %}
                       extra_system_prompt: >-
                         {{ media_prompt }}

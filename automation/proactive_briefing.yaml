@@ -246,6 +246,16 @@ blueprint:
             entity:
               domain: input_boolean
 
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
         delivered_flag:
           name: Delivered flag
           description: >
@@ -611,6 +621,7 @@ variables:
   v_suppress_persons: !input suppress_persons
   v_suppress_persons_enabled: !input suppress_persons_enabled
   v_kill_switch: !input kill_switch
+  master_gate_entity: !input notification_master_gate
   v_delivered_flag: !input delivered_flag
   v_reset_time: !input reset_time
   v_sections: !input sections
@@ -687,6 +698,12 @@ triggers:
 # CONDITIONS — reset trigger bypasses via per-condition OR gates below
 # ===========================================================================
 conditions:
+  - alias: "Notification master gate must be ON"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+
   - alias: "Kill switch is ON"
     condition: or
     conditions:

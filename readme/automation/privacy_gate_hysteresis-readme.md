@@ -1,3 +1,5 @@
+![Privacy Gate -- Hysteresis Controller](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/privacy_gate_hysteresis-header.jpeg)
+
 # Privacy Gate -- Hysteresis Controller
 
 Watches an identity confidence sensor and toggles a gate boolean when the score crosses configurable suppress/re-enable thresholds. The hysteresis gap between the two thresholds prevents flapping -- the gate turns ON (suppressed) when confidence rises above the suppress threshold, and only turns OFF (re-enabled) when confidence drops below the lower re-enable threshold.

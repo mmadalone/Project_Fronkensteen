@@ -1,0 +1,92 @@
+# =============================================================================
+# AI System Health — alerting automations for sensor.ai_system_health
+# =============================================================================
+# Sensor owned by: pyscript/system_health.py (NOT a template sensor)
+# State:  healthy / degraded / failing / error / idle
+# Score:  weighted 0–1 across 8 categories (see system_health.py WEIGHTS)
+#
+# Helpers: none — read-only sensor, all config in entity_config.yaml manifest
+# =============================================================================
+
+automation:
+  - alias: "AI System Health — Failing Alert"
+    id: ai_system_health_failing_alert
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_system_health
+        to: "failing"
+        for:
+          minutes: 5
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "AI System Health: Failing"
+          message: >-
+            Score: {{ state_attr('sensor.ai_system_health', 'score') | default(0) }}.
+            Sensors: {{ state_attr('sensor.ai_system_health', 'status_sensors_grade') | default('?') }}.
+            Services: {{ state_attr('sensor.ai_system_health', 'services_grade') | default('?') }}.
+            Helpers: {{ state_attr('sensor.ai_system_health', 'helpers_grade') | default('?') }}.
+            Pipelines: {{ state_attr('sensor.ai_system_health', 'pipeline_entities_grade') | default('?') }}.
+            Memory DB: {{ state_attr('sensor.ai_system_health', 'memory_db_grade') | default('?') }}.
+            JSON: {{ state_attr('sensor.ai_system_health', 'json_configs_grade') | default('?') }}.
+            TTS: {{ state_attr('sensor.ai_system_health', 'tts_queue_grade') | default('?') }}.
+          notification_id: ai_system_health_failing
+
+  - alias: "AI System Health — Degraded Alert"
+    id: ai_system_health_degraded_alert
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_system_health
+        to: "degraded"
+        for:
+          minutes: 15
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "AI System Health: Degraded"
+          message: >-
+            Score: {{ state_attr('sensor.ai_system_health', 'score') | default(0) }}.
+            Check Developer Tools → States → sensor.ai_system_health for details.
+          notification_id: ai_system_health_degraded
+
+  - alias: "AI System Health — Recovery"
+    id: ai_system_health_recovery
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_system_health
+        to: "healthy"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state.state in ['failing', 'degraded', 'error'] }}
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: ai_system_health_failing
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: ai_system_health_degraded
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: ai_system_health_error
+
+  - alias: "AI System Health — Error Alert"
+    id: ai_system_health_error_alert
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_system_health
+        to: "error"
+        for:
+          minutes: 10
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "AI System Health: Check Error"
+          message: >-
+            The health check itself failed.
+            Error: {{ state_attr('sensor.ai_system_health', 'error') | default('unknown') }}.
+            Check pyscript logs for system_health traceback.
+          notification_id: ai_system_health_error

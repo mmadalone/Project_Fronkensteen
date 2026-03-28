@@ -30,6 +30,8 @@ blueprint:
   domain: automation
   author: Madalone + Assistant
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/memory_todo_mirror.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # =========================================================================
@@ -159,10 +161,10 @@ blueprint:
               domain: input_boolean
 
     # =========================================================================
-    # PRIVACY
+    # ⑤ PRIVACY
     # =========================================================================
     privacy:
-      name: "Privacy"
+      name: "⑤ Privacy"
       icon: mdi:shield-account
       collapsed: true
       input:

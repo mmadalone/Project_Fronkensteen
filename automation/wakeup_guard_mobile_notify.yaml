@@ -43,7 +43,7 @@ blueprint:
           description: >
             Same input_boolean as "Snooze toggle" in Wake-up guard.
             Will be turned ON when Snooze is triggered.
-          default:
+          default: ""
           selector:
             entity:
               domain: input_boolean
@@ -53,7 +53,7 @@ blueprint:
           description: >
             Same input_boolean as "Stop toggle" in Wake-up guard.
             Will be turned ON when Stop is triggered.
-          default:
+          default: ""
           selector:
             entity:
               domain: input_boolean
@@ -63,7 +63,7 @@ blueprint:
           description: >
             Media player used by TTS (same as "Media player for voice"
             in the main wake-up blueprint).
-          default:
+          default: ""
           selector:
             entity:
               domain: media_player

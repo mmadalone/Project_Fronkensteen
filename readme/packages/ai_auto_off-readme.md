@@ -1,3 +1,5 @@
+![AI Auto-Off](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_auto_off-header.jpeg)
+
 # AI Auto-Off — Zone Vacancy System
 
 Global master switches for the auto-off zone vacancy system. This package provides the top-level toggles that enable or disable automatic device shutdown when zones become vacant. Per-zone configuration (which devices, delay timers, conditions) is handled entirely by blueprint instances.

@@ -1,3 +1,5 @@
+![Refcount Bypass -- Claim](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/refcount_bypass_claim-header.jpeg)
+
 # Refcount Bypass -- Claim
 
 Generic refcount bypass for any shared boolean toggle. Registers an owner in a JSON owner list stored in an `input_text` helper. The first claim (0 to 1 transition) turns OFF the protected toggle. Subsequent claims from different owners are stacked. Duplicate claims from the same owner are silently ignored, making it safe for `mode: restart` automations.

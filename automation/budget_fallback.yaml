@@ -27,7 +27,10 @@ blueprint:
     Restores when the flag turns OFF (midnight reset or manual toggle).
     One instance per satellite.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/budget_fallback.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================
@@ -97,6 +100,30 @@ blueprint:
             entity:
               domain: media_player
 
+    # ===========================================================================
+    # ③ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure_section:
+      name: "③ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        fallback_active_entity:
+          name: Fallback active entity
+          description: "Boolean that signals budget fallback is active."
+          default: input_boolean.ai_budget_fallback_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        saved_pipelines_entity:
+          name: Saved pipelines entity
+          description: "input_text storing saved pipeline JSON for restore."
+          default: input_text.ai_budget_saved_pipelines
+          selector:
+            entity:
+              domain: input_text
+
 mode: restart
 
 # =============================================================================
@@ -104,11 +131,11 @@ mode: restart
 # =============================================================================
 triggers:
   - trigger: state
-    entity_id: input_boolean.ai_budget_fallback_active
+    entity_id: !input fallback_active_entity
     to: "on"
     id: fallback_on
   - trigger: state
-    entity_id: input_boolean.ai_budget_fallback_active
+    entity_id: !input fallback_active_entity
     to: "off"
     id: fallback_off
 
@@ -129,6 +156,7 @@ actions:
       fallback_pipeline: !input fallback_pipeline
       announcement: !input announcement_text
       speaker_entity: !input tts_speaker
+      _saved_pipelines: !input saved_pipelines_entity
 
   # ─────────────────────────────────────────────────────────────────────────
   # ACTIVATE: save current pipeline + switch to fallback
@@ -162,7 +190,7 @@ actions:
           - alias: "Set updated json"
             variables:
               updated_json: >-
-                {% set saved = states('input_text.ai_budget_saved_pipelines') | from_json(default={}) %}
+                {% set saved = states(_saved_pipelines) | from_json(default={}) %}
                 {% set ns = namespace(result={}) %}
                 {% for k, v in saved.items() %}
                   {% set ns.result = dict(ns.result, **{k: v}) %}
@@ -172,7 +200,7 @@ actions:
           - alias: "Save current pipeline to shared JSON helper"
             action: input_text.set_value
             target:
-              entity_id: input_text.ai_budget_saved_pipelines
+              entity_id: !input saved_pipelines_entity
             data:
               value: "{{ updated_json }}"
 
@@ -211,7 +239,7 @@ actions:
       # 1. Read saved pipelines JSON
       - alias: "Set saved dict"
         variables:
-          saved_dict: "{{ states('input_text.ai_budget_saved_pipelines') | from_json(default={}) }}"
+          saved_dict: "{{ states(_saved_pipelines) | from_json(default={}) }}"
       - alias: "Set restore to"
         variables:
           restore_to: "{{ saved_dict.get(pipeline_select, '') }}"
@@ -244,6 +272,6 @@ actions:
           - alias: "Remove restored entry from saved pipelines JSON"
             action: input_text.set_value
             target:
-              entity_id: input_text.ai_budget_saved_pipelines
+              entity_id: !input saved_pipelines_entity
             data:
               value: "{{ cleaned_json }}"

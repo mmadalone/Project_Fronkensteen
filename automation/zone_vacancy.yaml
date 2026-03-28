@@ -15,115 +15,148 @@ blueprint:
     reports "off" for a configurable delay. If the sensor goes back to "on"
     during the delay, the trigger is automatically cancelled.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/zone_vacancy.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
-    presence_sensor:
-      name: Presence Sensor
-      description: Binary sensor that detects zone occupancy (e.g. Aqara FP2).
-      selector:
-        entity:
-          domain: binary_sensor
+    detection:
+      name: "① Detection"
+      icon: mdi:motion-sensor
+      description: Presence sensor and vacancy delay settings.
+      collapsed: false
+      input:
+        presence_sensor:
+          name: Presence Sensor
+          description: Binary sensor that detects zone occupancy (e.g. Aqara FP2).
+          selector:
+            entity:
+              domain: binary_sensor
 
-    vacancy_delay:
-      name: Vacancy Delay
-      description: >-
-        How long the sensor must report "off" before turning things off.
-        If presence returns during this window, nothing happens.
-      default:
-        hours: 0
-        minutes: 15
-        seconds: 0
-      selector:
-        duration:
-          enable_day: false
+        vacancy_delay:
+          name: Vacancy Delay
+          description: >-
+            How long the sensor must report "off" before turning things off.
+            If presence returns during this window, nothing happens.
+          default:
+            hours: 0
+            minutes: 15
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
 
-    master_switch:
-      name: Master Switch
-      description: Global on/off for all auto-off zones.
-      default:
-        entity_id: input_boolean.ai_auto_off_enabled
-      selector:
-        entity:
-          domain: input_boolean
+    control:
+      name: "② Control"
+      icon: mdi:tune
+      description: Master kill switch for all auto-off zones.
+      collapsed: false
+      input:
+        master_switch:
+          name: Master Switch
+          description: Global on/off for all auto-off zones.
+          default:
+            entity_id: input_boolean.ai_auto_off_enabled
+          selector:
+            entity:
+              domain: input_boolean
 
-    lights_enabled:
-      name: Turn Off Lights
-      description: Whether to turn off lights when the zone is vacant.
-      default: true
-      selector:
-        boolean: {}
+    lights:
+      name: "③ Lights"
+      icon: mdi:lightbulb-group
+      description: Configure which lights to turn off on vacancy.
+      collapsed: true
+      input:
+        lights_enabled:
+          name: Turn Off Lights
+          description: Whether to turn off lights when the zone is vacant.
+          default: true
+          selector:
+            boolean: {}
 
-    use_area_lights:
-      name: Use Area Lights
-      description: >-
-        Turn off all lights in the target area. If disabled, uses the
-        specific lights list below instead.
-      default: true
-      selector:
-        boolean: {}
+        use_area_lights:
+          name: Use Area Lights
+          description: >-
+            Turn off all lights in the target area. If disabled, uses the
+            specific lights list below instead.
+          default: true
+          selector:
+            boolean: {}
 
-    target_area:
-      name: Target Area
-      description: The HA area this zone corresponds to.
-      selector:
-        area: {}
+        target_area:
+          name: Target Area
+          description: The HA area this zone corresponds to.
+          selector:
+            area: {}
 
-    specific_lights:
-      name: Specific Lights (optional)
-      description: >-
-        Individual lights/switches to turn off. When "Use Area Lights" is
-        enabled, only switch.* entities from this list are turned off
-        (area light.turn_off handles the rest). When disabled, all
-        entities in this list are turned off.
-      default: []
-      selector:
-        entity:
-          domain:
-            - light
-            - switch
-          multiple: true
+        specific_lights:
+          name: Specific Lights (optional)
+          description: >-
+            Individual lights/switches to turn off. When "Use Area Lights" is
+            enabled, only switch.* entities from this list are turned off
+            (area light.turn_off handles the rest). When disabled, all
+            entities in this list are turned off.
+          default: []
+          selector:
+            entity:
+              domain:
+                - light
+                - switch
+              multiple: true
 
-    media_enabled:
-      name: Stop Media
-      description: Whether to stop media players when the zone is vacant.
-      default: true
-      selector:
-        boolean: {}
+    media:
+      name: "④ Media"
+      icon: mdi:speaker
+      description: Configure which media players to stop on vacancy.
+      collapsed: true
+      input:
+        media_enabled:
+          name: Stop Media
+          description: Whether to stop media players when the zone is vacant.
+          default: true
+          selector:
+            boolean: {}
 
-    use_area_players:
-      name: Use Area Players
-      description: >-
-        Stop all media players in the target area. If disabled, uses the
-        specific players list below instead.
-      default: true
-      selector:
-        boolean: {}
+        use_area_players:
+          name: Use Area Players
+          description: >-
+            Stop all media players in the target area. If disabled, uses the
+            specific players list below instead.
+          default: true
+          selector:
+            boolean: {}
 
-    specific_players:
-      name: Specific Players (optional)
-      description: >-
-        Individual media players to stop. Only used when "Use Area Players"
-        is disabled.
-      default: []
-      selector:
-        entity:
-          domain: media_player
-          multiple: true
+        specific_players:
+          name: Specific Players (optional)
+          description: >-
+            Individual media players to stop. Only used when "Use Area Players"
+            is disabled.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
 
-    exit_script:
-      name: Exit Script (optional)
-      description: >-
-        Optional script to run after lights/media are turned off
-        (e.g. set thermostat to away mode).
-      default: []
-      selector:
-        entity:
-          domain: script
-          multiple: false
+    exit_actions:
+      name: "⑤ Exit Actions"
+      icon: mdi:exit-run
+      description: Optional script to run after lights/media are turned off.
+      collapsed: true
+      input:
+        exit_script:
+          name: Exit Script (optional)
+          description: >-
+            Optional script to run after lights/media are turned off
+            (e.g. set thermostat to away mode).
+          default: []
+          selector:
+            entity:
+              domain: script
+              multiple: false
 
     schedule_timing:
-      name: "Schedule & timing"
+      name: "⑥ Schedule & Timing"
       icon: mdi:clock-outline
       description: Configure when the automation is active.
       collapsed: true
@@ -176,7 +209,7 @@ blueprint:
               multiple: true
 
     weekend_overrides:
-      name: "Weekend overrides"
+      name: "⑦ Weekend Overrides"
       icon: mdi:weather-sunny
       description: >
         Optional weekend-specific schedule overrides.

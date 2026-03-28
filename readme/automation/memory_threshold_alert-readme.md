@@ -1,3 +1,5 @@
+![Memory Threshold Alert (v1.0.0)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/memory_threshold_alert-header.jpeg)
+
 # Memory Threshold Alert (v1.0.0)
 
 Scheduled daily health check for L2 memory. Calls `pyscript.memory_health_check` at the configured time, which compares record count and DB file size against configurable thresholds. If any threshold is breached, a persistent notification appears in the HA sidebar with detailed metrics.

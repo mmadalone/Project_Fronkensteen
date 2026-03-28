@@ -1,3 +1,5 @@
+![Proactive Briefing](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_briefing-header.jpeg)
+
 # Proactive briefing -- universal (scheduled + presence)
 
 Unified briefing blueprint that replaces both `proactive_briefing_morning` and `proactive_briefing_slot`. Each instance is a user-scheduled briefing with a custom label, fully self-contained. Supports scheduled time triggers (weekday/weekend), presence-based triggers, manual dashboard triggers, and self-resetting delivery flags. Includes volume set/restore with duck guard, media player pause/resume, dispatcher toggle, and custom LLM prompt with context injection.

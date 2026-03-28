@@ -1,3 +1,5 @@
+![Voice Assistant -- Confirmation Dialog](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/va_confirmation_dialog-header.jpeg)
+
 # Voice Assistant -- Confirmation Dialog
 
 Routes a voice command to a confirmation script. Use for destructive or expensive operations (turning off media centers, rebooting devices) where the assistant should ask "are you sure?" before acting. Create one instance per command pair (on/off, start/stop, etc.).

@@ -185,6 +185,46 @@ blueprint:
               multiline: false
 
     # ===========================================================================
+    # ⑤ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑤ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        sonarr_queue_entity:
+          name: Sonarr queue sensor
+          description: "Sensor tracking the Sonarr download queue."
+          default: sensor.sonarr_queue
+          selector:
+            entity:
+              domain: sensor
+
+        radarr_queue_entity:
+          name: Radarr queue sensor
+          description: "Sensor tracking the Radarr download queue."
+          default: sensor.radarr_queue
+          selector:
+            entity:
+              domain: sensor
+
+        tracking_enabled_entity:
+          name: Tracking enabled toggle
+          description: "Kill switch for media tracking."
+          default: input_boolean.ai_media_tracking_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        data_stale_entity:
+          name: Data stale flag
+          description: "Boolean flagged when media data promotion fails."
+          default: input_boolean.ai_media_data_stale
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
     # ⑥ PRIVACY
     # ===========================================================================
     privacy:
@@ -272,17 +312,17 @@ triggers:
   # 3. Queue change — Sonarr
   - trigger: state
     id: queue_sonarr
-    entity_id: sensor.sonarr_queue
+    entity_id: !input sonarr_queue_entity
 
   # 4. Queue change — Radarr
   - trigger: state
     id: queue_radarr
-    entity_id: sensor.radarr_queue
+    entity_id: !input radarr_queue_entity
 
   # 5. Manual — kill switch turns on
   - trigger: state
     id: manual
-    entity_id: input_boolean.ai_media_tracking_enabled
+    entity_id: !input tracking_enabled_entity
     to: "on"
 
   # 6. HA start
@@ -294,7 +334,7 @@ triggers:
 
 conditions:
   - condition: state
-    entity_id: input_boolean.ai_media_tracking_enabled
+    entity_id: !input tracking_enabled_entity
     state: "on"
   - condition: template
     value_template: >-
@@ -363,7 +403,7 @@ actions:
       - alias: "Flag media data as stale after promotion error"
         action: input_boolean.turn_on
         target:
-          entity_id: input_boolean.ai_media_data_stale
+          entity_id: !input data_stale_entity
 
   # ── Download notification ──
   - alias: "Download notification"

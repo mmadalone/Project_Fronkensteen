@@ -1,3 +1,5 @@
+![Phone charge reminder -- persona-aware battery nudges](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/phone_charge_reminder-header.jpeg)
+
 # Phone charge reminder -- persona-aware battery nudges
 
 Escalating TTS reminders when phone battery drops below configurable thresholds. Supports three delivery styles -- prompt (LLM-generated, persona-aware), factual (static, no LLM), or silent (no TTS). Congratulates on plug-in when battery was low. Each escalation tier (low, critical, urgent) has its own editable prompt/factual message, reminder count, and inter-reminder delay.

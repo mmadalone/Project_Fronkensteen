@@ -79,3 +79,18 @@ persons:
     notify_service: notify.mobile_app_oppo_a38
     spotify: ""
     imap_sensor: ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# System Health — config for system_health.py
+# ═══════════════════════════════════════════════════════════════════════════════
+# Most check data is discovered dynamically at runtime:
+#   Status sensors:   scanned from /config/pyscript/*.py (RESULT_ENTITY constants)
+#   Services:         scanned from /config/pyscript/*.py (@service functions)
+#   Helpers:          scanned from /config/helpers_input_*.yaml (ai_* keys)
+#   Pipeline entities: satellite_zones (above) + dispatcher sensor attributes
+# Only json_configs needs a static list (no single source to scan from).
+system_health:
+  json_configs:
+    - /config/pyscript/tts_speaker_config.json
+    - /config/pyscript/voice_mood_profile_map.json
+    - /config/pyscript/model_pricing.json

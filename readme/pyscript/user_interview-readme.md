@@ -1,3 +1,5 @@
+![User Preference Interview Engine](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/user_interview-header.jpeg)
+
 # User Preference Interview Engine
 
 Provides services for agent-driven conversational onboarding -- LLM agents call `save_user_preference` to persist answers to L1 helpers (known keys like wake time) or L2 memory (freeform preferences). Tracks interview progress per user in a JSON helper and exposes status for agents to decide what to ask next. Part of I-36 of the Voice Context Architecture.

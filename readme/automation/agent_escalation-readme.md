@@ -1,3 +1,5 @@
+![Agent Escalation -- Probability Gate](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/agent_escalation-header.jpeg)
+
 # Agent Escalation -- Probability Gate
 
 When an LLM agent threatens escalation, it fires the `escalate_action` tool which emits an `ai_escalation_request` event. This blueprint catches the event and rolls dice against a per-type configurable probability. On a hit, the threatened action executes. On a miss, the bluff is logged to L2 memory so agents can reference escalation history. Seven action types are supported, each with independent probability overrides and permission toggles.

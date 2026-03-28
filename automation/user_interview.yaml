@@ -26,6 +26,8 @@ blueprint:
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/user_interview.yaml
   author: madalone
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================
@@ -310,6 +312,38 @@ blueprint:
           selector:
             boolean:
 
+        continuous_conversation_entity:
+          name: "Continuous conversation entity"
+          description: "Boolean controlling the continuous conversation loop."
+          default: input_boolean.ai_continuous_conversation_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        follow_me_entity:
+          name: "Follow-me notification entity"
+          description: "Boolean controlling follow-me notifications."
+          default: input_boolean.ai_notification_follow_me
+          selector:
+            entity:
+              domain: input_boolean
+
+        voice_mood_entity:
+          name: "Voice mood entity"
+          description: "Boolean controlling voice mood modulation."
+          default: input_boolean.ai_voice_mood_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        interview_progress_entity:
+          name: "Interview progress entity"
+          description: "input_text storing interview progress JSON."
+          default: input_text.ai_interview_progress
+          selector:
+            entity:
+              domain: input_text
+
     # ===========================================================================
     # ④ Privacy
     # ===========================================================================
@@ -437,100 +471,6 @@ blueprint:
               multiline: true
 
     # ===========================================================================
-    # ⑥ Preference Helpers
-    # ===========================================================================
-    preference_helpers:
-      name: "⑥ Preference Helpers"
-      icon: mdi:account-cog
-      description: >
-        Helpers where individual preferences are stored after interview
-        save or file import. Each is editable in the HA UI. {user} in
-        the helper name is replaced with the target user slug at runtime.
-        Change these only if you use a different naming convention.
-      collapsed: true
-      input:
-        pref_verbosity:
-          name: "Verbosity helper"
-          description: "How verbose agents should be (e.g., brief, normal, detailed)"
-          default: "input_text.ai_context_user_verbosity_{user}"
-          selector:
-            text:
-        pref_humor:
-          name: "Humor helper"
-          description: "Agent humor level (e.g., lots of jokes, occasional, serious)"
-          default: "input_text.ai_context_user_humor_{user}"
-          selector:
-            text:
-        pref_language_context:
-          name: "Language context helper"
-          description: "When to switch languages (e.g., Spanish with Jessica)"
-          default: "input_text.ai_context_user_language_context_{user}"
-          selector:
-            text:
-        pref_persona:
-          name: "Persona helper"
-          description: "Preferred AI persona (e.g., rick, quark, no preference)"
-          default: "input_text.ai_context_user_persona_{user}"
-          selector:
-            text:
-        pref_notify_threshold:
-          name: "Notification threshold helper"
-          description: "What's worth a notification (e.g., urgent only, everything)"
-          default: "input_text.ai_context_user_notify_threshold_{user}"
-          selector:
-            text:
-        pref_social_style:
-          name: "Social style helper"
-          description: "Introvert/extrovert/ambivert"
-          default: "input_text.ai_context_user_social_style_{user}"
-          selector:
-            text:
-        pref_morning_or_night:
-          name: "Morning/night helper"
-          description: "Morning person or night owl"
-          default: "input_text.ai_context_user_morning_or_night_{user}"
-          selector:
-            text:
-        pref_values:
-          name: "Values helper"
-          description: "What matters most (e.g., honesty, creativity)"
-          default: "input_text.ai_context_user_values_{user}"
-          selector:
-            text:
-        pref_pet_peeves:
-          name: "Pet peeves helper"
-          description: "Things that annoy (e.g., small talk, being interrupted)"
-          default: "input_text.ai_context_user_pet_peeves_{user}"
-          selector:
-            text:
-        pref_stress_relief:
-          name: "Stress relief helper"
-          description: "What helps decompress (e.g., gaming, cooking)"
-          default: "input_text.ai_context_user_stress_relief_{user}"
-          selector:
-            text:
-        pref_off_limits:
-          name: "Off-limits topics helper"
-          description: "Topics the AI must NEVER bring up"
-          default: "input_text.ai_context_user_off_limits_{user}"
-          selector:
-            text:
-        pref_proactive_comfort:
-          name: "Proactive comfort helper"
-          description: "How proactive the AI should be (e.g., suggest freely, minimal)"
-          default: "input_text.ai_context_user_proactive_comfort_{user}"
-          selector:
-            text:
-        update_preferences:
-          name: "Update preference helpers after save/import"
-          description: >
-            When enabled, L1 preference helpers and the preferences
-            context sensor are updated after each interview save or
-            file import. Disable for manual-only control.
-          default: true
-          selector:
-            boolean:
-
 mode: restart
 max_exceeded: silent
 
@@ -564,7 +504,10 @@ variables:
   v_empty_progress_prompt: !input empty_progress_prompt
   v_interview_categories: !input interview_categories
   v_custom_topics: !input custom_topics
-  v_update_preferences: !input update_preferences
+  _continuous_conv: !input continuous_conversation_entity
+  _follow_me: !input follow_me_entity
+  _voice_mood: !input voice_mood_entity
+  _interview_progress: !input interview_progress_entity
 
 triggers:
   # ── Interview mode toggled ON ──
@@ -598,7 +541,7 @@ actions:
       - alias: "Deactivate continuous conversation on stop"
         action: input_boolean.turn_off
         target:
-          entity_id: input_boolean.ai_continuous_conversation_active
+          entity_id: !input continuous_conversation_entity
         continue_on_error: true
       - alias: "Restore suppressed toggles"
         if:
@@ -617,7 +560,7 @@ actions:
         then:
           - action: input_boolean.turn_on
             target:
-              entity_id: input_boolean.notification_follow_me
+              entity_id: !input follow_me_entity
             continue_on_error: true
       - alias: "Restore voice mood on stop"
         if:
@@ -626,7 +569,7 @@ actions:
         then:
           - action: input_boolean.turn_on
             target:
-              entity_id: input_boolean.ai_voice_mood_enabled
+              entity_id: !input voice_mood_entity
             continue_on_error: true
       - alias: "Stop: Interview mode deactivated — notifications restored"
         stop: "Interview mode deactivated — notifications restored"
@@ -708,7 +651,7 @@ actions:
     then:
       - action: input_boolean.turn_off
         target:
-          entity_id: input_boolean.notification_follow_me
+          entity_id: !input follow_me_entity
         continue_on_error: true
 
   # 0-mood. Suppress voice mood during interview
@@ -719,7 +662,7 @@ actions:
     then:
       - action: input_boolean.turn_off
         target:
-          entity_id: input_boolean.ai_voice_mood_enabled
+          entity_id: !input voice_mood_entity
         continue_on_error: true
 
   # 0b. Pre-seed progress from existing L1/L2 data
@@ -810,7 +753,7 @@ actions:
   - alias: "2 · Activate continuous flag"
     action: input_boolean.turn_on
     target:
-      entity_id: input_boolean.ai_continuous_conversation_active
+      entity_id: !input continuous_conversation_entity
     continue_on_error: true
 
   # 3. Loop variables (separate step — can't combine with repeat)
@@ -832,7 +775,7 @@ actions:
             {{ as_timestamp(now()) < loop_deadline | float
                and no_speech_count | int(0) < 3
                and is_state(v_toggle, 'on')
-               and states('input_boolean.ai_continuous_conversation_active') != 'off'
+               and states(_continuous_conv) != 'off'
                and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(30)) }}
       sequence:
         # A0. Wait for session to start (satellite leaves idle)
@@ -867,7 +810,7 @@ actions:
             {{ as_timestamp(now()) < loop_deadline | float
                and no_speech_count | int(0) < 3
                and is_state(v_toggle, 'on')
-               and states('input_boolean.ai_continuous_conversation_active') != 'off'
+               and states(_continuous_conv) != 'off'
                and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(30)) }}
 
         # D. Echo guard — let TTS audio start downloading
@@ -909,7 +852,7 @@ actions:
               Also cover these additional topics:
               {{ v_custom_topics }}
               {% endif %}
-              {% set raw = states('input_text.ai_interview_progress') | default('{}', true) %}
+              {% set raw = states(_interview_progress) | default('{}', true) %}
               {% if raw not in ['unknown', 'unavailable', '', '{}'] %}
                 {% set progress = raw | from_json | default({}) %}
                 {% set user_progress = progress[resolved_user] if resolved_user in progress else {} %}
@@ -947,7 +890,7 @@ actions:
   - alias: "5 · Deactivate continuous flag"
     action: input_boolean.turn_off
     target:
-      entity_id: input_boolean.ai_continuous_conversation_active
+      entity_id: !input continuous_conversation_entity
     continue_on_error: true
 
   # 6. Auto-deactivate interview mode if still on

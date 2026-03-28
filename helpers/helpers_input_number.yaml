@@ -4,45 +4,10 @@
 # Orphan "volume before ducking" helpers (6) removed 2026-03-14 — superseded by duck_manager
 
 ########################################
-# Bedtime negotiator (Global tuning knobs)
+# Goodnight negotiator
 ########################################
 
-bedtime_debounce_seconds:
-  name: Bedtime debounce seconds
-  icon: mdi:timer-lock-outline
-  min: 0
-  max: 60
-  step: 1
-  mode: slider
-  unit_of_measurement: s
-
-bedtime_cooldown_minutes:
-  name: Bedtime cooldown minutes
-  icon: mdi:timer-sand
-  min: 0
-  max: 180
-  step: 5
-  mode: slider
-  unit_of_measurement: min
-
-bedtime_reply_timeout_seconds:
-  name: Bedtime reply timeout seconds
-  icon: mdi:timer-alert-outline
-  min: 10
-  max: 180
-  step: 5
-  mode: slider
-  unit_of_measurement: s
-
-bedtime_max_attempts:
-  name: Bedtime max attempts
-  icon: mdi:counter
-  min: 1
-  max: 10
-  step: 1
-  mode: box
-
-gn_last_run_epoch:
+ai_gn_last_run_epoch:
   name: Goodnight Negotiator last run (epoch)
   icon: mdi:clock-check-outline
   min: 0
@@ -50,7 +15,7 @@ gn_last_run_epoch:
   step: 1
   mode: box
 
-gn_run_debounce_seconds:
+ai_gn_run_debounce_seconds:
   name: Goodnight Negotiator debounce (seconds)
   icon: mdi:timer-lock-outline
   min: 0
@@ -1161,14 +1126,6 @@ ai_tts_restore_timeout:
   step: 1
   icon: mdi:timer-alert
   mode: slider
-ai_tts_restore_post_buffer:
-  name: "TTS Restore Post-Buffer (s)"
-  min: 0
-  max: 15
-  step: 0.5
-  initial: 5
-  icon: mdi:speaker-pause
-  mode: slider
 
 # ── Music Composition (I-10) ──────────────────────────────────────────
 ai_music_daily_generation_limit:
@@ -1187,7 +1144,6 @@ ai_music_generations_today:
   max: 999
   step: 1
   mode: box
-  initial: 0
 
 ai_music_cache_size_mb:
   name: "AI Music - Cache Size Limit (MB)"
@@ -1624,7 +1580,7 @@ ai_wifi_score_primary:
   max: 100
   step: 5
   mode: box
-  initial: 40
+  initial: 30
 
 ai_wifi_score_secondary:
   name: "WiFi Score - Secondary Device (GPS)"
@@ -1642,7 +1598,7 @@ ai_wifi_score_tertiary:
   max: 100
   step: 5
   mode: box
-  initial: 20
+  initial: 15
 
 ai_wifi_score_quaternary:
   name: "WiFi Score - Quaternary Device"
@@ -1651,7 +1607,7 @@ ai_wifi_score_quaternary:
   max: 100
   step: 5
   mode: box
-  initial: 10
+  initial: 5
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_llm_budget — Budget Threshold Tuning
@@ -1865,4 +1821,73 @@ ai_voice_mood_doctor_portuondo_stability:
   max: 1
   step: 0.05
   initial: 0.60
+  mode: slider
+
+# ═══════════════════════════════════════════════════════════════════
+# TTS Stuck Detection
+# ═══════════════════════════════════════════════════════════════════
+ai_tts_stuck_timeout_minutes:
+  name: "TTS Stuck Timeout (minutes)"
+  icon: mdi:timer-alert
+  min: 1
+  max: 10
+  step: 1
+  mode: slider
+  unit_of_measurement: min
+  initial: 2
+
+# ═══════════════════════════════════════════════════════════════════
+# System Recovery Engine
+# ═══════════════════════════════════════════════════════════════════
+ai_recovery_max_retries_per_hour:
+  name: "Recovery Max Retries Per Hour"
+  icon: mdi:repeat
+  min: 1
+  max: 10
+  step: 1
+  mode: box
+  initial: 3
+
+ai_recovery_base_backoff_seconds:
+  name: "Recovery Base Backoff (seconds)"
+  icon: mdi:timer-sand
+  min: 10
+  max: 300
+  step: 10
+  mode: slider
+  unit_of_measurement: s
+  initial: 60
+
+# ═══════════════════════════════════════════════════════════════════
+# Toggle Audit Trail
+# ═══════════════════════════════════════════════════════════════════
+ai_toggle_audit_retention_days:
+  name: "AI Toggle Audit Retention (days)"
+  icon: mdi:calendar-clock
+  min: 7
+  max: 365
+  step: 1
+  mode: box
+  unit_of_measurement: days
+  initial: 90
+
+# ═══════════════════════════════════════════════════════════════════
+# Bedtime System (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_bedtime_now_countdown_minutes:
+  name: "Bedtime NOW — Countdown Minutes"
+  min: 1
+  max: 30
+  step: 1
+  mode: slider
+
+# ═══════════════════════════════════════════════════════════════════
+# Proactive Bedtime Escalation (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_stage_counter_helper_proactive_bedtime_escalation_rick:
+  name: "Stage Counter — Proactive Bedtime Escalation — Rick"
+  icon: mdi:counter
+  min: 0
+  max: 255
+  step: 1
   mode: slider

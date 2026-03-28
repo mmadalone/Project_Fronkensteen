@@ -1,3 +1,5 @@
+![Budget Fallback -- Per-Satellite Pipeline Switch](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/budget_fallback-header.jpeg)
+
 # Budget Fallback -- Per-Satellite Pipeline Switch
 
 When the AI budget is exhausted (`ai_budget_fallback_active` turns ON), this blueprint saves the current pipeline for each satellite and switches to a low-cost fallback pipeline (default: Davis). When the flag turns OFF (midnight reset or manual toggle), it restores the original pipeline. One instance per satellite, following the same per-satellite pattern as `voice_handoff.yaml`.

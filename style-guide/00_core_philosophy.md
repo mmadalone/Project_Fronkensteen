@@ -500,10 +500,11 @@ Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Pu
 - Always include `description`, `icon`, and `alias` fields
 
 ### 9.3 Helpers
-- Input helpers use prefixed naming by persona and context:
-  - Bedtime: `<persona>_bedtime_<field>` (e.g., `rick_bedtime_morning`, `quark_gn_devices_question`)
-  - Proactive: `<persona>_<area>_<time>` (e.g., `rick_workshop_evening`)
-  - Global state: `bedtime_<field>` (e.g., `bedtime_active`, `bedtime_global_lock`)
+- **All helpers use the `ai_` prefix.** Two bulk renames enforced this: F14 (2026-03-19, 20 entities) and F14b (2026-03-28, 48 entities). Only non-AI helpers (e.g., `lcars_sound`, `lcars_texture` for LCARS dashboard theme) are exempt.
+- Input helpers use `ai_` plus persona and context:
+  - Bedtime: `ai_<persona>_bedtime_<field>` (e.g., `ai_rick_bedtime_morning`, `ai_quark_gn_devices_question`)
+  - Proactive: `ai_<persona>_<area>_<time>` (e.g., `ai_rick_workshop_evening`)
+  - Global state: `ai_bedtime_<field>` (e.g., `ai_bedtime_active`, `ai_bedtime_global_lock`)
 - AI architecture helpers: `ai_<system>_<field>` (e.g., `ai_context_user_name`, `ai_dispatcher_era_morning`, `ai_tts_duck_volume`, `ai_dedup_enabled`). These are defined in `packages/ai_*.yaml` and shared across the pyscript orchestration layer.
 - **User preference helpers (auto-discovered):** `ai_context_user_<key>_{user}` (e.g., `ai_context_user_wake_schedule_miquel`, `ai_context_user_humor_jessica`). Any `input_text` matching this pattern is automatically discovered by `sensor.ai_preferences_context` and injected into agent hot context. To add a new user preference: create the helper in `helpers_input_text.yaml` → set or import a value → agents see it. No pyscript code changes needed. The interview import pipeline also auto-detects these for direct writes. Day-name fields (e.g., `wake_alt_days`) are normalized on ingest — Spanish abbreviations like `jue` are translated to English `thu` since `strftime` uses C/en_US locale.
 - **Preference consumption in blueprints:** Blueprints that call `conversation.process` inject preferences via a `_user_prefs_block` template variable (resolves active user from `sensor.occupancy_mode`, reads humor/off-limits/verbosity/morning-night helpers, outputs conditional text). Sleep-relevant blueprints also compute `_sleep_budget` (hours until wake with weekday/weekend/alt-day routing). Both are gated by an `enable_user_preferences` boolean input (default true). Alarm/routine blueprints additionally expose `use_preference_wake_time` / `use_preference_bed_time` toggles that override static trigger times with preference helper entities.

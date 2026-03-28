@@ -122,6 +122,16 @@ blueprint:
             entity:
               domain: input_boolean
 
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
         conversation_agent:
           name: Voice Assistant
           description: >-
@@ -683,7 +693,7 @@ blueprint:
             re-announcement of duplicate IMAP events (restarts,
             re-syncs, flaky connections). When the UID is empty,
             falls back to a sender+subject+date fingerprint.
-            Create: input_text.email_follow_me_dedup_uids
+            Create: input_text.ai_email_follow_me_dedup_uids
             (max 255, empty initial). Multi-instance on the same
             IMAP account: share this helper across all instances.
           default: ""
@@ -699,7 +709,7 @@ blueprint:
             the LLM prompt alongside the existing last-sender
             helper for multi-email awareness ("You recently told
             the user about an email from X about Y").
-            Create: input_text.email_follow_me_last_subject
+            Create: input_text.ai_email_follow_me_last_subject
             (max 255, empty initial). Multi-instance on the same
             IMAP account: share this helper across all instances.
           default: ""
@@ -955,6 +965,7 @@ variables:
   imap_entry: !input imap_entry_id
   account_label: !input email_account_label
   toggle_entity: !input enable_toggle
+  master_gate_entity: !input notification_master_gate
   presence_list: !input presence_sensors
   satellite_list: !input target_satellites
   fallback: !input fallback_mode
@@ -1025,6 +1036,12 @@ triggers:
 # CONDITIONS
 # =============================================================================
 conditions:
+  - alias: "Notification master gate must be ON"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+
   - alias: "Master toggle must be ON"
     condition: template
     value_template: "{{ is_state(toggle_entity, 'on') }}"
@@ -2177,7 +2194,12 @@ actions:
               {%- set existing = stored.split(',') | map('trim')
                   | reject('equalto', '') | list -%}
               {%- set combined = [uid] + existing -%}
-              {{ combined[:15] | join(',') }}
+              {%- set joined = combined[:15] | join(',') -%}
+              {%- if joined | length > 255 -%}
+                {{ joined[:255].rsplit(',', 1)[0] }}
+              {%- else -%}
+                {{ joined }}
+              {%- endif -%}
             {%- endif -%}
 
   # ---------------------------------------------------------------------------

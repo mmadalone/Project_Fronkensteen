@@ -200,6 +200,33 @@ blueprint:
             text:
               multiline: true
 
+        greeting_safety_prefix:
+          name: Greeting safety prefix
+          description: >-
+            Tool-suppression prefix prepended to the AI greeting prompt.
+            Safety guard — editing may cause tool invocations during
+            this step.
+          default: >-
+            [GREETING — do NOT call any functions or tools. Respond only
+            with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        arrival_system_prompt:
+          name: Arrival satellite system prompt
+          description: >-
+            Extra system prompt injected into the satellite conversation
+            after the greeting. Placeholders available at runtime:
+            {{ person_name }}, {{ welcome_line }}.
+          default: >-
+            {{ person_name }} just arrived home and heard: "{{ welcome_line }}".
+            This is an arrival conversation. Help them set up their lights, TV,
+            and music as per your rules.
+          selector:
+            text:
+              multiline: true
+
         assist_satellites:
           name: Assist satellites
           description: >-
@@ -418,6 +445,8 @@ variables:
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   v_ai_greeting_prompt: !input ai_greeting_prompt
+  v_greeting_prefix: !input greeting_safety_prefix
+  v_arrival_system_prompt: !input arrival_system_prompt
   person_name: >-
     {%- set custom = person_names_raw | string | trim -%}
     {%- if custom != '' -%}
@@ -751,7 +780,7 @@ actions:
             response_variable: ai_greeting
             data:
               agent_id: "{{ dispatch_agent }}"
-              text: "[GREETING — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ v_ai_greeting_prompt }}"
+              text: "{{ v_greeting_prefix }} {{ v_ai_greeting_prompt }}"
             continue_on_error: true
 
   - alias: "Extract greeting text with fallback if LLM failed"
@@ -776,9 +805,7 @@ actions:
               preannounce: true
               start_message: "{{ welcome_line }}"
               extra_system_prompt: >-
-                {{ person_name }} just arrived home and heard: "{{ welcome_line }}".
-                This is an arrival conversation. Help them set up their lights, TV,
-                and music as per your rules.
+                {{ v_arrival_system_prompt }}
             continue_on_error: true
 
   - alias: "Whisper — update self-awareness"

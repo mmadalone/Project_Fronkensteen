@@ -19,9 +19,9 @@ blueprint:
     min_version: "2024.10.0"
 
   input:
-    # ── 1️⃣ Playback defaults ─────────────────────────────────
+    # ── ① Playback defaults ─────────────────────────────────
     section_defaults:
-      name: "1️⃣ Playback defaults"
+      name: "① Playback defaults"
       icon: mdi:tune
       collapsed: false
       input:
@@ -65,16 +65,16 @@ blueprint:
                 - replace
                 - add
 
-    # ── 2️⃣ Infrastructure ──────────────────────────────────
+    # ── ② Infrastructure ──────────────────────────────────
     section_infrastructure:
-      name: "2️⃣ Infrastructure"
+      name: "② Infrastructure"
       icon: mdi:cog
       collapsed: true
       input:
         ducking_flag:
           name: "Ducking flag entity"
           description: "Boolean indicating audio ducking is active."
-          default: input_boolean.ducking_flag
+          default: input_boolean.ai_ducking_flag
           selector:
             entity:
               domain: input_boolean

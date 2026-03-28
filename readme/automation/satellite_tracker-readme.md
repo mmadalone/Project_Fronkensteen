@@ -1,3 +1,5 @@
+![Satellite Tracker -- Last Active](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/satellite_tracker-header.jpeg)
+
 # Satellite Tracker -- Last Active
 
 Tracks when a voice assistant satellite starts responding and stores its `entity_id` in `input_text.ai_last_satellite`. Used by `voice_handoff.yaml` and other automations to route actions to the correct satellite. Create one instance per satellite.

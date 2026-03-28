@@ -1,3 +1,5 @@
+![Calendar Alarm](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/calendar_alarm-header.jpeg)
+
 # Calendar-Aware Wake-Up Alarm
 
 Fires at the dynamically-computed wake time from the bedtime advisor (`input_datetime.ai_predicted_wake_time`). Optionally restricted to workdays only and presence-gated. The alarm turns on configured lights/switches, announces via TTS (static or LLM-generated), and can call an optional wake script for extended routines like music handoff, curtains, or coffee machines. Deliberately lean -- no snooze/stop cycle by design.

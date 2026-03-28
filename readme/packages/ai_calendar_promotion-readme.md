@@ -1,3 +1,5 @@
+![AI Calendar Promotion](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_calendar_promotion-header.jpeg)
+
 # AI Calendar Promotion — Google Calendar to Voice Context
 
 Promotes Google Calendar events from L3 (API) to L2 (memory) for fast agent access. Provides near-real-time sync via midnight cron and state-change triggers, plus L1 quick-access summaries for today and tomorrow. Part of Task 18a of the Voice Context Architecture.

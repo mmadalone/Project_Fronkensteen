@@ -1,3 +1,5 @@
+![Sleep Detection -- Presence-Based Sleep Lifecycle](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/sleep_detection-header.jpeg)
+
 # Sleep Detection -- Presence-Based Sleep Lifecycle
 
 Detects sleep from sustained presence in a bed zone. Manages the full lifecycle: sleep start (flag + timestamp), sleep end (clear + event + optional log), and false positive override. Includes configurable time window with cross-midnight support and cat mitigation (multi-zone check when a specific person is away).

@@ -885,7 +885,6 @@ variables:
     {% endif %}
     {{ ns.lines | join(' ') if ns.lines else '' }}
   _sleep_budget: >-
-    {% set day_names = ['mon','tue','wed','thu','fri','sat','sun'] %}
     {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
     {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
     {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}

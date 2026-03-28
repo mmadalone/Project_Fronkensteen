@@ -1,3 +1,5 @@
+![Music Taste Rebuild](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/music_taste_rebuild-header.jpeg)
+
 # Music Taste -- Manual Rebuild
 
 Triggers a full music taste profile aggregation when a rebuild button is pressed, on a scheduled interval, or at HA startup. Merges Music Assistant play logs and Spotify data into a unified taste profile on `sensor.ai_music_taste_status`. Optionally generates an LLM-powered genre/style summary (no artist names) for use in voice agent context.

@@ -1,3 +1,5 @@
+![Voice -- Bedtime Instant Shutdown](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_instant-header.jpeg)
+
 # Voice -- Bedtime Instant Shutdown
 
 Script blueprint that executes an instant bedtime sequence as a single tool call: announce bedtime, stop TV, play audiobook, warn before lights-off, wait, turn off lights, and say goodnight. Designed to be exposed as an LLM tool function so a voice agent can trigger a full staggered shutdown with one command.

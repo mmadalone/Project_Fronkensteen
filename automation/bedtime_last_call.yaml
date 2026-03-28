@@ -233,6 +233,32 @@ blueprint:
             text:
               multiline: true
 
+        safety_prefix:
+          name: Safety prefix
+          description: >-
+            Tool-suppression prefix prepended to the LLM prompt.
+            Safety guard — editing may cause tool invocations during
+            this step.
+          default: >-
+            [BEDTIME — do NOT call any functions or tools. Respond only
+            with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        task_instruction:
+          name: Task instruction
+          description: >-
+            Formatting instruction appended after the prompt and context
+            block. Placeholder available at runtime: {{ user_name }}.
+          default: >-
+            task: respond with ONE short, natural sentence you would say
+            out loud to {{ user_name }} right now. maximum 220 characters.
+            do not include quotation marks or any surrounding formatting.
+          selector:
+            text:
+              multiline: true
+
         context_entities:
           name: Extra context entities
           description: >
@@ -352,6 +378,16 @@ blueprint:
           selector:
             boolean:
 
+        enable_sleep_budget:
+          name: "Enable sleep budget context"
+          description: >
+            Inject sleep budget (hours until wake time) into last call
+            prompts so the agent can reference how much sleep the user
+            will get if they go to bed now.
+          default: true
+          selector:
+            boolean:
+
     # ===========================================================================
     # ⑨ INFRASTRUCTURE
     # ===========================================================================
@@ -389,6 +425,9 @@ variables:
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   enable_user_prefs: !input enable_user_preferences
+  enable_sleep_budget: !input enable_sleep_budget
+  v_safety_prefix: !input safety_prefix
+  v_task_instruction: !input task_instruction
 
   # ── User preference context (Preference Consumption B3) ──
   _resolved_user: >-
@@ -415,6 +454,25 @@ variables:
       {% set ns.lines = ns.lines + ['User is a ' ~ morning_night ~ '.'] %}
     {% endif %}
     {{ ns.lines | join(' ') if ns.lines else '' }}
+  _sleep_budget: >-
+    {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
+    {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
+    {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
+    {% set is_weekend = tomorrow in ['sat','sun'] %}
+    {% set is_alt = tomorrow in alt_days %}
+    {% if is_alt %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_alt_weekday_' ~ _resolved_user) %}
+    {% elif is_weekend %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekend_' ~ _resolved_user) %}
+    {% else %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekday_' ~ _resolved_user) %}
+    {% endif %}
+    {% if wake_raw not in ['unknown','unavailable','','None','00:00:00'] %}
+      {% set wake_today = today_at(wake_raw) %}
+      {% set wake_ts = wake_today if wake_today > now() else wake_today + timedelta(days=1) %}
+      {% set hours_left = ((wake_ts - now()).total_seconds() / 3600) | round(1) %}
+      Sleep budget: ~{{ hours_left }} hours until {{ wake_raw[:5] }} wake time.
+    {% endif %}
 
   today_key: >-
     {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
@@ -579,20 +637,22 @@ actions:
     data:
       agent_id: "{{ dispatch_agent }}"
       text: >-
-        [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+        {{ v_safety_prefix }}
         {{ llm_prompt }}
 
         context:
         - extra_entities:
         {{ sensor_context }}
 
-        task:
-        respond with ONE short, natural sentence you would say out loud
-        to {{ user_name }} right now. maximum 220 characters. do not include
-        quotation marks or any surrounding formatting.
+        {{ v_task_instruction }}
         {% if enable_user_prefs | bool(true) %}
         {% if _user_prefs_block | trim | length > 0 %}
         User context: {{ _user_prefs_block }}
+        {% endif %}
+        {% endif %}
+        {% if enable_sleep_budget | bool(true) %}
+        {% if _sleep_budget | trim | length > 0 %}
+        {{ _sleep_budget }}
         {% endif %}
         {% endif %}
     response_variable: ai_result

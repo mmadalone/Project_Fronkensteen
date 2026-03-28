@@ -16,7 +16,10 @@ blueprint:
     Tracks when a satellite starts responding and stores its entity_id
     in input_text.ai_last_satellite. Create one instance per satellite.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/satellite_tracker.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================
@@ -36,6 +39,14 @@ blueprint:
             entity:
               domain: assist_satellite
 
+        last_satellite_entity:
+          name: Last satellite entity
+          description: "Helper that stores the last-active satellite entity_id."
+          default: input_text.ai_last_satellite
+          selector:
+            entity:
+              domain: input_text
+
 mode: restart
 
 triggers:
@@ -47,6 +58,6 @@ actions:
   - alias: "Record last-used satellite for presence routing"
     action: input_text.set_value
     target:
-      entity_id: input_text.ai_last_satellite
+      entity_id: !input last_satellite_entity
     data:
       value: "{{ trigger.entity_id }}"

@@ -24,6 +24,8 @@ blueprint:
   domain: script
   author: Madalone + Assistant
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_confirm_device_toggle.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     core:

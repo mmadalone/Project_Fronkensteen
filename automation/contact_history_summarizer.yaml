@@ -47,6 +47,8 @@ blueprint:
 
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/contact_history_summarizer.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================

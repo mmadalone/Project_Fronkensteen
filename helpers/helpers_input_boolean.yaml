@@ -33,11 +33,6 @@ ai_wake_up_stop:
 # LCARS Stuff
 ########################################
 
-lcars_horizontal:
-  name: LCARS Horizontal
-  icon: mdi:arrow-split-horizontal
-  initial: false
-
 lcars_sound:
   name: LCARS Sound
   icon: mdi:volume-high
@@ -46,11 +41,6 @@ lcars_sound:
 lcars_texture:
   name: LCARS Texture
   icon: mdi:texture
-  initial: false
-
-lcars_vertical:
-  name: LCARS Vertical
-  icon: mdi:arrow-split-vertical
   initial: false
 
 ########################################
@@ -67,42 +57,7 @@ ai_bedtime_global_lock:
   icon: mdi:lock
   initial: false
 
-ai_bedtime_waiting_for_reply:
-  name: Bedtime negotiator waiting for reply
-  icon: mdi:account-voice
-  initial: false
-
-ai_bedtime_debug:
-  name: Bedtime negotiator debug
-  icon: mdi:bug
-  initial: false
-
-ai_bedtime_log_tts_payload:
-  name: Log bedtime TTS payload
-  icon: mdi:text-to-speech
-  initial: false
-
-ai_bedtime_log_llm_prompt:
-  name: Log bedtime LLM prompt summary
-  icon: mdi:brain
-  initial: false
-
-ai_bedtime_opening_llm_enabled:
-  name: Enable LLM opening line
-  icon: mdi:comment-text-outline
-  initial: true
-
-ai_bedtime_allow_shutdown_actions:
-  name: Allow shutdown actions
-  icon: mdi:power
-  initial: true
-
-ai_bedtime_allow_time_talk:
-  name: Allow time-based comments
-  icon: mdi:clock-outline
-  initial: true
-
-gn_bedtime_lock:
+ai_gn_bedtime_lock:
   name: Goodnight Negotiator lock (internal)
   icon: mdi:lock
   initial: false
@@ -118,7 +73,7 @@ ai_voice_pin_enabled:
   icon: mdi:shield-lock
   initial: false
 
-notification_follow_me:
+ai_notification_follow_me:
   name: Notification follow-me enabled
   icon: mdi:message-bulleted
   initial: true
@@ -716,3 +671,150 @@ ai_voice_mood_enabled:
   name: "AI Voice Mood Modulation - Enabled"
   icon: mdi:waveform
   initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_auto_on — Auto-On System (zone toggles)
+# ═══════════════════════════════════════════════════════════════════
+ai_auto_on_workshop:
+  name: "AI Auto-On — Workshop"
+  initial: true
+  icon: mdi:lightbulb-auto
+
+ai_auto_on_living_room:
+  name: "AI Auto-On — Living Room"
+  initial: true
+  icon: mdi:lightbulb-auto
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Evening Manual Trigger
+# ═══════════════════════════════════════════════════════════════════
+ai_briefing_evening_manual_trigger:
+  name: "AI Briefing — Evening Manual Trigger"
+  initial: false
+  icon: mdi:bell-ring
+
+# ═══════════════════════════════════════════════════════════════════
+# Wake-up System (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_wake_up_guard_stop:
+  name: "Wake Up Guard — STOP"
+  icon: mdi:alarm
+
+# ═══════════════════════════════════════════════════════════════════
+# Bedtime System (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_bedtime_now_manual_trigger:
+  name: "Bedtime NOW — Manual Trigger"
+  icon: mdi:weather-night
+
+ai_bedtime_now_rick:
+  name: "Bedtime NOW — Rick"
+  icon: mdi:sleep
+
+ai_bedtime_now_quark:
+  name: "Bedtime NOW — Quark"
+  icon: mdi:bed
+
+# ═══════════════════════════════════════════════════════════════════
+# Proactive Bedtime Escalation (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_proactive_bedtime_escalation_killswitch:
+  name: "Proactive Bedtime Escalation — Kill Switch — Rick"
+  icon: mdi:stop-circle-outline
+
+ai_bedtime_active_mutex_proactive_bedtime_escalation:
+  name: "Bedtime Active Mutex — Proactive Bedtime Escalation — Rick"
+  icon: mdi:volume-mute
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_notification_follow_me_reminder_loop_active:
+  name: "Notification Follow-Me — Reminder Loop Active"
+  icon: mdi:bell
+
+# ═══════════════════════════════════════════════════════════════════
+# Memory & Embedding (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_sqlite_vec_recompile_i_2a_kill_switch:
+  name: "sqlite-vec Recompile (I-2a) — Kill Switch"
+  icon: mdi:database-search
+
+ai_embedding_batch_kill_switch:
+  name: "Embedding Batch — Kill Switch"
+  icon: mdi:ember
+
+# ═══════════════════════════════════════════════════════════════════
+# Interaction Summarizer (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_interaction_summarizer_kill_switch:
+  name: "Interaction Summarizer — Kill Switch"
+  icon: mdi:summit
+
+# ═══════════════════════════════════════════════════════════════════
+# Briefing / Email — Alexa (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_alexa_briefing:
+  name: "Alexa Briefing"
+  icon: mdi:underwear-outline
+
+ai_alexa_mail_status:
+  name: "Alexa Mail Status"
+  icon: mdi:email
+
+# ═══════════════════════════════════════════════════════════════════
+# Memory To-do List (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_memory_to_do_list_mirror_kill_switch:
+  name: "Memory To-do List Mirror — Kill Switch"
+  icon: mdi:checkbox-marked-circle-auto-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Master Gate
+# ═══════════════════════════════════════════════════════════════════
+ai_notifications_master_enabled:
+  name: "AI Notifications — Master Enabled"
+  icon: mdi:bell-check
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Therapy Session (QS-5)
+# ═══════════════════════════════════════════════════════════════════
+ai_therapy_mode:
+  name: "AI Therapy Mode"
+  icon: mdi:brain
+
+ai_therapy_enabled:
+  name: "AI Therapy Enabled"
+  icon: mdi:brain
+
+# ═══════════════════════════════════════════════════════════════════
+# Toggle Audit Trail
+# ═══════════════════════════════════════════════════════════════════
+ai_toggle_audit_enabled:
+  name: "AI Toggle Audit - Enabled"
+  icon: mdi:clipboard-check-outline
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Dispatcher Bypass Mode (set by pyscript on cache failure)
+# ═══════════════════════════════════════════════════════════════════
+ai_dispatcher_bypass_mode:
+  name: "AI Dispatcher Bypass Mode"
+  icon: mdi:highway
+  initial: false
+
+# ═══════════════════════════════════════════════════════════════════
+# System Recovery Engine
+# ═══════════════════════════════════════════════════════════════════
+ai_system_recovery_enabled:
+  name: "AI System Recovery Engine"
+  icon: mdi:wrench-cog
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Contact History (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_contact_history_summarizer_kill_switch:
+  name: "Contact History Summarizer — Kill Switch"
+  icon: mdi:book-open-blank-variant

@@ -1,3 +1,5 @@
+![AI Dispatcher](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_dispatcher-header.jpeg)
+
 # AI Agent Dispatcher — Voice Pipeline Routing
 
 Package shell for the agent dispatcher system (DC-7 / Task 11). Routes voice queries to the appropriate conversation agent based on satellite identity, user preferences, and contextual signals. All helpers have been moved to consolidated helper files.

@@ -1,3 +1,5 @@
+![Duck Refcount Watchdog](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/duck_refcount_watchdog-header.jpeg)
+
 # Duck Refcount Watchdog
 
 Safety net for the duck refcount system used by Notification Follow-Me, Email Follow-Me, and other TTS blueprints that duck media player volumes during announcements. When parallel TTS runs die mid-flight (automation reload, HA restart, supersede exit), the duck refcount stays above zero, the ducking flag stays ON, and media players remain permanently ducked at low volume. This watchdog detects the stranded state and force-restores everything.

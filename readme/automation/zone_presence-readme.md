@@ -1,3 +1,5 @@
+![AI Auto-On -- Zone Presence](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/zone_presence-header.jpeg)
+
 # AI Auto-On -- Zone Presence
 
 Turns on lights and/or media when a presence sensor (e.g., Aqara FP2) reports "on" for a configurable delay. If the sensor goes back to "off" during the delay, the trigger is automatically cancelled. Each zone gets its own automation instance created through the HA UI. This is the inverse of the Zone Vacancy blueprint, which turns things off.

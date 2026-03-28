@@ -127,6 +127,11 @@ _cache_ts: float = 0.0
 _CACHE_EMPTY_RETRY: int = 30  # seconds — fast retry when pipelines were empty
 _round_robin_index = 0
 
+# ── Degradation: bypass mode when cache repeatedly fails ──
+_bypass_active: bool = False
+_cache_fail_count: int = 0
+_CACHE_FAIL_THRESHOLD: int = 3
+
 result_entity_name: dict[str, str] = {}
 
 
@@ -439,7 +444,7 @@ def _strip_handoff_command(intent_text: str, patterns: list) -> str:
 
 async def _ensure_cache() -> None:
     """Lazy-load the full cache on first dispatch. Auto-expires after configurable TTL."""
-    global _cache, _cache_ts
+    global _cache, _cache_ts, _cache_fail_count, _bypass_active
     if _cache is not None:
         ttl = _CACHE_EMPTY_RETRY if not _cache["personas"] else _get_cache_ttl()
         if (time.monotonic() - _cache_ts) < ttl:
@@ -454,10 +459,36 @@ async def _ensure_cache() -> None:
     )
 
     if not personas:
+        _cache_fail_count += 1
         log.error(  # noqa: F821
             "agent_dispatch: no conversation pipelines found in "
-            f"{PIPELINE_FILE} — dispatch will return empty results"
+            f"{PIPELINE_FILE} — fail count {_cache_fail_count}/{_CACHE_FAIL_THRESHOLD}"
         )
+        if _cache_fail_count >= _CACHE_FAIL_THRESHOLD and not _bypass_active:
+            _bypass_active = True
+            log.warning("agent_dispatch: entering BYPASS mode — cache load failed %d times", _cache_fail_count)  # noqa: F821
+            try:
+                service.call(  # noqa: F821
+                    "input_boolean", "turn_on",
+                    entity_id="input_boolean.ai_dispatcher_bypass_mode",
+                )
+            except Exception:
+                pass
+    else:
+        # Cache loaded successfully — clear bypass if active
+        if _bypass_active:
+            _bypass_active = False
+            _cache_fail_count = 0
+            log.info("agent_dispatch: exiting BYPASS mode — cache recovered with %d personas", len(personas))  # noqa: F821
+            try:
+                service.call(  # noqa: F821
+                    "input_boolean", "turn_off",
+                    entity_id="input_boolean.ai_dispatcher_bypass_mode",
+                )
+            except Exception:
+                pass
+        elif _cache_fail_count > 0:
+            _cache_fail_count = 0
 
     topic_keywords = await _load_topic_keywords(personas)
 
@@ -978,6 +1009,29 @@ async def agent_dispatch(
             _set_result("fallback", **result)
             return result
 
+        # ── Bypass mode: cache unavailable, direct routing ──
+        if _bypass_active:
+            try:
+                fallback_agent = (
+                    state.get("input_text.ai_dispatcher_fallback_pipeline") or "homeassistant"  # noqa: F821
+                ).strip()
+            except Exception:
+                fallback_agent = "homeassistant"
+            result = {
+                "agent": fallback_agent,
+                "persona": "bypass",
+                "verbosity": "standard",
+                "variant": "standard",
+                "reason": "cache_bypass",
+                "fallback": True,
+                "tts_engine": "tts.home_assistant_cloud",
+                "tts_voice": "",
+                "stt_engine": "stt.home_assistant_cloud",
+                "elapsed_ms": round((time.monotonic() - t_start) * 1000, 1),
+            }
+            _set_result("bypass", **result)
+            return result
+
         # ── Pipeline name resolution (dynamic by display name) ──
         if pipeline_name:
             pipeline_name_lower = pipeline_name.strip().lower()
@@ -1380,7 +1434,14 @@ async def agent_dispatcher_startup():
     """Initialize dispatcher status sensor on HA startup."""
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")
-    await _ensure_cache()  # populates era selects + keywords
+    try:
+        await _ensure_cache()  # populates era selects + keywords
+    except Exception as exc:
+        log.error("agent_dispatch: startup cache load failed: %s — entering bypass mode", exc)  # noqa: F821
+        global _bypass_active
+        _bypass_active = True
+        _set_result("bypass", error=str(exc)[:200])
+        return
     log.info("agent_dispatcher: loaded — idle")  # noqa: F821
 
 

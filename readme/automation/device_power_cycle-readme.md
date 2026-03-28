@@ -1,3 +1,5 @@
+![Device Power Cycle -- Scheduled Reboot via Smart Plug](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/device_power_cycle-header.jpeg)
+
 # Device Power Cycle -- Scheduled Reboot via Smart Plug
 
 Turns a smart plug OFF at a scheduled time, waits a configurable number of seconds, then turns it back ON. Use for speakers, routers, or any device that benefits from a daily power cycle.

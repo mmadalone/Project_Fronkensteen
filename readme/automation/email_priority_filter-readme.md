@@ -1,3 +1,5 @@
+![Email Priority Filter](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/email_priority_filter-header.jpeg)
+
 # Email Priority Filter
 
 Listens for IMAP content events from a specific email account and passes sender + subject to `pyscript.email_promote_process` for priority filtering and L2 memory promotion. Gated by a kill switch. Designed to work alongside Email Follow-Me -- this blueprint handles backend priority classification while Email Follow-Me handles TTS announcements.

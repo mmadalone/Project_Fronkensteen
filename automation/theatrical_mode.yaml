@@ -7,6 +7,8 @@ blueprint:
     their own TTS voice, optionally on different physical speakers
     for spatial staging. Foundation: Pattern 1 (Reactive Banter).
   domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/theatrical_mode.yaml
   homeassistant:
     min_version: "2025.7.0"
 
@@ -485,6 +487,25 @@ blueprint:
             text:
               multiline: true
 
+        native_fallback_prompt:
+          name: "Native Fallback — Debate Prompt"
+          description: >-
+            Prompt for the native fallback path (when dispatcher is disabled).
+            Simplified single-agent loop. Placeholders available at runtime:
+            {{ v_max_words }}, {{ v_topic }}. The i45a_prefix is NOT
+            prepended automatically in this path — include your own
+            guard if needed. Safety guard — editing may allow tool
+            invocations during this step.
+          default: >-
+            [THEATRICAL DEBATE — Do NOT call any functions or tools.
+            Respond ONLY with a brief in-character argument.
+            Stay under {{ v_max_words | int(40) }} words.]
+            Topic: {{ v_topic }}
+            Give your take. Be brief. Stay in character.
+          selector:
+            text:
+              multiline: true
+
     # \u2500\u2500 \u2469 Banter Escalation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     escalation:
       name: "\u2469 Banter Escalation"
@@ -528,6 +549,18 @@ blueprint:
             entity:
               domain: script
 
+        theatrical_mode_active_entity:
+          name: "Theatrical mode active entity"
+          description: >-
+            Boolean tracking whether a theatrical exchange is currently
+            running. Set ON at start, OFF at end. Used as a gate by
+            reactive_banter and as a loop condition by the native
+            fallback path.
+          default: input_boolean.ai_theatrical_mode_active
+          selector:
+            entity:
+              domain: input_boolean
+
 mode: single
 max_exceeded: silent
 
@@ -546,7 +579,7 @@ conditions:
   # Gate 2: Not already running
   - alias: "Gate 2 \u2014 Not already active"
     condition: state
-    entity_id: input_boolean.ai_theatrical_mode_active
+    entity_id: !input theatrical_mode_active_entity
     state: "off"
 
   # Gate 3: Budget floor
@@ -610,6 +643,7 @@ variables:
   v_whisper_template: !input whisper_template
   v_i45a_prefix: !input i45a_prefix
   v_lang_hint: !input lang_hint
+  v_native_fallback_prompt: !input native_fallback_prompt
   v_enable_escalation: !input enable_banter_escalation
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
@@ -717,25 +751,19 @@ action:
           - alias: "Native fallback \u2014 activate"
             action: input_boolean.turn_on
             target:
-              entity_id: input_boolean.ai_theatrical_mode_active
+              entity_id: !input theatrical_mode_active_entity
           - alias: "Native fallback \u2014 repeat loop"
             repeat:
               count: "{{ v_turn_limit | int(6) }}"
               sequence:
                 - condition: state
-                  entity_id: input_boolean.ai_theatrical_mode_active
+                  entity_id: !input theatrical_mode_active_entity
                   state: "on"
                 - action: conversation.process
                   data:
                     agent_id: "{{ v_conversation_agent }}"
                     text: >-
-                      [THEATRICAL DEBATE \u2014 Do NOT call any functions or tools.
-                      Respond ONLY with a brief in-character argument.
-                      Stay under {{ v_max_words | int(40) }} words.]
-
-                      Topic: {{ v_topic }}
-
-                      Give your take. Be brief. Stay in character.
+                      {{ v_native_fallback_prompt }}
                   response_variable: native_result
                   continue_on_error: true
                 - variables:
@@ -769,7 +797,7 @@ action:
           - alias: "Native fallback \u2014 deactivate"
             action: input_boolean.turn_off
             target:
-              entity_id: input_boolean.ai_theatrical_mode_active
+              entity_id: !input theatrical_mode_active_entity
 
   # ── Release refcount bypass ──
   - alias: "Step 5 \u2014 Release follow-me bypass"

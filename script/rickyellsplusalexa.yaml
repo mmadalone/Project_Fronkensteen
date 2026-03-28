@@ -27,11 +27,14 @@ blueprint:
     - **v1.0** — Initial release.
 
   domain: script
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/rickyellsplusalexa.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     dispatcher_settings:
-      name: "🤖 Dispatcher & Voice Assistant"
+      name: "① Dispatcher & Voice Assistant"
       icon: mdi:robot-outline
       collapsed: false
       input:
@@ -55,7 +58,7 @@ blueprint:
             text:
 
     tts_settings:
-      name: "🎙️ TTS Settings"
+      name: "② TTS Settings"
       icon: mdi:account-voice
       collapsed: false
       input:
@@ -63,7 +66,7 @@ blueprint:
           name: Media player for Rick's voice
           description: >
             Media player where Rick should yell at you.
-          default:
+          default: ""
           selector:
             entity:
               domain: media_player
@@ -96,7 +99,7 @@ blueprint:
               multiline: true
 
     alexa_settings:
-      name: "📻 Alexa Configuration"
+      name: "③ Alexa Configuration"
       icon: mdi:speaker-wireless
       collapsed: true
       input:
@@ -118,7 +121,7 @@ blueprint:
           description: >
             Alexa device that should receive the text commands. Must be
             supported by `alexa_devices.send_text_command`.
-          default:
+          default: ""
           selector:
             device:
               integration: alexa_devices

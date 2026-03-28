@@ -1,3 +1,5 @@
+![Device Power Cycle (manual script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/device_power_cycle_script-header.jpeg)
+
 # Device Power Cycle (manual script)
 
 Script blueprint for on-demand power cycling of a switch entity. Turns off the target switch, waits a configurable duration, then turns it back on. Ideal for rebooting speakers, routers, or smart-plug-controlled devices. For scheduled automatic power cycling, use the `device_power_cycle` automation blueprint instead.

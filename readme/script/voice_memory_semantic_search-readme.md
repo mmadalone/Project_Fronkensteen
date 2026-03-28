@@ -1,3 +1,5 @@
+![Voice -- Memory Semantic Search (tool script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_memory_semantic_search-header.jpeg)
+
 # Voice -- Memory Semantic Search (tool script)
 
 Semantic (meaning-based) memory search via sqlite-vec. Wraps `pyscript.memory_semantic_search` to perform pure KNN vector similarity search against embedded L2 memories. Use when regular FTS5 search returns no results, or when the user describes something in different words than how it was stored. Each query costs one embedding API call, so regular keyword search should be tried first.

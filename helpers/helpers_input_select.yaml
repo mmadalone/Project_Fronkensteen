@@ -538,3 +538,15 @@ ai_privacy_gate_user_interview:
   initial: auto
   icon: mdi:account-voice
 
+ai_privacy_gate_alexa_on_demand_briefing:
+  name: "Privacy Override — Alexa On-Demand Briefing"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:microphone-message
+
+ai_privacy_gate_therapy_session:
+  name: "Privacy Override — Therapy Session"
+  options: *privacy_override_options
+  initial: auto
+  icon: mdi:brain
+

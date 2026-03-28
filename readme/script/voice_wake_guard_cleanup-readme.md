@@ -1,3 +1,5 @@
+![Voice -- Wake Guard Cleanup (Helper Script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_wake_guard_cleanup-header.jpeg)
+
 # Voice -- Wake Guard Cleanup (Helper Script)
 
 Reusable stop/cleanup sequence for the wake-up-guard blueprint. Stops TTS playback, optionally announces via Assist Satellite, waits for audio drain, restores volume, and resets snooze/stop toggles. Called from stop, second-snooze, and post-snooze-stop paths in the wake-up-guard blueprint.

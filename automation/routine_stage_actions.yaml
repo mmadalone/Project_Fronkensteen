@@ -100,6 +100,16 @@ blueprint:
           selector:
             boolean: {}
 
+        routine_stage_entity:
+          name: Routine stage entity
+          description: >
+            The input_text helper that receives the current routine stage
+            signal from routine_fingerprint.py.
+          default: input_text.ai_routine_stage
+          selector:
+            entity:
+              domain: input_text
+
     # ===========================================================================
     # ② ACTIONS
     # ===========================================================================
@@ -128,10 +138,11 @@ variables:
   v_progress: !input progress_threshold
   v_fp_filter: !input fingerprint_filter
   v_once: !input once_per_routine
+  _routine_stage: !input routine_stage_entity
 
 triggers:
   - trigger: state
-    entity_id: input_text.ai_routine_stage
+    entity_id: !input routine_stage_entity
 
 conditions:
   - condition: state
@@ -141,13 +152,13 @@ conditions:
   # ── Not "none" (no routine active) ──
   - condition: template
     value_template: >-
-      {% set stage = states('input_text.ai_routine_stage') %}
+      {% set stage = states(_routine_stage) %}
       {{ stage not in ['none', '', 'unknown', 'unavailable'] }}
 
   # ── Parse step/total from stage value ──
   - condition: template
     value_template: >-
-      {% set stage = states('input_text.ai_routine_stage') %}
+      {% set stage = states(_routine_stage) %}
       {% set parts = stage.split(':') %}
       {% if parts | length < 2 %}
         false
@@ -199,7 +210,7 @@ conditions:
           {% set last_ts = as_timestamp(last, 0) %}
           {# Simple approach: if last_triggered was before current routine started,
              allow. Otherwise block. Use stage change timestamp as proxy. #}
-          {% set stage_changed = state_attr('input_text.ai_routine_stage', 'last_changed') | default(None) %}
+          {% set stage_changed = state_attr(_routine_stage, 'last_changed') | default(None) %}
           {% if stage_changed is none %}
             true
           {% else %}

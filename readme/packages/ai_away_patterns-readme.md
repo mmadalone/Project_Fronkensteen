@@ -1,3 +1,5 @@
+![AI Away Patterns](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_away_patterns-header.jpeg)
+
 # AI Away Patterns — Return Time Prediction
 
 Learns household departure and return patterns from recorder history and predicts when absent persons will return. Supports per-person predictions with confidence ranges, calendar fusion for travel buffers, and WiFi flap debouncing. Part of I-40 of the Voice Context Architecture.

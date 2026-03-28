@@ -399,6 +399,14 @@ template:
             {%- if email_stale -%}
               {%- set sns.parts = sns.parts + ['(Email may be outdated)'] -%}
             {%- endif -%}
+            {%- set media_stale = is_state('input_boolean.ai_media_data_stale', 'on') -%}
+            {%- if media_stale -%}
+              {%- set sns.parts = sns.parts + ['(Media data may be outdated)'] -%}
+            {%- endif -%}
+            {%- set project_stale = is_state('input_boolean.ai_project_data_stale', 'on') -%}
+            {%- if project_stale -%}
+              {%- set sns.parts = sns.parts + ['(Project data may be outdated)'] -%}
+            {%- endif -%}
             {%- if sns.parts | length > 0 -%}
               {%- set ns.lines = ns.lines + ['Schedule: ' ~ sns.parts | join('. ') ~ '.'] -%}
             {%- endif -%}
@@ -514,6 +522,9 @@ template:
             {%- if mem_ctx %}
             {%- set ns.lines = ns.lines + ['Memory context:\n' ~ mem_ctx] -%}
             {%- endif -%}
+
+            {# ── QS-5: Memory privacy guidance ── #}
+            {%- set ns.lines = ns.lines + ['Memory privacy: Scope "user" memories are private to the active user. [restricted] results belong to someone else — acknowledge existence, never reveal content. If identity is uncertain, ask who is speaking before saving personal data.'] -%}
 
             {# ── C7: Recent topic history ── #}
             {%- set topic_ctx = state_attr('sensor.ai_recent_topics', 'context') | default('', true) -%}

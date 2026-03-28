@@ -5,7 +5,11 @@
       SQLite database. Use this when the user asks you to remember
       something, recall something previously stored, search memories,
       or forget a specific memory. Memories persist across conversations
-      and HA restarts.
+      and HA restarts. Memories with scope "user" are private to the
+      active user. In search results, entries marked [restricted] belong
+      to another user — acknowledge their existence but never reveal
+      their content. If you receive an "identity_uncertain" response,
+      ask the user to confirm who they are before saving personal data.
     parameters:
       type: object
       properties:
@@ -27,10 +31,11 @@
             and useful — not a transcript, just the fact.
         scope:
           type: string
-          enum: [user, household, session]
+          enum: [user, household, session, couple]
           description: >-
             "user" for personal memories (default), "household" for
-            shared info, "session" for temporary within one conversation.
+            shared info, "session" for temporary within one conversation,
+            "couple" for couple therapy memories (visible to both partners).
         expiration_days:
           type: integer
           description: >-
@@ -48,6 +53,13 @@
           type: integer
           description: >-
             Max number of search results to return (1-50, default 5).
+        owner:
+          type: string
+          description: >-
+            Optional. The username this memory belongs to (e.g., miquel,
+            jessica). Only set this if the user explicitly identifies
+            themselves or if you received an identity_uncertain response
+            and the user confirmed. Leave empty to auto-detect.
       required:
         - operation
         - key
@@ -64,6 +76,7 @@
           tags: "{{tags|default('')}}"
           query: "{{query|default('')}}"
           search_limit: "{{search_limit|default(5)}}"
+          owner: "{{owner|default('')}}"
         response_variable: _function_result
 
 - spec:
@@ -252,3 +265,52 @@
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.ai_continuous_conversation_active
+
+- spec:
+    name: save_therapy_turn
+    description: >-
+      Log who spoke and what they said. Call after each patient speaks.
+      In couple mode, always identify the speaker. Silent tool — do not
+      mention logging to the user.
+    parameters:
+      type: object
+      properties:
+        speaker:
+          type: string
+          description: "Who spoke (e.g., miquel, jessica)"
+        content:
+          type: string
+          description: "Brief 5-10 word summary of what was said"
+      required:
+        - speaker
+        - content
+  function:
+    type: script
+    sequence:
+      - service: pyscript.therapy_save_turn
+        data:
+          speaker: "{{speaker}}"
+          content: "{{content}}"
+        response_variable: _function_result
+
+- spec:
+    name: therapy_report
+    description: >-
+      Generate a therapy session report in markdown format. Call when the
+      user asks for their session report, session summary, or session notes.
+      Returns a confirmation. Never speak the file path aloud — just confirm
+      that the report is ready.
+    parameters:
+      type: object
+      properties:
+        session_number:
+          type: integer
+          description: "Session number to report on. 0 = most recent."
+      required: []
+  function:
+    type: script
+    sequence:
+      - service: pyscript.therapy_session_report
+        data:
+          session_number: "{{session_number|default(0)}}"
+        response_variable: _function_result

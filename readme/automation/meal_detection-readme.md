@@ -1,3 +1,5 @@
+![Meal Detection](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/meal_detection-header.jpeg)
+
 # Meal Detection
 
 Passive meal time logging from kitchen presence patterns. When the kitchen sensor is occupied for a minimum duration within configured meal windows (breakfast, lunch, dinner), updates `last_meal_time` and optionally logs to L2 memory via pyscript. False positives are acceptable -- this is logging-only, with no actions beyond timestamps and optional memory entries.

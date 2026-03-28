@@ -7,71 +7,89 @@ blueprint:
     Critical = same + optional auto-downgrade (activates budget fallback).
     Cooldown prevents alert spam during sustained high-cost periods.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/budget_cost_alert.yaml
+  homeassistant:
+    min_version: "2024.10.0"
   input:
-    # ── Core ──────────────────────────────────────────────────────────
-    cost_threshold_warning:
-      name: Warning Threshold (EUR)
-      description: "Send a warning notification when daily cost exceeds this amount."
-      default: 3.0
-      selector:
-        number:
-          min: 0.5
-          max: 50
-          step: 0.5
-          unit_of_measurement: "EUR"
-    cost_threshold_critical:
-      name: Critical Threshold (EUR)
-      description: "Send a critical alert (and optionally auto-downgrade) at this amount."
-      default: 5.0
-      selector:
-        number:
-          min: 0.5
-          max: 100
-          step: 0.5
-          unit_of_measurement: "EUR"
-    cost_entity:
-      name: Cost Entity to Monitor
-      description: "Sensor providing the daily cost value."
-      default: sensor.ai_total_daily_cost
-      selector:
-        entity:
-          domain: sensor
+    # ── § 1  Thresholds ──────────────────────────────────────────────
+    section_thresholds:
+      name: "① Thresholds"
+      icon: mdi:alert-circle
+      collapsed: false
+      input:
+        cost_threshold_warning:
+          name: Warning Threshold (EUR)
+          description: "Send a warning notification when daily cost exceeds this amount."
+          default: 3.0
+          selector:
+            number:
+              min: 0.5
+              max: 50
+              step: 0.5
+              unit_of_measurement: "EUR"
+        cost_threshold_critical:
+          name: Critical Threshold (EUR)
+          description: "Send a critical alert (and optionally auto-downgrade) at this amount."
+          default: 5.0
+          selector:
+            number:
+              min: 0.5
+              max: 100
+              step: 0.5
+              unit_of_measurement: "EUR"
+        cost_entity:
+          name: Cost Entity to Monitor
+          description: "Sensor providing the daily cost value."
+          default: sensor.ai_total_daily_cost
+          selector:
+            entity:
+              domain: sensor
 
-    # ── Notifications ─────────────────────────────────────────────────
-    notify_target:
-      name: Notification Service
-      description: >-
-        Service target for mobile/push notifications (e.g. notify.mobile_app_phone).
-        Leave empty to skip push notifications.
-      default: ""
-      selector:
-        text: {}
-    tts_announce:
-      name: TTS Announcement
-      description: "Announce cost alerts via TTS (uses tts_queue_speak if available)."
-      default: true
-      selector:
-        boolean: {}
+    # ── § 2  Notifications ───────────────────────────────────────────
+    section_notifications:
+      name: "② Notifications"
+      icon: mdi:bell
+      collapsed: true
+      input:
+        notify_target:
+          name: Notification Service
+          description: >-
+            Service target for mobile/push notifications (e.g. notify.mobile_app_phone).
+            Leave empty to skip push notifications.
+          default: ""
+          selector:
+            text: {}
+        tts_announce:
+          name: TTS Announcement
+          description: "Announce cost alerts via TTS (uses tts_queue_speak if available)."
+          default: true
+          selector:
+            boolean: {}
 
-    # ── Automatic Actions ─────────────────────────────────────────────
-    auto_downgrade:
-      name: Auto-downgrade on Critical
-      description: >-
-        When critical threshold is reached, automatically activate budget
-        fallback mode (switches to HA Cloud TTS + fallback agent).
-      default: false
-      selector:
-        boolean: {}
-    cooldown_minutes:
-      name: Alert Cooldown (minutes)
-      description: "Minimum time between repeated alerts of the same level."
-      default: 30
-      selector:
-        number:
-          min: 5
-          max: 240
-          step: 5
+    # ── § 3  Behavior ────────────────────────────────────────────────
+    section_behavior:
+      name: "③ Behavior"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        auto_downgrade:
+          name: Auto-downgrade on Critical
+          description: >-
+            When critical threshold is reached, automatically activate budget
+            fallback mode (switches to HA Cloud TTS + fallback agent).
+          default: false
+          selector:
+            boolean: {}
+        cooldown_minutes:
+          name: Alert Cooldown (minutes)
+          description: "Minimum time between repeated alerts of the same level."
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 240
+              step: 5
 
 mode: single
 

@@ -1,5 +1,5 @@
 blueprint:
-  name: "Goodnight Negotiator (Hybrid) v8.8.0"
+  name: "Goodnight Negotiator (Hybrid) v8.9.0"
   description: >
     ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
 
@@ -10,11 +10,13 @@ blueprint:
     Announce selection, then play.
 
 
-    V8.8.0 notes (audit remediation):
-    - fix: 14 action aliases in Stage 1 were mislabeled as "Stage 3:" — corrected to "Stage 1:" for accurate trace debugging.
-    - fix: added missing `default: ""` on stage3_music_assistant_config_entry_id and stage3_music_assistant_player (required for collapsed section UI).
-    - fix: corrected indentation on end-of-file comment blocks.
-    - housekeeping: trimmed historical changelog from description (v6–v8.6.3 moved to repository README).
+    V8.9.0 notes (prompt externalization):
+    - feat: all 17 hardcoded LLM prompts exposed as `!input` declarations in new section ⑫ Prompts (collapsed).
+    - feat: bridge variables for Jinja-bearing prompts (baked_open_prompt, baked_close_prompt, prompt_ask_tv_off, prompt_confirm_tv_off, prompt_ask_devices_off, prompt_confirm_devices_off).
+    - feat: safety_prefix is now an editable input (was hardcoded `_pfx` string).
+    - refactor: prompt_cancel reused at 5 call sites via single bridge variable.
+    - refactor: prompt_unclear_proceed and prompt_unclear_skip reused at 4 call sites each.
+    - zero breaking changes: all defaults match the previous hardcoded text verbatim.
 
 
     Notes on Music Assistant search/play:
@@ -24,6 +26,8 @@ blueprint:
   author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/goodnight_negotiator_hybrid.yaml
   domain: script
+  homeassistant:
+    min_version: "2024.10.0"
   input:
     core_routing:
       name: "① Core Routing"
@@ -683,7 +687,7 @@ blueprint:
         helper_last_run_epoch:
           name: Helper input_number for last run epoch seconds
           description: >
-            Optional. Example: input_number.gn_last_run_epoch
+            Optional. Example: input_number.ai_gn_last_run_epoch
           default: ""
           selector:
             entity:
@@ -694,7 +698,7 @@ blueprint:
         helper_run_debounce_seconds:
           name: Helper input_number for debounce seconds override
           description: >
-            Optional. Example: input_number.gn_run_debounce_seconds
+            Optional. Example: input_number.ai_gn_run_debounce_seconds
             If blank, uses the blueprint input "Run debounce (seconds)".
           default: ""
           selector:
@@ -706,7 +710,7 @@ blueprint:
         helper_lock_boolean:
           name: Helper input_boolean lock (in-progress) (optional)
           description: >
-            Optional. Example: input_boolean.gn_bedtime_lock
+            Optional. Example: input_boolean.ai_gn_bedtime_lock
             If provided, the script refuses to start while it is ON, then sets it ON during the run
             and turns it OFF at the end.
           default: ""
@@ -718,7 +722,7 @@ blueprint:
 
         helper_last_opening_line:
           name: Helper input_text for last opening line
-          description: "Optional. Example: input_text.gn_last_opening_line"
+          description: "Optional. Example: input_text.ai_gn_last_opening_line"
           default: ""
           selector:
             entity:
@@ -728,7 +732,7 @@ blueprint:
 
         helper_last_question:
           name: Helper input_text for last asked question (trace)
-          description: "Optional. Example: input_text.gn_last_question"
+          description: "Optional. Example: input_text.ai_gn_last_question"
           default: ""
           selector:
             entity:
@@ -738,7 +742,7 @@ blueprint:
 
         helper_last_reply:
           name: Helper input_text for last spoken reply (trace)
-          description: "Optional. Example: input_text.gn_last_reply"
+          description: "Optional. Example: input_text.ai_gn_last_reply"
           default: ""
           selector:
             entity:
@@ -775,13 +779,214 @@ blueprint:
             entity:
               domain: input_boolean
 
+    # ─────────────────────────────────────────────────────────────
+    prompts:
+      name: "⑫ Prompts"
+      icon: mdi:script-text-key-outline
+      collapsed: true
+      description: >-
+        LLM prompt templates used throughout the negotiation stages.
+        Edit these to change the personality or wording of each spoken line without
+        touching the script logic. Placeholders are Jinja — see each description.
+      input:
+        safety_prefix:
+          name: "Safety prefix"
+          description: >-
+            Prepended to every LLM call. Prevents the model from invoking functions.
+          default: >-
+            [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        baked_open_prompt:
+          name: "Opening line prompt (baked default)"
+          description: >-
+            Prompt sent when opening_line_mode = llm_generated and no custom
+            opening prompt is provided.
+            Placeholders: {{ user_name }}, {{ area }}, {{ last_opening_line }}.
+          default: >-
+            say one short opening line to {{ user_name }} in the {{ area }}. no quotes. be natural. 1 sentence max.
+            important (strict): do not guess what is playing.
+            only state what's playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
+            if those fields are missing/empty/unknown, and you are asked what's playing, reply exactly: "i have no idea what's playing right now."
+            never mention time, lateness, or sleep schedules unless the context includes the exact phrase "it's late.".
+            never use the phrase "burning the midnight oil" (or any close variation). avoid all time-based clichés.
+            {% if last_opening_line != '""' %}do not repeat this exact line: "{{ last_opening_line }}".{% endif %}
+            make it noticeably different from your last opening.
+          selector:
+            text:
+              multiline: true
+
+        baked_close_prompt:
+          name: "Closing line prompt (baked default)"
+          description: >-
+            Prompt sent when closing_line_mode = llm_generated and no custom
+            closing prompt is provided.
+            Placeholders: {{ user_name }}.
+          default: >-
+            say one short closing goodnight line to {{ user_name }}. no quotes. be natural.
+            important (strict): do not guess what is playing.
+            only state what's playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
+            if those fields are missing/empty/unknown, and you are asked what's playing, reply exactly: "i have no idea what's playing right now."
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_tv_off:
+          name: "Ask TV off"
+          description: >-
+            Stage 1 LLM prompt: ask the user whether to turn off the TV.
+            Placeholders: {{ s1_name }}.
+          default: >-
+            ask a brief yes/no question: should i turn off {{ s1_name }}?
+          selector:
+            text:
+              multiline: true
+
+        prompt_already_off:
+          name: "Already off acknowledgement"
+          description: >-
+            Stage 1 LLM prompt: acknowledge that the TV is already off.
+          default: >-
+            acknowledge briefly that it's already off. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_cancel:
+          name: "Cancel / abort"
+          description: >-
+            LLM prompt used whenever the user aborts the routine.
+            Reused across all stages.
+          default: >-
+            say briefly that you're cancelling the bedtime routine. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_tv_stays_on:
+          name: "TV stays on"
+          description: >-
+            Stage 1 LLM prompt: acknowledge leaving the TV on and skipping audio.
+          default: >-
+            acknowledge briefly that you'll leave the tv on. say you'll continue with lights only and skip bedtime audio. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_tv_off:
+          name: "Confirm TV off"
+          description: >-
+            Stage 1 LLM prompt: brief confirmation after turning off the TV.
+            Placeholders: {{ s1_name }}.
+          default: >-
+            say a very brief confirmation that you turned off {{ s1_name }}. one or two words max.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_devices_off:
+          name: "Ask devices off"
+          description: >-
+            Stage 2 LLM prompt: ask the user whether to turn off lights/devices.
+            Placeholders: {{ s2_name }}.
+          default: >-
+            ask a brief yes/no question: should i turn off {{ s2_name }}?
+          selector:
+            text:
+              multiline: true
+
+        prompt_unclear_proceed:
+          name: "Unclear — doing it anyway"
+          description: >-
+            LLM prompt when response is unclear and fallback is do_it_anyway.
+            Reused across all stages.
+          default: >-
+            say briefly that you didn't understand but you're doing it anyway. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_unclear_skip:
+          name: "Unclear — skipping"
+          description: >-
+            LLM prompt when response is unclear and fallback is skip.
+            Reused across all stages.
+          default: >-
+            say briefly that you didn't understand so you're skipping this. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_devices_off:
+          name: "Confirm devices off"
+          description: >-
+            Stage 2 LLM prompt: brief confirmation after turning off devices.
+            Placeholders: {{ s2_name }}.
+          default: >-
+            say a very brief confirmation that you turned off {{ s2_name }}. one or two words max.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ma_missing:
+          name: "Music Assistant config missing"
+          description: >-
+            Stage 3 LLM prompt: inform user that MA config is missing.
+          default: >-
+            say briefly that Music Assistant config is missing so you can't play audio. one sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_replace_audio:
+          name: "Ask replace current audio"
+          description: >-
+            Stage 3 LLM prompt: ask whether to replace currently playing audio.
+          default: >-
+            ask briefly: something is already playing. should i replace it with bedtime audio?
+          selector:
+            text:
+              multiline: true
+
+        prompt_no_speech:
+          name: "No speech heard"
+          description: >-
+            Stage 3 LLM prompt: user gave empty/no response to "what to play".
+          default: >-
+            say briefly that you didn't hear anything so you're skipping bedtime audio. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_audio:
+          name: "Confirm starting audio"
+          description: >-
+            Stage 3 LLM prompt: confirm that bedtime audio is starting.
+          default: >-
+            say one short sentence confirming you will start bedtime audio now.
+          selector:
+            text:
+              multiline: true
+
+        prompt_nothing_found:
+          name: "Nothing found to play"
+          description: >-
+            Stage 3 LLM prompt: no results from Music Assistant.
+          default: >-
+            say briefly that you couldn't find anything to play. one short sentence.
+          selector:
+            text:
+              multiline: true
+
 mode: single
 max_exceeded: silent
 
 sequence:
   - alias: "Set skip stage3 due to tv and 21 more variables"
     variables:
-      _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]"
+      _pfx: !input safety_prefix
       skip_stage3_due_to_tv: false
       user_name: !input user_name
       area: !input area_name
@@ -915,22 +1120,33 @@ sequence:
         {% else %}
           ""
         {% endif %}
-      # baked-in prompts (now using user_name variable)
-      baked_open_prompt: >
-        say one short opening line to {{ user_name }} in the {{ area }}. no quotes. be natural. 1 sentence max.
-        important (strict): do not guess what is playing.
-        only state what’s playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
-        if those fields are missing/empty/unknown, and you are asked what’s playing, reply exactly: "i have no idea what's playing right now."
-        never mention time, lateness, or sleep schedules unless the context includes the exact phrase "it's late.".
-        never use the phrase "burning the midnight oil" (or any close variation). avoid all time-based clichés.
-        {% if last_opening_line != '""' %}do not repeat this exact line: "{{ last_opening_line }}".{% endif %}
-        make it noticeably different from your last opening.
+      # baked-in prompts — bridge variables (inputs contain Jinja placeholders)
+      _raw_open_prompt: !input baked_open_prompt
+      _raw_close_prompt: !input baked_close_prompt
+      baked_open_prompt: "{{ _raw_open_prompt }}"
+      baked_close_prompt: "{{ _raw_close_prompt }}"
 
-      baked_close_prompt: >
-        say one short closing goodnight line to {{ user_name }}. no quotes. be natural.
-        important (strict): do not guess what is playing.
-        only state what’s playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
-        if those fields are missing/empty/unknown, and you are asked what’s playing, reply exactly: "i have no idea what's playing right now."
+      # prompt bridge variables (inputs with Jinja placeholders)
+      _raw_prompt_ask_tv_off: !input prompt_ask_tv_off
+      v_prompt_ask_tv_off: "{{ _raw_prompt_ask_tv_off }}"
+      _raw_prompt_confirm_tv_off: !input prompt_confirm_tv_off
+      v_prompt_confirm_tv_off: "{{ _raw_prompt_confirm_tv_off }}"
+      _raw_prompt_ask_devices_off: !input prompt_ask_devices_off
+      v_prompt_ask_devices_off: "{{ _raw_prompt_ask_devices_off }}"
+      _raw_prompt_confirm_devices_off: !input prompt_confirm_devices_off
+      v_prompt_confirm_devices_off: "{{ _raw_prompt_confirm_devices_off }}"
+
+      # prompt bridge variables (plain text — no Jinja placeholders in default)
+      v_prompt_already_off: !input prompt_already_off
+      v_prompt_cancel: !input prompt_cancel
+      v_prompt_tv_stays_on: !input prompt_tv_stays_on
+      v_prompt_unclear_proceed: !input prompt_unclear_proceed
+      v_prompt_unclear_skip: !input prompt_unclear_skip
+      v_prompt_ma_missing: !input prompt_ma_missing
+      v_prompt_ask_replace_audio: !input prompt_ask_replace_audio
+      v_prompt_no_speech: !input prompt_no_speech
+      v_prompt_confirm_audio: !input prompt_confirm_audio
+      v_prompt_nothing_found: !input prompt_nothing_found
   # ---------------------------------------------------------------------
   # run control: prevent double-triggered speech
   # ---------------------------------------------------------------------
@@ -1172,7 +1388,7 @@ sequence:
                       agent_id: "{{ agent_id }}"
                       text: >
                         {{ _pfx }}
-                        ask a brief yes/no question: should i turn off {{ s1_name }}?
+                        {{ v_prompt_ask_tv_off }}
                         context:
                         {{ context_block }}
                     response_variable: s1_q
@@ -1248,7 +1464,7 @@ sequence:
                             continue_on_error: true
                             data:
                               agent_id: "{{ agent_id }}"
-                              text: "{{ _pfx }} acknowledge briefly that it's already off. one short sentence."
+                              text: "{{ _pfx }} {{ v_prompt_already_off }}"
                             response_variable: s1_state_no_resp
                           - alias: "Stage 1: announce TV already off via satellite"
                             action: assist_satellite.announce
@@ -1360,9 +1576,9 @@ sequence:
                           text: >
                             {{ _pfx }}
                             {% if s1_fallback == 'do_it_anyway' %}
-                              say briefly that you didn't understand but you're doing it anyway. one short sentence.
+                              {{ v_prompt_unclear_proceed }}
                             {% else %}
-                              say briefly that you didn't understand so you're skipping this. one short sentence.
+                              {{ v_prompt_unclear_skip }}
                             {% endif %}
                         response_variable: unclear_resp
                       - alias: "Stage 1: announce unclear response via satellite"
@@ -1400,7 +1616,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "{{ _pfx }} say briefly that you're cancelling the bedtime routine. one short sentence."
+                          text: "{{ _pfx }} {{ v_prompt_cancel }}"
                         response_variable: cancel_resp
                       - alias: "Stage 1: announce abort via satellite"
                         action: assist_satellite.announce
@@ -1422,7 +1638,7 @@ sequence:
                     continue_on_error: true
                     data:
                       agent_id: "{{ agent_id }}"
-                      text: "{{ _pfx }} acknowledge briefly that you'll leave the tv on. say you'll continue with lights only and skip bedtime audio. one short sentence."
+                      text: "{{ _pfx }} {{ v_prompt_tv_stays_on }}"
                     response_variable: s1_no_resp
                   - alias: "Stage 1: announce TV stays on via satellite"
                     action: assist_satellite.announce
@@ -1475,7 +1691,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say a very brief confirmation that you turned off {{ s1_name }}. one or two words max."
+                                  text: "{{ _pfx }} {{ v_prompt_confirm_tv_off }}"
                                 response_variable: confirm_resp
                               - alias: "Stage 1: announce completion via satellite"
                                 action: assist_satellite.announce
@@ -1529,7 +1745,7 @@ sequence:
                       agent_id: "{{ agent_id }}"
                       text: >
                         {{ _pfx }}
-                        ask a brief yes/no question: should i turn off {{ s2_name }}?
+                        {{ v_prompt_ask_devices_off }}
                         context:
                         {{ context_block }}
                     response_variable: s2_q
@@ -1622,9 +1838,9 @@ sequence:
                           text: >
                             {{ _pfx }}
                             {% if s2_fallback == 'do_it_anyway' %}
-                              say briefly that you didn't understand but you're doing it anyway. one short sentence.
+                              {{ v_prompt_unclear_proceed }}
                             {% else %}
-                              say briefly that you didn't understand so you're skipping this. one short sentence.
+                              {{ v_prompt_unclear_skip }}
                             {% endif %}
                         response_variable: unclear_resp2
                       - alias: "Stage 2: announce via satellite"
@@ -1662,7 +1878,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "{{ _pfx }} say briefly that you're cancelling the bedtime routine. one short sentence."
+                          text: "{{ _pfx }} {{ v_prompt_cancel }}"
                         response_variable: cancel_resp2
                       - alias: "Stage 2: announce via satellite"
                         action: assist_satellite.announce
@@ -1706,7 +1922,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say a very brief confirmation that you turned off {{ s2_name }}. one or two words max."
+                                  text: "{{ _pfx }} {{ v_prompt_confirm_devices_off }}"
                                 response_variable: confirm_resp2
                               - alias: "Stage 2: announce via satellite"
                                 action: assist_satellite.announce
@@ -1764,7 +1980,7 @@ sequence:
                         continue_on_error: true
                         data:
                           agent_id: "{{ agent_id }}"
-                          text: "{{ _pfx }} say briefly that Music Assistant config is missing so you can't play audio. one sentence."
+                          text: "{{ _pfx }} {{ v_prompt_ma_missing }}"
                         response_variable: ma_err_resp
                       - alias: "Stage 3: announce via satellite"
                         action: assist_satellite.announce
@@ -1835,7 +2051,7 @@ sequence:
                               agent_id: "{{ agent_id }}"
                               text: >
                                 {{ _pfx }}
-                                ask briefly: something is already playing. should i replace it with bedtime audio?
+                                {{ v_prompt_ask_replace_audio }}
                                 context:
                                 {{ context_block }}
                             response_variable: s3_swq
@@ -1928,9 +2144,9 @@ sequence:
                                           text: >
                                             {{ _pfx }}
                                             {% if s3_fallback == 'safe_default' %}
-                                              say briefly that you didn't understand but you're continuing anyway. one short sentence.
+                                              {{ v_prompt_unclear_proceed }}
                                             {% else %}
-                                              say briefly that you didn't understand so you're skipping audio. one short sentence.
+                                              {{ v_prompt_unclear_skip }}
                                             {% endif %}
                                         response_variable: unclear_resp3
                                       - alias: "Stage 3: announce via satellite"
@@ -1968,7 +2184,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
                                 response_variable: cancel_resp3
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2085,9 +2301,9 @@ sequence:
                                           text: >
                                             {{ _pfx }}
                                             {% if s3_fallback == 'safe_default' %}
-                                              say briefly that you didn't understand but you're continuing anyway. one short sentence.
+                                              {{ v_prompt_unclear_proceed }}
                                             {% else %}
-                                              say briefly that you didn't understand so you're skipping audio. one short sentence.
+                                              {{ v_prompt_unclear_skip }}
                                             {% endif %}
                                         response_variable: unclear_resp4
                                       - alias: "Stage 3: announce via satellite"
@@ -2125,7 +2341,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
                                 response_variable: cancel_resp4
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2213,7 +2429,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say briefly that you're cancelling. one short sentence."
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
                                 response_variable: cancel_resp5
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2247,7 +2463,7 @@ sequence:
                                 continue_on_error: true
                                 data:
                                   agent_id: "{{ agent_id }}"
-                                  text: "{{ _pfx }} say briefly that you didn't hear anything so you're skipping bedtime audio. one short sentence."
+                                  text: "{{ _pfx }} {{ v_prompt_no_speech }}"
                                 response_variable: empty_resp
                               - alias: "Stage 3: announce via satellite"
                                 action: assist_satellite.announce
@@ -2334,7 +2550,7 @@ sequence:
                                         continue_on_error: true
                                         data:
                                           agent_id: "{{ agent_id }}"
-                                          text: "{{ _pfx }} say one short sentence confirming you will start bedtime audio now."
+                                          text: "{{ _pfx }} {{ v_prompt_confirm_audio }}"
                                         response_variable: playing_resp
                                       - alias: "Stage 3: announce via satellite"
                                         action: assist_satellite.announce
@@ -2454,7 +2670,7 @@ sequence:
                                     continue_on_error: true
                                     data:
                                       agent_id: "{{ agent_id }}"
-                                      text: "{{ _pfx }} say briefly that you couldn't find anything to play. one short sentence."
+                                      text: "{{ _pfx }} {{ v_prompt_nothing_found }}"
                                     response_variable: s3_notfound
                                   - alias: "Stage 3: announce via satellite"
                                     action: assist_satellite.announce

@@ -427,42 +427,36 @@ actions:
           - condition: template
             value_template: "{{ v_pre_actions | length > 0 }}"
         sequence:
-          - alias: "Set v away raw"
+          - alias: "Read away predictions"
             variables:
-              v_away_raw: "{{ states('input_text.ai_away_prediction_raw') }}"
+              v_away_preds: "{{ state_attr('sensor.ai_away_prediction', 'predictions') | default([], true) }}"
           - condition: template
             value_template: >-
-              {% if v_away_raw in ['', 'unknown', 'unavailable', 'None'] or '{' not in v_away_raw %}
+              {% set my_pred = v_away_preds | selectattr('person', 'eq', v_person_lower) | list %}
+              {% if my_pred | length == 0 %}
                 false
               {% else %}
-                {% set data = v_away_raw | from_json %}
-                {% set preds = data.predictions | default([data]) %}
-                {% set my_pred = preds | selectattr('person', 'eq', v_person_lower) | list %}
-                {% if my_pred | length == 0 %}
+                {% set pred = my_pred[0] %}
+                {% set conf = pred.confidence | default('low') %}
+                {% set conf_level = v_confidence_map.get(conf, 0) %}
+                {% set min_level = v_confidence_map.get(v_pre_confidence, 2) %}
+                {% if conf_level < min_level %}
                   false
                 {% else %}
-                  {% set pred = my_pred[0] %}
-                  {% set conf = pred.confidence | default('low') %}
-                  {% set conf_level = v_confidence_map.get(conf, 0) %}
-                  {% set min_level = v_confidence_map.get(v_pre_confidence, 2) %}
-                  {% if conf_level < min_level %}
+                  {% set return_time = pred.predicted_return_time | default('') %}
+                  {% if return_time == '' %}
                     false
                   {% else %}
-                    {% set return_time = pred.predicted_return_time | default('') %}
-                    {% if return_time == '' %}
-                      false
+                    {% if v_pre_use_range and pred.range_low is defined and pred.range_low != '' %}
+                      {% set use_time = pred.range_low %}
                     {% else %}
-                      {% if v_pre_use_range and pred.range_low is defined and pred.range_low != '' %}
-                        {% set use_time = pred.range_low %}
-                      {% else %}
-                        {% set use_time = return_time %}
-                      {% endif %}
-                      {% set parts = use_time.split(':') %}
-                      {% set return_hour = parts[0] | int + parts[1] | int / 60.0 %}
-                      {% set now_hour = now().hour + now().minute / 60.0 %}
-                      {% set minutes_until = ((return_hour - now_hour) * 60) | int %}
-                      {{ 0 < minutes_until <= v_pre_minutes | int }}
+                      {% set use_time = return_time %}
                     {% endif %}
+                    {% set parts = use_time.split(':') %}
+                    {% set return_hour = parts[0] | int + parts[1] | int / 60.0 %}
+                    {% set now_hour = now().hour + now().minute / 60.0 %}
+                    {% set minutes_until = ((return_hour - now_hour) * 60) | int %}
+                    {{ 0 < minutes_until <= v_pre_minutes | int }}
                   {% endif %}
                 {% endif %}
               {% endif %}

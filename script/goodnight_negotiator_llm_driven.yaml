@@ -103,7 +103,7 @@ blueprint:
           name: Assist Satellite (voice device)
           description: >
             The device that will speak/ask questions (Voice Preview / Assist Satellite entity).
-          default:
+          default: ""
           selector:
             entity:
               domain: assist_satellite
@@ -299,7 +299,7 @@ blueprint:
           description: >
             Use the Music Assistant player entity (e.g., media_player.workshop),
             not the raw Sonos entity.
-          default:
+          default: ""
           selector:
             entity:
               domain: media_player
@@ -460,7 +460,7 @@ blueprint:
         ducking_flag:
           name: "Ducking flag entity"
           description: "Boolean indicating audio ducking is active."
-          default: input_boolean.ducking_flag
+          default: input_boolean.ai_ducking_flag
           selector:
             entity:
               domain: input_boolean
@@ -479,6 +479,84 @@ blueprint:
             entity:
               domain: input_boolean
 
+    # ─────────────────────────────────────────────────────────────
+    section_prompts:
+      name: "⑧ Prompts"
+      icon: mdi:text-box-outline
+      description: "LLM prompt templates used at each stage. Edit to reshape the persona's phrasing."
+      collapsed: true
+      input:
+        safety_prefix:
+          name: "Safety prefix"
+          description: >-
+            Prepended to every LLM call to prevent the agent from calling
+            functions or tools during the bedtime routine.
+          default: >-
+            [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        opening_default_prompt:
+          name: "Opening prompt (default)"
+          description: >-
+            Fallback prompt sent when Custom opening prompt is empty.
+            Placeholders: {{ user_name_val }}, {{ area_name }}.
+          default: >-
+            Create ONE short opening line to start a goodnight routine for {{ user_name_val }} in "{{ area_name }}".
+            One sentence max. No explanations.
+          selector:
+            text:
+              multiline: true
+
+        tv_ask_prompt:
+          name: "TV ask prompt"
+          description: >-
+            Prompt for the LLM to generate a yes/no question about turning
+            off the TV. Placeholders: {{ user_name_val }}, {{ tv_name }}.
+          default: >-
+            Ask {{ user_name_val }} ONE short yes/no question: should I turn off {{ tv_name }} now?
+            One sentence. No extras.
+          selector:
+            text:
+              multiline: true
+
+        devices_ask_prompt:
+          name: "Devices ask prompt"
+          description: >-
+            Prompt for the LLM to generate a yes/no question about turning
+            off devices. Placeholders: {{ user_name_val }}, {{ area_name }}.
+          default: >-
+            Ask {{ user_name_val }} ONE short yes/no question: should I turn off the selected devices in "{{ area_name }}"?
+            One sentence. No extras.
+          selector:
+            text:
+              multiline: true
+
+        music_ask_prompt:
+          name: "Music ask prompt"
+          description: >-
+            Prompt for the LLM to generate a yes/no question about starting
+            bedtime audio. Placeholders: {{ user_name_val }}.
+          default: >-
+            Ask {{ user_name_val }} ONE short yes/no question: should I start bedtime audio now?
+            One sentence. No extras.
+          selector:
+            text:
+              multiline: true
+
+        closing_default_prompt:
+          name: "Closing prompt (default)"
+          description: >-
+            Fallback prompt sent when Custom closing prompt is empty.
+            Placeholders: {{ user_name_val }}.
+          default: >-
+            Create ONE short final goodnight line for {{ user_name_val }}.
+            One sentence max. No explanations.
+          selector:
+            text:
+              multiline: true
+
 mode: single
 icon: mdi:bed
 
@@ -488,7 +566,12 @@ sequence:
   # ─────────────────────────────────────────────────────────────
   - alias: "Variables — capture all inputs for template use"
     variables:
-      _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]"
+      _pfx: !input safety_prefix
+      v_opening_default_prompt: !input opening_default_prompt
+      v_tv_ask_prompt: !input tv_ask_prompt
+      v_devices_ask_prompt: !input devices_ask_prompt
+      v_music_ask_prompt: !input music_ask_prompt
+      v_closing_default_prompt: !input closing_default_prompt
       v_ducking_flag: !input ducking_flag
       v_duck_guard: !input duck_guard_enabled
       v_pipeline_name: !input persona_agent_id
@@ -666,8 +749,7 @@ sequence:
                 {% if c != '' %}
                   {{ c }}
                 {% else %}
-                  Create ONE short opening line to start a goodnight routine for {{ user_name_val }} in "{{ area_name }}".
-                  One sentence max. No explanations.
+                  {{ v_opening_default_prompt }}
                 {% endif %}
             response_variable: pre_llm
 
@@ -733,8 +815,7 @@ sequence:
                       conversation_id: "{{ conv_id }}"
                       text: >
                         {{ _pfx }}
-                        Ask {{ user_name_val }} ONE short yes/no question: should I turn off {{ tv_name }} now?
-                        One sentence. No extras.
+                        {{ v_tv_ask_prompt }}
                     response_variable: tv_q
 
                   - alias: "TV ask extract — parse question with fallback"
@@ -908,8 +989,7 @@ sequence:
                       conversation_id: "{{ conv_id }}"
                       text: >
                         {{ _pfx }}
-                        Ask {{ user_name_val }} ONE short yes/no question: should I turn off the selected devices in "{{ area_name }}"?
-                        One sentence. No extras.
+                        {{ v_devices_ask_prompt }}
                     response_variable: dev_q
 
                   - alias: "Devices ask extract — parse question with fallback"
@@ -1316,8 +1396,7 @@ sequence:
                       conversation_id: "{{ conv_id }}"
                       text: >
                         {{ _pfx }}
-                        Ask {{ user_name_val }} ONE short yes/no question: should I start bedtime audio now?
-                        One sentence. No extras.
+                        {{ v_music_ask_prompt }}
                     response_variable: m_q
 
                   - alias: "Music ask extract — parse question with fallback"
@@ -1621,8 +1700,7 @@ sequence:
                 {% if c != '' %}
                   {{ c }}
                 {% else %}
-                  Create ONE short final goodnight line for {{ user_name_val }}.
-                  One sentence max. No explanations.
+                  {{ v_closing_default_prompt }}
                 {% endif %}
             response_variable: final_llm
 

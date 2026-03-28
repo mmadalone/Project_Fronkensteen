@@ -28,13 +28,14 @@ blueprint:
     - **v1.0** — Initial release.
 
   domain: script
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/announce_music_follow_me.yaml
   homeassistant:
     min_version: 2024.6.0
 
   input:
     dispatcher_settings:
-      name: "🤖 Dispatcher & Voice Assistant"
+      name: "① Dispatcher & Voice Assistant"
       icon: mdi:robot-outline
       collapsed: false
       input:
@@ -72,7 +73,7 @@ blueprint:
               mode: slider
 
     message_settings:
-      name: "💬 Message Settings"
+      name: "② Message Settings"
       icon: mdi:message-text
       collapsed: true
       input:

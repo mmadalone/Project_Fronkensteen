@@ -1,3 +1,5 @@
+![Zone Pre-Activation (I-40)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/zone_preactivation-header.jpeg)
+
 # Zone Pre-Activation (I-40)
 
 Pre-activates scenes, lights, or climate before the user arrives in a predicted zone. Consumes the `input_text.ai_predicted_next_zone_raw` helper from `presence_patterns.py`, which contains a JSON payload with the predicted zone, probability, and confidence level. If the prediction changes away or the user does not arrive within a configurable timeout, optional deactivation actions run to undo the pre-activation.

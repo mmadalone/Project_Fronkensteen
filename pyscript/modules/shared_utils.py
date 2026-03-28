@@ -4,7 +4,9 @@ Helper functions shared across multiple pyscript modules.
 Imported via: from shared_utils import build_result_entity_name, load_entity_config
 Imported via: from shared_utils import discover_persons, get_person_slugs, get_person_tracker, get_person_config
 """
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -22,22 +24,46 @@ def load_entity_config() -> dict:
     global _config_cache
     if _config_cache is not None:
         return _config_cache
-    try:
-        if not _CONFIG_PATH.exists():
+    # If already on a worker thread (e.g. via asyncio.to_thread), read directly.
+    # Otherwise, dispatch Path bound methods to a thread pool to avoid HA
+    # blocking-call warning.  Only native CPython methods (_CONFIG_PATH.exists,
+    # _CONFIG_PATH.read_text) are submitted — pyscript-defined functions return
+    # coroutines in a thread context and must not be passed to the pool.
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            if not _CONFIG_PATH.exists():
+                import logging
+                logging.getLogger(__name__).warning(
+                    "shared_utils: entity_config.yaml not found at %s", _CONFIG_PATH
+                )
+                _config_cache = {}
+                return _config_cache
+            _config_cache = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
+        except Exception as exc:
             import logging
-            logging.getLogger(__name__).warning(
-                "shared_utils: entity_config.yaml not found at %s", _CONFIG_PATH
+            logging.getLogger(__name__).error(
+                "shared_utils: failed to load entity_config.yaml: %s", exc
             )
             _config_cache = {}
-            return _config_cache
-        # Use Path.read_text() instead of open() — pyscript sandboxes builtins
-        _config_cache = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).error(
-            "shared_utils: failed to load entity_config.yaml: %s", exc
-        )
-        _config_cache = {}
+    else:
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                if not pool.submit(_CONFIG_PATH.exists).result(timeout=5):
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "shared_utils: entity_config.yaml not found at %s",
+                        _CONFIG_PATH,
+                    )
+                    _config_cache = {}
+                    return _config_cache
+                raw = pool.submit(_CONFIG_PATH.read_text).result(timeout=5)
+            _config_cache = yaml.safe_load(raw) or {}
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(
+                "shared_utils: thread pool config read failed: %s", exc
+            )
+            _config_cache = {}
     return _config_cache
 
 
@@ -183,3 +209,55 @@ def resolve_active_user() -> str:
         slugs = get_person_slugs()
         best_slug = slugs[0] if slugs else "miquel"
     return best_slug
+
+
+# ── Memory Owner Resolution (QS-5) ───────────────────────────────────────
+
+def resolve_memory_owner(explicit_owner: str = "", scope: str = "user") -> str:
+    """Resolve owner for a memory operation.
+
+    Priority:
+      1. Explicit owner parameter (normalized).
+      2. Auto-resolve from identity confidence (for user scope).
+      3. Empty string (for household/session scope).
+    """
+    if explicit_owner:
+        return explicit_owner.strip().lower()
+    if scope in ("household", "session"):
+        return ""
+    return resolve_active_user()
+
+
+def resolve_memory_owner_with_confidence(
+    explicit_owner: str = "", scope: str = "user"
+) -> tuple:
+    """Resolve owner with certainty flag for dual-occupancy safety.
+
+    Returns:
+        (owner_slug: str, is_certain: bool)
+        is_certain is False when occupancy is dual and the confidence
+        gap between the top two persons is below 20 points.
+    """
+    if explicit_owner:
+        return explicit_owner.strip().lower(), True
+    if scope in ("household", "session"):
+        return "", True
+    occ = str(state.get("sensor.occupancy_mode") or "")  # noqa: F821
+    if occ != "dual":
+        return resolve_active_user(), True
+    # Dual mode — check confidence gap
+    scores = {}
+    for eid in state.names("person"):  # noqa: F821
+        slug = eid.split(".", 1)[1]
+        try:
+            scores[slug] = int(
+                float(state.get(f"sensor.identity_confidence_{slug}") or 0)  # noqa: F821
+            )
+        except (TypeError, ValueError):
+            scores[slug] = 0
+    if len(scores) >= 2:
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        gap = ranked[0][1] - ranked[1][1]
+        if gap < 20:
+            return ranked[0][0], False  # uncertain
+    return resolve_active_user(), True

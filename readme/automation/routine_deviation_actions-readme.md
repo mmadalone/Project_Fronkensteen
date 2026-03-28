@@ -1,3 +1,5 @@
+![Routine Deviation Actions (I-40)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/routine_deviation_actions-header.jpeg)
+
 # Routine Deviation Actions (I-40)
 
 Fires when `routine_fingerprint.py` detects that the user's zone sequence has deviated from a known routine fingerprint. Consumes the `ai_routine_deviation` event. Use it to send check-in notifications, speak TTS messages, or adjust automations when the expected routine is broken.

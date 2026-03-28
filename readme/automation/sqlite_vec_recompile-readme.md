@@ -1,3 +1,5 @@
+![sqlite-vec Recompile (I-2a)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/sqlite_vec_recompile-header.jpeg)
+
 # sqlite-vec Recompile (I-2a)
 
 Monitors Home Assistant Core updates and recompiles `vec0.so` if the sqlite-vec extension becomes incompatible after an update. When HA Core updates, the Alpine base image (and its SQLite version) may change, making the compiled `vec0.so` incompatible. This blueprint detects the update, runs a health check, and triggers a recompile if needed.

@@ -1,3 +1,5 @@
+![AI Auto-Off -- Zone Vacancy](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/zone_vacancy-header.jpeg)
+
 # AI Auto-Off -- Zone Vacancy
 
 Turns off lights and/or media when a presence sensor (e.g., Aqara FP2) reports "off" for a configurable delay. If the sensor goes back to "on" during the delay, the trigger is automatically cancelled. Each zone gets its own automation instance created through the HA UI. This is the inverse of the Zone Presence blueprint, which turns things on.

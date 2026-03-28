@@ -1,3 +1,5 @@
+![Memory Embedding Batch](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/embedding_batch-header.jpeg)
+
 # Memory Embedding Batch
 
 Runs a batch of memory embeddings on a schedule. At the configured time, calls `pyscript.memory_embed_batch` to vectorize unembedded L2 memory entries for semantic search. Configurable batch size, schedule time, and kill switch.

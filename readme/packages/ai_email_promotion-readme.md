@@ -1,3 +1,5 @@
+![AI Email Promotion](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_email_promotion-header.jpeg)
+
 # AI Email Priority Filter — IMAP to Voice Context
 
 Filters incoming IMAP emails and promotes only priority messages to L2 memory. Uses known contacts and keyword matching to filter high-volume inboxes, ensuring agents only see relevant emails. Part of Task 18b of the Voice Context Architecture.

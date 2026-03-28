@@ -1,0 +1,147 @@
+# =============================================================================
+# AI System Recovery — self-healing engine helpers and fallback alerting
+# =============================================================================
+# Sensor owned by: pyscript/system_recovery.py (NOT a template sensor)
+# State:  idle / recovering / exhausted / error
+# Attrs:  active_recoveries, circuit_broken, total_attempts_1h
+#
+# Helpers:
+#   - helpers_input_boolean.yaml: ai_system_recovery_enabled
+#   - helpers_input_number.yaml:  ai_recovery_max_retries_per_hour,
+#                                  ai_recovery_base_backoff_seconds
+#   - helpers_input_text.yaml:    ai_recovery_pending_category
+#
+# Events:
+#   - ai_health_transition       (consumed from system_health.py)
+#   - ai_health_category_degraded (consumed from system_health.py)
+#   - ai_recovery_completed       (fired on success)
+#   - ai_recovery_exhausted       (fired when circuit breaker opens)
+#   - ai_recovery_alert           (fired for alert-only categories)
+#   - ai_tts_queue_stuck          (consumed from tts_queue.py)
+#   - ai_memory_mode_changed      (consumed from memory.py)
+#
+# Blueprint:
+#   - blueprints/automation/madalone/system_recovery_alert.yaml
+#
+# Dependencies:
+#   - pyscript/system_recovery.py (recovery engine)
+#   - pyscript/system_health.py   (health transition events)
+# =============================================================================
+
+automation:
+  # Fallback alert — fires even if no blueprint instance is configured
+  - alias: "AI Recovery — Exhausted Fallback Alert"
+    id: ai_recovery_exhausted_fallback
+    triggers:
+      - trigger: event
+        event_type: ai_recovery_exhausted
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "AI Recovery: {{ trigger.event.data.category }} Exhausted"
+          message: >-
+            Recovery attempts for **{{ trigger.event.data.category }}** exhausted
+            ({{ trigger.event.data.attempts | default('?') }} attempts in the last hour).
+            Grade: {{ trigger.event.data.grade | default('?') }}.
+            Manual intervention required.
+          notification_id: "ai_recovery_exhausted_{{ trigger.event.data.category }}"
+
+  # Clear exhausted notification when category recovers
+  - alias: "AI Recovery — Category Recovered"
+    id: ai_recovery_category_recovered
+    triggers:
+      - trigger: event
+        event_type: ai_recovery_completed
+    conditions: []
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: "ai_recovery_exhausted_{{ trigger.event.data.category }}"
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: "ai_recovery_alert_{{ trigger.event.data.category }}"
+
+  # ── TTS Queue Stuck Alert ──
+  - alias: "AI Recovery — TTS Queue Stuck"
+    id: ai_recovery_tts_stuck_alert
+    triggers:
+      - trigger: event
+        event_type: ai_tts_queue_stuck
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "TTS Queue: Force-Cleared"
+          message: >-
+            TTS queue was stuck for {{ trigger.event.data.duration_s | default('?') }}s
+            (last item completed {{ trigger.event.data.since_last_item_s | default('?') }}s ago).
+            Queue processor force-reset. Next enqueue will restart processing.
+          notification_id: ai_tts_queue_stuck
+
+  # ── Memory Degradation Alert ──
+  - alias: "AI Recovery — Memory Read-Only"
+    id: ai_recovery_memory_readonly_alert
+    triggers:
+      - trigger: event
+        event_type: ai_memory_mode_changed
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.new_mode == 'read_only' }}"
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "Memory DB: Read-Only Mode"
+          message: >-
+            Memory database entered read-only mode after repeated write failures.
+            Reads still work. Writes are silently skipped.
+            Recovery probe runs every 5 minutes. Check pyscript logs for details.
+          notification_id: ai_memory_read_only
+
+  - alias: "AI Recovery — Memory Recovered"
+    id: ai_recovery_memory_recovered
+    triggers:
+      - trigger: event
+        event_type: ai_memory_mode_changed
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.new_mode == 'normal' }}"
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: ai_memory_read_only
+
+  # ── Promoter Stale Auto-Recovery ──
+  # Entity IDs resolved dynamically from entity registry — first entity
+  # matching the domain is used to locate the config entry.
+  - alias: "AI Recovery — Calendar Stale Reload"
+    id: ai_recovery_calendar_stale
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.ai_calendar_stale
+        to: "on"
+        for:
+          minutes: 15
+    conditions: []
+    actions:
+      - action: homeassistant.reload_config_entry
+        target:
+          entity_id: >-
+            {{ states.calendar | map(attribute='entity_id')
+               | select('search', 'gmail') | first | default('') }}
+
+  - alias: "AI Recovery — Email Stale Reload"
+    id: ai_recovery_email_stale
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.ai_email_stale
+        to: "on"
+        for:
+          minutes: 15
+    conditions: []
+    actions:
+      - action: homeassistant.reload_config_entry
+        target:
+          entity_id: >-
+            {{ states.sensor | map(attribute='entity_id')
+               | select('search', 'gmail_messages') | first | default('') }}

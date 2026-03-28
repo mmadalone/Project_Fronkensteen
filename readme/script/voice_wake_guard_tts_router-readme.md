@@ -1,3 +1,5 @@
+![Voice -- Wake Guard TTS Router (Helper Script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_wake_guard_tts_router-header.jpeg)
+
 # Voice -- Wake Guard TTS Router (Helper Script)
 
 Routes TTS between ElevenLabs Custom (with `voice_profile` option) and standard `tts.speak`. Called by the wake-up-guard blueprint to avoid duplicating TTS routing logic across pass 1 and pass 2. The ElevenLabs Custom entity ID is configurable, so it also works with other custom TTS integrations that support `voice_profile` options.

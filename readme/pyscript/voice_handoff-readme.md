@@ -1,3 +1,5 @@
+![Voice Handoff -- Agent Pipeline Switching](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_handoff-header.jpeg)
+
 # Voice Handoff -- Agent Pipeline Switching
 
 Executes agent handoffs by switching the satellite's assist pipeline select entity, playing a chime, delivering a greeting in the target agent's voice, and opening the mic. Device-to-pipeline mappings are auto-discovered from the entity registry at startup. Supports timed restore, continuous conversation, and farewell from the source agent. Part of I-24 of the Voice Context Architecture.

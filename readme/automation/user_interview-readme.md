@@ -1,3 +1,5 @@
+![AI User Interview](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/user_interview-header.jpeg)
+
 # AI User Interview
 
 Manages the LLM-driven user preference interview. Activates interview mode (hot context injection), runs a continuous conversation loop so the agent keeps asking questions, and auto-deactivates after timeout. The actual interview is conducted by the LLM agent using hot context guidance and the `save_user_preference` tool function.

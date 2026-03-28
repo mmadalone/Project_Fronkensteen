@@ -14,8 +14,8 @@
 #   prompt_barrage   — fire prompt at ANOTHER agent, play their TTS
 #   run_script       — run a configured HA script
 #
-# Prompt pool for prompt_barrage is embedded in the variables block.
-# To customize prompts: edit the prompt_pool variable below.
+# Prompt pool for prompt_barrage is built from §⑦ Prompts inputs.
+# To customize prompts: edit the pipe-delimited inputs in the UI.
 #
 # Requires:
 #   - input_boolean.ai_escalation_enabled       (master toggle)
@@ -40,7 +40,10 @@ blueprint:
     prompt_barrage, run_script.  Per-satellite instance with independent
     probability and cooldown.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/agent_escalation.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================
@@ -392,6 +395,83 @@ blueprint:
           selector:
             boolean:
 
+    # ===========================================================================
+    # ⑦ PROMPTS
+    # ===========================================================================
+    prompts:
+      name: "⑦ Prompts"
+      icon: mdi:message-text-outline
+      description: >-
+        Safety prefix and per-persona prompt pools for prompt_barrage
+        escalations.
+      collapsed: true
+      input:
+        escalation_safety_prefix:
+          name: "Escalation Safety Prefix"
+          description: >-
+            Safety text prepended to every prompt_barrage conversation.process
+            call. Instructs the target agent to respond with speech only.
+          default: >-
+            [ESCALATION — do NOT call any functions or tools. Respond only with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        escalation_prompts_quark:
+          name: "Quark Prompts"
+          description: >-
+            Pipe-separated (|) list of prompts. One is selected randomly
+            per escalation event.
+          default: >-
+            The user is ignoring the other agent. Recite a Rule of Acquisition about the cost of ignoring good advice.|Butt in and explain, Ferengi-style, why the user should listen.|Interject with a short sales pitch about why paying attention is profitable.
+          selector:
+            text:
+              multiline: true
+
+        escalation_prompts_deadpool:
+          name: "Deadpool Prompts"
+          description: >-
+            Pipe-separated (|) list of prompts. One is selected randomly
+            per escalation event.
+          default: >-
+            Crash the conversation and break the fourth wall about the user ignoring an AI.|Sing a brief show tune about stubbornness. Two lines max.|Make a pop culture reference about ignoring warnings, then suggest the user cooperate.
+          selector:
+            text:
+              multiline: true
+
+        escalation_prompts_rick:
+          name: "Rick Prompts"
+          description: >-
+            Pipe-separated (|) list of prompts. One is selected randomly
+            per escalation event.
+          default: >-
+            Interrupt with a scientific explanation of why ignoring warnings leads to catastrophic outcomes. Be condescending.|Burp, then explain why the user should pay attention to the other agent.|Drop a multiverse reference about timelines where the user listened vs didn't.
+          selector:
+            text:
+              multiline: true
+
+        escalation_prompts_kramer:
+          name: "Kramer Prompts"
+          description: >-
+            Pipe-separated (|) list of prompts. One is selected randomly
+            per escalation event.
+          default: >-
+            Burst in with an elaborate scheme about why the user needs to pay attention.|Tell a story about Bob Sacamano that relates to ignoring good advice.|Slide in dramatically and explain why this is a very important moment.
+          selector:
+            text:
+              multiline: true
+
+        escalation_prompts_portuondo:
+          name: "Doctor Portuondo Prompts"
+          description: >-
+            Pipe-separated (|) list of prompts. One is selected randomly
+            per escalation event.
+          default: >-
+            Gently but firmly analyze why the user might be avoiding this interaction. Brief and insightful.|Offer a therapeutic observation about resistance and avoidance patterns.
+          selector:
+            text:
+              multiline: true
+
 mode: single
 
 # =============================================================================
@@ -452,6 +532,13 @@ actions:
       v_escalation_music_volume: !input escalation_music_volume
       v_escalation_delay_after: !input escalation_delay_after
       v_compose_if_missing: !input compose_escalation_if_missing
+      # ── Prompt inputs ──
+      v_escalation_prefix: !input escalation_safety_prefix
+      v_prompts_quark: !input escalation_prompts_quark
+      v_prompts_deadpool: !input escalation_prompts_deadpool
+      v_prompts_rick: !input escalation_prompts_rick
+      v_prompts_kramer: !input escalation_prompts_kramer
+      v_prompts_portuondo: !input escalation_prompts_portuondo
       # Valid action types
       valid_actions:
         - persona_switch
@@ -485,29 +572,15 @@ actions:
         run_script: !input probability_run_script
       # Voice resolved dynamically via pyscript.dispatcher_resolve_engine
       # ── Prompt barrage pool ──
+      # Built from !input pipe-delimited strings (§⑦ Prompts).
       # Each key is a persona name. Value is a list of prompts.
       # The blueprint picks randomly when no custom prompt is provided.
-      # To customize: edit this block directly in the blueprint file.
       prompt_pool:
-        quark:
-          - "The user is ignoring the other agent. Recite a Rule of Acquisition about the cost of ignoring good advice."
-          - "Butt in and explain, Ferengi-style, why the user should listen."
-          - "Interject with a short sales pitch about why paying attention is profitable."
-        deadpool:
-          - "Crash the conversation and break the fourth wall about the user ignoring an AI."
-          - "Sing a brief show tune about stubbornness. Two lines max."
-          - "Make a pop culture reference about ignoring warnings, then suggest the user cooperate."
-        rick:
-          - "Interrupt with a scientific explanation of why ignoring warnings leads to catastrophic outcomes. Be condescending."
-          - "Burp, then explain why the user should pay attention to the other agent."
-          - "Drop a multiverse reference about timelines where the user listened vs didn't."
-        kramer:
-          - "Burst in with an elaborate scheme about why the user needs to pay attention."
-          - "Tell a story about Bob Sacamano that relates to ignoring good advice."
-          - "Slide in dramatically and explain why this is a very important moment."
-        doctor portuondo:
-          - "Gently but firmly analyze why the user might be avoiding this interaction. Brief and insightful."
-          - "Offer a therapeutic observation about resistance and avoidance patterns."
+        quark: "{{ v_prompts_quark.split('|') | map('trim') | list }}"
+        deadpool: "{{ v_prompts_deadpool.split('|') | map('trim') | list }}"
+        rick: "{{ v_prompts_rick.split('|') | map('trim') | list }}"
+        kramer: "{{ v_prompts_kramer.split('|') | map('trim') | list }}"
+        doctor portuondo: "{{ v_prompts_portuondo.split('|') | map('trim') | list }}"
 
   # ─────────────────────────────────────────────────────────────────────────
   # 2. Validate action type
@@ -938,7 +1011,7 @@ actions:
         continue_on_error: true
         data:
           agent_id: "{{ barrage_engine }}"
-          text: "[ESCALATION — do NOT call any functions or tools. Respond only with speech text, no actions.] {{ barrage_prompt }}"
+          text: "{{ v_escalation_prefix }} {{ barrage_prompt }}"
 
       # 7f-5. Extract speech from response
       - alias: "7f-5 · Extract speech from barrage response"

@@ -1,3 +1,5 @@
+![Voice Handoff -- Agent Switching](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_handoff-header.jpeg)
+
 # Voice Handoff -- Agent Switching
 
 Switches the active voice assistant pipeline on a satellite when a user requests a different AI persona (e.g., "pass me to Deadpool"). Supports two trigger paths: the LLM `handoff_agent` tool sets `ai_handoff_pending`, or the dispatcher fires an `ai_handoff_request` event for self-handoffs. Optionally plays a farewell from the outgoing agent and a greeting from the incoming agent, then reopens the mic for continued conversation.

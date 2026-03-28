@@ -1,3 +1,5 @@
+![Weather -- Tomorrow Forecast Promote](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/weather_forecast_promote-header.jpeg)
+
 # Weather -- Tomorrow Forecast Promote
 
 Reads weather sensor states (AEMET, Met.no, etc.) and an optional weather domain entity, sends all data to an LLM for a natural-language summary, and stores the result in an `input_text` helper for hot context injection. The weather integration updates sensors on its own schedule -- this blueprint just reads the current values and summarizes them on a configurable interval.

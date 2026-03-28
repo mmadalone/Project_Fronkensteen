@@ -52,6 +52,17 @@ blueprint:
           selector:
             entity:
               domain: input_boolean
+
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
         suppress_urgent_tts:
           name: Suppress urgent TTS announcements
           description: >
@@ -132,6 +143,7 @@ blueprint:
 variables:
   imap_entry_id: !input imap_entry_id
   kill_switch: !input kill_switch
+  master_gate_entity: !input notification_master_gate
   suppress_urgent_tts: !input suppress_urgent_tts
   v_bypass_follow_me: !input bypass_follow_me
   v_bypass_claim: !input bypass_claim_script
@@ -150,6 +162,12 @@ triggers:
       entry_id: !input imap_entry_id
 
 conditions:
+  - alias: "Notification master gate must be ON"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+
   - alias: "Kill switch is ON"
     condition: state
     entity_id: !input kill_switch

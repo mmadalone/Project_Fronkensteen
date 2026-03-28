@@ -23,7 +23,10 @@ blueprint:
     memory by conversation_sensor.py.  Groups entries by agent, compresses via
     LLM, and stores summaries back in L2 with configurable retention.
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/conversation_summarizer.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================

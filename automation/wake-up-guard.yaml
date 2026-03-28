@@ -875,7 +875,7 @@ actions:
     variables:
       follow_me_was_on: >-
         {{ v_bypass_follow_me | default(false)
-           and is_state('input_boolean.notification_follow_me', 'on') }}
+           and is_state('input_boolean.ai_notification_follow_me', 'on') }}
 
   - alias: "Bypass follow-me (if configured)"
     choose:

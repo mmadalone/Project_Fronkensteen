@@ -8,7 +8,10 @@ blueprint:
     - v1.1.0 — Fixed kill switch (was checking trigger entity instead of kill switch input)
     - v1.0.0 — Initial version
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/embedding_batch.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ===========================================================================

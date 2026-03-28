@@ -153,7 +153,7 @@ blueprint:
         ducking_flag:
           name: "Ducking flag entity"
           description: "Boolean indicating audio ducking is active."
-          default: input_boolean.ducking_flag
+          default: input_boolean.ai_ducking_flag
           selector:
             entity:
               domain: input_boolean
@@ -165,6 +165,14 @@ blueprint:
           selector:
             entity:
               domain: input_boolean
+
+        music_budget_entity:
+          name: "Music generation budget entity"
+          description: "Sensor tracking daily music generation budget. Attributes used_today and daily_limit gate budget-aware routing."
+          default: sensor.ai_music_generation_budget
+          selector:
+            entity:
+              domain: sensor
 
 fields:
   prompt:
@@ -241,6 +249,7 @@ variables:
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
   v_default_content_type: !input default_content_type
+  v_music_budget_entity: !input music_budget_entity
   # Resolve field overrides
   effective_source: >-
     {%- set s = source | default('') | string | trim -%}
@@ -277,8 +286,8 @@ sequence:
     variables:
       final_source: >-
         {%- if v_routing_mode == 'budget_aware' and effective_source != 'fluidsynth' -%}
-          {%- set budget = state_attr('sensor.ai_music_generation_budget', 'used_today') | int(0) -%}
-          {%- set limit = state_attr('sensor.ai_music_generation_budget', 'daily_limit') | int(10) -%}
+          {%- set budget = state_attr(v_music_budget_entity, 'used_today') | int(0) -%}
+          {%- set limit = state_attr(v_music_budget_entity, 'daily_limit') | int(10) -%}
           {%- set pct = (budget / limit * 100) if limit > 0 else 0 -%}
           {{ 'fluidsynth' if pct >= (v_budget_threshold | int(80)) else effective_source }}
         {%- else -%}

@@ -50,6 +50,8 @@ blueprint:
 
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/follow_me_refcount_watchdog.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     section_core:
@@ -70,7 +72,7 @@ blueprint:
           name: "Follow-me toggle"
           description: >-
             The input_boolean that enables/disables notification follow-me.
-          default: input_boolean.notification_follow_me
+          default: input_boolean.ai_notification_follow_me
           selector:
             entity:
               domain: input_boolean
@@ -80,7 +82,7 @@ blueprint:
           description: >-
             An input_text entity used for owner debug logging.
             Cleared on watchdog reset.
-          default: input_text.notification_follow_me_bypass_log
+          default: input_text.ai_notification_follow_me_bypass_log
           selector:
             entity:
               domain: input_text

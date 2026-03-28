@@ -31,7 +31,10 @@ blueprint:
     Tool-suppression prefix prevents re-entry. Per-satellite instances.
     Foundation for Pattern 4 (Theatrical Mode).
   domain: automation
+  author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/reactive_banter.yaml
+  homeassistant:
+    min_version: "2024.10.0"
 
   input:
     # ── ① Control ──────────────────────────────────────────────────────────
@@ -44,6 +47,16 @@ blueprint:
         enable_toggle:
           name: Enable Toggle
           description: Per-instance kill switch for reactive banter.
+          selector:
+            entity:
+              domain: input_boolean
+
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
           selector:
             entity:
               domain: input_boolean
@@ -297,6 +310,30 @@ blueprint:
             entity:
               domain: script
 
+        theatrical_mode_entity:
+          name: "Theatrical mode active entity"
+          description: "Boolean tracking whether theatrical mode is currently running."
+          default: input_boolean.ai_theatrical_mode_active
+          selector:
+            entity:
+              domain: input_boolean
+
+        last_satellite_entity:
+          name: "Last satellite entity"
+          description: "Helper that stores the last-active satellite entity_id."
+          default: input_text.ai_last_satellite
+          selector:
+            entity:
+              domain: input_text
+
+        ducking_flag_entity:
+          name: "Ducking flag entity"
+          description: "Boolean tracking active volume ducking state."
+          default: input_boolean.ai_ducking_flag
+          selector:
+            entity:
+              domain: input_boolean
+
     # ── ⑦ Prompt ─────────────────────────────────────────────────────────
     prompt:
       name: "⑦ Prompt"
@@ -443,6 +480,7 @@ triggers:
 variables:
   # ── Inputs ──
   enable_toggle_entity: !input enable_toggle
+  master_gate_entity: !input notification_master_gate
   satellite_entity: !input satellite
   satellite_speaker_entity: !input satellite_speaker
   notification_banter_enabled: !input enable_notification_banter
@@ -470,17 +508,27 @@ variables:
   escalation_budget_floor: !input escalation_budget_floor
   enable_user_prefs: !input enable_user_preferences
   enable_threshold: !input enable_notify_threshold
+  _last_satellite: !input last_satellite_entity
+  _ducking_flag: !input ducking_flag_entity
+  _theatrical_mode_active: !input theatrical_mode_entity
   # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
   # ── User preference context for banter shaping ──
-  _banter_user: >-
+  _resolved_user: >-
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
     {% else %}miquel{% endif %}
-  _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _banter_user) | default('', true) }}"
-  _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _banter_user) | default('', true) }}"
-  _user_pet_peeves: "{{ states('input_text.ai_context_user_pet_peeves_' ~ _banter_user) | default('', true) }}"
+  _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) }}"
+  _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) }}"
+  _user_pet_peeves: "{{ states('input_text.ai_context_user_pet_peeves_' ~ _resolved_user) | default('', true) }}"
 
 conditions:
+  # ── Gate 0: Notification master gate ──
+  - alias: "Gate 0 — Notification master gate"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
   # ── Gate 1: Enable toggle (voice = master toggle, notification = own knob) ──
   - alias: "Gate 1 — Enable toggle"
     condition: template
@@ -498,7 +546,7 @@ conditions:
       {% if trigger.id == 'notification' %}
         true
       {% else %}
-        {{ states('input_text.ai_last_satellite') == satellite_entity }}
+        {{ states(_last_satellite) == satellite_entity }}
       {% endif %}
 
   # ── Gate 3: Trigger sanity ──
@@ -537,7 +585,7 @@ conditions:
   # ── Gate 6: Not during theatrical exchange ──
   - alias: "Gate 6 — Theatrical mode not active"
     condition: state
-    entity_id: input_boolean.ai_theatrical_mode_active
+    entity_id: !input theatrical_mode_entity
     state: "off"
 
   # ── Gate 7: Satellite not in active voice session ──
@@ -811,9 +859,9 @@ action:
   - alias: "Step 6g — Wait for ducking to settle"
     if:
       - condition: template
-        value_template: "{{ states('input_boolean.ai_ducking_flag') == 'on' }}"
+        value_template: "{{ states(_ducking_flag) == 'on' }}"
     then:
-      - wait_template: "{{ states('input_boolean.ai_ducking_flag') == 'off' }}"
+      - wait_template: "{{ states(_ducking_flag) == 'off' }}"
         timeout: "00:00:10"
         continue_on_timeout: true
   - alias: "Step 6g2 — Settle delay for volume propagation"
@@ -885,7 +933,7 @@ action:
         value_template: >-
           {{ enable_theatrical_escalation | default(false)
              and is_state('input_boolean.ai_theatrical_mode_enabled', 'on')
-             and is_state('input_boolean.ai_theatrical_mode_active', 'off')
+             and is_state(_theatrical_mode_active, 'off')
              and (states('sensor.ai_llm_budget_remaining') | float(100))
                 >= (escalation_budget_floor | float(70))
              and (range(100) | random) < (escalation_probability | int(10)) }}

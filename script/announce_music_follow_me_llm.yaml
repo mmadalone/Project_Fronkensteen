@@ -371,6 +371,14 @@ blueprint:
             entity:
               domain: input_boolean
 
+        llm_budget_entity:
+          name: "LLM budget remaining entity"
+          description: "Sensor showing remaining LLM budget percentage. Used to gate LLM-generated messages and banter when budget is low."
+          default: sensor.ai_llm_budget_remaining
+          selector:
+            entity:
+              domain: sensor
+
 mode: queued
 max_exceeded: silent
 
@@ -421,6 +429,7 @@ variables:
   v_banter_prompt: !input banter_prompt
   v_banter_max_words: !input banter_max_words
   v_banter_delay: !input banter_delay
+  v_llm_budget_entity: !input llm_budget_entity
 
 sequence:
   # ── Infrastructure: Agent selection — dispatcher > manual ──────────────
@@ -510,7 +519,7 @@ sequence:
             value_template: >-
               {%- set floor = budget_floor | int(0) -%}
               {%- set budget_ok = (floor == 0
-                    or states('sensor.ai_llm_budget_remaining') | int(100) >= floor) -%}
+                    or states(v_llm_budget_entity) | int(100) >= floor) -%}
               {{ random_mode and use_llm and budget_ok }}
         sequence:
           - alias: "Call conversation agent for a fun announcement (non-critical)"
@@ -716,7 +725,7 @@ sequence:
         value_template: >-
           {%- set floor = budget_floor | int(0) -%}
           {%- set budget_ok = (floor == 0
-                or states('sensor.ai_llm_budget_remaining') | int(100) >= floor) -%}
+                or states(v_llm_budget_entity) | int(100) >= floor) -%}
           {%- set dice = range(100) | random -%}
           {{ v_enable_banter and budget_ok
              and dice | int < v_banter_probability | int }}

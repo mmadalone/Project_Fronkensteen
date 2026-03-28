@@ -1,3 +1,5 @@
+![Voice -- PIN-Gated Action (tool script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_pin_action-header.jpeg)
+
 # Voice -- PIN-Gated Action (tool script)
 
 Require a spoken passphrase before executing a protected action. Uses `assist_satellite.ask_question` with the passphrase as a templated answer, retries on wrong answers, and announces the result. Designed to chain with the `va_confirmation_dialog` automation blueprint for a full voice command to PIN challenge to action pipeline.

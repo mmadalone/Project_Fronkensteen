@@ -18,7 +18,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import (
+    build_result_entity_name,
+    get_person_slugs,
+    load_entity_config,
+    resolve_memory_owner,
+    resolve_memory_owner_with_confidence,
+)
 
 DB_PATH = Path("/config/memory.db")
 VEC0_PATH = "/config/vec0"
@@ -78,6 +84,29 @@ EXTRA_CHAR_REPLACEMENTS = {
 
 _DB_READY = False
 _DB_READY_LOCK = threading.Lock()
+
+# ── Degradation: read-only mode on repeated write failures ──
+_db_mode: str = "normal"  # normal | read_only | unavailable
+_db_write_fail_count: int = 0
+_DB_WRITE_FAIL_THRESHOLD: int = 3
+_db_mode_lock = threading.Lock()
+
+
+# ── QS-5: access control ─────────────────────────────────────────────────
+
+def _check_access(row_owner: str, row_scope: str, requesting_user: str) -> str:
+    """Return 'full' or 'restricted' (Tier B).
+
+    full:       caller can see key + value.
+    restricted: caller can see key/scope/tags, but value is redacted.
+    """
+    if row_scope in ("household", "session", "couple"):
+        return "full"
+    if not row_owner:  # legacy unassigned → full access
+        return "full"
+    if row_owner == requesting_user:
+        return "full"
+    return "restricted"
 
 result_entity_name: dict[str, str] = {}
 
@@ -253,6 +282,39 @@ def _ensure_db() -> None:
             conn.execute("ALTER TABLE budget_history ADD COLUMN music_generations INTEGER DEFAULT 0")
         except Exception:
             pass
+        # ── QS-5: owner column for per-user memory isolation ──
+        try:
+            conn.execute("ALTER TABLE mem ADD COLUMN owner TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass  # Column already exists
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_owner ON mem(owner);")
+        # ── QS-5: backfill owner from existing key naming convention ──
+        _qs5_row = conn.execute(
+            "SELECT 1 FROM mem WHERE key='_schema:qs5_backfill'"
+        ).fetchone()
+        if _qs5_row is None:
+            _now_bf = datetime.now(UTC).isoformat()
+            conn.execute("""
+                UPDATE mem SET owner='miquel'
+                WHERE owner='' AND scope='user'
+                  AND (key LIKE '%:miquel' OR key LIKE '%:miquel:%')
+            """)
+            conn.execute("""
+                UPDATE mem SET owner='jessica'
+                WHERE owner='' AND scope='user'
+                  AND (key LIKE '%:jessica' OR key LIKE '%:jessica:%')
+            """)
+            conn.execute("""
+                INSERT OR IGNORE INTO mem(
+                    key, value, scope, tags, tags_search,
+                    created_at, last_used_at, owner
+                ) VALUES(
+                    '_schema:qs5_backfill', '1', 'system',
+                    'schema migration', 'schema migration',
+                    ?, ?, 'system'
+                )
+            """, (_now_bf, _now_bf))
+            conn.commit()
         # ── mem_archive: cold storage for archived L2 entries (I-42 Phase 2) ──
         conn.execute(
             """
@@ -276,6 +338,38 @@ def _ensure_db() -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_mem_archive_archived_at ON mem_archive(archived_at);"
+        )
+        # ── QS-5: owner column on mem_archive ──
+        try:
+            conn.execute(
+                "ALTER TABLE mem_archive ADD COLUMN owner TEXT NOT NULL DEFAULT ''"
+            )
+        except Exception:
+            pass
+        # ── toggle_audit: kill switch audit trail ──
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS toggle_audit (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id     TEXT    NOT NULL,
+                old_state     TEXT    NOT NULL,
+                new_state     TEXT    NOT NULL,
+                source        TEXT    NOT NULL DEFAULT 'unknown',
+                source_detail TEXT    NOT NULL DEFAULT '',
+                timestamp     TEXT    NOT NULL,
+                context_id    TEXT    NOT NULL DEFAULT '',
+                user_id       TEXT    NOT NULL DEFAULT '',
+                parent_id     TEXT    NOT NULL DEFAULT ''
+            );
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_toggle_audit_entity "
+            "ON toggle_audit(entity_id);"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_toggle_audit_ts "
+            "ON toggle_audit(timestamp);"
         )
         # ── sqlite-vec: load extension and create vector table ──
         _init_vec0(conn, _VEC_DIMENSIONS)
@@ -620,7 +714,8 @@ def _fetch_with_expiry(
                tags,
                created_at,
                last_used_at,
-               expires_at
+               expires_at,
+               owner
         FROM mem
         WHERE key = ?;
         """,
@@ -651,6 +746,47 @@ def _reset_db_ready() -> None:
         _DB_READY = False
 
 
+@pyscript_compile  # noqa: F821
+def _track_write_failure() -> str | None:
+    """Increment write failure count; transition to read_only if threshold exceeded.
+
+    Returns "read_only" if mode just transitioned, else None.
+    Safe to call from @pyscript_executor context (no pyscript builtins used).
+    """
+    global _db_write_fail_count, _db_mode
+    with _db_mode_lock:
+        _db_write_fail_count += 1
+        if _db_write_fail_count >= _DB_WRITE_FAIL_THRESHOLD and _db_mode == "normal":
+            _db_mode = "read_only"
+            return "read_only"
+    return None
+
+
+@pyscript_compile  # noqa: F821
+def _track_write_success() -> str | None:
+    """Reset failure count; promote from read_only to normal if recovered.
+
+    Returns "normal" if mode just transitioned, else None.
+    Safe to call from @pyscript_executor context (no pyscript builtins used).
+    """
+    global _db_write_fail_count, _db_mode
+    with _db_mode_lock:
+        _db_write_fail_count = 0
+        if _db_mode == "read_only":
+            _db_mode = "normal"
+            return "normal"
+    return None
+
+
+@pyscript_compile  # noqa: F821
+def _is_write_allowed() -> bool:
+    """Return True if the DB is in normal (writable) mode.
+
+    Safe to call from @pyscript_executor context (no pyscript builtins used).
+    """
+    return _db_mode == "normal"
+
+
 @pyscript_executor  # noqa: F821
 def _memory_set_db_sync(
     key_norm: str,
@@ -660,8 +796,11 @@ def _memory_set_db_sync(
     tags_search: str,
     now_iso: str,
     expires_at: str | None,
+    owner_norm: str = "",
 ) -> bool:
     """Persist a memory record, retrying once if schema objects are missing."""
+    if not _is_write_allowed():
+        return False
     for attempt in range(2):
         try:
             _ensure_db_once(force=attempt == 1)
@@ -669,14 +808,16 @@ def _memory_set_db_sync(
                 cur = conn.cursor()
                 cur.execute(
                     """
-                    INSERT INTO mem(key, value, scope, tags, tags_search, created_at, last_used_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO mem(key, value, scope, tags, tags_search,
+                                    created_at, last_used_at, expires_at, owner)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(key) DO UPDATE SET value=excluded.value,
                                                    scope=excluded.scope,
                                                    tags=excluded.tags,
                                                    tags_search=excluded.tags_search,
                                                    last_used_at=excluded.last_used_at,
-                                                   expires_at=excluded.expires_at
+                                                   expires_at=excluded.expires_at,
+                                                   owner=excluded.owner
                     """,
                     (
                         key_norm,
@@ -687,12 +828,15 @@ def _memory_set_db_sync(
                         now_iso,
                         now_iso,
                         expires_at,
+                        owner_norm,
                     ),
                 )
                 conn.commit()
+            _track_write_success()
             return True
         except sqlite3.OperationalError:
             _reset_db_ready()
+            _track_write_failure()
             if attempt == 0:
                 time.sleep(0.1)
                 continue
@@ -741,6 +885,7 @@ def _memory_get_db_sync(key_norm: str) -> tuple[str, dict[str, Any] | None]:
                     "created_at": row["created_at"],
                     "last_used_at": row["last_used_at"],
                     "expires_at": row["expires_at"],
+                    "owner": row["owner"] if "owner" in row.keys() else "",
                 }
                 if expired:
                     return "expired", row_data
@@ -854,6 +999,7 @@ def _memory_search_db_sync(
                                             m.created_at,
                                             m.last_used_at,
                                             m.expires_at,
+                                            m.owner,
                                             mem_fts.rank AS rank
                             FROM mem_fts
                                      JOIN mem AS m
@@ -888,6 +1034,7 @@ def _memory_search_db_sync(
                                         m.created_at,
                                         m.last_used_at,
                                         m.expires_at,
+                                        m.owner,
                                         NULL AS rank
                         FROM mem AS m
                         WHERE m.value LIKE ?
@@ -923,6 +1070,7 @@ def _memory_search_db_sync(
                     "created_at": row["created_at"],
                     "last_used_at": row["last_used_at"],
                     "expires_at": row["expires_at"],
+                    "owner": row["owner"] if "owner" in row.keys() else "",
                     "fts_score": fts_score,
                 }
 
@@ -938,7 +1086,7 @@ def _memory_search_db_sync(
                             rows = conn2.execute(
                                 f"""
                                 SELECT key, value, scope, tags, tags_search,
-                                       created_at, last_used_at, expires_at
+                                       created_at, last_used_at, expires_at, owner
                                 FROM mem WHERE key IN ({placeholders})
                                 """,
                                 list(sem_only_keys),
@@ -952,6 +1100,7 @@ def _memory_search_db_sync(
                                     "created_at": row["created_at"],
                                     "last_used_at": row["last_used_at"],
                                     "expires_at": row["expires_at"],
+                                    "owner": row["owner"] if "owner" in row.keys() else "",
                                     "fts_score": 0.0,
                                 }
                     except Exception:
@@ -1247,7 +1396,7 @@ def _memory_related_db_sync(
                     rows = cur.execute(
                         f"""SELECT r.to_key, r.weight, r.rel_type, r.created_at,
                                    m.value, m.scope, m.tags, m.created_at AS mem_created,
-                                   m.last_used_at, m.expires_at
+                                   m.last_used_at, m.expires_at, m.owner
                             FROM mem_rel r
                             JOIN mem m ON m.key = r.to_key
                             WHERE r.from_key IN ({placeholders})
@@ -1269,6 +1418,7 @@ def _memory_related_db_sync(
                             "value": row["value"],
                             "scope": row["scope"],
                             "tags": row["tags"],
+                            "owner": row["owner"] if "owner" in row.keys() else "",
                             "weight": row["weight"],
                             "rel_type": row["rel_type"],
                             "rel_created_at": row["created_at"],
@@ -1329,7 +1479,8 @@ def _memory_search_enrich_db_sync(
                                m.tags,
                                m.created_at,
                                m.last_used_at,
-                               m.expires_at
+                               m.expires_at,
+                               m.owner
                         FROM mem_rel r
                         JOIN mem m ON m.key = r.to_key
                         WHERE r.from_key IN ({key_ph})
@@ -1352,6 +1503,7 @@ def _memory_search_enrich_db_sync(
                         "value": row["value"],
                         "scope": row["scope"],
                         "tags": row["tags"],
+                        "owner": row["owner"] if "owner" in row.keys() else "",
                         "created_at": row["created_at"],
                         "last_used_at": row["last_used_at"],
                         "expires_at": row["expires_at"],
@@ -1516,6 +1668,7 @@ async def _memory_set_db(
     tags_search: str,
     now_iso: str,
     expires_at: str | None,
+    owner_norm: str = "",
 ) -> bool:
     """Async wrapper around _memory_set_db_sync to keep writes off the event loop."""
     return _memory_set_db_sync(
@@ -1526,6 +1679,7 @@ async def _memory_set_db(
         tags_search,
         now_iso,
         expires_at,
+        owner_norm,
     )
 
 
@@ -1653,6 +1807,7 @@ async def memory_set(
     expiration_days: int = 180,
     tags: str = "",
     force_new: bool = False,
+    owner: str = "",
 ):
     """
     yaml
@@ -1675,7 +1830,10 @@ async def memory_set(
           text:
       scope:
         name: Scope
-        description: Arbitrary grouping label for organization.
+        description: >-
+          Grouping label. "user" = private (QS-5 owner isolation),
+          "household" = shared, "session" = temporary,
+          "couple" = shared between both partners (visible to both).
         default: user
         example: user
         selector:
@@ -1684,6 +1842,7 @@ async def memory_set(
               - user
               - household
               - session
+              - couple
       expiration_days:
         name: Expiration (days)
         description: Days until expiration; 0 keeps forever.
@@ -1706,8 +1865,17 @@ async def memory_set(
         example: false
         selector:
           boolean:
+      owner:
+        name: Owner
+        description: >-
+          Person slug who owns this memory (QS-5 isolation).
+          Auto-resolved from identity confidence when empty.
+        default: ""
+        example: miquel
+        selector:
+          text:
     """
-    # Returns: {status, op, key, value?, scope?, tags?, expires_at?, key_exists?, force_new_applied?, duplicate_matches?, error?, matches?}  # noqa: E501
+    # Returns: {status, op, key, value?, scope?, tags?, expires_at?, key_exists?, force_new_applied?, duplicate_matches?, error?, matches?, owner?}  # noqa: E501
     if _is_test_mode():
         log.info("memory [TEST]: would set key=%s", key)  # noqa: F821
         return {"status": "test_mode_skip"}
@@ -1745,6 +1913,20 @@ async def memory_set(
 
     try:
         scope_norm = ("" if scope is None else str(scope).strip()).lower() or "user"
+
+        # ── QS-5: resolve owner with dual-mode safety ──
+        owner_slug, certain = resolve_memory_owner_with_confidence(owner, scope_norm)
+        if not certain and scope_norm == "user":
+            return {
+                "status": "identity_uncertain",
+                "op": "set",
+                "key": _normalize_key(key),
+                "candidates": list(get_person_slugs()),
+                "message": "Cannot determine who is speaking. "
+                "Please confirm your identity.",
+            }
+        owner_norm = owner_slug
+
         value_norm = _normalize_value(value)
         tags_raw = _normalize_value(tags) if tags else _normalize_value(key)
         tags_search = _normalize_tags(tags_raw)
@@ -1806,6 +1988,7 @@ async def memory_set(
             tags_search=tags_search,
             now_iso=now_iso,
             expires_at=expires_at,
+            owner_norm=owner_norm,
         )
 
         if not ok_db:
@@ -1834,6 +2017,7 @@ async def memory_set(
             "expires_at": expires_at,
             "key_exists": key_exists,
             "force_new_applied": forced_duplicate_override,
+            "owner": owner_norm,
         }
         if forced_duplicate_override:
             result_details["duplicate_matches"] = duplicate_options
@@ -1850,6 +2034,7 @@ async def memory_set(
             "expires_at": expires_at,
             "key_exists": key_exists,
             "force_new_applied": forced_duplicate_override,
+            "owner": owner_norm,
         }
         if forced_duplicate_override:
             response["duplicate_matches"] = duplicate_options
@@ -1861,11 +2046,11 @@ async def memory_set(
 
 
 @service(supports_response="only")  # noqa: F821
-async def memory_get(key: str):
+async def memory_get(key: str, owner: str = ""):
     """
     yaml
     name: Memory Get
-    description: Get a memory entry by key, updating last_used_at; returns `ambiguous` when similar suggestions exist and `status=expired` with the stored payload so callers can reuse it when the record has expired.
+    description: Get a memory entry by key, updating last_used_at; returns `ambiguous` when similar suggestions exist and `status=expired` with the stored payload so callers can reuse it when the record has expired. Returns `restricted` if the entry belongs to another user.
     fields:
       key:
         name: Key
@@ -1874,8 +2059,15 @@ async def memory_get(key: str):
         example: "car_parking_slot"
         selector:
           text:
+      owner:
+        name: Owner
+        description: >-
+          Requesting user slug (QS-5). Auto-resolved when empty.
+        default: ""
+        selector:
+          text:
     """
-    # Returns: {status, op, key, value?, scope?, tags?, created_at?, last_used_at?, expires_at?, error?, expired?, matches?}  # noqa: E501
+    # Returns: {status, op, key, value?, scope?, tags?, created_at?, last_used_at?, expires_at?, owner?, error?, expired?, matches?, restricted?}  # noqa: E501
     if _is_test_mode():
         log.info("memory [TEST]: would get key=%s", key)  # noqa: F821
         return {"status": "test_mode_skip", "op": "get", "value": "{}"}
@@ -1926,16 +2118,37 @@ async def memory_get(key: str):
         }
 
     res = payload or {}
+
+    # ── QS-5: Tier B access check ──
+    row_owner = res.get("owner", "")
+    row_scope = res.get("scope", "")
+    requesting_user = resolve_memory_owner(owner, row_scope)
+    access = _check_access(row_owner, row_scope, requesting_user)
+    if access == "restricted":
+        restricted_res = {
+            "status": "restricted",
+            "op": "get",
+            "key": res.get("key", key_norm),
+            "scope": row_scope,
+            "tags": res.get("tags", ""),
+            "owner": row_owner,
+            "restricted": True,
+        }
+        _set_result("restricted", op="get", **restricted_res)
+        return restricted_res
+
     _set_result("ok", op="get", **res)
     return {"status": "ok", "op": "get", **res}
 
 
 @service(supports_response="only")  # noqa: F821
-async def memory_search(query: str, limit: int = 5, include_related: bool = True):
+async def memory_search(
+    query: str, limit: int = 5, include_related: bool = True, owner: str = ""
+):
     """
     yaml
     name: Memory Search
-    description: Search entries across key/value/tags using FTS; falls back to LIKE if MATCH fails. Optionally appends graph-connected related entries.
+    description: Search entries across key/value/tags using FTS; falls back to LIKE if MATCH fails. Optionally appends graph-connected related entries. Other-user entries are returned with value redacted (Tier B).
     fields:
       query:
         name: Query
@@ -1959,6 +2172,13 @@ async def memory_search(query: str, limit: int = 5, include_related: bool = True
         default: true
         selector:
           boolean:
+      owner:
+        name: Owner
+        description: >-
+          Requesting user slug (QS-5). Auto-resolved when empty.
+        default: ""
+        selector:
+          text:
     """
     # Returns: {status, op, query, count?, related_count?, results?, blended?, error?}
     if _is_test_mode():
@@ -2048,6 +2268,26 @@ async def memory_search(query: str, limit: int = 5, include_related: bool = True
     # Combine for response
     all_results = results + related_entries
 
+    # ── QS-5: Tier B post-filter ──
+    requesting_user = resolve_memory_owner(owner, "user")
+    filtered: list[dict[str, Any]] = []
+    for r in all_results:
+        row_owner = r.get("owner", "")
+        row_scope = r.get("scope", "")
+        access = _check_access(row_owner, row_scope, requesting_user)
+        if access == "restricted":
+            filtered.append({
+                "key": r.get("key", ""),
+                "value": "[restricted]",
+                "scope": row_scope,
+                "tags": r.get("tags", ""),
+                "owner": row_owner,
+                "restricted": True,
+                "match_score": r.get("match_score", 0),
+            })
+        else:
+            filtered.append(r)
+
     # Sensor attrs get only summary (full results in service response).
     # This avoids the 16 KB recorder limit and 32 KB event-size cap.
     _set_result(
@@ -2056,7 +2296,7 @@ async def memory_search(query: str, limit: int = 5, include_related: bool = True
         query=query,
         count=len(results),
         related_count=len(related_entries),
-        result_keys=[r.get("key", "") for r in all_results],
+        result_keys=[r.get("key", "") for r in filtered],
     )
     return {
         "status": "ok",
@@ -2064,23 +2304,30 @@ async def memory_search(query: str, limit: int = 5, include_related: bool = True
         "query": query,
         "count": len(results),
         "related_count": len(related_entries),
-        "results": all_results,
+        "results": filtered,
         "blended": query_vec is not None,
     }
 
 
 @service(supports_response="only")  # noqa: F821
-async def memory_forget(key: str):
+async def memory_forget(key: str, owner: str = ""):
     """
     yaml
     name: Memory Forget
-    description: Delete a memory entry by key and remove it from the FTS index; returns `ambiguous` when nothing is removed but suggestions exist.
+    description: Delete a memory entry by key and remove it from the FTS index; returns `ambiguous` when nothing is removed but suggestions exist. Refuses to delete entries owned by another user.
     fields:
       key:
         name: Key
         description: Key to delete.
         required: true
         example: "car_parking_slot"
+        selector:
+          text:
+      owner:
+        name: Owner
+        description: >-
+          Requesting user slug (QS-5). Auto-resolved when empty.
+        default: ""
         selector:
           text:
     """
@@ -2098,6 +2345,28 @@ async def memory_forget(key: str):
             "key": key or "",
             "error": "key_missing",
         }
+
+    # ── QS-5: ownership check before delete ──
+    try:
+        _, existing = await _memory_get_db(key_norm)
+    except Exception:
+        existing = None
+    if existing:
+        row_owner = existing.get("owner", "")
+        row_scope = existing.get("scope", "")
+        requesting_user = resolve_memory_owner(owner, row_scope)
+        if row_owner and row_owner != requesting_user:
+            _set_result(
+                "error", op="forget", key=key_norm, error="not_owner"
+            )
+            return {
+                "status": "error",
+                "op": "forget",
+                "key": key_norm,
+                "error": "not_owner",
+                "owner": row_owner,
+            }
+
     try:
         deleted = await _memory_forget_db(key_norm)
     except Exception as e:
@@ -2130,11 +2399,11 @@ async def memory_forget(key: str):
 
 
 @service(supports_response="only")  # noqa: F821
-async def memory_related(key: str, limit: int = 10, depth: int = 1):
+async def memory_related(key: str, limit: int = 10, depth: int = 1, owner: str = ""):
     """
     yaml
     name: Memory Related
-    description: Get memories related to a given key via the relationship graph.
+    description: Get memories related to a given key via the relationship graph. Other-user entries are returned with value redacted (Tier B).
     fields:
       key:
         name: Key
@@ -2158,6 +2427,13 @@ async def memory_related(key: str, limit: int = 10, depth: int = 1):
           number:
             min: 1
             max: 3
+      owner:
+        name: Owner
+        description: >-
+          Requesting user slug (QS-5). Auto-resolved when empty.
+        default: ""
+        selector:
+          text:
     """
     if _is_test_mode():
         log.info("memory [TEST]: would get related for key=%s", key)  # noqa: F821
@@ -2178,20 +2454,42 @@ async def memory_related(key: str, limit: int = 10, depth: int = 1):
 
     try:
         results = await _memory_related_db(key_norm, lim, dep)
-        # Sensor attrs get only summary (full results in service response).
+
+        # ── QS-5: Tier B post-filter ──
+        requesting_user = resolve_memory_owner(owner, "user")
+        filtered: list[dict[str, Any]] = []
+        for r in results:
+            row_owner = r.get("owner", "")
+            row_scope = r.get("scope", "")
+            access = _check_access(row_owner, row_scope, requesting_user)
+            if access == "restricted":
+                filtered.append({
+                    "key": r.get("key", ""),
+                    "value": "[restricted]",
+                    "scope": row_scope,
+                    "tags": r.get("tags", ""),
+                    "owner": row_owner,
+                    "restricted": True,
+                    "rel_type": r.get("rel_type", ""),
+                    "weight": r.get("weight", 0),
+                    "depth": r.get("depth", 1),
+                })
+            else:
+                filtered.append(r)
+
         _set_result(
             "ok",
             op="related",
             key=key_norm,
-            count=len(results),
-            result_keys=[r.get("key", "") for r in results],
+            count=len(filtered),
+            result_keys=[r.get("key", "") for r in filtered],
         )
         return {
             "status": "ok",
             "op": "related",
             "key": key_norm,
-            "count": len(results),
-            "results": results,
+            "count": len(filtered),
+            "results": filtered,
         }
     except Exception as e:
         log.error(f"memory_related failed: {e}")  # noqa: F821
@@ -2633,6 +2931,49 @@ async def memory_daily_housekeeping():
             log.info(f"memory_daily_housekeeping: pruned {pruned} orphan relationships")  # noqa: F821
     except Exception as e:
         log.error(f"memory_daily_housekeeping orphan pruning failed: {e}")  # noqa: F821
+
+
+# ── Degradation Recovery Probe ───────────────────────────────────────────────
+
+
+@pyscript_executor  # noqa: F821
+def _db_recovery_probe_sync() -> bool:
+    """Attempt a test write to memory.db. Returns True on success."""
+    import sqlite3 as _sqlite3
+    from datetime import datetime as _dt, timezone as _tz
+
+    try:
+        now_iso = _dt.now(_tz.utc).isoformat()
+        conn = _sqlite3.connect(DB_PATH, timeout=5)
+        conn.execute("PRAGMA busy_timeout=3000;")
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute(
+            """INSERT OR REPLACE INTO mem(
+                key, value, scope, tags, tags_search, created_at, last_used_at, owner
+            ) VALUES ('_health:db_probe', '1', 'system', 'system probe',
+                      'system probe', ?, ?, 'system')""",
+            (now_iso, now_iso),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+@time_trigger("cron(*/5 * * * *)")  # noqa: F821
+async def _memory_recovery_probe():
+    """When in read_only mode, attempt a test write every 5 min to promote back."""
+    if _db_mode != "read_only":
+        return
+    ok = await _db_recovery_probe_sync()
+    if ok:
+        transition = _track_write_success()
+        if transition:
+            log.info("memory: recovery probe succeeded — promoted back to normal")  # noqa: F821
+            event.fire("ai_memory_mode_changed", old_mode="read_only", new_mode="normal")  # noqa: F821
+    else:
+        log.debug("memory: recovery probe failed — staying in read_only mode")  # noqa: F821
 
 
 # ── Memory Auto-Archive (I-42 Phase 2) ───────────────────────────────────────

@@ -1,3 +1,5 @@
+![Whisper Re-tag Automation Entries](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/whisper_retag_automation-header.jpeg)
+
 # Whisper Re-tag Automation Entries
 
 One-shot cleanup script that scans existing whisper interaction entries whose values match known automation patterns (goodnight negotiator, music follow-me, notification replay, etc.) but were logged without the `source_automation` tag, and re-tags them. Run with Dry Run enabled first to preview matches, then disable to apply. This is a maintenance tool -- run it once after deploying the whisper source filtering update, then disable or delete the script instance.

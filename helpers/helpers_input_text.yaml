@@ -5,17 +5,17 @@
 # Goodnight Negotiator — last state
 ########################################
 
-gn_last_opening_line:
+ai_gn_last_opening_line:
   name: Goodnight Negotiator last opening line
   icon: mdi:message-text-clock-outline
   max: 255
 
-gn_last_question:
+ai_gn_last_question:
   name: Goodnight Negotiator last question
   icon: mdi:chat-question-outline
   max: 255
 
-gn_last_reply:
+ai_gn_last_reply:
   name: Goodnight Negotiator last reply
   icon: mdi:chat-outline
   max: 255
@@ -25,76 +25,76 @@ gn_last_reply:
 ########################################
 
 # Pre / Post
-quark_goodnight_pre_line:
+ai_quark_goodnight_pre_line:
   name: Quark goodnight pre-announcement
   icon: mdi:weather-night
   max: 255
   mode: text
 
-quark_gn_post:
+ai_quark_gn_post:
   name: Quark goodnight post-announcement
   icon: mdi:weather-night
   max: 255
   mode: text
 
 # Stage 1 – Devices
-quark_gn_devices_question:
+ai_quark_gn_devices_question:
   name: Quark GN devices question
   icon: mdi:power-plug-outline
   max: 255
   mode: text
 
-quark_gn_devices_yes:
+ai_quark_gn_devices_yes:
   name: Quark GN devices YES line
   icon: mdi:check-circle-outline
   max: 255
   mode: text
 
-quark_gn_devices_no:
+ai_quark_gn_devices_no:
   name: Quark GN devices NO line
   icon: mdi:close-circle-outline
   max: 255
   mode: text
 
 # Stage 2 – TV / IR devices
-quark_gn_ir_question:
+ai_quark_gn_ir_question:
   name: Quark GN TV question
   icon: mdi:television
   max: 255
   mode: text
 
-quark_gn_ir_yes:
+ai_quark_gn_ir_yes:
   name: Quark GN TV YES line
   icon: mdi:check-circle-outline
   max: 255
   mode: text
 
-quark_gn_ir_no:
+ai_quark_gn_ir_no:
   name: Quark GN TV NO line
   icon: mdi:close-circle-outline
   max: 255
   mode: text
 
 # Stage 3 – Music / bedtime story
-quark_gn_music_intro_question:
+ai_quark_gn_music_intro_question:
   name: Quark GN music intro question
   icon: mdi:music-note
   max: 255
   mode: text
 
-quark_gn_music_yes:
+ai_quark_gn_music_yes:
   name: Quark GN music YES line
   icon: mdi:check-circle-outline
   max: 255
   mode: text
 
-quark_gn_music_no:
+ai_quark_gn_music_no:
   name: Quark GN music NO line
   icon: mdi:close-circle-outline
   max: 255
   mode: text
 
-quark_gn_music_secondary_question:
+ai_quark_gn_music_secondary_question:
   name: Quark GN secondary music question
   icon: mdi:music-note-plus
   max: 255
@@ -140,13 +140,13 @@ ai_handoff_persona_aliases:
 # Notification Follow-Me
 ########################################
 
-notification_follow_me_bypass_log:
+ai_notification_follow_me_bypass_log:
   name: "Notification Follow-Me - Bypass Owner Log"
   icon: mdi:text-box-outline
   max: 255
   mode: text
 
-notification_follow_me_ledger:
+ai_notification_follow_me_ledger:
   name: Notification Follow-Me Ledger
   icon: mdi:format-list-bulleted
   max: 255
@@ -154,19 +154,13 @@ notification_follow_me_ledger:
 
 # Orphan notification_follow_me_duck_snapshot, _rick, _quark removed 2026-03-20 — superseded by duck_manager
 
-notification_last_announced_sender_name_rick:
+ai_notification_last_announced_sender_name_rick:
   name: Notification Last Announced Sender Name - Rick
   icon: mdi:account-alert
   max: 255
   mode: text
 
-notification_last_announced_sender_name_quark:
-  name: Notification Last Announced Sender Name - Quark
-  icon: mdi:account-alert-outline
-  max: 255
-  mode: text
-
-notification_follow_me_reminder_loop_owner:
+ai_notification_follow_me_reminder_loop_owner:
   name: Notification Follow-me - Reminder loop owner
   icon: mdi:archive-arrow-down
   max: 255
@@ -176,20 +170,20 @@ notification_follow_me_reminder_loop_owner:
 # Email Follow-Me
 ########################################
 
-email_last_announce_sender:
+ai_email_last_announce_sender:
   name: Email Last Announce Sender
   icon: mdi:account-arrow-right
   max: 255
   mode: text
 
 
-email_follow_me_dedup_uids:
+ai_email_follow_me_dedup_uids:
   name: Email Follow-Me Dedup UIDs
   icon: mdi:email-check-outline
   max: 255
   mode: text
 
-email_follow_me_last_subject:
+ai_email_follow_me_last_subject:
   name: Email Follow-Me Last Subject
   icon: mdi:email-outline
   max: 255
@@ -792,17 +786,7 @@ ai_music_players:
   icon: mdi:speaker-multiple
   max: 255
 
-ai_spotify_pull_cron:
-  name: "Spotify Pull Schedule (cron)"
-  icon: mdi:clock-outline
-  max: 50
-  initial: "0 4 * * *"
 
-ai_music_aggregate_cron:
-  name: "Music Aggregate Schedule (cron)"
-  icon: mdi:clock-outline
-  max: 50
-  initial: "30 4 * * *"
 
 # ── VSynced Speaker Groups (duck_manager) ───────────────────────────────────
 # CSV lists of media_player entity IDs per zone, read by duck_manager.py
@@ -896,7 +880,7 @@ ai_vsync_shower_alexa:
   icon: mdi:speaker-group
   max: 255
 
-notification_follow_me_last_post_time:
+ai_notification_follow_me_last_post_time:
   name: "Notification Follow-Me Last Post Time"
   icon: mdi:clock-digital
   max: 35
@@ -1073,4 +1057,37 @@ ai_context_wake_time_alt_days_miquel:
 ai_context_wake_time_alt_days_jessica:
   name: "AI Context - Alt Weekday Days (Jessica)"
   icon: mdi:calendar-week
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — Default TTS Voice
+# ═══════════════════════════════════════════════════════════════════
+ai_default_tts_voice:
+  name: "AI Default TTS Voice"
+  icon: mdi:account-voice
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Urgent Keywords
+# ═══════════════════════════════════════════════════════════════════
+ai_email_urgent_keywords:
+  name: "AI Email Urgent Keywords"
+  icon: mdi:email-alert
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Bypass Mode Fallback
+# ═══════════════════════════════════════════════════════════════════
+ai_dispatcher_fallback_pipeline:
+  name: "Dispatcher Fallback Pipeline"
+  icon: mdi:pipe-wrench
+  max: 255
+  initial: "homeassistant"
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_system_recovery — Pending Category (reload survival)
+# ═══════════════════════════════════════════════════════════════════
+ai_recovery_pending_category:
+  name: "Recovery Pending Category"
+  icon: mdi:wrench-clock
   max: 255

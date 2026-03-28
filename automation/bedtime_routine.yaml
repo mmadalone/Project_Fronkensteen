@@ -911,11 +911,108 @@ blueprint:
           selector:
             text: {}
 
+    # ===========================================================================
+    # ⑫ PROMPTS
+    # ===========================================================================
+    prompts:
+      name: "⑫ Prompts"
+      icon: mdi:script-text-outline
+      description: >
+        LLM system prompts and spoken messages used during the bedtime routine.
+        Override these to change tone, language, or phrasing without touching
+        the automation logic.
+      collapsed: true
+      input:
+        safety_prefix:
+          name: "Safety prefix"
+          description: >-
+            Prepended to every LLM prompt to prevent the agent from calling
+            tools or executing actions during bedtime-only conversations.
+          default: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
+          selector:
+            text:
+              multiline: true
+
+        countdown_system_prompt:
+          name: "Countdown negotiation system prompt"
+          description: >-
+            System prompt for the countdown negotiation satellite conversation.
+            Placeholders: {{ default_countdown }}, {{ living_room_lamp }},
+            {{ bathroom_sensor }}.
+          default: >-
+            Bedtime routine active. Default countdown: {{ default_countdown }} minutes.
+            The user may ask for more time. Use the voice_set_bedtime_countdown tool
+            to change the countdown (min 1, max 15 minutes). Current lamp entity:
+            {{ living_room_lamp }}. Bathroom sensor: {{ bathroom_sensor }}.
+          selector:
+            text:
+              multiline: true
+
+        audiobook_prompt_curated:
+          name: "Audiobook prompt — curated mode"
+          description: >-
+            LLM prompt when audiobook_mode is curated. Placeholders: {{ curated_list }}.
+          default: >-
+            Ask if they want a bedtime audiobook. Offer ONLY these choices: {{ curated_list }}.
+            If they decline, say okay. If they pick one, use the voice_play_bedtime_audiobook tool
+            with exactly the title they chose. If they want none, just acknowledge and move on.
+          selector:
+            text:
+              multiline: true
+
+        audiobook_prompt_freeform:
+          name: "Audiobook prompt — freeform mode"
+          description: >-
+            LLM prompt when audiobook_mode is freeform.
+          default: >-
+            Ask if they want a bedtime audiobook. Let them request anything — a title, author, or genre.
+            Use the voice_play_bedtime_audiobook tool with whatever they ask for.
+            If they decline, just acknowledge and move on.
+          selector:
+            text:
+              multiline: true
+
+        audiobook_prompt_both:
+          name: "Audiobook prompt — both mode"
+          description: >-
+            LLM prompt when audiobook_mode is both (curated + freeform).
+            Placeholders: {{ curated_list }}.
+          default: >-
+            Ask if they want a bedtime audiobook. Offer these favorites: {{ curated_list }}.
+            But also accept any other request — if they want something not on the list, that's fine.
+            Use the voice_play_bedtime_audiobook tool with their choice.
+            If they decline, just acknowledge and move on.
+          selector:
+            text:
+              multiline: true
+
+        audiobook_start_curated:
+          name: "Audiobook start message — curated list available"
+          description: >-
+            Spoken message when starting the audiobook conversation with a
+            curated list available. Placeholders: {{ curated_list }}.
+          default: >-
+            Would you like a bedtime audiobook? I've got {{ curated_list }} — or ask for something else.
+          selector:
+            text:
+              multiline: true
+
+        audiobook_start_default:
+          name: "Audiobook start message — fallback"
+          description: >-
+            Spoken message when starting the audiobook conversation with no
+            curated list (freeform mode or empty list).
+          default: >-
+            Would you like a bedtime audiobook?
+          selector:
+            text:
+              multiline: true
+
 # ═══════════════════════════════════════════════════════════════════════
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
-  _pfx: "[BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.] "
+  _pfx: !input safety_prefix
   # --- Infrastructure ---
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
@@ -1030,6 +1127,14 @@ variables:
   audiobook_media_type: !input audiobook_media_type
   audiobook_volume: !input audiobook_volume
 
+  # --- Prompt inputs (⑫ Prompts) ---
+  v_countdown_system_prompt: !input countdown_system_prompt
+  v_audiobook_prompt_curated: !input audiobook_prompt_curated
+  v_audiobook_prompt_freeform: !input audiobook_prompt_freeform
+  v_audiobook_prompt_both: !input audiobook_prompt_both
+  v_audiobook_start_curated: !input audiobook_start_curated
+  v_audiobook_start_default: !input audiobook_start_default
+
   # --- Timing inputs ---
   bathroom_sensor: !input bathroom_sensor
   countdown_helper: !input countdown_helper
@@ -1090,7 +1195,6 @@ variables:
     {% endif %}
     {{ ns.lines | join(' ') if ns.lines else '' }}
   _sleep_budget: >-
-    {% set day_names = ['mon','tue','wed','thu','fri','sat','sun'] %}
     {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
     {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
     {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
@@ -1857,10 +1961,7 @@ actions:
                   preannounce: true
                   start_message: "{{ bedtime_message }}"
                   extra_system_prompt: >-
-                    Bedtime routine active. Default countdown: {{ default_countdown }} minutes.
-                    The user may ask for more time. Use the voice_set_bedtime_countdown tool
-                    to change the countdown (min 1, max 15 minutes). Current lamp entity:
-                    {{ living_room_lamp }}. Bathroom sensor: {{ bathroom_sensor }}.
+                    {{ v_countdown_system_prompt }}
 
               - alias: "Wait for conversation to settle — agent has had time to set the countdown helper"
                 delay:
@@ -1904,18 +2005,11 @@ actions:
                 variables:
                   audiobook_prompt: >-
                     {% if audiobook_mode == 'curated' %}
-                      Ask if they want a bedtime audiobook. Offer ONLY these choices: {{ curated_list }}.
-                      If they decline, say okay. If they pick one, use the voice_play_bedtime_audiobook tool
-                      with exactly the title they chose. If they want none, just acknowledge and move on.
+                      {{ v_audiobook_prompt_curated }}
                     {% elif audiobook_mode == 'freeform' %}
-                      Ask if they want a bedtime audiobook. Let them request anything — a title, author, or genre.
-                      Use the voice_play_bedtime_audiobook tool with whatever they ask for.
-                      If they decline, just acknowledge and move on.
+                      {{ v_audiobook_prompt_freeform }}
                     {% else %}
-                      Ask if they want a bedtime audiobook. Offer these favorites: {{ curated_list }}.
-                      But also accept any other request — if they want something not on the list, that's fine.
-                      Use the voice_play_bedtime_audiobook tool with their choice.
-                      If they decline, just acknowledge and move on.
+                      {{ v_audiobook_prompt_both }}
                     {% endif %}
 
               - alias: "Pause before audiobook — let satellite fully close the previous conversation"
@@ -1930,11 +2024,11 @@ actions:
                   preannounce: true
                   start_message: >-
                     {% if audiobook_mode == 'freeform' %}
-                      Would you like a bedtime audiobook? You can ask for anything.
+                      {{ v_audiobook_start_default }}
                     {% elif curated_list | default('') | length > 0 %}
-                      Would you like a bedtime audiobook? I've got {{ curated_list }} — or ask for something else.
+                      {{ v_audiobook_start_curated }}
                     {% else %}
-                      Would you like a bedtime audiobook?
+                      {{ v_audiobook_start_default }}
                     {% endif %}
                   extra_system_prompt: >-
                     {{ audiobook_prompt }}

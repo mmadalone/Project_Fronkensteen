@@ -1,3 +1,5 @@
+![AI Memory -- Todo List Mirror (I-6)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/memory_todo_mirror-header.jpeg)
+
 # AI Memory -- Todo List Mirror (I-6)
 
 Bidirectional sync between L2 memory and a native HA todo list. L2 entries matching configured filters are mirrored to the todo list so users can browse memories in the sidebar, companion app, and Assist. New items added directly to the todo list (without an L2 marker) are automatically created as L2 memory entries on the next sync cycle. Checking off a synced item deletes the L2 entry and removes the todo item.

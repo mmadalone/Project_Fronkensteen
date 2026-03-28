@@ -20,188 +20,225 @@ blueprint:
     are written to input_number (stability) and input_text (tags) helpers
     that tts_queue and tts.py read on every TTS call.
   domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/voice_mood_modulation.yaml
   homeassistant:
     min_version: "2024.6.0"
 
   input:
-    # ── § 1 — Character ──────────────────────────────────────────────────
-    agent_name:
-      name: "Agent Name"
-      description: >-
-        Character identifier (e.g., "rick", "quark"). Used to construct
-        helper entity names: input_number.ai_voice_mood_{agent}_stability
-        and input_text.ai_voice_mood_{agent}_tags.
-      selector:
-        text:
+    # ── § 1 — Character & Control ────────────────────────────────────────
+    section_character:
+      name: "① Character & Control"
+      icon: mdi:account-voice
+      collapsed: false
+      input:
+        agent_name:
+          name: "Agent Name"
+          description: >-
+            Character identifier (e.g., "rick", "quark"). Used to construct
+            helper entity names: input_number.ai_voice_mood_{agent}_stability
+            and input_text.ai_voice_mood_{agent}_tags.
+          selector:
+            text:
 
-    enabled:
-      name: "Enabled"
-      description: "Per-instance kill switch."
-      default: true
-      selector:
-        boolean:
+        enabled:
+          name: "Enabled"
+          description: "Per-instance kill switch."
+          default: true
+          selector:
+            boolean:
 
-    global_kill_switch:
-      name: "Global Kill Switch"
-      description: "Boolean helper that gates all mood modulation system-wide."
-      default: input_boolean.ai_voice_mood_enabled
-      selector:
-        entity:
-          domain: input_boolean
+        global_kill_switch:
+          name: "Global Kill Switch"
+          description: "Boolean helper that gates all mood modulation system-wide."
+          default: input_boolean.ai_voice_mood_enabled
+          selector:
+            entity:
+              domain: input_boolean
 
     # ── § 2 — Time Block Boundaries ──────────────────────────────────────
     # Sequence: → B5 (late night, wraps past midnight) → B1 → B2 → B3 → B4 → B5 →
-    block_1_start:
-      name: "Block 1 Start Hour (Early Morning)"
-      description: >-
-        Hour (0-23) when Block 1 begins. Block 5 (late night) wraps past
-        midnight and runs until this hour.
-      default: 5
-      selector:
-        number:
-          min: 0
-          max: 23
-          step: 1
-          mode: box
+    section_time_blocks:
+      name: "② Time Block Boundaries"
+      icon: mdi:clock-outline
+      collapsed: false
+      input:
+        block_1_start:
+          name: "Block 1 Start Hour (Early Morning)"
+          description: >-
+            Hour (0-23) when Block 1 begins. Block 5 (late night) wraps past
+            midnight and runs until this hour.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 23
+              step: 1
+              mode: box
 
-    block_2_start:
-      name: "Block 2 Start Hour (Morning)"
-      description: "Hour (0-23) when Block 2 begins."
-      default: 9
-      selector:
-        number:
-          min: 0
-          max: 23
-          step: 1
-          mode: box
+        block_2_start:
+          name: "Block 2 Start Hour (Morning)"
+          description: "Hour (0-23) when Block 2 begins."
+          default: 9
+          selector:
+            number:
+              min: 0
+              max: 23
+              step: 1
+              mode: box
 
-    block_3_start:
-      name: "Block 3 Start Hour (Afternoon)"
-      default: 12
-      selector:
-        number:
-          min: 0
-          max: 23
-          step: 1
-          mode: box
+        block_3_start:
+          name: "Block 3 Start Hour (Afternoon)"
+          default: 12
+          selector:
+            number:
+              min: 0
+              max: 23
+              step: 1
+              mode: box
 
-    block_4_start:
-      name: "Block 4 Start Hour (Evening)"
-      default: 17
-      selector:
-        number:
-          min: 0
-          max: 23
-          step: 1
-          mode: box
+        block_4_start:
+          name: "Block 4 Start Hour (Evening)"
+          default: 17
+          selector:
+            number:
+              min: 0
+              max: 23
+              step: 1
+              mode: box
 
-    block_5_start:
-      name: "Block 5 Start Hour (Late Night)"
-      default: 21
-      selector:
-        number:
-          min: 0
-          max: 23
-          step: 1
-          mode: box
+        block_5_start:
+          name: "Block 5 Start Hour (Late Night)"
+          default: 21
+          selector:
+            number:
+              min: 0
+              max: 23
+              step: 1
+              mode: box
 
     # ── § 3 — Block 1: Early Morning ─────────────────────────────────────
-    b1_stability:
-      name: "Block 1 — Stability"
-      description: "ElevenLabs v3 stability (0=Creative, 1=Robust)."
-      default: 0.25
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.05
-          mode: slider
+    section_block_1:
+      name: "③ Block 1: Early Morning"
+      icon: mdi:weather-sunset-up
+      collapsed: true
+      input:
+        b1_stability:
+          name: "Block 1 — Stability"
+          description: "ElevenLabs v3 stability (0=Creative, 1=Robust)."
+          default: 0.25
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
 
-    b1_tags:
-      name: "Block 1 — Audio Tags"
-      description: >-
-        Tag prefix for non-agent TTS text. Empty string = no prefix.
-        Agent conversation responses already include their own tags and
-        won't be double-tagged. Combine multiple tags for layered effects.
-        Available v3 tags — Emotions: [happy], [sad], [angry], [annoyed],
-        [excited], [sarcastic], [curious], [mischievously], [surprised],
-        [appalled], [thoughtful], [crying]. Speech: [whispers], [sighs],
-        [laughs], [chuckles], [snorts], [wheezing], [muttering],
-        [clears throat], [exhales], [exhales sharply], [inhales deeply],
-        [swallows], [gulps]. Pacing: [short pause], [long pause].
-        Experimental: [slurring], [sings], [strong X accent].
-        Effectiveness varies by voice — test combinations.
-      default: ""
-      selector:
-        text:
+        b1_tags:
+          name: "Block 1 — Audio Tags"
+          description: >-
+            Tag prefix for non-agent TTS text. Empty string = no prefix.
+            Agent conversation responses already include their own tags and
+            won't be double-tagged. Combine multiple tags for layered effects.
+            Available v3 tags — Emotions: [happy], [sad], [angry], [annoyed],
+            [excited], [sarcastic], [curious], [mischievously], [surprised],
+            [appalled], [thoughtful], [crying]. Speech: [whispers], [sighs],
+            [laughs], [chuckles], [snorts], [wheezing], [muttering],
+            [clears throat], [exhales], [exhales sharply], [inhales deeply],
+            [swallows], [gulps]. Pacing: [short pause], [long pause].
+            Experimental: [slurring], [sings], [strong X accent].
+            Effectiveness varies by voice — test combinations.
+          default: ""
+          selector:
+            text:
 
     # ── § 4 — Block 2: Morning ───────────────────────────────────────────
-    b2_stability:
-      name: "Block 2 — Stability"
-      default: 0.35
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.05
-          mode: slider
+    section_block_2:
+      name: "④ Block 2: Morning"
+      icon: mdi:weather-sunny
+      collapsed: true
+      input:
+        b2_stability:
+          name: "Block 2 — Stability"
+          default: 0.35
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
 
-    b2_tags:
-      name: "Block 2 — Audio Tags"
-      default: ""
-      selector:
-        text:
+        b2_tags:
+          name: "Block 2 — Audio Tags"
+          default: ""
+          selector:
+            text:
 
     # ── § 5 — Block 3: Afternoon ─────────────────────────────────────────
-    b3_stability:
-      name: "Block 3 — Stability"
-      default: 0.45
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.05
-          mode: slider
+    section_block_3:
+      name: "⑤ Block 3: Afternoon"
+      icon: mdi:white-balance-sunny
+      collapsed: true
+      input:
+        b3_stability:
+          name: "Block 3 — Stability"
+          default: 0.45
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
 
-    b3_tags:
-      name: "Block 3 — Audio Tags"
-      default: ""
-      selector:
-        text:
+        b3_tags:
+          name: "Block 3 — Audio Tags"
+          default: ""
+          selector:
+            text:
 
     # ── § 6 — Block 4: Evening ───────────────────────────────────────────
-    b4_stability:
-      name: "Block 4 — Stability"
-      default: 0.30
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.05
-          mode: slider
+    section_block_4:
+      name: "⑥ Block 4: Evening"
+      icon: mdi:weather-sunset-down
+      collapsed: true
+      input:
+        b4_stability:
+          name: "Block 4 — Stability"
+          default: 0.30
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
 
-    b4_tags:
-      name: "Block 4 — Audio Tags"
-      default: ""
-      selector:
-        text:
+        b4_tags:
+          name: "Block 4 — Audio Tags"
+          default: ""
+          selector:
+            text:
 
     # ── § 7 — Block 5: Late Night (wraps past midnight) ──────────────────
-    b5_stability:
-      name: "Block 5 — Stability"
-      default: 0.20
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.05
-          mode: slider
+    section_block_5:
+      name: "⑦ Block 5: Late Night"
+      icon: mdi:weather-night
+      collapsed: true
+      input:
+        b5_stability:
+          name: "Block 5 — Stability"
+          default: 0.20
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
 
-    b5_tags:
-      name: "Block 5 — Audio Tags"
-      default: ""
-      selector:
-        text:
+        b5_tags:
+          name: "Block 5 — Audio Tags"
+          default: ""
+          selector:
+            text:
 
 mode: single
 

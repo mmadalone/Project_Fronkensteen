@@ -1,3 +1,5 @@
+![AI Embedding](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/ai_embedding-header.jpeg)
+
 # AI Embedding — Semantic Search & Memory Lifecycle
 
 Configuration package for the semantic search subsystem (I-2) and memory lifecycle monitoring (I-42). Provides all tuning knobs for embedding generation, vector search, and automatic memory archival.

@@ -90,6 +90,22 @@ blueprint:
             entity:
               domain: input_boolean
 
+        session_pending_entity:
+          name: "Session pending entity"
+          description: "The input_text that triggers a voice session when set."
+          default: input_text.ai_voice_session_pending
+          selector:
+            entity:
+              domain: input_text
+
+        last_satellite_entity:
+          name: "Last satellite entity"
+          description: "Helper that stores the last-active satellite entity_id."
+          default: input_text.ai_last_satellite
+          selector:
+            entity:
+              domain: input_text
+
 mode: queued
 max: 3
 
@@ -100,13 +116,14 @@ variables:
   v_default_timeout: !input default_continuous_timeout
   v_duck_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
+  _last_satellite: !input last_satellite_entity
   # Derive HA base URL from silence_media (e.g. "http://host:8123")
   v_ha_base_url: >-
     {{ v_silence_media.split('/local/')[0] }}
 
 triggers:
   - trigger: state
-    entity_id: input_text.ai_voice_session_pending
+    entity_id: !input session_pending_entity
     not_to: ""
 
 conditions:
@@ -126,12 +143,12 @@ actions:
       req_volume: "{{ parsed.volume | default(0.5) | float(0.5) }}"
       req_continuous: "{{ parsed.continuous | default(true) | bool }}"
       req_timeout: "{{ parsed.continuous_timeout | default(v_default_timeout) | float }}"
-      satellite: "{{ states('input_text.ai_last_satellite') }}"
+      satellite: "{{ states(_last_satellite) }}"
 
   - alias: "Clear pending flag"
     action: input_text.set_value
     target:
-      entity_id: input_text.ai_voice_session_pending
+      entity_id: !input session_pending_entity
     data:
       value: ""
 

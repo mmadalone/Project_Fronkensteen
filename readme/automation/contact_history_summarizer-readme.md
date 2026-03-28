@@ -1,3 +1,5 @@
+![Contact History Summarizer (v1.0.0)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/contact_history_summarizer-header.jpeg)
+
 # Contact History Summarizer (v1.0.0)
 
 Batch job that compresses raw per-contact message entries into LLM-compressed digests for the notification follow-me contact history feature (I-47). Searches L2 memory for unsummarized `contact_msg_*` entries, groups them by contact, compresses each group via LLM into a 2-3 sentence digest, and stores the result with a configurable TTL. Three trigger modes allow tuning the cost/freshness tradeoff.

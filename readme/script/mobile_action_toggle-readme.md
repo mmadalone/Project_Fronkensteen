@@ -1,3 +1,5 @@
+![Mobile Action Toggle (helper script)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/mobile_action_toggle-header.jpeg)
+
 # Mobile Action Toggle (helper script)
 
 Fires a `mobile_app_notification_action` event and turns on an `input_boolean`. Used to bridge dashboard buttons with mobile notification action handlers (e.g. alarm snooze/stop from a dashboard). Create one instance per action you want to expose on a dashboard.

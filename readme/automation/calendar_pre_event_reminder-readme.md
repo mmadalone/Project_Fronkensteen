@@ -1,3 +1,5 @@
+![Calendar Pre-Event Reminder -- TTS Announcement](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/calendar_pre_event_reminder-header.jpeg)
+
 # Calendar Pre-Event Reminder -- TTS Announcement
 
 Announces upcoming calendar events before they start using a calendar trigger with configurable offset. Uses `dedup_announce` to prevent duplicate announcements from overlapping systems. Gated by kill switch, presence, and privacy tier.
