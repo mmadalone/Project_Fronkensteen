@@ -1,6 +1,6 @@
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 # AI Media Tracking — Radarr/Sonarr Integration (I-47)
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 # Status: Active
 # Deployed: 2026-03-10
 # Thin package — storage helpers only. All config knobs live in the blueprint.
@@ -18,4 +18,4 @@
 #   - Blueprints: media_tracking.yaml
 #   - Context: ai_context_hot.yaml (reads sonarr/radarr helpers for L1 injection)
 #   - Other packages: ai_privacy_gate.yaml
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================

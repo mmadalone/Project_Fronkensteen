@@ -336,10 +336,18 @@ blueprint:
               max: 4
               step: 1
 
+        native_fallback_voice:
+          name: Native Fallback TTS Voice
+          description: >-
+            TTS engine entity used when a participant has no pipeline
+            TTS configured (fallback path). Defaults to Google TTS.
+          default: "tts.google_en_com"
+          selector:
+            text: {}
         tts_output_volume:
           name: TTS Output Volume (optional)
           description: >-
-            Volume level (0.0\u20131.0) during exchange. Speakers are
+            Volume level (0.0–1.0) during exchange. Speakers are
             restored after the exchange. Set to 0 to disable.
           default: 0.0
           selector:
@@ -636,6 +644,7 @@ variables:
   v_tts_output_vol: !input tts_output_volume
   v_tts_vol_restore_delay: !input tts_volume_restore_delay
   v_tts_playback_buffer: !input tts_playback_buffer
+  v_native_fallback_voice: !input native_fallback_voice
   v_stinger_enabled: !input enable_pre_exchange_stinger
   v_stinger_url: !input stinger_fallback_media_url
   v_prompt_template: !input theatrical_prompt_template
@@ -778,7 +787,7 @@ action:
                     - action: pyscript.tts_queue_speak
                       data:
                         text: "{{ native_speech[:200] }}"
-                        voice: "tts.google_en_com"
+                        voice: "{{ v_native_fallback_voice }}"
                         target_mode: explicit
                         target: "{{ satellite_speaker_entity }}"
                         announce: true

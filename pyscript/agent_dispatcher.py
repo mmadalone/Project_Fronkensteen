@@ -1362,7 +1362,10 @@ async def agent_dispatch(
         if persona is None:
             _user = resolve_active_user()
             _pref_entity = f"input_text.ai_context_user_persona_{_user}"
-            _pref_val = state.get(_pref_entity)
+            try:
+                _pref_val = state.get(_pref_entity)
+            except NameError:
+                _pref_val = None
             if _pref_val and str(_pref_val) not in ("unknown", "unavailable", "", "None", "no preference"):
                 _pref_lower = str(_pref_val).strip().lower()
                 for p in personas:

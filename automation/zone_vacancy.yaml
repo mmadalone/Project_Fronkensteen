@@ -87,6 +87,7 @@ blueprint:
         target_area:
           name: Target Area
           description: The HA area this zone corresponds to.
+          default: ""
           selector:
             area: {}
 

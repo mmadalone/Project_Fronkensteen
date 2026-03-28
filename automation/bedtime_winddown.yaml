@@ -1,9 +1,7 @@
 blueprint:
   name: "Bedtime Wind-Down – Context-aware offers + escalation"
   author: madalone
-  description: '![Bedtime Wind-Down](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_winddown-header.jpeg)
-
-    # Bedtime Wind-Down
+  description: '# Bedtime Wind-Down
 
     Context-aware bedtime detection + conversational offers + multi-stage
     escalation. Detects 4 scenarios (sleepy TV, bed+TV, bed+idle,

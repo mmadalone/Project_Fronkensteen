@@ -86,17 +86,17 @@ automation:
       re-stamping on tracker flaps.
     mode: queued
     max: 4
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: person.miquel, person.jessica
         to: "home"
-    condition:
+    conditions:
       - condition: template
         value_template: >-
           {% set slug = trigger.to_state.object_id %}
           {% set helper = 'input_datetime.ai_home_since_' ~ slug %}
           {{ states(helper) in ['unknown', 'unavailable', '1970-01-01 00:00:00', ''] }}
-    action:
+    actions:
       - action: input_datetime.set_datetime
         target:
           entity_id: >-
@@ -113,11 +113,11 @@ automation:
       leaves home.
     mode: queued
     max: 4
-    trigger:
-      - platform: state
+    triggers:
+      - trigger: state
         entity_id: person.miquel, person.jessica
         from: "home"
-    action:
+    actions:
       - action: input_datetime.set_datetime
         target:
           entity_id: >-
@@ -137,10 +137,10 @@ automation:
       approximation — history_stats resets at midnight so the seed is
       only accurate for same-day arrivals.
     mode: single
-    trigger:
-      - platform: homeassistant
+    triggers:
+      - trigger: homeassistant
         event: start
-    action:
+    actions:
       - delay:
           seconds: 30
       - repeat:

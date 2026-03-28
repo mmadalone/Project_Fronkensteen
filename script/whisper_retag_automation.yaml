@@ -29,6 +29,7 @@ blueprint:
     configuration:
       name: "① Configuration"
       icon: mdi:cog
+      collapsed: false
       description: Re-tag settings.
       input:
         dry_run:

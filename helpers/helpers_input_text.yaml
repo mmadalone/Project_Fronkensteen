@@ -1,5 +1,12 @@
 # Orphan voice_spotify_last_search removed 2026-03-14
-# Orphan dynamic_media_id removed 2026-03-14
+########################################
+# Goodnight Routine — dynamic media ID
+########################################
+
+ai_dynamic_media_id:
+  name: "AI Goodnight Routine — Dynamic Media ID"
+  icon: mdi:music-box
+  max: 255
 
 ########################################
 # Goodnight Negotiator — last state
@@ -494,7 +501,6 @@ ai_budget_fallback_agent:
 
 ai_budget_saved_pipelines:
   name: "AI Budget - Saved Pipelines (JSON)"
-  initial: "{}"
   icon: mdi:content-save
   max: 255
 

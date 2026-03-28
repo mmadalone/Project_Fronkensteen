@@ -119,6 +119,12 @@ ai_escalation_last_followthrough:
   has_time: true
   icon: mdi:clock-check
 
+ai_session_timestamp_proactive_bedtime_escalation_rick:
+  name: "AI Proactive Bedtime Escalation — Session Timestamp (Rick)"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-star
+
 # ═══════════════════════════════════════════════════════════════════
 # ai_focus_guard — Focus Guard
 # ═══════════════════════════════════════════════════════════════════

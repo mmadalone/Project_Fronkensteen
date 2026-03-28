@@ -138,18 +138,18 @@ variables:
   v_week_seed: >-
     {{ (now().isocalendar()[0] * 100 + now().isocalendar()[1]) | int }}
 
-trigger:
+triggers:
   - trigger: time
     at: !input refresh_time
     # Runs every day but only generates on Monday (configurable via condition)
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ is_state(v_kill_switch, 'on') }}"
   - condition: template
     value_template: "{{ now().weekday() == 0 }}"
 
-action:
+actions:
   # ── Check budget ──
   - alias: "Read budget remaining"
     variables:

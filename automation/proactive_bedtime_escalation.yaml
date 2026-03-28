@@ -4046,7 +4046,7 @@ actions:
                           - "not_home"
                     timeout:
                       minutes: "{{ bathroom_max_timeout_val | int(15) }}"
-                    continue_on_error: true
+                    continue_on_timeout: true
 
                   - alias: "Bathroom grace period"
                     delay:

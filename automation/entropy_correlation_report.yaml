@@ -103,17 +103,17 @@ variables:
   v_cumulative_min: !input cumulative_min_entries
   v_report_day: !input report_day
 
-trigger:
+triggers:
   - trigger: time
     at: !input report_time
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ is_state(v_kill_switch, 'on') }}"
   - condition: template
     value_template: "{{ now().weekday() == (v_report_day | int(0)) }}"
 
-action:
+actions:
   # ── Weekly report ──
   - alias: "Run weekly entropy correlation report"
     action: pyscript.entropy_correlation_report

@@ -1,6 +1,6 @@
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 # AI Duck Manager — Unified Volume Ducking Engine
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 # Status: Active
 # Central duck/restore engine for satellite wake words, TTS queue, and external.
 #
@@ -31,4 +31,4 @@
 #       bedtime_routine_plus, wake-up-guard, escalating_wakeup_guard,
 #       llm_alarm, alexa_presence_radio
 #   - Other packages: ai_tts_queue.yaml (shared ducking helpers)
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================

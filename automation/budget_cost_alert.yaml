@@ -66,6 +66,15 @@ blueprint:
           default: true
           selector:
             boolean: {}
+        tts_fallback_voice:
+          name: Fallback TTS Voice
+          description: >-
+            TTS engine entity for cost alert announcements.
+            Defaults to HA Cloud TTS (free, always available even when
+            ElevenLabs budget is exhausted).
+          default: "tts.home_assistant_cloud"
+          selector:
+            text: {}
 
     # ── § 3  Behavior ────────────────────────────────────────────────
     section_behavior:
@@ -161,7 +170,7 @@ actions:
             {% if trigger.id == 'critical' and auto_downgrade %}
               Activating budget fallback mode.
             {% endif %}
-          voice: "tts.home_assistant_cloud"
+          voice: !input tts_fallback_voice
           priority: 1
           target_mode: "presence"
 

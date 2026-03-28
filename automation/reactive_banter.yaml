@@ -169,6 +169,7 @@ blueprint:
           description: >-
             Media player to deliver banter through. Only used when
             TTS Target Mode is set to "explicit".
+          default: ""
           selector:
             entity:
               domain: media_player

@@ -134,6 +134,18 @@
           description: >-
             Filter by content type: theme, chime, handoff, expertise,
             stinger, thinking, wake_melody, bedtime, ambient (for list action).
+        source:
+          type: string
+          description: >-
+            Filter by source: "elevenlabs" or "fluidsynth" (for list action).
+        volume:
+          type: number
+          description: >-
+            Playback volume 0.0–1.0 (for play action). Omit to keep current volume.
+        limit:
+          type: integer
+          description: >-
+            Max results to return (for list action, default 20).
       required:
         - action
   function:
@@ -147,6 +159,9 @@
           player: "{{player|default('')}}"
           agent: "{{agent|default('')}}"
           content_type: "{{content_type|default('')}}"
+          source: "{{source|default('')}}"
+          volume: "{{volume|default(-1)}}"
+          limit: "{{limit|default(20)}}"
         response_variable: _function_result
 
 - spec:

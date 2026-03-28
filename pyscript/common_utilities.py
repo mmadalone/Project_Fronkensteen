@@ -685,9 +685,6 @@ _ENTITY_REGISTRY_PATH = Path("/config/.storage/core.entity_registry")
 # Agent name extraction: conversation.rick_standard_2 → rick
 # Mirrors the Jinja in ai_llm_budget.yaml:
 #   regex_replace('_(standard|bedtime|extended|music).*$', '') | regex_replace('_\\d+$', '')
-import re as _re  # noqa: E402
-_STRIP_VARIANT_RE = _re.compile(r"_(standard|bedtime|extended|music).*$")
-_STRIP_TRAILING_NUM_RE = _re.compile(r"_\d+$")
 
 # Static TTS/STT maps — these don't change with model swaps
 _AGENT_TTS_MAP = {
@@ -721,11 +718,14 @@ _PRICING_JSON_PATH = Path("/config/pyscript/model_pricing.json")
 @pyscript_compile  # noqa: F821
 def _extract_agent_name(entity_id: str) -> str | None:
     """Derive budget agent key from a conversation entity ID."""
+    import re as _re
+    _variant_re = _re.compile(r"_(standard|bedtime|extended|music).*$")
+    _trailing_re = _re.compile(r"_\d+$")
     if not entity_id.startswith("conversation."):
         return None
     raw = entity_id.removeprefix("conversation.")
-    raw = _STRIP_VARIANT_RE.sub("", raw)
-    raw = _STRIP_TRAILING_NUM_RE.sub("", raw)
+    raw = _variant_re.sub("", raw)
+    raw = _trailing_re.sub("", raw)
     # Normalize: doctor_portuondo → portuondo (matches existing budget keys)
     if raw == "doctor_portuondo":
         return "portuondo"

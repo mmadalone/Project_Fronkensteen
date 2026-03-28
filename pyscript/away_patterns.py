@@ -1699,7 +1699,7 @@ async def _predict_return_inner(person=""):
                 state.set("sensor.ai_away_prediction", value=summary, new_attributes={  # noqa: F821
                     "friendly_name": "AI Away Prediction",
                     "icon": "mdi:home-clock-outline",
-                    "person": ", ".join(p.get("person", "?") for p in predictions),
+                    "person": ", ".join([p.get("person", "?") for p in predictions]),
                     "predictions": predictions,
                 })
         except Exception:

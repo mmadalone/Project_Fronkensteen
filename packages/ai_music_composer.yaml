@@ -25,10 +25,10 @@ automation:
       Reinstalls fluidsynth binary after HA Core updates (apk packages
       are wiped on container rebuild). Python deps handled by pyscript requirements.
     mode: single
-    trigger:
+    triggers:
       - trigger: homeassistant
         event: start
-    action:
+    actions:
       - alias: "Install fluidsynth if missing"
         action: shell_command.ai_music_install_fluidsynth
         continue_on_error: true
@@ -42,10 +42,10 @@ automation:
     alias: "AI Music — Midnight Generation Counter Reset"
     description: "Reset the daily music API generation counter at midnight."
     mode: single
-    trigger:
+    triggers:
       - trigger: time
         at: "00:00:00"
-    action:
+    actions:
       - alias: "Reset daily generation counter"
         action: input_number.set_value
         target:

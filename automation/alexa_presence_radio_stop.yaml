@@ -72,6 +72,7 @@ blueprint:
     trigger_settings:
       name: "① Trigger"
       icon: mdi:toggle-switch
+      collapsed: false
       description: The input_boolean that fires this automation when Alexa turns it ON.
       input:
         trigger_entity:
@@ -93,6 +94,7 @@ blueprint:
     player_selection:
       name: "② Player selection"
       icon: mdi:speaker-group
+      collapsed: true
       description: Which Music Assistant players can be stopped by this automation.
       input:
         players_to_stop:
@@ -116,6 +118,7 @@ blueprint:
     stop_mode:
       name: "③ Stop mode"
       icon: mdi:stop-circle-outline
+      collapsed: true
       description: >
         Choose between stopping all players or only the player in the
         room where you currently are.

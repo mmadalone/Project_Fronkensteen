@@ -877,6 +877,8 @@ actions:
         continue_on_error: true
         data:
           text: "{{ opening_message }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
@@ -942,6 +944,8 @@ actions:
             user {{ resolved_user }}.
             {% if was_resumed | bool %}Resumed from checkpoint.{% endif %}
             Pipeline: {{ target_pipeline }}.
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
@@ -1039,6 +1043,8 @@ actions:
               continue_on_error: true
               data:
                 text: "Test mode: single cycle complete. Ending session."
+                voice: "{{ _voice }}"
+                voice_id: "{{ _voice_id }}"
                 target_mode: explicit
                 target: "{{ speaker_entity }}"
                 priority: 1

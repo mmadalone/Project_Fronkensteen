@@ -764,6 +764,22 @@ actions:
           dispatch_voice: ""
           dispatch_tts_voice: ""
 
+  # ── Release bypass BEFORE reminder loops ──────────────────────────────
+  #     Bypass only needed during agent dispatch (~2s). Holding it through
+  #     5-30min reminder loops strands the counter on reload/restart/kill.
+  #     TTS queue handles ducking for individual announcements.
+  - alias: "Release follow-me bypass before loops"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass via refcount (pre-loop)"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
   - alias: "Route by trigger"
     choose:
       # ── LOW BATTERY — casual nudge ───────────────────────────────────
@@ -1357,16 +1373,5 @@ actions:
                 - alias: "Wait for configured delay"
                   delay: "{{ _tier_delay }}"
 
-  # ── Restore bypassed toggles ─────────────────────────────────────────
-  - alias: "Restore follow-me (if bypassed)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ follow_me_was_on }}"
-        sequence:
-          - alias: "Release follow-me bypass via refcount"
-            action: "{{ v_bypass_release }}"
-            continue_on_error: true
-            data:
-              owner: "{{ this.entity_id }}"
+  # ── Bypass already released before loops (see above) ─────────────────
 

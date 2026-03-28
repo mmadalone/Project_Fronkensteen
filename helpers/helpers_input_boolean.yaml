@@ -213,6 +213,11 @@ ai_duck_allow_manual_override:
 # ai_email_promotion — Email Priority Filter
 # ═══════════════════════════════════════════════════════════════════
 # Kill switch. When OFF, email priority filter is disabled.
+ai_email_master_toggle:
+  name: "AI Email Follow-Me — Master Toggle"
+  icon: mdi:email-sync
+  initial: true
+
 ai_email_promotion_enabled:
   name: "AI Email Promotion Enabled"
   icon: mdi:email-check
@@ -472,17 +477,14 @@ ai_proactive_briefing_enabled:
 # these and self-resets it at the configured reset_time.
 ai_briefing_delivered_morning:
   name: "AI Briefing - Delivered Morning"
-  initial: false
   icon: mdi:check-circle
 
 ai_briefing_delivered_afternoon:
   name: "AI Briefing - Delivered Afternoon"
-  initial: false
   icon: mdi:check-circle
 
 ai_briefing_delivered_evening:
   name: "AI Briefing - Delivered Evening"
-  initial: false
   icon: mdi:check-circle
 
 # ═══════════════════════════════════════════════════════════════════

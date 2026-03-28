@@ -529,19 +529,13 @@ actions:
         sequence:
           - action: pyscript.music_library_play
             data:
-              agent: >-
-                {% if is_state(v_bedtime, 'on') %}
-                  {{ v_composer_agent }}
-                {% else %}
-                  {{ v_composer_agent }}
-                {% endif %}
-              content_type: >-
+              search: >-
                 {% if is_state(v_bedtime, 'on') and v_bedtime_behavior == 'wind_down' %}
                   bedtime
                 {% else %}
                   {{ v_composer_type }}
                 {% endif %}
-              speaker: !input target_player
+              player: !input target_player
             continue_on_error: true
 
       # ── Taste auto mode ──

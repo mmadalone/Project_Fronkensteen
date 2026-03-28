@@ -749,11 +749,11 @@ actions:
 
   - alias: "Wait for Snooze/Stop (first round)"
     wait_for_trigger:
-      - platform: event
+      - trigger: event
         event_type: mobile_app_notification_action
         event_data:
           action: !input mobile_snooze_action_id
-      - platform: event
+      - trigger: event
         event_type: mobile_app_notification_action
         event_data:
           action: !input mobile_stop_action_id

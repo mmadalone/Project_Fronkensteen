@@ -309,7 +309,10 @@ def _build_tts_media_uri(tts_engine, message, voice_id=""):
 async def _wait_for_satellite_idle(satellite, timeout_secs=10):
     """Wait for satellite to return to idle. Returns True if idle."""
     for _ in range(timeout_secs * 2):
-        sat_state = state.get(satellite)
+        try:
+            sat_state = state.get(satellite)
+        except NameError:
+            sat_state = None
         if sat_state in [None, "idle", "", "unknown", "unavailable"]:
             return True
         await asyncio.sleep(0.5)
@@ -329,7 +332,10 @@ async def _wait_for_tts_playback(speaker, buffer=1, text_len=0):
     # Phase 1: Wait for speaker to start playing (max 15s)
     phase1_hit = False
     for _ in range(30):
-        sp_state = state.get(speaker)
+        try:
+            sp_state = state.get(speaker)
+        except NameError:
+            sp_state = None
         if sp_state not in [
             "idle", "standby", "off", "unavailable", "unknown", None, "",
         ]:
@@ -339,7 +345,10 @@ async def _wait_for_tts_playback(speaker, buffer=1, text_len=0):
     if phase1_hit:
         # Phase 2: Wait for speaker to finish playing (max 90s)
         for _ in range(180):
-            sp_state = state.get(speaker)
+            try:
+                sp_state = state.get(speaker)
+            except NameError:
+                sp_state = None
             if sp_state in ["idle", "standby", "off", None, ""]:
                 break
             await asyncio.sleep(0.5)
@@ -422,6 +431,8 @@ async def theatrical_mode_start(
     Safe here because each call is separated by a full LLM+TTS cycle.
     If mic_gap becomes unreliable, fall back to wake_word interrupt mode.
     """
+    global _SANITIZE_PATTERNS
+
     # ── GUARDS ──────────────────────────────────────────────────────────
     # Kill switch
     if state.get("input_boolean.ai_theatrical_mode_enabled") != "on":
@@ -466,7 +477,10 @@ async def theatrical_mode_start(
         return {"status": "no_satellite"}
 
     # H5: Wait for satellite idle (handles start_debate timing gap)
-    sat_st = state.get(sat)
+    try:
+        sat_st = state.get(sat)
+    except NameError:
+        sat_st = None
     if sat_st in ["listening", "responding"]:
         log.info("theatrical: satellite busy (%s), waiting...", sat_st)
         if not await _wait_for_satellite_idle(sat, 10):
@@ -635,7 +649,6 @@ async def theatrical_mode_start(
             ctx_buf.append(initial_context)
 
         # ── LAZY-INIT SANITIZE PATTERNS ────────────────────────────────
-        global _SANITIZE_PATTERNS
         if _SANITIZE_PATTERNS is None:
             if callable(_build_sanitize_patterns_sync):
                 _SANITIZE_PATTERNS = await _build_sanitize_patterns_sync()
@@ -791,7 +804,10 @@ async def theatrical_mode_start(
             )
 
             # ── H2: Satellite idle re-check before TTS ─────────────────
-            sat_st = state.get(sat)
+            try:
+                sat_st = state.get(sat)
+            except NameError:
+                sat_st = None
             if sat_st in ["listening", "responding"]:
                 log.info(
                     "theatrical: satellite busy (%s) before TTS, waiting...",

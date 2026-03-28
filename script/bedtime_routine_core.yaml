@@ -1,9 +1,7 @@
 blueprint:
   name: "Bedtime Routine – Core sequence (script)"
   author: madalone
-  description: '![Bedtime Routine Core](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/bedtime_routine_core-header.jpeg)
-
-    # Bedtime Routine – Core sequence
+  description: '# Bedtime Routine – Core sequence
 
     Complete bedtime shutdown sequence as a reusable script blueprint. Handles
     TV shutdown (CEC/script/IR stack), lights, media playback (audiobook via

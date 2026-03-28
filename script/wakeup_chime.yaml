@@ -22,6 +22,7 @@ blueprint:
           name: Chime media_player
           description: >
             Media player that should play the chime.
+          default: ""
           selector:
             entity:
               domain: media_player

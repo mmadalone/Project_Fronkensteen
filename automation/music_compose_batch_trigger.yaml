@@ -89,15 +89,15 @@ variables:
   v_auto_approve: !input auto_approve
   v_kill_switch: !input kill_switch
 
-trigger:
+triggers:
   - trigger: state
     entity_id: !input batch_button
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ is_state(v_kill_switch, 'on') }}"
 
-action:
+actions:
   - alias: "Call batch generation service"
     action: pyscript.music_compose_batch
     response_variable: batch_result

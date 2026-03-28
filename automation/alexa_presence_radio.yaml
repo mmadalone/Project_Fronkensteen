@@ -85,6 +85,7 @@ blueprint:
     room_mapping:
       name: "① Trigger & room mapping"
       icon: mdi:floor-plan
+      collapsed: false
       description: >
         Configure the voice-command trigger and map presence sensors to
         Music Assistant players. **Order matters** — the first sensor is

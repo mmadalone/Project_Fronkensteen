@@ -1083,6 +1083,22 @@ actions:
       user_query: "Delivered wake-up alarm announcement"
     continue_on_error: true
 
+  # ── Release bypass BEFORE wait_for_trigger ──────────────────────────
+  #     Bypass only needed during TTS delivery. Holding it through
+  #     snooze delays and wait_for_trigger timeouts strands the counter
+  #     on reload/restart/kill. TTS queue priority handles concurrency.
+  - alias: "Release follow-me bypass after TTS delivery"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass via refcount (post-TTS)"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
   # Listens for mobile notification action events AND input_boolean toggles
   # (dashboard / other automation).
   - alias: "Wait for snooze/stop or timeout (pass 1)"
@@ -1155,17 +1171,7 @@ actions:
               snooze_toggle: "{{ v_snooze_toggle }}"
               stop_toggle: "{{ v_stop_toggle }}"
 
-          - alias: "Restore follow-me (if bypassed)"
-            choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ follow_me_was_on }}"
-                sequence:
-                  - alias: "Release follow-me bypass via refcount"
-                    action: "{{ v_bypass_release }}"
-                    continue_on_error: true
-                    data:
-                      owner: "{{ this.entity_id }}"
+          # Bypass already released after TTS delivery (see above)
 
           - alias: "Stop: Wake-up completed after Stop."
             stop: "Wake-up completed after Stop."
@@ -1353,17 +1359,7 @@ actions:
                       snooze_toggle: "{{ v_snooze_toggle }}"
                       stop_toggle: "{{ v_stop_toggle }}"
 
-                  - alias: "Restore follow-me (if bypassed, after snooze stop)"
-                    choose:
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ follow_me_was_on }}"
-                        sequence:
-                          - alias: "Release follow-me bypass after snooze stop"
-                            action: "{{ v_bypass_release }}"
-                            continue_on_error: true
-                            data:
-                              owner: "{{ this.entity_id }}"
+                  # Bypass already released after TTS delivery (see above)
 
                   - alias: "Stop: Wake-up completed after snooze + Stop."
                     stop: "Wake-up completed after snooze + Stop."
@@ -1386,17 +1382,7 @@ actions:
                       snooze_toggle: "{{ v_snooze_toggle }}"
                       stop_toggle: "{{ v_stop_toggle }}"
 
-                  - alias: "Restore follow-me (if bypassed, second snooze)"
-                    choose:
-                      - conditions:
-                          - condition: template
-                            value_template: "{{ follow_me_was_on }}"
-                        sequence:
-                          - alias: "Release follow-me bypass after second snooze"
-                            action: "{{ v_bypass_release }}"
-                            continue_on_error: true
-                            data:
-                              owner: "{{ this.entity_id }}"
+                  # Bypass already released after TTS delivery (see above)
 
                   - alias: "Stop: Wake-up completed after second snooze (treated as Stop)."
                     stop: "Wake-up completed after second snooze (treated as Stop)."
@@ -1437,17 +1423,7 @@ actions:
                     - !input stop_toggle
                 continue_on_error: true
 
-              - alias: "Restore follow-me (if bypassed, snooze music path)"
-                choose:
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ follow_me_was_on }}"
-                    sequence:
-                      - alias: "Release follow-me bypass after snooze music"
-                        action: "{{ v_bypass_release }}"
-                        continue_on_error: true
-                        data:
-                          owner: "{{ this.entity_id }}"
+              # Bypass already released after TTS delivery (see above)
 
           - alias: "Stop: Wake-up completed after snooze + music."
             stop: "Wake-up completed after snooze + music."
@@ -1488,14 +1464,4 @@ actions:
             - !input stop_toggle
         continue_on_error: true
 
-      - alias: "Restore follow-me (if bypassed, normal path)"
-        choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ follow_me_was_on }}"
-            sequence:
-              - alias: "Release follow-me bypass via refcount (normal path)"
-                action: "{{ v_bypass_release }}"
-                continue_on_error: true
-                data:
-                  owner: "{{ this.entity_id }}"
+      # Bypass already released after TTS delivery (see above)

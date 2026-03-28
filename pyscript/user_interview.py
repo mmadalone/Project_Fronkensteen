@@ -1008,7 +1008,10 @@ def _format_preferences_text(user: str) -> str:
         key = eid[len(prefix):-len(suffix)]
         if key in _SKIP_IN_PREFS:
             continue
-        raw = state.get(eid)  # noqa: F821
+        try:
+            raw = state.get(eid)  # noqa: F821
+        except NameError:
+            raw = None
         if raw is None or str(raw) in _EMPTY_STATES:
             continue
         v = str(raw).strip()
@@ -1017,7 +1020,10 @@ def _format_preferences_text(user: str) -> str:
 
     if not prefs:
         return ""
-    u_name = state.get(f"input_text.ai_context_user_name_{user}") or user.title()  # noqa: F821
+    try:
+        u_name = state.get(f"input_text.ai_context_user_name_{user}") or user.title()  # noqa: F821
+    except NameError:
+        u_name = user.title()
     if str(u_name) in _EMPTY_STATES:
         u_name = user.title()
     lines = [f"User preferences ({u_name}):"]

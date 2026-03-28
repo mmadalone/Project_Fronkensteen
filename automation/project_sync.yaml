@@ -105,7 +105,7 @@ variables:
   v_notify_status: !input notify_on_status_change
   v_manual_trigger: !input manual_trigger
 
-trigger:
+triggers:
   # ── 1. Periodic sync (every N minutes) ──
   - id: periodic
     trigger: time_pattern
@@ -122,11 +122,11 @@ trigger:
     trigger: homeassistant
     event: start
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ v_enable }}"
 
-action:
+actions:
   # ── Step 1: Call pyscript engine ──
   - alias: "Sync project files to L2 memory and L1 helpers"
     action: pyscript.project_promote_now

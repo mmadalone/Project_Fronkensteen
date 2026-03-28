@@ -153,7 +153,7 @@ def _lookup_context_sync(entity_id: str) -> dict[str, str]:
                     result[key] = _binascii.hexlify(raw).decode("ascii")
     except Exception as exc:
         # Recorder may be temporarily locked or schema mismatch
-        log.debug("toggle_audit: recorder lookup failed for %s: %s", entity_id, exc)  # noqa: F821
+        result["_error"] = f"recorder lookup failed for {entity_id}: {exc}"
 
     return result
 
@@ -219,10 +219,9 @@ def _write_audit_row(
         )
         conn.commit()
         conn.close()
-        return True
+        return True, None
     except Exception as exc:
-        log.warning("toggle_audit: DB write failed: %s", exc)  # noqa: F821
-        return False
+        return False, f"DB write failed: {exc}"
 
 
 # ─── Retention purge (AP-55 compliant) ───────────────────────────────────────
@@ -242,10 +241,9 @@ def _purge_old_audit_rows(cutoff_iso: str) -> int:
         deleted = cur.rowcount
         conn.commit()
         conn.close()
-        return deleted
+        return deleted, None
     except Exception as exc:
-        log.warning("toggle_audit: purge failed: %s", exc)  # noqa: F821
-        return 0
+        return 0, f"purge failed: {exc}"
 
 
 # ─── Query executor (AP-55 compliant) ───────────────────────────────────────
@@ -326,11 +324,15 @@ async def _on_toggle_change(**kwargs):
     if not context.get("user_id") and not context.get("parent_id"):
         await asyncio.sleep(RECORDER_SETTLE_DELAY)
         context = await _lookup_context_sync(entity_id)
+        if context.get("_error"):
+            log.debug("toggle_audit: %s", context["_error"])  # noqa: F821
 
         # Retry once if recorder was slow
         if not context.get("user_id") and not context.get("parent_id"):
             await asyncio.sleep(RECORDER_RETRY_DELAY)
             context = await _lookup_context_sync(entity_id)
+            if context.get("_error"):
+                log.debug("toggle_audit: %s (retry)", context["_error"])  # noqa: F821
 
     source, source_detail = _classify_source(context)
 
@@ -340,11 +342,13 @@ async def _on_toggle_change(**kwargs):
     )
 
     # Write to SQLite
-    await _write_audit_row(
+    _wrote, _write_err = await _write_audit_row(
         entity_id, old_state, new_state, source, source_detail,
         now_iso, context.get("context_id", ""),
         context.get("user_id", ""), context.get("parent_id", ""),
     )
+    if _write_err:
+        log.warning("toggle_audit: %s", _write_err)  # noqa: F821
 
     # Write to HA logbook for Activity panel visibility
     short_name = entity_id.replace("input_boolean.", "")
@@ -450,9 +454,11 @@ async def toggle_audit_purge():
         days = 90.0
 
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    deleted = await _purge_old_audit_rows(cutoff.isoformat())
+    deleted, purge_err = await _purge_old_audit_rows(cutoff.isoformat())
 
-    if deleted > 0:
+    if purge_err:
+        log.warning("toggle_audit: %s", purge_err)  # noqa: F821
+    elif deleted > 0:
         log.info("toggle_audit: purged %d rows older than %d days", deleted, int(days))  # noqa: F821
 
 

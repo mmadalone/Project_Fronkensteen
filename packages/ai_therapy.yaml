@@ -1,6 +1,6 @@
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 # AI Therapy Session Framework
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 # Status: Active
 # Deployed: 2026-03-27
 # Persona-agnostic therapy session management (individual + couple).
@@ -51,4 +51,4 @@
 # therapy:session:{user}:{ts}       — session summary (scope: user/couple)
 # therapy:note:{user}:{ts}          — therapist clinical notes (scope: user/couple)
 # therapy:active_session:{user}     — checkpoint for recovery (scope: session, 1d expiry)
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================

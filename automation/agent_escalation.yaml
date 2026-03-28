@@ -752,8 +752,8 @@ actions:
                 continue_on_error: true
                 data:
                   library_id: "{{ v_escalation_library_id }}"
-                  target: "{{ speaker_entity }}"
-                  volume_level: "{{ v_escalation_music_volume | float(0) if v_escalation_music_volume | float(0) > 0 else none }}"
+                  player: "{{ speaker_entity }}"
+                  volume: "{{ v_escalation_music_volume | float(0) if v_escalation_music_volume | float(0) > 0 else none }}"
               - if: "{{ v_escalation_delay_after | int(1) > 0 }}"
                 then:
                   - delay:

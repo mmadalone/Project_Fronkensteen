@@ -22,8 +22,10 @@
         key:
           type: string
           description: >-
-            The memory key or label. Use short, descriptive snake_case
-            names like "wifi_password", "parking_spot", "dentist_address".
+            The memory key or label. Required for get, set, and forget
+            operations. Ignored for search (use query instead). Use
+            short, descriptive snake_case names like "wifi_password",
+            "parking_spot", "dentist_address".
         value:
           type: string
           description: >-
@@ -62,7 +64,6 @@
             and the user confirmed. Leave empty to auto-detect.
       required:
         - operation
-        - key
   function:
     type: script
     sequence:

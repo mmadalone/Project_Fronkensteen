@@ -121,6 +121,7 @@ blueprint:
         lights_off_targets:
           name: "Lights/switches to turn off"
           description: "Entities to turn off when the timer expires."
+          default: {}
           selector:
             target:
               entity:

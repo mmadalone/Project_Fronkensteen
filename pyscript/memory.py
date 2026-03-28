@@ -2839,7 +2839,7 @@ async def memory_health_check():
         if threshold_exceeded:
             log.warning(  # noqa: F821
                 "memory.py: threshold exceeded — %s",
-                ", ".join(f"{b['metric']}: {b['current']}/{b['limit']}" for b in breached),
+                ", ".join([f"{b['metric']}: {b['current']}/{b['limit']}" for b in breached]),
             )
             event.fire(  # noqa: F821
                 "ai_memory_threshold_exceeded",

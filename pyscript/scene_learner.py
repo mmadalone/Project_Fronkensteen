@@ -404,6 +404,6 @@ async def scene_learner_status():
 
     return {
         "zones_with_data": list(stats.keys()),
-        "total_contexts": sum(len(v) for v in stats.values()),
+        "total_contexts": sum([len(v) for v in stats.values()]),
         "detail": stats,
     }

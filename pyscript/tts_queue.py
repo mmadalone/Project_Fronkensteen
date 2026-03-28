@@ -919,11 +919,17 @@ async def _play_tts(
         _agent = _voice_to_agent(voice, voice_id=voice_id)
         if _agent and _agent != "unknown":
             # Stability — the one VoiceSettings param v3 respects
-            _sv = state.get(f"input_number.ai_voice_mood_{_agent}_stability")  # noqa: F821
+            try:
+                _sv = state.get(f"input_number.ai_voice_mood_{_agent}_stability")  # noqa: F821
+            except NameError:
+                _sv = None
             if _sv not in (None, "unknown", "unavailable"):
                 _mood_opts["stability"] = float(_sv)
             # Tag prefix for non-tagged text
-            _tv = state.get(f"input_text.ai_voice_mood_{_agent}_tags")  # noqa: F821
+            try:
+                _tv = state.get(f"input_text.ai_voice_mood_{_agent}_tags")  # noqa: F821
+            except NameError:
+                _tv = None
             if _tv not in (None, "unknown", "unavailable", ""):
                 _mood_tags = _tv.strip()
     # Inject mood tags for non-tagged messages (notifications, announcements).
@@ -1113,7 +1119,7 @@ async def _maybe_preempt(new_priority: int) -> bool:
 
 
 async def _process_queue() -> None:
-    global _processing, _current_item, _preempted, _pre_queue_playing
+    global _processing, _current_item, _preempted, _pre_queue_playing, _last_item_completed_at
     _set_result("processing", op="queue_drain")
     try:
         while True:
@@ -1181,7 +1187,6 @@ async def _process_queue() -> None:
 
                 # ── Fire completion event for downstream coordination ──
                 # Re-read preemption flag (may have changed during wait)
-                global _last_item_completed_at
                 _last_item_completed_at = time.monotonic()
                 if not item.get("test_mode"):
                     with _queue_lock:

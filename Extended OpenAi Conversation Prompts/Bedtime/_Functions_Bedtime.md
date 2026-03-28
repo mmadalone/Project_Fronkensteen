@@ -143,7 +143,7 @@
     resource: "https://google.serper.dev/search"
     method: POST
     headers:
-      X-API-KEY: "5f19c27b1a07e6fe814a7db514d6521b4a195322"
+      X-API-KEY: "APIKEY"
       Content-Type: "application/json"
     payload: '{"q": "{{query}}", "num": 5}'
     value_template: >-
@@ -379,21 +379,6 @@
       - service: script.voice_play_bedtime_audiobook
         data:
           title: "{{title}}"
-        response_variable: _function_result
-
-- spec:
-    name: voice_skip_audiobook
-    description: >-
-      Signals that no audiobook is wanted for tonight. Call this when
-      the user declines a bedtime story.
-    parameters:
-      type: object
-      properties: {}
-  function:
-    type: script
-    sequence:
-      - service: script.voice_skip_audiobook
-        data: {}
         response_variable: _function_result
 
 - spec:

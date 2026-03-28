@@ -99,6 +99,15 @@ blueprint:
           selector:
             entity:
               domain: media_player
+        tts_fallback_voice:
+          name: Fallback TTS Voice
+          description: >-
+            TTS engine entity for fallback announcements.
+            Defaults to HA Cloud TTS (free, always available even when
+            ElevenLabs budget is exhausted).
+          default: "tts.home_assistant_cloud"
+          selector:
+            text: {}
 
     # ===========================================================================
     # ③ INFRASTRUCTURE
@@ -224,7 +233,7 @@ actions:
                 response_variable: _tts
                 data:
                   text: "{{ announcement }}"
-                  voice: "tts.home_assistant_cloud"
+                  voice: !input tts_fallback_voice
                   priority: 1
                   target: "{{ speaker_entity }}"
 

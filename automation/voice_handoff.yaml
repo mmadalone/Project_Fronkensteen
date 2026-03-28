@@ -1765,7 +1765,31 @@ actions:
           entity_id: input_boolean.ai_continuous_conversation_active
         continue_on_error: true
 
-  # 12. Restore pipeline after timeout (3-mode: source / preferred / never)
+  # 12. Release follow-me bypass BEFORE restore delay
+  #     Bypass only needed during active handoff (~30s). Holding it through
+  #     the restore timer (~5min) means any reload/restart/mode:restart
+  #     strands the counter. Release now, restore pipeline independently.
+  - alias: "12 · Restore follow-me (if bypassed)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass (normal end path)"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+  # 13. Clear processing guard (redundant safety — already cleared at 11b)
+  - alias: "Clear processing guard (final safety)"
+    action: input_boolean.turn_off
+    target:
+      entity_id: "{{ processing_guard_entity }}"
+
+  # 14. Restore pipeline after timeout (3-mode: source / preferred / never)
+  #     This runs independently after bypass is already released.
+  #     Safe to be killed by reload/restart — no resources held.
   - alias: "Set restore mode, restore timeout"
     variables:
       restore_mode: !input restore_mode
@@ -1820,22 +1844,3 @@ actions:
             data:
               satellite: "{{ satellite_entity }}"
             continue_on_error: true
-
-  # 12b. Restore follow-me — normal end path
-  - alias: "12b · Restore follow-me (if bypassed)"
-    choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ follow_me_was_on }}"
-        sequence:
-          - alias: "Release follow-me bypass (normal end path)"
-            action: "{{ v_bypass_release }}"
-            continue_on_error: true
-            data:
-              owner: "{{ this.entity_id }}"
-
-  # 13. Clear processing guard (redundant safety — already cleared at 11b)
-  - alias: "Clear processing guard (final safety)"
-    action: input_boolean.turn_off
-    target:
-      entity_id: "{{ processing_guard_entity }}"
