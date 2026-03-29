@@ -500,7 +500,7 @@ Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Pu
 - Always include `description`, `icon`, and `alias` fields
 
 ### 9.3 Helpers
-- **All helpers use the `ai_` prefix.** Two bulk renames enforced this: F14 (2026-03-19, 20 entities) and F14b (2026-03-28, 48 entities). Only non-AI helpers (e.g., `lcars_sound`, `lcars_texture` for LCARS dashboard theme) are exempt.
+- **All helpers use the `ai_` prefix.** Two bulk renames enforced this: F14 (2026-03-19, 20 entities) and F14b (2026-03-28, 48 entities).
 - Input helpers use `ai_` plus persona and context:
   - Bedtime: `ai_<persona>_bedtime_<field>` (e.g., `ai_rick_bedtime_morning`, `ai_quark_gn_devices_question`)
   - Proactive: `ai_<persona>_<area>_<time>` (e.g., `ai_rick_workshop_evening`)

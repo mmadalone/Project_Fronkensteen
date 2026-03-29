@@ -4,8 +4,8 @@
 # Status: Placeholder — future weather integration (I-47)
 # No pyscript module or sensor. Blueprint handles promotion directly.
 #
-# Helpers: Consolidated into helpers_input_*.yaml
-#   - helpers_input_text.yaml:   ai_weather_tomorrow_summary
+# Sensors (state.set, written by blueprint via bridge service):
+#   - sensor.ai_weather_tomorrow_summary
 #   - helpers_input_button.yaml: ai_weather_forecast_rebuild
 #
 # Dependencies:

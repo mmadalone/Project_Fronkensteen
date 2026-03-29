@@ -9,9 +9,9 @@
 # Provides:
 #   input_boolean.ai_calendar_promotion_enabled — kill switch (default ON)
 #   input_boolean.ai_calendar_stale — set when calendar API fails
-#   input_text.ai_calendar_last_sync — ISO timestamp of last successful sync
-#   input_text.ai_calendar_today_summary — today's events (L1 quick access)
-#   input_text.ai_calendar_tomorrow_summary — tomorrow's events (L1)
+#   sensor.ai_calendar_last_sync — ISO timestamp of last successful sync
+#   sensor.ai_calendar_today_summary — today's events (L1 quick access)
+#   sensor.ai_calendar_tomorrow_summary — tomorrow's events (L1)
 #   automation.ai_calendar_pre_event_reminder — 15 min TTS reminder via dedup
 #   sensor.ai_calendar_promotion_status — created by pyscript (last op status)
 #
@@ -62,16 +62,16 @@
 #         name: "Promotion Active"
 #       - entity: input_boolean.ai_calendar_stale
 #         name: "Data Stale"
-#       - entity: input_text.ai_calendar_last_sync
+#       - entity: sensor.ai_calendar_last_sync
 #         name: "Last Sync"
 #
 #   # ── Calendar Summaries ──
 #   - type: entities
 #     title: "Promoted Data"
 #     entities:
-#       - entity: input_text.ai_calendar_today_summary
+#       - entity: sensor.ai_calendar_today_summary
 #         name: "Today"
-#       - entity: input_text.ai_calendar_tomorrow_summary
+#       - entity: sensor.ai_calendar_tomorrow_summary
 #         name: "Tomorrow"
 #
 #   # ── Status ──

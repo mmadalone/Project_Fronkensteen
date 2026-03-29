@@ -376,10 +376,12 @@ def _update_last_sync() -> None:
     """Update last sync timestamp."""
     try:
         now_iso = datetime.now().isoformat(timespec="seconds")
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_project_last_sync",
-            value=now_iso,
+        state.set(  # noqa: F821
+            "sensor.ai_project_last_sync", now_iso,
+            new_attributes={
+                "icon": "mdi:clock-check",
+                "friendly_name": "AI Project Last Sync",
+            },
         )
     except Exception as exc:
         log.warning(f"project_promote: last sync failed: {exc}")  # noqa: F821
@@ -582,8 +584,22 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
             f"project_promote [TEST]: summary: {summary_line}"
         )
     else:
-        _update_helper("input_text.ai_project_hot_context_line", hot_line)
-        _update_helper("input_text.ai_active_projects_summary", summary_line)
+        state.set(  # noqa: F821
+            "sensor.ai_project_hot_context_line",
+            str(hot_line)[:255],
+            new_attributes={
+                "icon": "mdi:fire",
+                "friendly_name": "AI Project Hot Context Line",
+            },
+        )
+        state.set(  # noqa: F821
+            "sensor.ai_active_projects_summary",
+            str(summary_line)[:255],
+            new_attributes={
+                "icon": "mdi:folder-star",
+                "friendly_name": "AI Active Projects Summary",
+            },
+        )
         _update_last_sync()
         _set_stale_flag(False)
 

@@ -124,12 +124,11 @@ blueprint:
             entity:
               domain: input_button
         summary_helper:
-          name: Summary Helper
-          description: "input_text entity to store the forecast summary."
-          default: input_text.ai_weather_tomorrow_summary
+          name: Summary Sensor
+          description: "Sensor entity to store the forecast summary (via bridge service)."
+          default: sensor.ai_weather_tomorrow_summary
           selector:
             entity:
-              domain: input_text
 
 mode: single
 
@@ -228,9 +227,10 @@ actions:
           _final: "No weather data available."
 
   # 3. Store result
-  - alias: "Store weather summary in L1 helper"
-    action: input_text.set_value
-    target:
-      entity_id: !input summary_helper
+  - alias: "Store weather summary in L1 sensor"
+    action: pyscript.set_sensor_value
     data:
+      entity_id: !input summary_helper
       value: "{{ _final | trim }}"
+      icon: "mdi:weather-partly-snowy-rainy"
+      friendly_name: "AI Weather Tomorrow Summary"

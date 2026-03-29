@@ -37,11 +37,11 @@ template:
           {%- endif -%}
         attributes:
           calendar_stale: "{{ is_state('input_boolean.ai_calendar_stale', 'on') }}"
-          calendar_last_sync: "{{ states('input_text.ai_calendar_last_sync') | default('unknown', true) }}"
+          calendar_last_sync: "{{ states('sensor.ai_calendar_last_sync') | default('unknown', true) }}"
           email_stale: "{{ is_state('input_boolean.ai_email_stale', 'on') }}"
           media_stale: "{{ is_state('input_boolean.ai_media_data_stale', 'on') }}"
           project_stale: "{{ is_state('input_boolean.ai_project_data_stale', 'on') }}"
-          project_last_sync: "{{ states('input_text.ai_project_last_sync') | default('unknown', true) }}"
+          project_last_sync: "{{ states('sensor.ai_project_last_sync') | default('unknown', true) }}"
           stale_count: >-
             {{ [
               is_state('input_boolean.ai_calendar_stale', 'on'),

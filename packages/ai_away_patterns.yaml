@@ -17,7 +17,7 @@
 #   counter.ai_away_trip_count_{slug} — per-person daily trip counter (I-40b)
 #   sensor.ai_away_prediction — pyscript sensor with full attributes (I-54)
 #   sensor.ai_entropy_correlation — G13 Phase 1.5 correlation analysis result
-#   input_text.ai_away_prediction_accuracy — rolling MAE (G12)
+#   sensor.ai_away_prediction_accuracy — rolling MAE (G12)
 #   input_datetime.ai_away_departed_{slug} — per-person departure timestamp (Task 22)
 #   sensor.ai_away_prediction — human-readable with range or "not_away"
 #   sensor.ai_away_duration — minutes since departure (live-updating)
@@ -130,7 +130,7 @@ template:
 #       - entity: sensor.ai_away_duration
 #         name: "Away Duration"
 #       # I-54: ai_away_prediction_raw removed — sensor.ai_away_prediction has full attributes
-#       - entity: input_text.ai_away_prediction_accuracy
+#       - entity: sensor.ai_away_prediction_accuracy
 #         name: "Prediction Accuracy"
 #
 #   - type: entities

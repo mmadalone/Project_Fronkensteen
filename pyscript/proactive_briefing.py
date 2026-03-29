@@ -318,7 +318,7 @@ async def _section_calendar(hour: int = 0) -> str:
     """Build calendar section from L1 helper (populated by Task 18a)."""
     try:
         cal_raw = state.get(  # noqa: F821
-            "input_text.ai_calendar_today_summary",
+            "sensor.ai_calendar_today_summary",
         ) or ""
     except (NameError, Exception):
         return ""
@@ -383,7 +383,7 @@ async def _section_schedule() -> str:
     """
     try:
         cal_raw = state.get(  # noqa: F821
-            "input_text.ai_calendar_today_summary",
+            "sensor.ai_calendar_today_summary",
         ) or ""
     except (NameError, Exception):
         return ""
@@ -539,8 +539,8 @@ async def _section_projects() -> str:
     _SKIP = {"", "unknown", "unavailable", "none", None}
 
     try:
-        summary = state.get("input_text.ai_active_projects_summary")  # noqa: F821
-        hot_line = state.get("input_text.ai_project_hot_context_line")  # noqa: F821
+        summary = state.get("sensor.ai_active_projects_summary")  # noqa: F821
+        hot_line = state.get("sensor.ai_project_hot_context_line")  # noqa: F821
     except Exception as exc:
         log.warning(f"dispatcher: {exc}")  # noqa: F821
         return ""

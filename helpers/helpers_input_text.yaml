@@ -26,11 +26,6 @@ ai_gn_last_opening_line:
   icon: mdi:message-text-clock-outline
   max: 255
 
-ai_gn_last_question:
-  name: Goodnight Negotiator last question
-  icon: mdi:chat-question-outline
-  max: 255
-
 ai_gn_last_reply:
   name: Goodnight Negotiator last reply
   icon: mdi:chat-outline
@@ -212,41 +207,10 @@ ai_email_follow_me_last_subject:
 # I-54: ai_away_prediction_raw removed — replaced by pyscript sensor.ai_away_prediction
 # (state.set with attributes, no 255-char limit, L2 persistence)
 
-# I-40a G12: Accuracy tracking
-ai_away_prediction_accuracy:
-  name: "AI Away Prediction Accuracy"
-  initial: ""
-  max: 255
-  icon: mdi:chart-line
+# I-40a G12: ai_away_prediction_accuracy removed — migrated to sensor.ai_away_prediction_accuracy (state.set)
 
-# ═══════════════════════════════════════════════════════════════════
-# ai_calendar_promotion — Calendar Promotion
-# ═══════════════════════════════════════════════════════════════════
-
-# ISO timestamp of last successful sync. Agents and dashboards can check
-# freshness of calendar data.
-ai_calendar_last_sync:
-  name: "AI Calendar Last Sync"
-  initial: ""
-  max: 30
-  icon: mdi:clock-check-outline
-
-# Today's events — compact format for quick L1 access without L2 query.
-# Example: "10:00 Dentist | 14:00 Team standup | 18:00 Dinner"
-ai_calendar_today_summary:
-  name: "AI Calendar Today Summary"
-  initial: ""
-  max: 255
-  icon: mdi:calendar-today
-
-# Tomorrow's events — same format, used by bedtime advisor and evening
-# briefing automations.
-ai_calendar_tomorrow_summary:
-  name: "AI Calendar Tomorrow Summary"
-  initial: ""
-  max: 255
-  icon: mdi:calendar-arrow-right
-
+# ai_calendar_last_sync, ai_calendar_today_summary, ai_calendar_tomorrow_summary
+# removed — migrated to sensor.ai_calendar_* (state.set, Session 2)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context (Layer 1)
@@ -442,22 +406,8 @@ ai_test_calendar_event:
   max: 255
   icon: mdi:calendar-clock
 
-# ═══════════════════════════════════════════════════════════════════
-# ai_project_tracking — Project Awareness
-# ═══════════════════════════════════════════════════════════════════
-
-ai_project_last_sync:
-  name: "AI Project Last Sync"
-  initial: ""
-  max: 30
-ai_active_projects_summary:
-  name: "AI Active Projects Summary"
-  initial: ""
-  max: 255
-ai_project_hot_context_line:
-  name: "AI Project Hot Context Line"
-  initial: ""
-  max: 255
+# ai_project_last_sync, ai_active_projects_summary, ai_project_hot_context_line
+# removed — migrated to sensor.ai_project_* (state.set, Session 2)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_proactive_briefing — Proactive Briefing
@@ -592,14 +542,7 @@ ai_interview_progress:
   max: 255
   icon: mdi:progress-check
 
-# ═══════════════════════════════════════════════════════════════════
-# ai_weather_forecast — Tomorrow Weather
-# ═══════════════════════════════════════════════════════════════════
-
-ai_weather_tomorrow_summary:
-  name: "AI weather tomorrow summary"
-  icon: mdi:weather-partly-cloudy
-  max: 255
+# ai_weather_tomorrow_summary removed — migrated to sensor.ai_weather_tomorrow_summary (state.set, Session 2)
 
 ai_notification_follow_me_last_post_time:
   name: "Notification Follow-Me Last Post Time"

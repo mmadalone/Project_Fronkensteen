@@ -1199,9 +1199,13 @@ async def _log_prediction_accuracy(person: str, actual_return_hour: float,
                 if len(_prediction_log) >= 5:
                     errors = [e["error_min"] for e in _prediction_log[-20:]]
                     mae = round(sum(errors) / len(errors), 1)
-                    _update_helper(
-                        "input_text.ai_away_prediction_accuracy",
+                    state.set(  # noqa: F821
+                        "sensor.ai_away_prediction_accuracy",
                         f"MAE: {mae} min (last {len(errors)} trips)",
+                        new_attributes={
+                            "icon": "mdi:target",
+                            "friendly_name": "AI Away Prediction Accuracy",
+                        },
                     )
 
                 # ── G13 Phase 1.5: Per-arrival entropy+MAE to L2 ──
@@ -1381,7 +1385,7 @@ async def _predict_return_inner(person=""):
     cal_summary = ""
     try:
         cal_summary = str(
-            state.get("input_text.ai_calendar_today_summary") or ""  # noqa: F821
+            state.get("sensor.ai_calendar_today_summary") or ""  # noqa: F821
         )
     except NameError:
         pass

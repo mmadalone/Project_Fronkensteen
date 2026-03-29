@@ -130,13 +130,4 @@ lovelace:
       show_in_sidebar: true
 
 
-# ===== LCARS PANEL — Deep Space One Operations Console =====
-panel_custom:
-  - name: lcars-panel
-    sidebar_title: Deep Space One
-    sidebar_icon: mdi:star-trek
-    url_path: lcars
-    js_url: /local/lcars-panel/lcars-panel.js?v=38
-    config: {}
-
 calendar_utils:

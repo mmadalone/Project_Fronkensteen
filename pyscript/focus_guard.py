@@ -652,7 +652,7 @@ def _eval_calendar_warn(now_ts: float) -> dict:
     """Evaluate calendar warning nudge."""
     try:
         cal_raw = state.get(  # noqa: F821
-            "input_text.ai_calendar_today_summary",
+            "sensor.ai_calendar_today_summary",
         ) or ""
     except (NameError, Exception):
         return {"fire": False, "reason": "no_calendar_data"}

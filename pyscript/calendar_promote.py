@@ -37,7 +37,7 @@ from shared_utils import (
 # Key design:
 #   - Fetches 48h window (today + tomorrow) in one call per calendar
 #   - L2 keys: calendar_today:{person}, calendar_tomorrow:{person}
-#   - L1 helpers: input_text.ai_calendar_today_summary, _tomorrow_summary
+#   - L1 sensors: sensor.ai_calendar_today_summary, _tomorrow_summary (state.set)
 #   - Stale flag: input_boolean.ai_calendar_stale (set on API failure)
 #   - Promote cache: 5 min TTL to debounce rapid state-change triggers
 #   - Event dedup: memory_set upserts by key — no L2 duplicates
@@ -519,10 +519,12 @@ def _update_last_sync() -> None:
     """Update last sync timestamp."""
     try:
         now_iso = datetime.now().isoformat(timespec="seconds")
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_calendar_last_sync",
-            value=now_iso,
+        state.set(  # noqa: F821
+            "sensor.ai_calendar_last_sync", now_iso,
+            new_attributes={
+                "icon": "mdi:calendar-clock",
+                "friendly_name": "AI Calendar Last Sync",
+            },
         )
     except Exception as exc:
         log.warning(f"cal_promote: last sync failed: {exc}")  # noqa: F821
@@ -747,12 +749,22 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
         l2_today_ok = True
         l2_tomorrow_ok = True
 
-        # ── Update L1 helpers (shared household summary) ──
-        _update_helper(
-            "input_text.ai_calendar_today_summary", today_helper,
+        # ── Update L1 sensors (shared household summary) ──
+        state.set(  # noqa: F821
+            "sensor.ai_calendar_today_summary",
+            str(today_helper)[:255],
+            new_attributes={
+                "icon": "mdi:calendar-today",
+                "friendly_name": "AI Calendar Today Summary",
+            },
         )
-        _update_helper(
-            "input_text.ai_calendar_tomorrow_summary", tomorrow_helper,
+        state.set(  # noqa: F821
+            "sensor.ai_calendar_tomorrow_summary",
+            str(tomorrow_helper)[:255],
+            new_attributes={
+                "icon": "mdi:calendar-arrow-right",
+                "friendly_name": "AI Calendar Tomorrow Summary",
+            },
         )
 
         # ── Per-person L1 helpers (Gap 1: identity-aware hot context) ──

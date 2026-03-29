@@ -676,7 +676,7 @@ actions:
                    ~ '- target_word_count: ' ~ ((v_post_tts_timeout | default(40) * 2) | int | string) ~ '\n'
                    ~ '\ncontext:\n'
                    ~ '- wakeup_reason: alarm time reached\n'
-                   ~ '- calendar_today: ' ~ (states('input_text.ai_calendar_today_summary') | default('No events', true)) ~ '\n'
+                   ~ '- calendar_today: ' ~ (states('sensor.ai_calendar_today_summary') | default('No events', true)) ~ '\n'
                    ~ '- priority_emails: ' ~ (states('input_number.ai_email_priority_count') | int(0) | string) ~ '\n'
                    ~ '- sensor_context: ' ~ (sensor_context | string)
                 }}

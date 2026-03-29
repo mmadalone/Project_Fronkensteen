@@ -730,16 +730,6 @@ blueprint:
                 domain: input_text
 
 
-        helper_last_question:
-          name: Helper input_text for last asked question (trace)
-          description: "Optional. Example: input_text.ai_gn_last_question"
-          default: ""
-          selector:
-            entity:
-              filter:
-                domain: input_text
-
-
         helper_last_reply:
           name: Helper input_text for last spoken reply (trace)
           description: "Optional. Example: input_text.ai_gn_last_reply"
@@ -1009,7 +999,6 @@ sequence:
       h_debounce_seconds: !input helper_run_debounce_seconds
       h_lock_boolean: !input helper_lock_boolean
       h_last_opening: !input helper_last_opening_line
-      h_last_question: !input helper_last_question
       h_last_reply: !input helper_last_reply
       # custom phrases
       p_confirm: !input phrase_confirmation
