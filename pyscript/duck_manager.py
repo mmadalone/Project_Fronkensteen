@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from shared_utils import build_result_entity_name, parse_csv_helper
+from shared_utils import build_result_entity_name, load_entity_config
 
 # =============================================================================
 # Duck Manager — Unified Volume Ducking Engine
@@ -27,14 +27,13 @@ from shared_utils import build_result_entity_name, parse_csv_helper
 #   tts_queue  — via duck_manager_duck/restore service calls
 #   external   — any caller via duck_manager_duck service
 #
-# Duck group + announcement players + satellites configured via input_text
-# helpers (CSV). Crash recovery via JSON snapshot file.
+# Duck group + announcement players + satellites + vsync zones configured
+# in entity_config.yaml. Crash recovery via JSON snapshot file.
 # Watchdog force-restores stale sessions.
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_duck_manager_status"
 SNAPSHOT_FILE = Path("/config/pyscript/duck_snapshot.json")
-_SPEAKER_CONFIG_FILE = Path("/config/pyscript/tts_speaker_config.json")
 
 # ── State ─────────────────────────────────────────────────────────────────────
 _satellite_triggers = []       # holds factory-created trigger references (keep alive)
@@ -103,23 +102,26 @@ def _is_enabled() -> bool:
 
 
 def _get_duck_group() -> list:
-    speakers = parse_csv_helper("input_text.ai_duck_group", "media_player.")
+    cfg = load_entity_config()
+    speakers = cfg.get("duck", {}).get("group", [])
     if not speakers:
-        log.error("duck_manager: duck group helper is empty")  # noqa: F821
+        log.error("duck_manager: duck group config is empty")  # noqa: F821
     return speakers
 
 
 def _get_announcement_players() -> list:
-    speakers = parse_csv_helper("input_text.ai_duck_announcement_players", "media_player.")
+    cfg = load_entity_config()
+    speakers = cfg.get("duck", {}).get("announcement_players", [])
     if not speakers:
-        log.error("duck_manager: announcement players helper is empty")  # noqa: F821
+        log.error("duck_manager: announcement players config is empty")  # noqa: F821
     return speakers
 
 
 def _get_duck_satellites() -> list:
-    satellites = parse_csv_helper("input_text.ai_duck_satellites", "assist_satellite.")
+    cfg = load_entity_config()
+    satellites = cfg.get("duck", {}).get("satellites", [])
     if not satellites:
-        log.error("duck_manager: duck satellites helper is empty")  # noqa: F821
+        log.error("duck_manager: duck satellites config is empty")  # noqa: F821
     return satellites
 
 
@@ -192,50 +194,21 @@ def _get_allow_manual_override() -> bool:
 # ── Volume Buddy Fallback ────────────────────────────────────────────────────
 
 
-@pyscript_compile  # noqa: F821
-def _load_vsync_zones(path: str) -> list:
-    """Load zone names from tts_speaker_config.json (runs outside sandbox)."""
-    import json as _json
-    try:
-        with open(path, "r") as f:
-            cfg = _json.loads(f.read())
-        # Drill into zone_speaker_map to get actual zone names
-        if isinstance(cfg, dict) and "zone_speaker_map" in cfg:
-            zsm = cfg["zone_speaker_map"]
-            return list(zsm.keys()) if isinstance(zsm, dict) else []
-        # Fallback: treat top-level keys as zones (flat config format)
-        return list(cfg.keys()) if isinstance(cfg, dict) else []
-    except Exception:
-        return []
-
-
-def _get_vsync_groups() -> list:
-    """Discover vsync zone names dynamically from speaker config or helpers."""
-    zones = _load_vsync_zones(str(_SPEAKER_CONFIG_FILE))
-    if zones:
-        return zones
-    log.warning("duck_manager: no zones found in speaker config — falling back to empty")  # noqa: F821
-    return []
-
-
 def _get_volume_buddies() -> dict:
-    """Derive buddy map from volume_sync group helpers.
+    """Derive buddy map from vsync_zones in entity_config.yaml.
 
     For each vsync group, Alexa devices are unreliable reporters.
     Their buddy is the first non-Alexa member in the same group.
-    Logs an error if helpers are empty (no hardcoded fallbacks).
     """
+    cfg = load_entity_config()
+    vsync = cfg.get("vsync_zones", {})
     buddies = {}
-    for group_name in _get_vsync_groups():
-        players = parse_csv_helper(
-            f"input_text.ai_vsync_{group_name}_players", "media_player."
-        )
-        alexa_list = parse_csv_helper(
-            f"input_text.ai_vsync_{group_name}_alexa", "media_player."
-        )
+    for group_name, zone_cfg in vsync.items():
+        players = zone_cfg.get("players", [])
+        alexa_list = zone_cfg.get("alexa", [])
         if not players:
             log.error(  # noqa: F821
-                f"duck_manager: vsync group {group_name} players helper is empty"
+                f"duck_manager: vsync zone {group_name} players config is empty"
             )
             continue
         alexa_set = set(alexa_list)
@@ -252,7 +225,7 @@ def _get_volume_buddies() -> dict:
     if buddies:
         log.info(f"duck_manager: volume buddies resolved: {buddies}")  # noqa: F821
     else:
-        log.warning("duck_manager: no volume buddies resolved from vsync helpers")  # noqa: F821
+        log.warning("duck_manager: no volume buddies resolved from vsync config")  # noqa: F821
     return buddies
 
 
@@ -748,8 +721,8 @@ async def _update_status() -> None:
 
 
 # ── Satellite Trigger (dynamic via state_trigger_factory) ─────────────────────
-# Triggers are registered at startup from input_text.ai_duck_satellites helper.
-# To add/remove satellites: update the helper → pyscript.reload or HA restart.
+# Triggers are registered at startup from entity_config.yaml duck.satellites.
+# To add/remove satellites: update entity_config.yaml → pyscript.reload or HA restart.
 # Pattern: https://hacs-pyscript.readthedocs.io/en/stable/reference (factory)
 
 def _satellite_trigger_factory(entity_id):
@@ -770,7 +743,7 @@ async def _on_satellite_change(var_name=None, value=None, old_value=None):
     if not _is_enabled():
         return
 
-    # Check configurable helper (allows disabling a satellite without code edit)
+    # Check configured satellites (allows disabling via entity_config without code edit)
     configured = _get_duck_satellites()
     if var_name not in configured:
         return
@@ -1213,7 +1186,7 @@ async def _duck_manager_startup():
     except Exception:
         pass
 
-    # Register satellite triggers dynamically from helper
+    # Register satellite triggers dynamically from config
     global _satellite_triggers
     satellites = _get_duck_satellites()
     _satellite_triggers = [_satellite_trigger_factory(sat) for sat in satellites]

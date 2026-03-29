@@ -603,16 +603,14 @@ async def _section_media(upcoming_days: int = 0, download_window: str = "since_m
                     return " ".join(parts)
         except Exception as exc:
             log.warning(f"dispatcher: {exc}")  # noqa: F821
-    # Fallback: read from L1 helpers (separate Sonarr/Radarr)
+    # Fallback: read from consolidated media sensor attributes
     parts = []
-    for helper in (
-        "input_text.ai_media_upcoming_sonarr",
-        "input_text.ai_media_upcoming_radarr",
-    ):
-        val = state.get(helper) or ""  # noqa: F821
+    _media_attrs = state.getattr("sensor.ai_media_upcoming") or {}  # noqa: F821
+    for key in ("sonarr", "radarr"):
+        val = _media_attrs.get(key) or ""
         if val and val not in ("unknown", "unavailable", ""):
             parts.append(val)
-    recent = state.get("input_text.ai_media_recent_downloads") or ""  # noqa: F821
+    recent = _media_attrs.get("recent_downloads") or ""
     if recent and recent not in ("unknown", "unavailable", ""):
         parts.append(f"Recently downloaded: {recent}")
     return " ".join(parts)

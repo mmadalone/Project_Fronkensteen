@@ -545,11 +545,10 @@ async def voice_handoff(
     )
 
     # ── Greeting ─────────────────────────────────────────────────────────
-    last_topic = (
-        state.get("input_text.ai_last_interaction_topic") or ""  # noqa: F821
-    ).strip()
+    _li_attrs = state.getattr("sensor.ai_last_interaction") or {}  # noqa: F821
+    last_topic = (_li_attrs.get("topic") or "").strip()
     last_agent_name = (
-        state.get("input_text.ai_last_agent_name") or ""  # noqa: F821
+        state.get("sensor.ai_last_interaction") or ""  # noqa: F821
     ).strip()
     topic_line = ""
     if (last_topic and last_topic not in ("unknown", "unavailable")
@@ -598,20 +597,11 @@ async def voice_handoff(
             await asyncio.sleep(0.5)
 
     # ── Update self-awareness ────────────────────────────────────────────
-    service.call(  # noqa: F821
-        "input_text", "set_value",
-        entity_id="input_text.ai_last_agent_name",
-        value=target,
-    )
-    service.call(  # noqa: F821
-        "input_text", "set_value",
-        entity_id="input_text.ai_last_handoff_reason",
-        value=reason or "user_request",
-    )
-    service.call(  # noqa: F821
-        "input_text", "set_value",
-        entity_id="input_text.ai_last_handoff_source",
-        value=source_persona or "unknown",
+    from shared_utils import set_last_interaction as _set_li
+    _set_li(
+        agent_name=target,
+        handoff_reason=reason or "user_request",
+        handoff_source=source_persona or "unknown",
     )
     try:
         pyscript.budget_track_call(  # noqa: F821

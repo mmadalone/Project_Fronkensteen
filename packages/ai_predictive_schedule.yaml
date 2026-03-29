@@ -7,8 +7,8 @@
 # Provides:
 #   input_number.ai_target_sleep_hours — target sleep duration (default 7h)
 #   input_number.ai_morning_prep_buffer — wake-to-ready buffer (default 45m)
-#   input_text.ai_bedtime_recommendation — latest recommendation text
-#   input_text.ai_schedule_sources_raw — JSON for confidence template sensor
+#   sensor.ai_predictive_schedule_status attr bedtime_recommendation — latest recommendation
+#   sensor.ai_predictive_schedule_status attr schedule_sources_raw — JSON for confidence
 #   input_text.ai_test_calendar_event — mock calendar data for test mode
 #   input_datetime.ai_predicted_routine_start — predicted routine start time
 #   sensor.ai_schedule_confidence — template: high/medium/low/none
@@ -62,7 +62,7 @@ template:
         unique_id: ai_schedule_confidence
         icon: mdi:shield-check
         state: >-
-          {%- set raw = states('input_text.ai_schedule_sources_raw') -%}
+          {%- set raw = state_attr('sensor.ai_predictive_schedule_status', 'schedule_sources_raw') | default('', true) -%}
           {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
             {%- set src = raw | from_json -%}
             {%- set cal = src.calendar | default(false) -%}

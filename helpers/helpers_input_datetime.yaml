@@ -22,29 +22,6 @@ ai_summarizer_batch_time:
 # ═══════════════════════════════════════════════════════════════════
 # ai_away_patterns — Away Patterns
 # ═══════════════════════════════════════════════════════════════════
-ai_away_departed_miquel:
-  name: "AI Away - Miquel Departed At"
-  has_date: true
-  has_time: true
-  icon: mdi:exit-run
-
-ai_away_departed_jessica:
-  name: "AI Away - Jessica Departed At"
-  has_date: true
-  has_time: true
-  icon: mdi:exit-run
-
-ai_home_since_miquel:
-  name: "AI Home Since - Miquel"
-  has_date: true
-  has_time: true
-  icon: mdi:home-clock
-
-ai_home_since_jessica:
-  name: "AI Home Since - Jessica"
-  has_date: true
-  has_time: true
-  icon: mdi:home-clock
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context
@@ -54,36 +31,6 @@ ai_context_bed_time:
   has_date: false
   has_time: true
 
-# ── Per-User Schedule (Miquel) ──
-# Note: input_datetime has no 'initial' — set defaults via UI or automation.
-# Intended defaults: weekday 07:30, weekend 09:00, bedtime 22:30.
-ai_context_wake_time_weekday_miquel:
-  name: "AI Context - Wake Time Weekday (Miquel)"
-  has_date: false
-  has_time: true
-ai_context_wake_time_weekend_miquel:
-  name: "AI Context - Wake Time Weekend (Miquel)"
-  has_date: false
-  has_time: true
-ai_context_bed_time_miquel:
-  name: "AI Context - Bedtime Target (Miquel)"
-  has_date: false
-  has_time: true
-
-# ── Per-User Schedule (Jessica) ──
-# Shares bedtime with Miquel. Set wake/bed times via UI.
-ai_context_wake_time_weekday_jessica:
-  name: "AI Context - Wake Time Weekday (Jessica)"
-  has_date: false
-  has_time: true
-ai_context_wake_time_weekend_jessica:
-  name: "AI Context - Wake Time Weekend (Jessica)"
-  has_date: false
-  has_time: true
-ai_context_bed_time_jessica:
-  name: "AI Context - Bedtime Target (Jessica)"
-  has_date: false
-  has_time: true
 
 # ── Self-Awareness (Task 2) ──
 ai_last_interaction_time:
@@ -229,19 +176,6 @@ ai_theatrical_last_exchange:
   has_time: true
   icon: mdi:drama-masks
 
-# ═══════════════════════════════════════════════════════════════════
-# ai_context — Alt-Weekday Wake Time (Preference Consumption B1)
-# ═══════════════════════════════════════════════════════════════════
-ai_context_wake_time_alt_weekday_miquel:
-  name: "AI Context - Alt Weekday Wake Time (Miquel)"
-  has_date: false
-  has_time: true
-  icon: mdi:alarm-plus
-ai_context_wake_time_alt_weekday_jessica:
-  name: "AI Context - Alt Weekday Wake Time (Jessica)"
-  has_date: false
-  has_time: true
-  icon: mdi:alarm-plus
 
 # ═══════════════════════════════════════════════════════════════════
 # Music Follow-Me (migrated from UI)

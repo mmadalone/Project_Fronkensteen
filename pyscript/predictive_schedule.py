@@ -122,9 +122,20 @@ def _ensure_result_entity_name(force: bool = False) -> None:
         result_entity_name = build_result_entity_name(RESULT_ENTITY)
 
 
+_CARRY_FORWARD_ATTRS = ("bedtime_recommendation", "schedule_sources_raw")
+
+
 def _set_result(state_value: str = "ok", **attrs: Any) -> None:
     _ensure_result_entity_name()
     attrs.update(result_entity_name)
+    # Carry forward consolidated attributes across status updates
+    try:
+        existing = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+        for key in _CARRY_FORWARD_ATTRS:
+            if key not in attrs and key in existing:
+                attrs[key] = existing[key]
+    except Exception:
+        pass
     state.set(RESULT_ENTITY, value=state_value, new_attributes=attrs)  # noqa: F821
 
 
@@ -645,13 +656,15 @@ async def _update_helpers(result: dict, test_mode: bool) -> None:
         )
         return
 
-    # Recommendation text
+    # Recommendation text → attribute on status sensor
     rec = result.get("recommendation", "")
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_bedtime_recommendation",
-            value=rec[:255],
+        cur_attrs = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+        cur_attrs["bedtime_recommendation"] = rec[:255]
+        state.set(  # noqa: F821
+            RESULT_ENTITY,
+            value=state.get(RESULT_ENTITY) or "ok",  # noqa: F821
+            new_attributes=cur_attrs,
         )
     except Exception:
         pass
@@ -680,13 +693,15 @@ async def _update_helpers(result: dict, test_mode: bool) -> None:
         except Exception:
             pass
 
-    # Sources JSON for confidence template sensor
+    # Sources JSON → attribute on status sensor
     sources = result.get("sources", {})
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_schedule_sources_raw",
-            value=json.dumps(sources, separators=(",", ":")),
+        cur_attrs = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+        cur_attrs["schedule_sources_raw"] = json.dumps(sources, separators=(",", ":"))
+        state.set(  # noqa: F821
+            RESULT_ENTITY,
+            value=state.get(RESULT_ENTITY) or "ok",  # noqa: F821
+            new_attributes=cur_attrs,
         )
     except Exception:
         pass

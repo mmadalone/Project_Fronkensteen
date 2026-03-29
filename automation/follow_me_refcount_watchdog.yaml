@@ -63,7 +63,7 @@ blueprint:
           name: "Refcount counter"
           description: >-
             The counter entity that tracks active bypass claims.
-          default: counter.notification_follow_me_bypass_refcount
+          default: counter.ai_notification_follow_me_bypass_refcount
           selector:
             entity:
               domain: counter

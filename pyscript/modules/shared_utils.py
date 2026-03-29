@@ -77,6 +77,37 @@ def reload_entity_config() -> dict:
 
 
 
+_LAST_INTERACTION = "sensor.ai_last_interaction"
+
+
+def set_last_interaction(**kwargs):
+    """Update sensor.ai_last_interaction with partial updates.
+
+    Only non-empty kwargs are applied; other attributes are preserved.
+    Valid kwargs: agent_name, agent_entity, topic, handoff_reason, handoff_source.
+    """
+    try:
+        attrs = state.getattr(_LAST_INTERACTION) or {}  # noqa: F821
+    except Exception:
+        attrs = {}
+    try:
+        cur = state.get(_LAST_INTERACTION) or ""  # noqa: F821
+    except Exception:
+        cur = ""
+    state.set(  # noqa: F821
+        _LAST_INTERACTION,
+        value=kwargs.get("agent_name") or cur,
+        new_attributes={
+            "agent_entity": kwargs.get("agent_entity") or attrs.get("agent_entity", ""),
+            "topic": kwargs.get("topic") or attrs.get("topic", ""),
+            "handoff_reason": kwargs.get("handoff_reason") or attrs.get("handoff_reason", ""),
+            "handoff_source": kwargs.get("handoff_source") or attrs.get("handoff_source", ""),
+            "friendly_name": "AI Last Interaction",
+            "icon": "mdi:account-voice",
+        },
+    )
+
+
 def parse_csv_helper(entity_id: str, prefix: str = "") -> list:
     """Read a CSV input_text helper and return a list of stripped, non-empty values.
 

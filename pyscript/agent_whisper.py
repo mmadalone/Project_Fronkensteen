@@ -11,7 +11,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name
+from shared_utils import build_result_entity_name, set_last_interaction
 
 # =============================================================================
 # Agent Whisper Network — Pattern 5 of Voice Context Architecture (Task 13)
@@ -1010,23 +1010,13 @@ async def agent_whisper(
         except Exception:
             pass
 
-    # ── 5. UPDATE SELF-AWARENESS HELPERS (fire-and-forget) ──
-    if not test_mode and topic_slug and source == "user":
-        try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_last_interaction_topic",
-                value=topic_slug[:200],
-            )
-        except Exception:
-            pass
+    # ── 5. UPDATE SELF-AWARENESS SENSOR (fire-and-forget) ──
     if not test_mode and source == "user":
         try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_last_agent_name",
-                value=agent,
-            )
+            kwargs = {"agent_name": agent}
+            if topic_slug:
+                kwargs["topic"] = topic_slug[:200]
+            set_last_interaction(**kwargs)
             service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_last_interaction_time",
@@ -1662,19 +1652,10 @@ async def agent_interaction_log(
         expiration_days=_get_interaction_expiry(),
     )
 
-    # Update self-awareness helpers (user interactions only)
+    # Update self-awareness sensor (user interactions only)
     if src == "user":
         try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_last_interaction_topic",
-                value=topic_str[:200],
-            )
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_last_agent_name",
-                value=agent,
-            )
+            set_last_interaction(agent_name=agent, topic=topic_str[:200])
             service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_last_interaction_time",

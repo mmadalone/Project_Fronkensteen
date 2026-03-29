@@ -12,8 +12,8 @@
 # Helpers: Consolidated into helpers_input_*.yaml
 #   - helpers_input_boolean.yaml: ai_ducking_flag, ai_duck_manager_enabled,
 #       ai_duck_guard_enabled, ai_duck_allow_manual_override
-#   - helpers_input_text.yaml:    ai_duck_group, ai_duck_announcement_players,
-#       ai_duck_satellites
+#   - entity_config.yaml:         duck.group, duck.announcement_players,
+#       duck.satellites, vsync_zones
 #   - helpers_input_select.yaml:  ai_duck_behavior
 #   - helpers_input_number.yaml:  ai_duck_watchdog_timeout, ai_duck_pre_delay_ms,
 #       ai_duck_default_volume, ai_duck_volume, ai_duck_announce_volume,

@@ -29,7 +29,7 @@ from shared_utils import build_result_entity_name
 #   - Stateless service — no triggers, no scheduling (blueprint owns timing)
 #   - API keys read from HA config entries at startup
 #   - Promote cache: 5 min TTL to debounce rapid triggers
-#   - L1 helpers: input_text.ai_media_upcoming_summary, _recent_downloads
+#   - L1 sensor: sensor.ai_media_upcoming (state=summary, attrs: sonarr, radarr, recent_downloads)
 #   - L2 keys: media_upcoming:summary, media_downloads:recent
 #   - Stale flag: input_boolean.ai_media_data_stale
 #
@@ -85,6 +85,18 @@ async def _startup():
         )
     except Exception as exc:
         log.warning("media_promote: startup config read failed: %s", exc)  # noqa: F821
+    # Initialize consolidated media sensor (refreshed every 30 min)
+    try:
+        state.set(  # noqa: F821
+            "sensor.ai_media_upcoming", value="",
+            new_attributes={
+                "sonarr": "", "radarr": "", "recent_downloads": "",
+                "friendly_name": "AI Media Upcoming",
+                "icon": "mdi:television-classic",
+            },
+        )
+    except Exception:
+        pass
 
 
 # ── Entity Name Helpers ─────────────────────────────────────────────────────
@@ -529,19 +541,6 @@ async def _l2_set(
         return False
 
 
-# ── HA Helper Updates ────────────────────────────────────────────────────────
-
-def _update_helper(entity_id: str, value: str) -> None:
-    """Update an input_text helper, truncating to 255 chars."""
-    try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id=entity_id, value=str(value)[:255],
-        )
-    except Exception as exc:
-        log.warning(  # noqa: F821
-            "media_promote: helper update failed %s: %s", entity_id, exc,
-        )
 
 
 def _set_stale_flag(stale: bool) -> None:
@@ -701,12 +700,22 @@ async def _promote_internal(
         new_count = len(new_titles)
     _last_downloads = current_titles
 
-    # ── Write L1 helpers ──
+    # ── Write consolidated sensor ──
     if write_l1:
-        _update_helper("input_text.ai_media_upcoming_summary", upcoming_summary)
-        _update_helper("input_text.ai_media_upcoming_sonarr", sonarr_line)
-        _update_helper("input_text.ai_media_upcoming_radarr", radarr_line)
-        _update_helper("input_text.ai_media_recent_downloads", recent_summary)
+        try:
+            state.set(  # noqa: F821
+                "sensor.ai_media_upcoming",
+                value=str(upcoming_summary)[:255],
+                new_attributes={
+                    "sonarr": str(sonarr_line)[:255],
+                    "radarr": str(radarr_line)[:255],
+                    "recent_downloads": str(recent_summary)[:255],
+                    "friendly_name": "AI Media Upcoming",
+                    "icon": "mdi:television-classic",
+                },
+            )
+        except Exception as exc:
+            log.warning("media_promote: sensor update failed: %s", exc)  # noqa: F821
 
     # ── Write L2 memory ──
     if upcoming_summary:

@@ -241,11 +241,11 @@ template:
 
             {# ── MEDIA LIBRARY (Radarr/Sonarr) ── #}
             {%- if is_state('input_boolean.ai_media_tracking_enabled', 'on') -%}
-              {%- set sonarr = states('input_text.ai_media_upcoming_sonarr') | default('', true) | regex_replace(' today\\.$', '.') -%}
+              {%- set sonarr = state_attr('sensor.ai_media_upcoming', 'sonarr') | default('', true) | regex_replace(' today\\.$', '.') -%}
               {%- if sonarr not in ['', 'none', 'unknown', 'unavailable'] -%}
                 {%- set ns.lines = ns.lines + [sonarr] -%}
               {%- endif -%}
-              {%- set radarr = states('input_text.ai_media_upcoming_radarr') | default('', true) -%}
+              {%- set radarr = state_attr('sensor.ai_media_upcoming', 'radarr') | default('', true) -%}
               {%- if radarr not in ['', 'none', 'unknown', 'unavailable'] -%}
                 {%- set ns.lines = ns.lines + [radarr] -%}
               {%- endif -%}
@@ -538,14 +538,14 @@ template:
               'deadpool': 'Deadpool', 'portuondo': 'Dr. Portuondo',
               'doctor_portuondo': 'Dr. Portuondo', 'homeassistant': 'Home Assistant'
             } -%}
-            {%- set last_agent_raw = states('input_text.ai_last_agent_name') -%}
+            {%- set last_agent_raw = states('sensor.ai_last_interaction') -%}
             {%- set last_agent = agent_names.get(last_agent_raw, last_agent_raw | title) -%}
             {%- set last_ts = state_attr('input_datetime.ai_last_interaction_time', 'timestamp') | float(0) -%}
             {%- if last_agent_raw not in ['none', 'unknown', 'unavailable', ''] and last_ts > 0 -%}
               {%- set minutes_ago = ((now().timestamp() - last_ts) / 60) | int -%}
-              {%- set last_topic = states('input_text.ai_last_interaction_topic') | default('', true) -%}
-              {%- set handoff_reason = states('input_text.ai_last_handoff_reason') -%}
-              {%- set handoff_source_raw = states('input_text.ai_last_handoff_source') -%}
+              {%- set last_topic = state_attr('sensor.ai_last_interaction', 'topic') | default('', true) -%}
+              {%- set handoff_reason = state_attr('sensor.ai_last_interaction', 'handoff_reason') | default('', true) -%}
+              {%- set handoff_source_raw = state_attr('sensor.ai_last_interaction', 'handoff_source') | default('', true) -%}
               {%- set handoff_source = agent_names.get(handoff_source_raw, handoff_source_raw | title) -%}
               {%- set base_line = 'Last interaction: ' ~ last_agent ~ ', ' ~ minutes_ago ~ ' min ago' -%}
               {%- if last_topic -%}

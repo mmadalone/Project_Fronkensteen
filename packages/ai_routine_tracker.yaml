@@ -9,7 +9,7 @@
 #     "evening_weekday_living_room_bed:step_3_of_4" or "none")
 #   input_text.ai_routine_deviation — last deviation description (e.g.,
 #     "expected:bathroom actual:living_room" or "none")
-#   input_text.ai_routine_eta_raw — JSON for ETA template sensor
+#   sensor.ai_routine_tracker_status attr eta_raw — JSON for ETA template sensor
 #   input_boolean.ai_routine_tracking_enabled — kill switch (ON = active)
 #   input_boolean.ai_bedtime_predicted — set ON when a bed-ending routine
 #     starts; arms bedtime automations for instant response
@@ -60,7 +60,7 @@ template:
         icon: mdi:timer-sand
         unit_of_measurement: "min"
         state: >-
-          {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+          {%- set raw = state_attr('sensor.ai_routine_tracker_status', 'eta_raw') | default('', true) -%}
           {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
             {{ (raw | from_json).eta_minutes | default(0) | round(0) | int }}
           {%- else -%}
@@ -68,21 +68,21 @@ template:
           {%- endif -%}
         attributes:
           fingerprint_id: >-
-            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- set raw = state_attr('sensor.ai_routine_tracker_status', 'eta_raw') | default('', true) -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).fingerprint_id | default('none') }}
             {%- else -%}
               none
             {%- endif -%}
           step: >-
-            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- set raw = state_attr('sensor.ai_routine_tracker_status', 'eta_raw') | default('', true) -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).step | default(0) }}
             {%- else -%}
               0
             {%- endif -%}
           total: >-
-            {%- set raw = states('input_text.ai_routine_eta_raw') -%}
+            {%- set raw = state_attr('sensor.ai_routine_tracker_status', 'eta_raw') | default('', true) -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).total | default(0) }}
             {%- else -%}

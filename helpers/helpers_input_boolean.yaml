@@ -29,19 +29,6 @@ ai_wake_up_stop:
   icon: mdi:account-clock
   initial: false
 
-########################################
-# LCARS Stuff
-########################################
-
-lcars_sound:
-  name: LCARS Sound
-  icon: mdi:volume-high
-  initial: false
-
-lcars_texture:
-  name: LCARS Texture
-  icon: mdi:texture
-  initial: false
 
 ########################################
 # Bedtime negotiator (Global state + toggles)
@@ -169,17 +156,6 @@ ai_context_work_day_tomorrow:
   initial: false
   icon: mdi:briefcase-clock
 
-# ── Per-User Flags (Miquel) ──
-ai_context_work_day_miquel:
-  name: "AI Context - Work Day (Miquel)"
-  initial: true
-  icon: mdi:briefcase
-
-# ── Per-User Flags (Jessica) ──
-ai_context_work_day_jessica:
-  name: "AI Context - Work Day (Jessica)"
-  initial: false
-  icon: mdi:briefcase-search
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_dispatcher — Agent Dispatcher
@@ -324,12 +300,6 @@ ai_sustained_solo_zone:
   initial: false
   icon: mdi:account-clock
 
-# Set by automation when Jessica's WiFi says home but no FP2 zone has
-# detected a body for the configured timeout. Zeroes her 40-pt WiFi signal.
-ai_wifi_stale_jessica:
-  name: "AI WiFi Stale Jessica"
-  initial: false
-  icon: mdi:wifi-alert
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_llm_budget — Budget Fallback
@@ -437,32 +407,6 @@ ai_privacy_gate_enabled:
   initial: true
   icon: mdi:shield-account
 
-# ── Per-Person Per-Tier State Booleans ──
-# Set by privacy_gate_hysteresis.yaml instances
-ai_privacy_gate_miquel_t1_suppressed:
-  name: "Privacy Gate — Miquel T1 Suppressed"
-  initial: false
-  icon: mdi:bed-clock
-ai_privacy_gate_miquel_t2_suppressed:
-  name: "Privacy Gate — Miquel T2 Suppressed"
-  initial: false
-  icon: mdi:email-lock
-ai_privacy_gate_miquel_t3_suppressed:
-  name: "Privacy Gate — Miquel T3 Suppressed"
-  initial: false
-  icon: mdi:home-lightbulb
-ai_privacy_gate_jessica_t1_suppressed:
-  name: "Privacy Gate — Jessica T1 Suppressed"
-  initial: false
-  icon: mdi:bed-clock
-ai_privacy_gate_jessica_t2_suppressed:
-  name: "Privacy Gate — Jessica T2 Suppressed"
-  initial: false
-  icon: mdi:email-lock
-ai_privacy_gate_jessica_t3_suppressed:
-  name: "Privacy Gate — Jessica T3 Suppressed"
-  initial: false
-  icon: mdi:home-lightbulb
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_proactive_briefing — Proactive Briefing

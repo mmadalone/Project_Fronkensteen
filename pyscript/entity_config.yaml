@@ -89,6 +89,69 @@ persons:
 #   Helpers:          scanned from /config/helpers_input_*.yaml (ai_* keys)
 #   Pipeline entities: satellite_zones (above) + dispatcher sensor attributes
 # Only json_configs needs a static list (no single source to scan from).
+# ═══════════════════════════════════════════════════════════════════════════════
+# VSynced Speaker Groups — volume buddy mapping for duck_manager
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-zone player/alexa lists. Alexa devices are unreliable volume reporters;
+# their buddy (first non-Alexa player in the same zone) is used instead.
+# Used by: duck_manager (_get_volume_buddies)
+vsync_zones:
+  workshop:
+    players:
+      - media_player.workshop_sonos
+    alexa:
+      - media_player.miquel_s_2nd_echo_pop
+      - media_player.miquel_s_echo_pop
+  living_room:
+    players:
+      - media_player.ha_voice_pe_living_room_quark_esp
+    alexa:
+      - media_player.alexa
+  main_room:
+    players:
+      - media_player.workshop_sonos
+    alexa: []
+  bed:
+    players:
+      - media_player.workshop_sonos
+    alexa: []
+  kitchen:
+    players:
+      - media_player.workshop_sonos
+    alexa: []
+  bathroom:
+    players:
+      - media_player.bathroom_sonos
+    alexa: []
+  lobby:
+    players:
+      - media_player.workshop_sonos
+    alexa: []
+  shower:
+    players:
+      - media_player.bathroom_sonos
+    alexa: []
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Duck Manager — group, announcement, and satellite configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# Used by: duck_manager (_get_duck_group, _get_announcement_players,
+#          _get_duck_satellites)
+duck:
+  group:
+    - media_player.madteevee
+    - media_player.alexa
+    - media_player.miquel_s_echo_pop
+    - media_player.miquel_s_2nd_echo_pop
+    - media_player.workshop_sonos
+    - media_player.40pfs6009_12
+  announcement_players:
+    - media_player.home_assistant_voice_living_room_media_player_esp
+    - media_player.home_assistant_voice_workshop_media_player_esp
+  satellites:
+    - assist_satellite.home_assistant_voice_0905c5_assist_satellite
+    - assist_satellite.home_assistant_voice_0a0109_assist_satellite
+
 system_health:
   json_configs:
     - /config/pyscript/tts_speaker_config.json

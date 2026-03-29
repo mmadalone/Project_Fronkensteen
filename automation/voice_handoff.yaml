@@ -781,11 +781,11 @@ actions:
           {{ '' }}
         {% endif %}
       saved_pipeline: "{{ states(pipeline_select) }}"
-      # Derive source persona — fall back to ai_last_agent_name when pipeline is "preferred"
+      # Derive source persona — fall back to last interaction sensor when pipeline is "preferred"
       saved_persona: >-
         {% set pipe = states(pipeline_select) | lower | replace(' - bedtime', '') | replace(' - extended', '') %}
         {% if pipe == 'preferred' %}
-          {{ states('input_text.ai_last_agent_name') | lower }}
+          {{ states('sensor.ai_last_interaction') | lower }}
         {% else %}
           {{ pipe }}
         {% endif %}
@@ -1276,7 +1276,7 @@ actions:
   # 9b. Capture source agent name before greeting logic (available to step 10c outside if block)
   - alias: "Set last agent for esp"
     variables:
-      _last_agent_for_esp: "{{ states('input_text.ai_last_agent_name') }}"
+      _last_agent_for_esp: "{{ states('sensor.ai_last_interaction') }}"
 
   # ─────────────────────────────────────────────────────────────────────────
   # 9c · Agent theme jingle before greeting  # ─────────────────────────────────────────────────────────────────────────
@@ -1389,9 +1389,9 @@ actions:
             {% if event_topic | length > 0 %}
               {{ event_topic }}
             {% else %}
-              {{ states('input_text.ai_last_interaction_topic') }}
+              {{ state_attr('sensor.ai_last_interaction', 'topic') | default('') }}
             {% endif %}
-          _last_agent: "{{ states('input_text.ai_last_agent_name') }}"
+          _last_agent: "{{ states('sensor.ai_last_interaction') }}"
           _ctx: >-
             {{ handoff_context | default('', true) | trim }}
           _topic_line: >-
@@ -1604,40 +1604,14 @@ actions:
     timeout: "00:00:05"
     continue_on_timeout: true
 
-  # 11a. Update self-awareness (moved before loop — set immediately after switch)
+  # 11a. Update self-awareness sensor via bridge service
   - alias: "11a · Update self-awareness"
-    action: input_text.set_value
-    target:
-      entity_id: input_text.ai_last_agent_name
+    action: pyscript.update_last_interaction
     data:
-      value: "{{ handoff_target }}"
-
-  # 11a-topic. Persist handoff topic for other consumers
-  - alias: "11a-topic · Persist handoff topic"
-    if:
-      - condition: template
-        value_template: "{{ _last_topic | default('') | trim | length > 0 }}"
-    then:
-      - alias: "Persist handoff topic for downstream consumers"
-        action: input_text.set_value
-        target:
-          entity_id: input_text.ai_last_interaction_topic
-        data:
-          value: "{{ _last_topic[:200] }}"
-
-  - alias: "11a-reason · Persist handoff reason"
-    action: input_text.set_value
-    target:
-      entity_id: input_text.ai_last_handoff_reason
-    data:
-      value: "{{ handoff_reason }}"
-
-  - alias: "11a-source · Persist handoff source"
-    action: input_text.set_value
-    target:
-      entity_id: input_text.ai_last_handoff_source
-    data:
-      value: "{{ saved_persona }}"
+      agent_name: "{{ handoff_target }}"
+      topic: "{{ _last_topic | default('') | trim }}"
+      handoff_reason: "{{ handoff_reason }}"
+      handoff_source: "{{ saved_persona }}"
 
   - alias: "11a-log · Log handoff"
     action: system_log.write

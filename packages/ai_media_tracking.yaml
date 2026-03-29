@@ -11,8 +11,7 @@
 #
 # Helpers: Consolidated into helpers_input_*.yaml
 #   - helpers_input_boolean.yaml: ai_media_tracking_enabled, ai_media_data_stale
-#   - helpers_input_text.yaml:    ai_media_upcoming_summary, ai_media_upcoming_sonarr,
-#       ai_media_upcoming_radarr, ai_media_recent_downloads
+#   - sensor.ai_media_upcoming:   state=summary, attrs: sonarr, radarr, recent_downloads
 #
 # Dependencies:
 #   - Blueprints: media_tracking.yaml

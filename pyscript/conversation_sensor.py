@@ -261,7 +261,7 @@ def _on_conversation_finished(**kwargs):
 
     # --- Fire event for reactive banter (replaces state triggers) ---
     _topic = (
-        state.get("input_text.ai_last_interaction_topic") or "general"  # noqa: F821
+        (state.getattr("sensor.ai_last_interaction") or {}).get("topic") or "general"  # noqa: F821
     ).strip()
     event.fire(  # noqa: F821
         "ai_conversation_response_ready",

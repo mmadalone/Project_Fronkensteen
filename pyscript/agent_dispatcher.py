@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from shared_utils import build_result_entity_name, resolve_active_user
+from shared_utils import build_result_entity_name, resolve_active_user, set_last_interaction
 
 # =============================================================================
 # Agent Dispatcher — DC-7 of Voice Context Architecture (Task 11)
@@ -860,19 +860,10 @@ async def _check_budget() -> tuple:
 
 
 async def _update_self_awareness(persona: str, entity: str) -> None:
-    """Update self-awareness helpers after dispatch decision."""
+    """Update self-awareness sensor after dispatch decision."""
     try:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_last_agent_name",
-            value=persona,
-        )
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_last_agent_entity",
-            value=entity,
-        )
+        set_last_interaction(agent_name=persona, agent_entity=entity)
         service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_last_interaction_time",
@@ -880,6 +871,61 @@ async def _update_self_awareness(persona: str, entity: str) -> None:
         )
     except Exception as exc:
         log.warning(f"agent_dispatch: self-awareness update failed: {exc}")  # noqa: F821
+
+
+# ── Bridge Service: update_last_interaction ──────────────────────────────────
+# Blueprints cannot call state.set() directly.  This thin service lets
+# voice_handoff.yaml (and any other YAML automation) write to
+# sensor.ai_last_interaction via pyscript.update_last_interaction.
+
+@service  # noqa: F821
+async def update_last_interaction(
+    agent_name: str = "",
+    agent_entity: str = "",
+    topic: str = "",
+    handoff_reason: str = "",
+    handoff_source: str = "",
+):
+    """
+    yaml
+    name: Update Last Interaction
+    description: >-
+      Bridge service — updates sensor.ai_last_interaction.
+      Only non-empty fields are applied; others are preserved.
+    fields:
+      agent_name:
+        name: Agent Name
+        required: false
+        selector:
+          text:
+      agent_entity:
+        name: Agent Entity
+        required: false
+        selector:
+          text:
+      topic:
+        name: Topic
+        required: false
+        selector:
+          text:
+      handoff_reason:
+        name: Handoff Reason
+        required: false
+        selector:
+          text:
+      handoff_source:
+        name: Handoff Source
+        required: false
+        selector:
+          text:
+    """
+    set_last_interaction(
+        agent_name=agent_name,
+        agent_entity=agent_entity,
+        topic=topic,
+        handoff_reason=handoff_reason,
+        handoff_source=handoff_source,
+    )
 
 
 # ── Main Dispatch Service ────────────────────────────────────────────────────
@@ -1437,6 +1483,9 @@ async def agent_dispatcher_startup():
     """Initialize dispatcher status sensor on HA startup."""
     _ensure_result_entity_name(force=True)
     _set_result("idle", op="startup")
+    # Initialize consolidated self-awareness sensor (no persistence needed —
+    # overwritten on every voice interaction, typically within minutes).
+    set_last_interaction(agent_name="none")
     try:
         await _ensure_cache()  # populates era selects + keywords
     except Exception as exc:

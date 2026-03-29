@@ -13,12 +13,9 @@
 # it was resetting the timestamp on every announcement/automation call.
 # This script is kept for backward compatibility with any remaining callers.
 #
-# Helpers defined here:
-#   input_text.ai_last_agent_name        — which agent responded
-#   input_text.ai_last_agent_entity      — agent entity_id
-#   input_text.ai_last_interaction_topic — what was discussed
-#   input_datetime.ai_last_interaction_time — when it happened
-#   input_text.ai_last_satellite — last satellite that responded
+# State consolidated into: sensor.ai_last_interaction (via state.set)
+#   State: agent name  |  Attrs: agent_entity, topic, handoff_reason, handoff_source
+#   input_datetime.ai_last_interaction_time — when it happened (stays as helper)
 # =============================================================================
 
 # input_text: moved to helpers_input_text.yaml (C5 consolidation)
@@ -57,18 +54,8 @@ script:
           entity_id: input_datetime.ai_last_interaction_time
         data:
           datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.ai_last_agent_name
+      - action: pyscript.update_last_interaction
         data:
-          value: "{{ agent_name | default('unknown') | truncate(50, true, '') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.ai_last_agent_entity
-        data:
-          value: "{{ agent_entity | default('none') | truncate(100, true, '') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.ai_last_interaction_topic
-        data:
-          value: "{{ topic | default('') | truncate(200, true, '') }}"
+          agent_name: "{{ agent_name | default('unknown') | truncate(50, true, '') }}"
+          agent_entity: "{{ agent_entity | default('none') | truncate(100, true, '') }}"
+          topic: "{{ topic | default('') | truncate(200, true, '') }}"

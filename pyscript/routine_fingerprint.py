@@ -107,6 +107,14 @@ def _ensure_result_entity_name(force: bool = False) -> None:
 def _set_result(state_value: str = "ok", **attrs: Any) -> None:
     _ensure_result_entity_name()
     attrs.update(result_entity_name)
+    # Carry forward eta_raw attribute across status updates
+    if "eta_raw" not in attrs:
+        try:
+            existing = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+            if "eta_raw" in existing:
+                attrs["eta_raw"] = existing["eta_raw"]
+        except Exception:
+            pass
     state.set(RESULT_ENTITY, value=state_value, new_attributes=attrs)  # noqa: F821
 
 
@@ -607,10 +615,14 @@ async def _update_routine_helpers(
     except Exception:
         pass
 
+    # Write eta_raw as attribute on the status sensor
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_routine_eta_raw", value=eta_raw,
+        cur_attrs = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+        cur_attrs["eta_raw"] = eta_raw
+        state.set(  # noqa: F821
+            RESULT_ENTITY,
+            value=state.get(RESULT_ENTITY) or "ok",  # noqa: F821
+            new_attributes=cur_attrs,
         )
     except Exception:
         pass
