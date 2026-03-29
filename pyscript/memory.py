@@ -4803,7 +4803,7 @@ async def budget_history_rolling(months: int = 0):
     try:
         or_attrs = state.getattr("sensor.openrouter_credits") or {}  # noqa: F821
         total_usage_usd = float(or_attrs.get("total_usage", 0))
-        midnight_usd = float(state.get("input_number.ai_openrouter_usage_midnight") or 0)  # noqa: F821
+        midnight_usd = float(state.get("sensor.ai_openrouter_usage_midnight") or 0)  # noqa: F821
         today_usd = max(total_usage_usd - midnight_usd, 0.0)
         rate = float(state.get("sensor.usd_eur_exchange_rate") or 0.92)  # noqa: F821
         today_eur = round(today_usd * rate, 4)
@@ -4814,7 +4814,7 @@ async def budget_history_rolling(months: int = 0):
     # Serper live delta (credits consumed today, not yet in DB)
     try:
         serper_remaining = int(float(state.get("sensor.serper_account") or 0))  # noqa: F821
-        serper_midnight = int(float(state.get("input_number.ai_serper_credits_midnight") or 0))  # noqa: F821
+        serper_midnight = int(float(state.get("sensor.ai_serper_credits_midnight") or 0))  # noqa: F821
         today_serper = max(serper_midnight - serper_remaining, 0)
     except Exception:
         today_serper = 0
@@ -4837,7 +4837,7 @@ async def budget_history_rolling(months: int = 0):
     hist_model_cost = round(result.get("total_model_cost", 0.0), 4)
     # C5: Add today's live model cost delta
     try:
-        today_model_cost = float(state.get("input_number.ai_model_cost_today") or 0)  # noqa: F821
+        today_model_cost = float(state.get("sensor.ai_model_cost_today") or 0)  # noqa: F821
     except Exception:
         today_model_cost = 0.0
     total_model_cost = round(hist_model_cost + today_model_cost, 4)

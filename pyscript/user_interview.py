@@ -213,7 +213,7 @@ def _l1_has_value(entity_id: str, domain_hint: str = "text") -> bool:
 def _load_progress(user: str) -> dict:
     """Load interview progress from helper. Returns {category: [keys_done]}."""
     try:
-        raw = state.get("input_text.ai_interview_progress") or "{}"  # noqa: F821
+        raw = state.get("sensor.ai_interview_progress") or "{}"  # noqa: F821
         if raw in ("unknown", "unavailable", ""):
             return {}
         all_progress = json.loads(raw)
@@ -230,7 +230,7 @@ def _load_progress(user: str) -> dict:
 def _save_progress(user: str, progress: dict) -> None:
     """Save interview progress to helper."""
     try:
-        raw = state.get("input_text.ai_interview_progress") or "{}"  # noqa: F821
+        raw = state.get("sensor.ai_interview_progress") or "{}"  # noqa: F821
         if raw in ("unknown", "unavailable", ""):
             all_progress = {}
         else:
@@ -248,10 +248,13 @@ def _save_progress(user: str, progress: dict) -> None:
     all_progress[user] = compacted
 
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_interview_progress",
-            value=json.dumps(all_progress, separators=(",", ":"))[:255],
+        state.set(  # noqa: F821
+            "sensor.ai_interview_progress",
+            json.dumps(all_progress, separators=(",", ":"))[:255],
+            new_attributes={
+                "icon": "mdi:clipboard-check-outline",
+                "friendly_name": "AI Interview Progress",
+            },
         )
     except Exception as exc:
         log.warning(f"user_interview: progress save failed: {exc}")  # noqa: F821

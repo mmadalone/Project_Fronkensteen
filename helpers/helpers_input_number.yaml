@@ -30,15 +30,7 @@ ai_llm_daily_budget:
   unit_of_measurement: "%"
   icon: mdi:cash-multiple
 
-# Running call counter — incremented by script.ai_llm_budget_increment,
-# reset to 0 at midnight by automation.ai_llm_budget_midnight_reset.
-ai_llm_calls_today:
-  name: "AI LLM - Calls Today"
-  min: 0
-  max: 999
-  step: 1
-  mode: box
-  icon: mdi:counter
+# ai_llm_calls_today removed — migrated to sensor.ai_llm_calls_today (state.set, Session 3)
 
 # The denominator for budget % calculation. Adjust via UI or automation.
 ai_llm_daily_limit:
@@ -58,13 +50,7 @@ ai_tts_daily_limit:
   mode: box
   icon: mdi:message-text-clock
 
-ai_llm_tokens_today:
-  name: "AI LLM - Tokens Today"
-  min: 0
-  max: 999999
-  step: 1
-  mode: box
-  icon: mdi:code-braces
+# ai_llm_tokens_today removed — migrated to sensor.ai_llm_tokens_today (state.set, Session 3)
 
 ai_llm_daily_token_limit:
   name: "AI LLM - Daily Token Limit"
@@ -74,22 +60,7 @@ ai_llm_daily_token_limit:
   mode: box
   icon: mdi:speedometer-slow
 
-ai_tts_chars_today:
-  name: "AI TTS - Characters Today (ElevenLabs)"
-  min: 0
-  max: 999999
-  step: 1
-  mode: box
-  icon: mdi:alphabetical
-
-ai_stt_calls_today:
-  name: "AI STT - Calls Today"
-  min: 0
-  max: 99999
-  step: 1
-  mode: box
-  unit_of_measurement: "calls"
-  icon: mdi:microphone
+# ai_tts_chars_today, ai_stt_calls_today removed — migrated to sensors (state.set, Session 3)
 
 ai_budget_daily_cost_limit:
   name: "AI Budget - Daily Cost Limit (€)"
@@ -163,45 +134,8 @@ ai_budget_rolling_months:
   unit_of_measurement: "months"
   icon: mdi:calendar-range
 
-# I-32: Snapshot of OpenRouter total_usage at midnight (for daily delta)
-ai_openrouter_usage_midnight:
-  name: "AI OpenRouter - Usage at Midnight"
-  min: 0
-  max: 99999
-  step: 0.0001
-  mode: box
-  unit_of_measurement: "$"
-  icon: mdi:router-wireless
-
-# ElevenLabs cumulative character_count at midnight (for daily delta)
-ai_elevenlabs_chars_midnight:
-  name: "ElevenLabs - Chars Used at Midnight"
-  min: 0
-  max: 10000000
-  step: 1
-  mode: box
-  unit_of_measurement: "chars"
-  icon: mdi:account-voice
-
-# Serper remaining credits at midnight (for daily delta)
-ai_serper_credits_midnight:
-  name: "Serper - Credits at Midnight"
-  min: 0
-  max: 999999
-  step: 1
-  mode: box
-  unit_of_measurement: "credits"
-  icon: mdi:web
-
-# C5: Per-model cost accumulator — resets at midnight alongside other counters
-ai_model_cost_today:
-  name: "AI Model Cost Today (EUR)"
-  min: 0
-  max: 100
-  step: 0.001
-  mode: box
-  unit_of_measurement: "€"
-  icon: mdi:cash-multiple
+# ai_openrouter_usage_midnight, ai_elevenlabs_chars_midnight, ai_serper_credits_midnight,
+# ai_model_cost_today removed — migrated to sensors (state.set, Session 3)
 
 # C5: ElevenLabs monthly subscription cost (for derived TTS per-char rate)
 ai_elevenlabs_monthly_cost:
@@ -241,30 +175,7 @@ ai_serper_plan_credits:
 # ai_email_promotion — Email Priority Filter
 # ═══════════════════════════════════════════════════════════════════
 
-# Unread priority email count. Incremented on each priority email.
-# Reset by pyscript.email_clear_count or midnight cron.
-# Feeds into L1 hot context: "2 priority emails"
-ai_email_priority_count:
-  name: "AI Email Priority Count"
-  min: 0
-  max: 999
-  step: 1
-  mode: box
-  icon: mdi:email-multiple
-
-
-# ═══════════════════════════════════════════════════════════════════
-# ai_notification_dedup — Notification Deduplication
-# ═══════════════════════════════════════════════════════════════════
-
-ai_dedup_blocked_count:
-  name: AI Dedup Blocked Count
-  min: 0
-  max: 999
-  step: 1
-  mode: box
-  icon: mdi:cancel
-
+# ai_email_priority_count, ai_dedup_blocked_count removed — migrated to sensors (state.set, Session 3)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_predictive_schedule — Predictive Scheduling

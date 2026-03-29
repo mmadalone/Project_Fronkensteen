@@ -362,7 +362,7 @@ async def _section_email(hour: int = 0) -> str:
     """Build email section from priority count helper (Task 18b)."""
     try:
         count = int(float(
-            state.get("input_number.ai_email_priority_count") or 0  # noqa: F821
+            state.get("sensor.ai_email_priority_count") or 0  # noqa: F821
         ))
     except (TypeError, ValueError, NameError):
         return ""
@@ -655,12 +655,15 @@ def _increment_llm_counter(cost: int = 1) -> None:
     """Increment LLM call counter after conversation.process."""
     try:
         current = int(float(
-            state.get("input_number.ai_llm_calls_today") or 0  # noqa: F821
+            state.get("sensor.ai_llm_calls_today") or 0  # noqa: F821
         ))
-        service.call(  # noqa: F821
-            "input_number", "set_value",
-            entity_id="input_number.ai_llm_calls_today",
-            value=min(current + cost, 999),
+        state.set(  # noqa: F821
+            "sensor.ai_llm_calls_today",
+            min(current + cost, 999),
+            new_attributes={
+                "icon": "mdi:counter",
+                "friendly_name": "AI LLM Calls Today",
+            },
         )
     except Exception as exc:
         log.warning(f"dispatcher: {exc}")  # noqa: F821

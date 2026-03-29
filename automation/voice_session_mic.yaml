@@ -8,7 +8,7 @@
 # Requires:
 #   - pyscript/voice_session.py (shared mic control services)
 #   - input_text.ai_voice_session_pending (trigger flag)
-#   - input_text.ai_last_satellite (satellite routing)
+#   - sensor.ai_last_satellite (satellite routing)
 #   - input_boolean.ai_continuous_conversation_active (stop signal)
 #
 # Create one instance (global — routes to the correct satellite via
@@ -100,11 +100,10 @@ blueprint:
 
         last_satellite_entity:
           name: "Last satellite entity"
-          description: "Helper that stores the last-active satellite entity_id."
-          default: input_text.ai_last_satellite
+          description: "Sensor that stores the last-active satellite entity_id."
+          default: sensor.ai_last_satellite
           selector:
             entity:
-              domain: input_text
 
 mode: queued
 max: 3

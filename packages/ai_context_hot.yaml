@@ -351,7 +351,7 @@ template:
             {%- set cal_raw = cal_per if cal_per not in ['', 'none', 'unknown', 'unavailable'] else (states('sensor.ai_calendar_today_summary') | default('', true)) -%}
             {%- set cal_stale = is_state('input_boolean.ai_calendar_stale', 'on') -%}
             {%- set email_stale = is_state('input_boolean.ai_email_stale', 'on') -%}
-            {%- set email_ct = states('input_number.ai_email_priority_count') | int(0) -%}
+            {%- set email_ct = states('sensor.ai_email_priority_count') | int(0) -%}
             {%- set sns = namespace(parts=[]) -%}
             {%- if cal_raw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
               {%- set events = cal_raw.split(' | ') -%}

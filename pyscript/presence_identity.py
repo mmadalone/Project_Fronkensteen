@@ -677,7 +677,7 @@ async def _on_wifi_change(var_name=None, value=None, old_value=None):
             )
 
 
-@state_trigger("input_text.ai_last_satellite")  # noqa: F821
+@state_trigger("sensor.ai_last_satellite")  # noqa: F821
 async def presence_identity_satellite_trigger(var_name=None, value=None, old_value=None):
     """Handle voice satellite interaction — anchor speaker to zone."""
     if not _is_enabled():

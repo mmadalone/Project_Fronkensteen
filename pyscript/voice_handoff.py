@@ -420,7 +420,7 @@ async def voice_handoff(
     # ── Resolve satellite ────────────────────────────────────────────────
     if not satellite:
         satellite = (
-            state.get("input_text.ai_last_satellite") or ""  # noqa: F821
+            state.get("sensor.ai_last_satellite") or ""  # noqa: F821
         ).strip()
     if not satellite or satellite not in _select_map:
         log.warning(  # noqa: F821

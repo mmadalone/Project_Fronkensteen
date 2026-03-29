@@ -322,7 +322,7 @@ blueprint:
         last_satellite_entity:
           name: "Last satellite entity"
           description: "Helper that stores the last-active satellite entity_id."
-          default: input_text.ai_last_satellite
+          default: sensor.ai_last_satellite
           selector:
             entity:
               domain: input_text

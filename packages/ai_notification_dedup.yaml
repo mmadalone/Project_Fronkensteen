@@ -15,14 +15,8 @@
 
 # input_number: moved to helpers_input_number.yaml (C6 consolidation)
 
-template:
-  - sensor:
-      - name: AI Dedup Blocked Today
-        unique_id: ai_dedup_blocked_today
-        unit_of_measurement: ""
-        icon: mdi:bell-cancel-outline
-        state: >-
-          {{ states('input_number.ai_dedup_blocked_count') | int(0) }}
+# Template sensor mirror removed — sensor.ai_dedup_blocked_count now owned by
+# pyscript state.set() (Session 3 migration). Dashboard reads sensor directly.
 
 # ── Dashboard Card (paste into Lovelace YAML) ───────────────────────────────
 # type: entities

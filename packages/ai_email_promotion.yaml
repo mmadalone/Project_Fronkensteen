@@ -12,7 +12,7 @@
 #   input_text.ai_email_known_contacts — comma-separated trusted senders/domains
 #   input_text.ai_email_priority_keywords — comma-separated custom keywords
 #   input_text.ai_email_last_priority — last priority email subject (quick ref)
-#   input_number.ai_email_priority_count — unread priority email count
+#   sensor.ai_email_priority_count — unread priority email count
 #   automation.ai_email_priority_filter — IMAP trigger → pyscript filter
 #   sensor.ai_email_promotion_status — created by pyscript (last op status)
 #   sensor.ai_email_priority_count — template mirror of input_number for dashboard
@@ -58,15 +58,8 @@
 
 # ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
 
-template:
-  - sensor:
-      # Mirror of input_number for dashboard display and L1 context injection.
-      - name: AI Email Priority Count
-        unique_id: ai_email_priority_count
-        unit_of_measurement: ""
-        icon: mdi:email-newsletter
-        state: >-
-          {{ states('input_number.ai_email_priority_count') | int(0) }}
+# Template sensor mirror removed — sensor.ai_email_priority_count now owned by
+# pyscript state.set() (Session 3 migration). Dashboard reads sensor directly.
 
 # =============================================================================
 # DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor

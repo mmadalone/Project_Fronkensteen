@@ -27,7 +27,7 @@ template:
         unique_id: ai_escalation_status
         icon: mdi:dice-5-outline
         state: >-
-          {{ states('input_text.ai_escalation_last_outcome') | default('idle', true) }}
+          {{ states('sensor.ai_escalation_last_outcome') | default('idle', true) }}
         attributes:
           last_followthrough: >-
             {{ states('input_datetime.ai_escalation_last_followthrough') | default('unknown', true) }}

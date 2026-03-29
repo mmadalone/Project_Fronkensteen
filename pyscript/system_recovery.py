@@ -22,7 +22,7 @@ RESULT_ENTITY = "sensor.ai_system_recovery_status"
 KILL_SWITCH = "input_boolean.ai_system_recovery_enabled"
 MAX_RETRIES_HELPER = "input_number.ai_recovery_max_retries_per_hour"
 BASE_BACKOFF_HELPER = "input_number.ai_recovery_base_backoff_seconds"
-PENDING_HELPER = "input_text.ai_recovery_pending_category"
+PENDING_HELPER = "sensor.ai_recovery_pending_category"
 HEALTH_SENSOR = "sensor.ai_system_health"
 ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
 MAX_BACKOFF_SECONDS = 600  # 10 min cap
@@ -143,10 +143,12 @@ async def _do_pyscript_reload(category: str) -> bool:
     """Reload all pyscript modules. Persist pending state for reload survival."""
     # Persist pending category so we can verify after reload
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id=PENDING_HELPER,
-            value=category,
+        state.set(  # noqa: F821
+            PENDING_HELPER, category,
+            new_attributes={
+                "icon": "mdi:wrench-clock",
+                "friendly_name": "AI Recovery Pending Category",
+            },
         )
     except Exception:
         pass
@@ -403,9 +405,12 @@ async def system_recovery_startup():
     if pending:
         # Clear the marker
         try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id=PENDING_HELPER, value="",
+            state.set(  # noqa: F821
+                PENDING_HELPER, "",
+                new_attributes={
+                    "icon": "mdi:wrench-clock",
+                    "friendly_name": "AI Recovery Pending Category",
+                },
             )
         except Exception:
             pass

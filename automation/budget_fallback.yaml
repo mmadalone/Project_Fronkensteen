@@ -126,12 +126,11 @@ blueprint:
               domain: input_boolean
 
         saved_pipelines_entity:
-          name: Saved pipelines entity
-          description: "input_text storing saved pipeline JSON for restore."
-          default: input_text.ai_budget_saved_pipelines
+          name: Saved pipelines sensor
+          description: "Sensor storing saved pipeline JSON for restore (via bridge service)."
+          default: sensor.ai_budget_saved_pipelines
           selector:
             entity:
-              domain: input_text
 
 mode: restart
 
@@ -206,12 +205,13 @@ actions:
                 {% endfor %}
                 {% set ns.result = dict(ns.result, **{pipeline_select: current_pipeline}) %}
                 {{ ns.result | to_json }}
-          - alias: "Save current pipeline to shared JSON helper"
-            action: input_text.set_value
-            target:
-              entity_id: !input saved_pipelines_entity
+          - alias: "Save current pipeline to shared JSON sensor"
+            action: pyscript.set_sensor_value
             data:
+              entity_id: !input saved_pipelines_entity
               value: "{{ updated_json }}"
+              icon: "mdi:content-save"
+              friendly_name: "AI Budget Saved Pipelines"
 
           # 4. Switch pipeline
           - alias: "Switch satellite to fallback pipeline"
@@ -279,8 +279,9 @@ actions:
                 {% endfor %}
                 {{ ns.result | to_json }}
           - alias: "Remove restored entry from saved pipelines JSON"
-            action: input_text.set_value
-            target:
-              entity_id: !input saved_pipelines_entity
+            action: pyscript.set_sensor_value
             data:
+              entity_id: !input saved_pipelines_entity
               value: "{{ cleaned_json }}"
+              icon: "mdi:content-save"
+              friendly_name: "AI Budget Saved Pipelines"

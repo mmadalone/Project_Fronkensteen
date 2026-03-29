@@ -1307,11 +1307,14 @@ def budget_track_call(
             entry["model_cost_eur"] += cost_eur
             # Accumulate into helper for template sensor access
             try:
-                cur = float(state.get("input_number.ai_model_cost_today") or 0)  # noqa: F821
-                service.call(  # noqa: F821
-                    "input_number", "set_value",
-                    entity_id="input_number.ai_model_cost_today",
-                    value=min(round(cur + cost_eur, 4), 100),
+                cur = float(state.get("sensor.ai_model_cost_today") or 0)  # noqa: F821
+                state.set(  # noqa: F821
+                    "sensor.ai_model_cost_today",
+                    min(round(cur + cost_eur, 4), 100),
+                    new_attributes={
+                        "icon": "mdi:currency-eur",
+                        "friendly_name": "AI Model Cost Today",
+                    },
                 )
             except Exception:
                 pass
@@ -1368,25 +1371,34 @@ def _increment_budget_counters(calls: int = 1, tokens: int = 0, stt: int = 0,
     C5: model + input_tokens/output_tokens enable per-model cost tracking."""
     try:
         if calls > 0:
-            cur_calls = int(float(state.get("input_number.ai_llm_calls_today") or 0))  # noqa: F821
-            service.call(  # noqa: F821
-                "input_number", "set_value",
-                entity_id="input_number.ai_llm_calls_today",
-                value=min(cur_calls + calls, 999),
+            cur_calls = int(float(state.get("sensor.ai_llm_calls_today") or 0))  # noqa: F821
+            state.set(  # noqa: F821
+                "sensor.ai_llm_calls_today",
+                min(cur_calls + calls, 999),
+                new_attributes={
+                    "icon": "mdi:counter",
+                    "friendly_name": "AI LLM Calls Today",
+                },
             )
         if tokens > 0:
-            cur_tokens = int(float(state.get("input_number.ai_llm_tokens_today") or 0))  # noqa: F821
-            service.call(  # noqa: F821
-                "input_number", "set_value",
-                entity_id="input_number.ai_llm_tokens_today",
-                value=min(cur_tokens + tokens, 999999),
+            cur_tokens = int(float(state.get("sensor.ai_llm_tokens_today") or 0))  # noqa: F821
+            state.set(  # noqa: F821
+                "sensor.ai_llm_tokens_today",
+                min(cur_tokens + tokens, 999999),
+                new_attributes={
+                    "icon": "mdi:counter",
+                    "friendly_name": "AI LLM Tokens Today",
+                },
             )
         if stt > 0:
-            cur_stt = int(float(state.get("input_number.ai_stt_calls_today") or 0))  # noqa: F821
-            service.call(  # noqa: F821
-                "input_number", "set_value",
-                entity_id="input_number.ai_stt_calls_today",
-                value=min(cur_stt + stt, 99999),
+            cur_stt = int(float(state.get("sensor.ai_stt_calls_today") or 0))  # noqa: F821
+            state.set(  # noqa: F821
+                "sensor.ai_stt_calls_today",
+                min(cur_stt + stt, 99999),
+                new_attributes={
+                    "icon": "mdi:counter",
+                    "friendly_name": "AI STT Calls Today",
+                },
             )
         # C5: Resolve model from full slug map if not provided
         resolved_model = model

@@ -471,7 +471,7 @@ async def theatrical_mode_start(
     )
 
     # Resolve satellite
-    sat = satellite or _helper_str("input_text.ai_last_satellite", "")
+    sat = satellite or _helper_str("sensor.ai_last_satellite", "")
     if not sat:
         log.warning("theatrical: no satellite available")
         return {"status": "no_satellite"}

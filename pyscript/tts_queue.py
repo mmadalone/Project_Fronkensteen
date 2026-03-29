@@ -1093,8 +1093,8 @@ def _increment_counter_by(entity_id: str, amount: int) -> None:
     """Increment a counter by a specific amount (I-33: TTS char counting)."""
     try:
         current = float(state.get(entity_id) or 0)  # noqa: F821
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id=entity_id, value=min(current + amount, 999999))
+        state.set(entity_id, min(current + amount, 999999),  # noqa: F821
+                  new_attributes=dict(state.getattr(entity_id) or {}))  # noqa: F821
     except Exception:
         pass
 
@@ -1311,7 +1311,7 @@ async def _play_item(item: dict) -> None:
 
     # I-33: Count TTS characters (ElevenLabs billing unit)
     if text:
-        _increment_counter_by("input_number.ai_tts_chars_today", len(text))
+        _increment_counter_by("sensor.ai_tts_chars_today", len(text))
 
     # I-33 Phase 2: Per-agent TTS tracking
     try:
@@ -2040,20 +2040,20 @@ async def _budget_save_to_l2() -> None:
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         counters = {
-            "input_number.ai_llm_calls_today": float(
-                state.get("input_number.ai_llm_calls_today") or 0  # noqa: F821
+            "sensor.ai_llm_calls_today": float(
+                state.get("sensor.ai_llm_calls_today") or 0  # noqa: F821
             ),
             "input_number.ai_tts_calls_today": float(
                 state.get("input_number.ai_tts_calls_today") or 0  # noqa: F821
             ),
-            "input_number.ai_llm_tokens_today": float(
-                state.get("input_number.ai_llm_tokens_today") or 0  # noqa: F821
+            "sensor.ai_llm_tokens_today": float(
+                state.get("sensor.ai_llm_tokens_today") or 0  # noqa: F821
             ),
-            "input_number.ai_tts_chars_today": float(
-                state.get("input_number.ai_tts_chars_today") or 0  # noqa: F821
+            "sensor.ai_tts_chars_today": float(
+                state.get("sensor.ai_tts_chars_today") or 0  # noqa: F821
             ),
-            "input_number.ai_stt_calls_today": float(
-                state.get("input_number.ai_stt_calls_today") or 0  # noqa: F821
+            "sensor.ai_stt_calls_today": float(
+                state.get("sensor.ai_stt_calls_today") or 0  # noqa: F821
             ),
         }
         import json as _json

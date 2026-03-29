@@ -228,10 +228,13 @@ async def _l2_search(query: str, limit: int = 20) -> list[dict[str, Any]]:
 def _increment_blocked_counter() -> None:
     """Increment the daily blocked-duplicates counter."""
     try:
-        current = float(state.get("input_number.ai_dedup_blocked_count") or 0)  # noqa: F821
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id="input_number.ai_dedup_blocked_count",
-                     value=min(current + 1, 999))
+        current = float(state.get("sensor.ai_dedup_blocked_count") or 0)  # noqa: F821
+        state.set("sensor.ai_dedup_blocked_count",  # noqa: F821
+                  min(current + 1, 999),
+                  new_attributes={
+                      "icon": "mdi:bell-cancel",
+                      "friendly_name": "AI Dedup Blocked Count",
+                  })
     except Exception:
         pass
 
@@ -882,8 +885,11 @@ async def dedup_daily_housekeeping():
     """
     # Reset daily blocked counter
     try:
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id="input_number.ai_dedup_blocked_count", value=0)
+        state.set("sensor.ai_dedup_blocked_count", 0,  # noqa: F821
+                  new_attributes={
+                      "icon": "mdi:bell-cancel",
+                      "friendly_name": "AI Dedup Blocked Count",
+                  })
     except Exception as exc:
         log.error(f"dedup housekeeping: counter reset failed: {exc}")  # noqa: F821
 

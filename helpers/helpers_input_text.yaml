@@ -345,11 +345,7 @@ ai_memory_archive_protection_tags:
 # ai_escalation — Agent Escalation System
 # ═══════════════════════════════════════════════════════════════════
 
-ai_escalation_last_outcome:
-  name: "AI Escalation Last Outcome"
-  max: 255
-  initial: ""
-  icon: mdi:history
+# ai_escalation_last_outcome removed — migrated to sensor (state.set, Session 4)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_llm_budget — LLM/TTS/STT Budget & Fallback
@@ -361,10 +357,7 @@ ai_budget_fallback_agent:
   icon: mdi:robot-off-outline
   max: 255
 
-ai_budget_saved_pipelines:
-  name: "AI Budget - Saved Pipelines (JSON)"
-  icon: mdi:content-save
-  max: 255
+# ai_budget_saved_pipelines removed — migrated to sensor (state.set, Session 4)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -448,10 +441,7 @@ ai_routine_deviation:
 # ai_self_awareness — Agent Self-Awareness
 # ═══════════════════════════════════════════════════════════════════
 
-ai_last_satellite:
-  name: "AI - Last Active Satellite"
-  max: 100
-  icon: mdi:microphone
+# ai_last_satellite removed — migrated to sensor (state.set, Session 4)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_test_harness — Testing & Simulation
@@ -536,11 +526,7 @@ ai_tts_restore_satellites:
 # ai_user_interview — User Preference Interview
 # ═══════════════════════════════════════════════════════════════════
 
-ai_interview_progress:
-  name: "AI Interview Progress"
-  initial: "{}"
-  max: 255
-  icon: mdi:progress-check
+# ai_interview_progress removed — migrated to sensor (state.set, Session 4)
 
 # ai_weather_tomorrow_summary removed — migrated to sensor.ai_weather_tomorrow_summary (state.set, Session 2)
 
@@ -613,7 +599,4 @@ ai_dispatcher_fallback_pipeline:
 # ═══════════════════════════════════════════════════════════════════
 # ai_system_recovery — Pending Category (reload survival)
 # ═══════════════════════════════════════════════════════════════════
-ai_recovery_pending_category:
-  name: "Recovery Pending Category"
-  icon: mdi:wrench-clock
-  max: 255
+# ai_recovery_pending_category removed — migrated to sensor (state.set, Session 4)

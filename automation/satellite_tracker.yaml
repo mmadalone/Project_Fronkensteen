@@ -40,12 +40,11 @@ blueprint:
               domain: assist_satellite
 
         last_satellite_entity:
-          name: Last satellite entity
-          description: "Helper that stores the last-active satellite entity_id."
-          default: input_text.ai_last_satellite
+          name: Last satellite sensor
+          description: "Sensor that stores the last-active satellite entity_id (via bridge service)."
+          default: sensor.ai_last_satellite
           selector:
             entity:
-              domain: input_text
 
 mode: restart
 
@@ -56,8 +55,9 @@ triggers:
 
 actions:
   - alias: "Record last-used satellite for presence routing"
-    action: input_text.set_value
-    target:
-      entity_id: !input last_satellite_entity
+    action: pyscript.set_sensor_value
     data:
+      entity_id: !input last_satellite_entity
       value: "{{ trigger.entity_id }}"
+      icon: "mdi:satellite-uplink"
+      friendly_name: "AI Last Satellite"

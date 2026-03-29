@@ -90,7 +90,7 @@ async def voice_session_wait_audio(
     """
     if not satellite:
         satellite = (
-            state.get("input_text.ai_last_satellite") or ""  # noqa: F821
+            state.get("sensor.ai_last_satellite") or ""  # noqa: F821
         ).strip()
     if not satellite:
         log.warning("voice_session: wait_audio — no satellite")  # noqa: F821
@@ -201,7 +201,7 @@ async def voice_session_open_mic(
     """
     if not satellite:
         satellite = (
-            state.get("input_text.ai_last_satellite") or ""  # noqa: F821
+            state.get("sensor.ai_last_satellite") or ""  # noqa: F821
         ).strip()
     if not satellite:
         log.warning("voice_session: open_mic — no satellite")  # noqa: F821
@@ -332,7 +332,7 @@ async def voice_session_continuous(
     """
     if not satellite:
         satellite = (
-            state.get("input_text.ai_last_satellite") or ""  # noqa: F821
+            state.get("sensor.ai_last_satellite") or ""  # noqa: F821
         ).strip()
     if not satellite:
         log.warning("voice_session: continuous — no satellite")  # noqa: F821

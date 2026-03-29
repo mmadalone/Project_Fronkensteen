@@ -19,7 +19,7 @@
 #
 # Requires:
 #   - input_boolean.ai_escalation_enabled       (master toggle)
-#   - input_text.ai_last_satellite               (satellite tracking)
+#   - sensor.ai_last_satellite               (satellite tracking)
 #   - input_text.ai_escalation_last_outcome      (status tracking)
 #   - input_datetime.ai_escalation_last_followthrough (cooldown gate)
 #   - input_text.ai_handoff_pending              (for persona_switch)
@@ -494,7 +494,7 @@ conditions:
     state: "on"
   - condition: template
     value_template: >-
-      {{ states('input_text.ai_last_satellite') == satellite_entity }}
+      {{ states('sensor.ai_last_satellite') == satellite_entity }}
 
 # =============================================================================
 # Actions
@@ -607,11 +607,12 @@ actions:
         value_template: "{{ not action_allowed }}"
     then:
       - alias: "Record blocked status for disabled action type"
-        action: input_text.set_value
-        target:
-          entity_id: input_text.ai_escalation_last_outcome
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_escalation_last_outcome
           value: "blocked:{{ action_type }}"
+          icon: "mdi:shield-alert"
+          friendly_name: "AI Escalation Last Outcome"
       - alias: "Stop: action type disabled"
         stop: "Action type {{ action_type }} disabled for this satellite"
 
@@ -639,11 +640,12 @@ actions:
         value_template: "{{ in_cooldown | bool(false) }}"
     then:
       - alias: "Record cooldown-blocked status"
-        action: input_text.set_value
-        target:
-          entity_id: input_text.ai_escalation_last_outcome
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_escalation_last_outcome
           value: "cooldown:{{ action_type }}:{{ target_persona or media_clip }}"
+          icon: "mdi:shield-alert"
+          friendly_name: "AI Escalation Last Outcome"
       - alias: "Stop: blocked by cooldown"
         stop: "Escalation blocked by cooldown ({{ cooldown }} min)"
 
@@ -668,11 +670,12 @@ actions:
         value_template: "{{ not is_hit | bool(false) }}"
     then:
       - alias: "Update status — bluff"
-        action: input_text.set_value
-        target:
-          entity_id: input_text.ai_escalation_last_outcome
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_escalation_last_outcome
           value: "bluff:{{ action_type }}:{{ target_persona or media_clip }}"
+          icon: "mdi:shield-alert"
+          friendly_name: "AI Escalation Last Outcome"
 
       - alias: "Log bluff to L2"
         if:
@@ -1075,11 +1078,12 @@ actions:
 
   # 8b. Update status helper
   - alias: "8b · Update status — follow-through"
-    action: input_text.set_value
-    target:
-      entity_id: input_text.ai_escalation_last_outcome
+    action: pyscript.set_sensor_value
     data:
+      entity_id: sensor.ai_escalation_last_outcome
       value: "followthrough:{{ action_type }}:{{ target_persona or media_clip or 'n/a' }}"
+      icon: "mdi:shield-alert"
+      friendly_name: "AI Escalation Last Outcome"
 
   # 8c. Log follow-through to L2
   - alias: "8c · Log follow-through to L2"

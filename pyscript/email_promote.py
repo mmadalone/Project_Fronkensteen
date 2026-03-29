@@ -342,22 +342,25 @@ async def _l2_set(
 # ── Counter + Helper Updates ─────────────────────────────────────────────────
 
 def _get_email_count() -> int:
-    """Read current priority email count from helper."""
+    """Read current priority email count from sensor."""
     try:
         return int(float(
-            state.get("input_number.ai_email_priority_count") or 0  # noqa: F821
+            state.get("sensor.ai_email_priority_count") or 0  # noqa: F821
         ))
     except (TypeError, ValueError, NameError):
         return 0
 
 
 def _set_email_count(count: int) -> None:
-    """Set priority email count on helper."""
+    """Set priority email count on sensor."""
     try:
-        service.call(  # noqa: F821
-            "input_number", "set_value",
-            entity_id="input_number.ai_email_priority_count",
-            value=max(0, min(999, count)),
+        state.set(  # noqa: F821
+            "sensor.ai_email_priority_count",
+            max(0, min(999, count)),
+            new_attributes={
+                "icon": "mdi:email-alert",
+                "friendly_name": "AI Email Priority Count",
+            },
         )
     except Exception as exc:
         log.warning(f"email_promote: counter update failed: {exc}")  # noqa: F821
@@ -403,12 +406,15 @@ def _increment_llm_counter(cost: int = 1) -> None:
     """Increment LLM call counter after conversation.process."""
     try:
         current = int(float(
-            state.get("input_number.ai_llm_calls_today") or 0  # noqa: F821
+            state.get("sensor.ai_llm_calls_today") or 0  # noqa: F821
         ))
-        service.call(  # noqa: F821
-            "input_number", "set_value",
-            entity_id="input_number.ai_llm_calls_today",
-            value=min(current + cost, 999),
+        state.set(  # noqa: F821
+            "sensor.ai_llm_calls_today",
+            min(current + cost, 999),
+            new_attributes={
+                "icon": "mdi:counter",
+                "friendly_name": "AI LLM Calls Today",
+            },
         )
     except Exception:
         pass

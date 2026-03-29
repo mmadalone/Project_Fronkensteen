@@ -4,7 +4,7 @@
 # Architecture spec: voice_context_architecture.md § "DC-2: LLM Cost Control"
 # Provides:
 #   input_number.ai_llm_daily_budget    — manual budget allocation (100 = 100%)
-#   input_number.ai_llm_calls_today     — running call counter (reset at midnight)
+#   sensor.ai_llm_calls_today     — running call counter (reset at midnight)
 #   input_number.ai_llm_daily_limit     — configurable max calls per day
 #   sensor.ai_llm_budget_remaining      — computed % remaining (0–100)
 #   script.ai_llm_budget_check          — gate check → {allowed, budget_remaining, ...}
@@ -126,9 +126,9 @@ template:
         unit_of_measurement: "%"
         state_class: measurement
         state: >-
-          {% set calls = states('input_number.ai_llm_calls_today') | int(0) %}
+          {% set calls = states('sensor.ai_llm_calls_today') | int(0) %}
           {% set call_limit = [states('input_number.ai_llm_daily_limit') | int(100), 1] | max %}
-          {% set tokens = states('input_number.ai_llm_tokens_today') | int(0) %}
+          {% set tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
           {% set token_limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
           {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
           {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
@@ -143,11 +143,11 @@ template:
           {{ [calls_pct, tokens_pct, cost_pct] | min }}
         attributes:
           calls_pct: >-
-            {% set calls = states('input_number.ai_llm_calls_today') | int(0) %}
+            {% set calls = states('sensor.ai_llm_calls_today') | int(0) %}
             {% set limit = [states('input_number.ai_llm_daily_limit') | int(100), 1] | max %}
             {{ [[((limit - calls) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
           tokens_pct: >-
-            {% set tokens = states('input_number.ai_llm_tokens_today') | int(0) %}
+            {% set tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
             {% set limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
             {{ [[((limit - tokens) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
           cost_pct: >-
@@ -189,9 +189,9 @@ template:
         unit_of_measurement: "€"
         state_class: measurement
         state: >-
-          {% set llm_tokens = states('input_number.ai_llm_tokens_today') | int(0) %}
-          {% set tts_chars = states('input_number.ai_tts_chars_today') | int(0) %}
-          {% set stt_calls = states('input_number.ai_stt_calls_today') | int(0) %}
+          {% set llm_tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
+          {% set tts_chars = states('sensor.ai_tts_chars_today') | int(0) %}
+          {% set stt_calls = states('sensor.ai_stt_calls_today') | int(0) %}
           {% set serper = states('sensor.serper_daily_usage') | int(0) %}
           {% set music_gens = states('input_number.ai_music_generations_today') | int(0) %}
           {% set llm_rate = states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01) %}
@@ -200,7 +200,7 @@ template:
           {% set stt_rate = states('input_number.ai_cost_per_stt_call') | float(0.02) %}
           {% set serper_rate = states('sensor.ai_cost_per_serper_credit') | float(0) %}
           {% set music_rate = states('input_number.ai_cost_per_music_generation') | float(0.02) %}
-          {% set model_cost = states('input_number.ai_model_cost_today') | float(0) %}
+          {% set model_cost = states('sensor.ai_model_cost_today') | float(0) %}
           {% set flat_llm_cost = llm_tokens / 1000 * llm_rate %}
           {% set llm_component = [model_cost, flat_llm_cost] | max %}
           {% set total = llm_component
@@ -211,21 +211,21 @@ template:
           {{ total | round(2) }}
         attributes:
           llm_cost: >-
-            {% set model_cost = states('input_number.ai_model_cost_today') | float(0) %}
-            {% set flat_cost = (states('input_number.ai_llm_tokens_today') | int(0) / 1000
+            {% set model_cost = states('sensor.ai_model_cost_today') | float(0) %}
+            {% set flat_cost = (states('sensor.ai_llm_tokens_today') | int(0) / 1000
                 * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) %}
             {{ [model_cost, flat_cost] | max | round(4) }}
           llm_model_cost: >-
-            {{ states('input_number.ai_model_cost_today') | float(0) | round(4) }}
+            {{ states('sensor.ai_model_cost_today') | float(0) | round(4) }}
           llm_flat_cost: >-
-            {{ (states('input_number.ai_llm_tokens_today') | int(0) / 1000
+            {{ (states('sensor.ai_llm_tokens_today') | int(0) / 1000
                 * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) | round(4) }}
           tts_cost: >-
             {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
             {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
-            {{ (states('input_number.ai_tts_chars_today') | int(0) / 1000 * tts_rate) | round(4) }}
+            {{ (states('sensor.ai_tts_chars_today') | int(0) / 1000 * tts_rate) | round(4) }}
           stt_cost: >-
-            {{ (states('input_number.ai_stt_calls_today') | int(0)
+            {{ (states('sensor.ai_stt_calls_today') | int(0)
                 * states('input_number.ai_cost_per_stt_call') | float(0.02)) | round(4) }}
           serper_cost: >-
             {{ (states('sensor.serper_daily_usage') | int(0)
@@ -287,12 +287,12 @@ template:
         state_class: measurement
         state: >-
           {% set used = state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) %}
-          {% set midnight = states('input_number.ai_elevenlabs_chars_midnight') | int(0) %}
+          {% set midnight = states('sensor.ai_elevenlabs_chars_midnight') | int(0) %}
           {{ [used - midnight, 0] | max }}
         attributes:
           chars_used_today: >-
             {% set used = state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) %}
-            {% set midnight = states('input_number.ai_elevenlabs_chars_midnight') | int(0) %}
+            {% set midnight = states('sensor.ai_elevenlabs_chars_midnight') | int(0) %}
             {{ [used - midnight, 0] | max }}
           cycle_total_used: >-
             {{ state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) }}
@@ -307,12 +307,12 @@ template:
         state_class: measurement
         state: >-
           {% set remaining = states('sensor.serper_account') | int(0) %}
-          {% set midnight = states('input_number.ai_serper_credits_midnight') | int(0) %}
+          {% set midnight = states('sensor.ai_serper_credits_midnight') | int(0) %}
           {{ [midnight - remaining, 0] | max }}
         attributes:
           credits_used_today: >-
             {% set remaining = states('sensor.serper_account') | int(0) %}
-            {% set midnight = states('input_number.ai_serper_credits_midnight') | int(0) %}
+            {% set midnight = states('sensor.ai_serper_credits_midnight') | int(0) %}
             {{ [midnight - remaining, 0] | max }}
           credits_remaining: >-
             {{ states('sensor.serper_account') | int(0) }}
@@ -398,19 +398,19 @@ template:
         state: >-
           {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
           {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
-          {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
+          {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
           {% set delta = [total - midnight, 0] | max %}
           {{ (delta * rate) | round(2) }}
         attributes:
           daily_usage_eur: >-
             {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
             {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
-            {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
+            {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
             {% set delta = [total - midnight, 0] | max %}
             {{ (delta * rate) | round(2) }}
           daily_usage_usd: >-
             {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
-            {% set midnight = states('input_number.ai_openrouter_usage_midnight') | float(0) %}
+            {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
             {{ [total - midnight, 0] | max | round(4) }}
           total_usage_usd: >-
             {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(0) | round(2) }}
@@ -443,7 +443,7 @@ template:
           fallback_agent: >-
             {{ states('input_text.ai_budget_fallback_agent') }}
           saved_pipelines: >-
-            {{ states('input_text.ai_budget_saved_pipelines') }}
+            {{ states('sensor.ai_budget_saved_pipelines') }}
 
 # ── SCRIPTS ──────────────────────────────────────────────────────────────────
 
@@ -481,11 +481,11 @@ script:
       # C5: Cost uses hybrid/actual/estimated per ai_budget_cost_source
       - variables:
           _calls: >-
-            {{ states('input_number.ai_llm_calls_today') | int(0) }}
+            {{ states('sensor.ai_llm_calls_today') | int(0) }}
           _call_limit: >-
             {{ [states('input_number.ai_llm_daily_limit') | int(100), 1] | max }}
           _tokens: >-
-            {{ states('input_number.ai_llm_tokens_today') | int(0) }}
+            {{ states('sensor.ai_llm_tokens_today') | int(0) }}
           _token_limit: >-
             {{ [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max }}
           _cost_source: >-
@@ -565,13 +565,14 @@ script:
             min: 1
             max: 50
     sequence:
-      - action: input_number.set_value
-        target:
-          entity_id: input_number.ai_llm_calls_today
+      - action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_llm_calls_today
           value: >-
-            {{ [(states('input_number.ai_llm_calls_today') | int(0)
+            {{ [(states('sensor.ai_llm_calls_today') | int(0)
                  + (cost | default(1) | int)), 999] | min }}
+          icon: mdi:counter
+          friendly_name: AI LLM Calls Today
 
   # ── BUDGET RESET (callable from midnight automation + manual button) ──────
   # Logs yesterday's totals to L2, resets all counters, snapshots OpenRouter,
@@ -594,16 +595,16 @@ script:
           key: >-
             budget_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
           value: >-
-            llm_calls={{ states('input_number.ai_llm_calls_today') | int(0) }},
-            llm_tokens={{ states('input_number.ai_llm_tokens_today') | int(0) }},
+            llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
+            llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
             tts_calls={{ states('input_number.ai_tts_calls_today') | int(0) }},
-            tts_chars={{ states('input_number.ai_tts_chars_today') | int(0) }},
-            stt_calls={{ states('input_number.ai_stt_calls_today') | int(0) }},
+            tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
+            stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
             music_gens={{ states('input_number.ai_music_generations_today') | int(0) }},
             cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
             openrouter_usage=${{
               (state_attr('sensor.openrouter_credits', 'total_usage') | float(0)
-               - states('input_number.ai_openrouter_usage_midnight') | float(0)) | round(4) }},
+               - states('sensor.ai_openrouter_usage_midnight') | float(0)) | round(4) }},
             serper_credits={{ states('sensor.serper_daily_usage') | int(0) }}
           scope: "system"
           tags: "budget,daily,llm,tts,stt,serper"
@@ -616,14 +617,14 @@ script:
           date: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
           usage_usd: >-
             {{ (state_attr('sensor.openrouter_credits', 'total_usage') | float(0)
-                - states('input_number.ai_openrouter_usage_midnight') | float(0)) | round(4) }}
+                - states('sensor.ai_openrouter_usage_midnight') | float(0)) | round(4) }}
           exchange_rate: "{{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}"
-          llm_calls: "{{ states('input_number.ai_llm_calls_today') | int(0) }}"
-          llm_tokens: "{{ states('input_number.ai_llm_tokens_today') | int(0) }}"
-          tts_chars: "{{ states('input_number.ai_tts_chars_today') | int(0) }}"
-          stt_calls: "{{ states('input_number.ai_stt_calls_today') | int(0) }}"
+          llm_calls: "{{ states('sensor.ai_llm_calls_today') | int(0) }}"
+          llm_tokens: "{{ states('sensor.ai_llm_tokens_today') | int(0) }}"
+          tts_chars: "{{ states('sensor.ai_tts_chars_today') | int(0) }}"
+          stt_calls: "{{ states('sensor.ai_stt_calls_today') | int(0) }}"
           serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
-          model_cost_eur: "{{ states('input_number.ai_model_cost_today') | float(0) }}"
+          model_cost_eur: "{{ states('sensor.ai_model_cost_today') | float(0) }}"
           model_breakdown: >-
             {% set bd = state_attr('sensor.ai_budget_breakdown', 'breakdown') %}
             {% if bd is mapping %}
@@ -645,46 +646,72 @@ script:
               {{ ns.models | tojson }}
             {% else %}{}{% endif %}
           music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
-      # ── Step 2: Reset all counters ──
-      - alias: "Reset all budget counters to zero"
-        action: input_number.set_value
-        target:
-          entity_id:
-            - input_number.ai_llm_calls_today
-            - input_number.ai_llm_tokens_today
-            - input_number.ai_tts_calls_today
-            - input_number.ai_tts_chars_today
-            - input_number.ai_stt_calls_today
-            - input_number.ai_model_cost_today
+      # ── Step 2: Reset all counters (via bridge service — sensors) ──
+      - alias: "Reset LLM calls counter"
+        action: pyscript.set_sensor_value
         data:
-          value: 0
+          entity_id: sensor.ai_llm_calls_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI LLM Calls Today
+      - alias: "Reset LLM tokens counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_llm_tokens_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI LLM Tokens Today
+      - alias: "Reset TTS chars counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_tts_chars_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI TTS Characters Today
+      - alias: "Reset STT calls counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_stt_calls_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI STT Calls Today
+      - alias: "Reset model cost counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_model_cost_today
+          value: "0"
+          icon: mdi:currency-eur
+          friendly_name: AI Model Cost Today
       # ── Step 3: Snapshot OpenRouter usage for next day's delta ──
       - alias: "Snapshot OpenRouter cumulative usage"
         continue_on_error: true
-        action: input_number.set_value
-        target:
-          entity_id: input_number.ai_openrouter_usage_midnight
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_openrouter_usage_midnight
           value: >-
             {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(0) }}
+          icon: mdi:router-wireless
+          friendly_name: AI OpenRouter Usage Midnight
       # ── Step 3b: Snapshot ElevenLabs cumulative usage ──
       - alias: "Snapshot ElevenLabs cumulative usage"
         continue_on_error: true
-        action: input_number.set_value
-        target:
-          entity_id: input_number.ai_elevenlabs_chars_midnight
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_elevenlabs_chars_midnight
           value: >-
             {{ state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) }}
+          icon: mdi:account-voice
+          friendly_name: AI ElevenLabs Chars Midnight
       # ── Step 3c: Snapshot Serper remaining credits ──
       - alias: "Snapshot Serper remaining credits"
         continue_on_error: true
-        action: input_number.set_value
-        target:
-          entity_id: input_number.ai_serper_credits_midnight
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_serper_credits_midnight
           value: >-
             {{ states('sensor.serper_account') | int(0) }}
+          icon: mdi:web
+          friendly_name: AI Serper Credits Midnight
       # ── Step 4: Reset per-agent breakdown ──
       - alias: "Reset per-agent budget breakdown"
         continue_on_error: true
@@ -760,11 +787,11 @@ automation:
                   key: >-
                     budget_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
                   value: >-
-                    llm_calls={{ states('input_number.ai_llm_calls_today') | int(0) }},
-                    llm_tokens={{ states('input_number.ai_llm_tokens_today') | int(0) }},
+                    llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
+                    llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
                     tts_calls={{ states('input_number.ai_tts_calls_today') | int(0) }},
-                    tts_chars={{ states('input_number.ai_tts_chars_today') | int(0) }},
-                    stt_calls={{ states('input_number.ai_stt_calls_today') | int(0) }},
+                    tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
+                    stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
                     music_gens={{ states('input_number.ai_music_generations_today') | int(0) }},
                     cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
                     serper_credits={{ states('sensor.serper_daily_usage') | int(0) }},
@@ -779,27 +806,50 @@ automation:
                   date: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
                   usage_usd: "0"
                   exchange_rate: "{{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}"
-                  llm_calls: "{{ states('input_number.ai_llm_calls_today') | int(0) }}"
-                  llm_tokens: "{{ states('input_number.ai_llm_tokens_today') | int(0) }}"
-                  tts_chars: "{{ states('input_number.ai_tts_chars_today') | int(0) }}"
-                  stt_calls: "{{ states('input_number.ai_stt_calls_today') | int(0) }}"
+                  llm_calls: "{{ states('sensor.ai_llm_calls_today') | int(0) }}"
+                  llm_tokens: "{{ states('sensor.ai_llm_tokens_today') | int(0) }}"
+                  tts_chars: "{{ states('sensor.ai_tts_chars_today') | int(0) }}"
+                  stt_calls: "{{ states('sensor.ai_stt_calls_today') | int(0) }}"
                   serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
-                  model_cost_eur: "{{ states('input_number.ai_model_cost_today') | float(0) }}"
+                  model_cost_eur: "{{ states('sensor.ai_model_cost_today') | float(0) }}"
                   model_breakdown: "{}"
                   music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
               # Phase 1b: Zero all counters — budget gate unblocks immediately
-              - alias: "Reset all budget counters to zero"
-                action: input_number.set_value
-                target:
-                  entity_id:
-                    - input_number.ai_llm_calls_today
-                    - input_number.ai_llm_tokens_today
-                    - input_number.ai_tts_calls_today
-                    - input_number.ai_tts_chars_today
-                    - input_number.ai_stt_calls_today
-                    - input_number.ai_model_cost_today
+              - alias: "Reset LLM calls"
+                action: pyscript.set_sensor_value
                 data:
-                  value: 0
+                  entity_id: sensor.ai_llm_calls_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI LLM Calls Today
+              - alias: "Reset LLM tokens"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_llm_tokens_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI LLM Tokens Today
+              - alias: "Reset TTS chars"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_tts_chars_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI TTS Characters Today
+              - alias: "Reset STT calls"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_stt_calls_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI STT Calls Today
+              - alias: "Reset model cost"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_model_cost_today
+                  value: "0"
+                  icon: mdi:currency-eur
+                  friendly_name: AI Model Cost Today
               - alias: "Reset per-agent budget breakdown"
                 continue_on_error: true
                 action: pyscript.budget_track_call
@@ -831,31 +881,34 @@ automation:
                 continue_on_timeout: true
               - alias: "Snapshot OpenRouter cumulative usage"
                 continue_on_error: true
-                action: input_number.set_value
-                target:
-                  entity_id: input_number.ai_openrouter_usage_midnight
+                action: pyscript.set_sensor_value
                 data:
+                  entity_id: sensor.ai_openrouter_usage_midnight
                   value: >-
                     {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(
-                       states('input_number.ai_openrouter_usage_midnight') | float(0)) }}
+                       states('sensor.ai_openrouter_usage_midnight') | float(0)) }}
+                  icon: mdi:router-wireless
+                  friendly_name: AI OpenRouter Usage Midnight
               - alias: "Snapshot ElevenLabs cumulative usage"
                 continue_on_error: true
-                action: input_number.set_value
-                target:
-                  entity_id: input_number.ai_elevenlabs_chars_midnight
+                action: pyscript.set_sensor_value
                 data:
+                  entity_id: sensor.ai_elevenlabs_chars_midnight
                   value: >-
                     {{ state_attr('sensor.elevenlabs_subscription', 'character_count')
-                       | int(states('input_number.ai_elevenlabs_chars_midnight') | int(0)) }}
+                       | int(states('sensor.ai_elevenlabs_chars_midnight') | int(0)) }}
+                  icon: mdi:account-voice
+                  friendly_name: AI ElevenLabs Chars Midnight
               - alias: "Snapshot Serper remaining credits"
                 continue_on_error: true
-                action: input_number.set_value
-                target:
-                  entity_id: input_number.ai_serper_credits_midnight
+                action: pyscript.set_sensor_value
                 data:
+                  entity_id: sensor.ai_serper_credits_midnight
                   value: >-
                     {{ states('sensor.serper_account')
-                       | int(states('input_number.ai_serper_credits_midnight') | int(0)) }}
+                       | int(states('sensor.ai_serper_credits_midnight') | int(0)) }}
+                  icon: mdi:web
+                  friendly_name: AI Serper Credits Midnight
         # ── Midnight / Manual: run the full reset script ──────────────
         default:
           - action: script.ai_budget_reset
@@ -903,12 +956,13 @@ automation:
           - condition: trigger
             id: pipeline
         then:
-          - action: input_number.set_value
-            target:
-              entity_id: input_number.ai_stt_calls_today
+          - action: pyscript.set_sensor_value
             data:
+              entity_id: sensor.ai_stt_calls_today
               value: >-
-                {{ [(states('input_number.ai_stt_calls_today') | int(0) + 1), 99999] | min }}
+                {{ [(states('sensor.ai_stt_calls_today') | int(0) + 1), 99999] | min }}
+              icon: mdi:counter
+              friendly_name: AI STT Calls Today
           - alias: "Track per-agent STT call"
             continue_on_error: true
             action: pyscript.budget_track_call
