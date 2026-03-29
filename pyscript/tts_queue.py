@@ -2100,6 +2100,7 @@ async def _budget_save_to_l2() -> None:
                 "value": _json.dumps(counters),
                 "scope": "system",
                 "tags": "budget,counters,daily",
+                "force_new": True,
             },
             blocking=True, return_response=True,
         )

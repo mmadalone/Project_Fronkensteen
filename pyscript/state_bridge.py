@@ -61,8 +61,6 @@ _BUDGET_SNAPSHOT_ENTITIES = [
     "sensor.ai_serper_credits_midnight",
 ]
 
-_last_budget_json = None  # Cached by periodic save for fast shutdown write
-
 
 # ── Startup Initialization ───────────────────────────────────────────────────
 # state.set() sensors don't persist across restarts. Seed all migrated sensors
@@ -354,7 +352,6 @@ async def save_budget_state():
       restart persistence.  Called periodically (every 15 min), on HA
       shutdown, and after midnight reset.
     """
-    global _last_budget_json
     today = datetime.now().strftime("%Y-%m-%d")  # noqa: F821
     counters = {}
     for eid in _BUDGET_COUNTER_ENTITIES:
@@ -374,9 +371,7 @@ async def save_budget_state():
         "counters": counters,
         "snapshots": snapshots,
     }
-    json_str = _json.dumps(data, indent=2)
-    _last_budget_json = json_str  # cache for shutdown handler
-    _write_budget_state(json_str)
+    _write_budget_state(_json.dumps(data, indent=2))
     log.debug("state_bridge: budget state saved to JSON")  # noqa: F821
 
 
