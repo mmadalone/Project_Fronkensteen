@@ -1,10 +1,10 @@
 {
   "_meta": {
     "currency": "USD",
-    "last_refreshed": "2026-03-30T00:12:21.553981",
+    "last_refreshed": "2026-03-30T00:45:06.622197",
     "source": "openrouter_api",
     "models_fetched": 2,
-    "next_refresh": "2026-03-31T00:12:21.553993"
+    "next_refresh": "2026-03-31T00:45:06.622234"
   },
   "models": {
     "anthropic/claude-opus-4.6": {
