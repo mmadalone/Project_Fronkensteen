@@ -60,27 +60,17 @@ TRANSITION_WINDOW_SEC = 300    # 5 min gap between zone OFF and ON (match Task 1
 MIN_DWELL_SECONDS = 30         # flicker filter (match Task 15)
 L2_EXPIRATION_DAYS = 365       # fingerprint entries persist ~1 year (refreshed daily)
 
-_DEFAULT_FP2_ENTITIES = {
-    "binary_sensor.fp2_presence_sensor_workshop": "workshop",
-    "binary_sensor.fp2_presence_sensor_living_room": "living_room",
-    "binary_sensor.fp2_presence_sensor_main_room": "main_room",
-    "binary_sensor.fp2_presence_sensor_kitchen": "kitchen",
-    "binary_sensor.fp2_presence_sensor_bed": "bed",
-    "binary_sensor.fp2_presence_sensor_lobby": "lobby",
-    "binary_sensor.fp2_presence_sensor_bathroom": "bathroom",
-    "binary_sensor.fp2_presence_sensor_shower": "shower",
-}
-
-
 def _get_fp2_entities() -> dict:
     cfg = load_entity_config()
-    return cfg.get("fp2_zones") or _DEFAULT_FP2_ENTITIES
+    fp2 = cfg.get("fp2_zones")
+    if not fp2:
+        log.warning("routine_fingerprint: fp2_zones not found in entity_config.yaml")  # noqa: F821
+        return {}
+    return fp2
 
 
 def _get_zone_names() -> list:
     return sorted(_get_fp2_entities().values())
-
-_DEFAULT_ZONE_NAMES = sorted(_DEFAULT_FP2_ENTITIES.values())
 
 # ── Module-Level State ───────────────────────────────────────────────────────
 
@@ -151,7 +141,7 @@ def _parse_pattern_key(key: str, zone_names: list = None) -> tuple[str, str, str
     Returns: (type, zone, time_bucket, day_type) or None.
     """
     if zone_names is None:
-        zone_names = _DEFAULT_ZONE_NAMES
+        return None
     zone_set = set(zone_names)
     for prefix, ptype in (("pattern_transition_", "transition"),
                           ("pattern_dwell_", "dwell")):

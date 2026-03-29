@@ -37,7 +37,7 @@ blueprint:
           description: >-
             Character identifier (e.g., "rick", "quark"). Used to construct
             helper entity names: input_number.ai_voice_mood_{agent}_stability
-            and input_text.ai_voice_mood_{agent}_tags.
+            and sensor.ai_voice_mood_{agent}_tags.
           selector:
             text:
 
@@ -299,8 +299,7 @@ actions:
     data:
       value: "{{ cur_stability }}"
 
-  - service: input_text.set_value
-    target:
-      entity_id: "input_text.ai_voice_mood_{{ v_agent }}_tags"
+  - service: pyscript.set_sensor_value
     data:
+      entity_id: "sensor.ai_voice_mood_{{ v_agent }}_tags"
       value: "{{ cur_tags }}"

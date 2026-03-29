@@ -2000,11 +2000,22 @@ async def _budget_restore_from_l2() -> bool:
                     except Exception as bex:
                         log.warning(f"tts_queue: breakdown restore failed: {bex}")  # noqa: F821
 
-                # Restore each counter
+                # Restore snapshot sensors from L2 (secondary backup)
+                snapshots = counters.pop("_snapshots", None)
+                if snapshots:
+                    for eid, val in snapshots.items():
+                        try:
+                            service.call("pyscript", "set_sensor_value",  # noqa: F821
+                                         entity_id=eid, value=str(val))
+                        except Exception:
+                            pass
+
+                # Restore each counter (Bug fix: use set_sensor_value,
+                # not input_number — these are state.set() sensors post-Phase 3)
                 for entity_id, val in counters.items():
                     try:
-                        service.call("input_number", "set_value",  # noqa: F821
-                                     entity_id=entity_id, value=float(val))
+                        service.call("pyscript", "set_sensor_value",  # noqa: F821
+                                     entity_id=entity_id, value=str(val))
                     except Exception:
                         pass
                 log.info(  # noqa: F821
@@ -2055,6 +2066,12 @@ async def _budget_save_to_l2() -> None:
             "sensor.ai_stt_calls_today": float(
                 state.get("sensor.ai_stt_calls_today") or 0  # noqa: F821
             ),
+            "sensor.ai_model_cost_today": float(
+                state.get("sensor.ai_model_cost_today") or 0  # noqa: F821
+            ),
+            "sensor.ai_music_generations_today": float(
+                state.get("sensor.ai_music_generations_today") or 0  # noqa: F821
+            ),
         }
         import json as _json
 
@@ -2062,6 +2079,19 @@ async def _budget_save_to_l2() -> None:
         breakdown_raw = state.getattr("sensor.ai_budget_breakdown") or {}  # noqa: F821
         breakdown = breakdown_raw.get("breakdown", {})
         counters["_breakdown"] = breakdown
+
+        # Include midnight snapshots for secondary restore
+        counters["_snapshots"] = {
+            "sensor.ai_openrouter_usage_midnight": str(
+                state.get("sensor.ai_openrouter_usage_midnight") or "0"  # noqa: F821
+            ),
+            "sensor.ai_elevenlabs_chars_midnight": str(
+                state.get("sensor.ai_elevenlabs_chars_midnight") or "0"  # noqa: F821
+            ),
+            "sensor.ai_serper_credits_midnight": str(
+                state.get("sensor.ai_serper_credits_midnight") or "0"  # noqa: F821
+            ),
+        }
 
         await hass.services.async_call(  # noqa: F821
             "pyscript", "memory_set",

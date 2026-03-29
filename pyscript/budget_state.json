@@ -1,0 +1,17 @@
+{
+  "date": "2026-03-30",
+  "timestamp": "2026-03-30T00:40:21.541282",
+  "counters": {
+    "sensor.ai_llm_calls_today": "35",
+    "sensor.ai_llm_tokens_today": "3232",
+    "sensor.ai_tts_chars_today": "989.0",
+    "sensor.ai_stt_calls_today": "0",
+    "sensor.ai_model_cost_today": "0.0028",
+    "sensor.ai_music_generations_today": "0"
+  },
+  "snapshots": {
+    "sensor.ai_openrouter_usage_midnight": "75.38236562",
+    "sensor.ai_elevenlabs_chars_midnight": "478872",
+    "sensor.ai_serper_credits_midnight": "2086"
+  }
+}

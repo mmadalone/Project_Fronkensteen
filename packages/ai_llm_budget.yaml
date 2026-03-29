@@ -737,6 +737,10 @@ script:
           entity_id: input_datetime.ai_budget_last_reset
         data:
           date: "{{ now().strftime('%Y-%m-%d') }}"
+      # ── Step 7: Save budget state to JSON (fresh midnight baselines) ──
+      - alias: "Save budget state to JSON"
+        continue_on_error: true
+        action: pyscript.save_budget_state
 
 # ── AUTOMATIONS ──────────────────────────────────────────────────────────────
 
@@ -909,6 +913,9 @@ automation:
                        | int(states('sensor.ai_serper_credits_midnight') | int(0)) }}
                   icon: mdi:web
                   friendly_name: AI Serper Credits Midnight
+              - alias: "Save budget state to JSON (fresh midnight baselines)"
+                continue_on_error: true
+                action: pyscript.save_budget_state
         # ── Midnight / Manual: run the full reset script ──────────────
         default:
           - action: script.ai_budget_reset

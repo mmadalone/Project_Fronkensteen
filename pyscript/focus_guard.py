@@ -97,26 +97,14 @@ CALENDAR_WARN_THRESHOLDS = [60, 30, 15]
 # Budget threshold: below this %, skip agent-personality nudges
 # BUDGET_PERSONALITY_THRESHOLD — now read from input_number.ai_budget_personality_threshold
 
-# FP2 zone entities for workshop detection and zone tracking
-_DEFAULT_FP2_ZONES = {
-    "workshop": "binary_sensor.fp2_presence_sensor_workshop",
-    "living_room": "binary_sensor.fp2_presence_sensor_living_room",
-    "main_room": "binary_sensor.fp2_presence_sensor_main_room",
-    "kitchen": "binary_sensor.fp2_presence_sensor_kitchen",
-    "bathroom": "binary_sensor.fp2_presence_sensor_bathroom",
-    "shower": "binary_sensor.fp2_presence_sensor_shower",
-    "bed": "binary_sensor.fp2_presence_sensor_bed",
-    "lobby": "binary_sensor.fp2_presence_sensor_lobby",
-}
-
-
 def _get_fp2_zones() -> dict:
     """Get zone→entity map. Config stores entity→zone, so we invert."""
     cfg = load_entity_config()
     fp2 = cfg.get("fp2_zones")
-    if fp2:
-        return {v: k for k, v in fp2.items()}
-    return _DEFAULT_FP2_ZONES
+    if not fp2:
+        log.warning("focus_guard: fp2_zones not found in entity_config.yaml")  # noqa: F821
+        return {}
+    return {v: k for k, v in fp2.items()}
 
 # Nudge text templates (gentle → firm → urgent → critical)
 NUDGE_TEXTS = {

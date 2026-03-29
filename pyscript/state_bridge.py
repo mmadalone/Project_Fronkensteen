@@ -16,6 +16,52 @@ Usage from a blueprint action:
 """
 
 import json as _json  # noqa: F811 — shadow-safe alias
+from datetime import datetime  # noqa: F811 — for budget state timestamps
+
+
+# ── Budget State File I/O ─────────────────────────────────────────────────────
+# JSON-based persistence for budget counters + midnight snapshots.
+# @pyscript_executor for file I/O (AP-55 sandbox restriction).
+
+@pyscript_executor  # noqa: F821
+def _read_budget_state():
+    """Read budget_state.json — native Python, file I/O allowed."""
+    import json as _json
+    try:
+        with open("/config/pyscript/budget_state.json", "r") as f:
+            return _json.load(f)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+
+
+@pyscript_executor  # noqa: F821
+def _write_budget_state(data_json):
+    """Write budget_state.json atomically — native Python."""
+    import os as _os
+    tmp = "/config/pyscript/budget_state.json.tmp"
+    with open(tmp, "w") as f:
+        f.write(data_json)
+    _os.replace(tmp, "/config/pyscript/budget_state.json")
+
+
+# ── Budget Entity Lists ───────────────────────────────────────────────────────
+
+_BUDGET_COUNTER_ENTITIES = [
+    "sensor.ai_llm_calls_today",
+    "sensor.ai_llm_tokens_today",
+    "sensor.ai_tts_chars_today",
+    "sensor.ai_stt_calls_today",
+    "sensor.ai_model_cost_today",
+    "sensor.ai_music_generations_today",
+]
+
+_BUDGET_SNAPSHOT_ENTITIES = [
+    "sensor.ai_openrouter_usage_midnight",
+    "sensor.ai_elevenlabs_chars_midnight",
+    "sensor.ai_serper_credits_midnight",
+]
+
+_last_budget_json = None  # Cached by periodic save for fast shutdown write
 
 
 # ── Startup Initialization ───────────────────────────────────────────────────
@@ -101,19 +147,35 @@ _STARTUP_SENSORS = [
 @time_trigger("startup")  # noqa: F821
 def _seed_migrated_sensors():
     """Seed all migrated sensors with defaults so they exist immediately."""
+    # ── Budget restore from JSON file (zero startup dependencies) ──
+    budget_data = _read_budget_state()
+    today = datetime.now().strftime("%Y-%m-%d")  # noqa: F821
+    budget_counters = {}
+    budget_snapshots = {}
+    if budget_data and budget_data.get("date") == today:
+        budget_counters = budget_data.get("counters", {})
+        budget_snapshots = budget_data.get("snapshots", {})
+        log.info(  # noqa: F821
+            f"state_bridge: restoring budget state from JSON "
+            f"(saved {budget_data.get('timestamp', '?')})"
+        )
+
+    # ── Seed all sensors (use restored values for budget entities) ──
     seeded = 0
     for entity_id, default, icon, fname in _STARTUP_SENSORS:
+        restored_val = budget_counters.get(entity_id)
+        seed_val = str(restored_val) if restored_val is not None else default
         try:
             current = state.get(entity_id)  # noqa: F821
             if current in (None, "unknown", "unavailable"):
                 state.set(  # noqa: F821
-                    entity_id, default,
+                    entity_id, seed_val,
                     new_attributes={"icon": icon, "friendly_name": fname},
                 )
                 seeded += 1
         except Exception:
             state.set(  # noqa: F821
-                entity_id, default,
+                entity_id, seed_val,
                 new_attributes={"icon": icon, "friendly_name": fname},
             )
             seeded += 1
@@ -122,35 +184,40 @@ def _seed_migrated_sensors():
 
     # Seed snapshot sensors — first pass may get 0 if REST sensors aren't
     # ready yet. Retry after 60s to catch them once loaded.
-    _seed_snapshot_sensors()
+    _seed_snapshot_sensors(budget_snapshots)
     task.sleep(60)  # noqa: F821
-    _seed_snapshot_sensors()
+    _seed_snapshot_sensors(budget_snapshots)
 
 
-def _seed_snapshot_sensors():
-    """Seed midnight snapshot sensors from current API values if missing.
+def _seed_snapshot_sensors(restored=None):
+    """Seed midnight snapshot sensors from restored JSON or API values.
 
     No lambdas — pyscript AST can't resolve builtins inside lambdas.
     """
+    restored = restored or {}
     _seed_one_snapshot(
         "sensor.ai_openrouter_usage_midnight",
         "sensor.openrouter_credits", "total_usage", True,
         "mdi:router-wireless", "AI OpenRouter Usage Midnight",
+        restored.get("sensor.ai_openrouter_usage_midnight"),
     )
     _seed_one_snapshot(
         "sensor.ai_elevenlabs_chars_midnight",
         "sensor.elevenlabs_subscription", "character_count", True,
         "mdi:account-voice", "AI ElevenLabs Chars Midnight",
+        restored.get("sensor.ai_elevenlabs_chars_midnight"),
     )
     _seed_one_snapshot(
         "sensor.ai_serper_credits_midnight",
         "sensor.serper_account", None, False,
         "mdi:web", "AI Serper Credits Midnight",
+        restored.get("sensor.ai_serper_credits_midnight"),
     )
 
 
-def _seed_one_snapshot(entity_id, source_entity, attr_key, use_attr, icon, fname):
-    """Seed a single snapshot sensor from a live API sensor."""
+def _seed_one_snapshot(entity_id, source_entity, attr_key, use_attr, icon, fname,
+                       restored_val=None):
+    """Seed a single snapshot sensor — prefer restored JSON value over live API."""
     current = None
     try:
         current = state.get(entity_id)  # noqa: F821
@@ -158,16 +225,22 @@ def _seed_one_snapshot(entity_id, source_entity, attr_key, use_attr, icon, fname
         pass
     if current not in (None, "unknown", "unavailable", "0"):
         return  # already has a real value
-    # Read from the API sensor
-    val = "0"
-    try:
-        if use_attr:
-            attrs = state.getattr(source_entity) or {}  # noqa: F821
-            val = str(attrs.get(attr_key, 0))
-        else:
-            val = str(state.get(source_entity) or 0)  # noqa: F821
-    except Exception:
-        pass
+
+    # Prefer restored value from budget_state.json over live API
+    if restored_val is not None:
+        val = str(restored_val)
+    else:
+        # Fallback: read from the API sensor
+        val = "0"
+        try:
+            if use_attr:
+                attrs = state.getattr(source_entity) or {}  # noqa: F821
+                val = str(attrs.get(attr_key, 0))
+            else:
+                val = str(state.get(source_entity) or 0)  # noqa: F821
+        except Exception:
+            pass
+
     state.set(  # noqa: F821
         entity_id, val,
         new_attributes={"icon": icon, "friendly_name": fname},
@@ -267,3 +340,84 @@ async def set_sensor_value(
         value,
         list(existing_attrs.keys()),
     )
+
+
+# ── Budget State Persistence (save service + periodic + shutdown) ─────────────
+
+@service  # noqa: F821
+async def save_budget_state():
+    """
+    yaml
+    name: Save Budget State
+    description: >-
+      Save budget counters + midnight snapshots to budget_state.json for
+      restart persistence.  Called periodically (every 15 min), on HA
+      shutdown, and after midnight reset.
+    """
+    global _last_budget_json
+    today = datetime.now().strftime("%Y-%m-%d")  # noqa: F821
+    counters = {}
+    for eid in _BUDGET_COUNTER_ENTITIES:
+        try:
+            counters[eid] = state.get(eid) or "0"  # noqa: F821
+        except Exception:
+            counters[eid] = "0"
+    snapshots = {}
+    for eid in _BUDGET_SNAPSHOT_ENTITIES:
+        try:
+            snapshots[eid] = state.get(eid) or "0"  # noqa: F821
+        except Exception:
+            snapshots[eid] = "0"
+    data = {
+        "date": today,
+        "timestamp": datetime.now().isoformat(),  # noqa: F821
+        "counters": counters,
+        "snapshots": snapshots,
+    }
+    json_str = _json.dumps(data, indent=2)
+    _last_budget_json = json_str  # cache for shutdown handler
+    _write_budget_state(json_str)
+    log.debug("state_bridge: budget state saved to JSON")  # noqa: F821
+
+
+@time_trigger("cron(*/15 * * * *)")  # noqa: F821
+async def _budget_periodic_file_save():
+    """Save budget state to JSON every 15 minutes."""
+    await save_budget_state()
+
+
+@time_trigger("shutdown")  # noqa: F821
+def _budget_shutdown_save():
+    """Save budget state to JSON on HA shutdown / pyscript reload.
+
+    Non-async to avoid task cancellation.  Uses pathlib.Path.write_text()
+    which works in the pyscript AST interpreter during shutdown (confirmed
+    by testing — produces a harmless 'blocking call' HA warning).  Does
+    NOT use @pyscript_executor (thread pool unavailable during reload).
+    """
+    from pathlib import Path
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        counters = {}
+        for eid in _BUDGET_COUNTER_ENTITIES:
+            try:
+                counters[eid] = str(state.get(eid) or "0")  # noqa: F821
+            except Exception:
+                counters[eid] = "0"
+        snapshots = {}
+        for eid in _BUDGET_SNAPSHOT_ENTITIES:
+            try:
+                snapshots[eid] = str(state.get(eid) or "0")  # noqa: F821
+            except Exception:
+                snapshots[eid] = "0"
+        data = {
+            "date": today,
+            "timestamp": datetime.now().isoformat(),
+            "counters": counters,
+            "snapshots": snapshots,
+        }
+        Path("/config/pyscript/budget_state.json").write_text(
+            _json.dumps(data, indent=2)
+        )
+    except Exception:
+        pass  # Best-effort — 15-min cron JSON is the primary safety net

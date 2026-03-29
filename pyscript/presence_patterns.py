@@ -60,27 +60,17 @@ from shared_utils import build_result_entity_name, load_entity_config, reload_en
 RECORDER_DB = Path("/config/home-assistant_v2.db")
 RESULT_ENTITY = "sensor.ai_presence_pattern_status"
 
-_DEFAULT_FP2_ENTITIES = {
-    "binary_sensor.fp2_presence_sensor_workshop": "workshop",
-    "binary_sensor.fp2_presence_sensor_living_room": "living_room",
-    "binary_sensor.fp2_presence_sensor_main_room": "main_room",
-    "binary_sensor.fp2_presence_sensor_kitchen": "kitchen",
-    "binary_sensor.fp2_presence_sensor_bed": "bed",
-    "binary_sensor.fp2_presence_sensor_lobby": "lobby",
-    "binary_sensor.fp2_presence_sensor_bathroom": "bathroom",
-    "binary_sensor.fp2_presence_sensor_shower": "shower",
-}
-
-
 def _get_fp2_entities() -> dict:
     cfg = load_entity_config()
-    return cfg.get("fp2_zones") or _DEFAULT_FP2_ENTITIES
+    fp2 = cfg.get("fp2_zones")
+    if not fp2:
+        log.warning("presence_patterns: fp2_zones not found in entity_config.yaml")  # noqa: F821
+        return {}
+    return fp2
 
 
 def _get_zone_names() -> list:
     return sorted(_get_fp2_entities().values())
-
-_DEFAULT_ZONE_NAMES = sorted(_DEFAULT_FP2_ENTITIES.values())
 
 # TRANSITION_WINDOW_SEC — now read from input_number.ai_presence_transition_window
 MIN_DWELL_SECONDS = 30       # ignore sub-30s presence (FP2 flicker at zone boundaries)
@@ -148,7 +138,7 @@ def _get_recorder_conn() -> sqlite3.Connection:
 def _resolve_metadata_ids(entity_map: dict = None) -> dict[int, str]:
     """Get metadata_id → zone_name mapping from recorder states_meta table."""
     if entity_map is None:
-        entity_map = dict(_DEFAULT_FP2_ENTITIES)
+        return {}
     entity_list = list(entity_map.keys())
     placeholders = ",".join("?" * len(entity_list))
     with closing(_get_recorder_conn()) as conn:
@@ -171,7 +161,10 @@ def _extract_data_sync(lookback_days: int, transition_window_sec: int = 300, ent
     Returns dict with: transitions, dwells, zones_seen, total_states, earliest_ts.
     """
     if entity_map is None:
-        entity_map = dict(_DEFAULT_FP2_ENTITIES)
+        return {
+            "transitions": [], "dwells": [], "zones_seen": [],
+            "total_states": 0, "earliest_ts": 0,
+        }
     meta_map = _resolve_metadata_ids(entity_map)
     if not meta_map:
         return {
@@ -330,7 +323,7 @@ def _parse_pattern_key(key: str, zone_names: list = None) -> tuple[str, str, str
     zone_names must be passed by callers (pyscript_compile cannot call state.get).
     """
     if zone_names is None:
-        zone_names = _DEFAULT_ZONE_NAMES
+        return None
     zone_set = set(zone_names)
     for prefix, ptype in (("pattern_transition_", "transition"), ("pattern_dwell_", "dwell")):
         if not key.startswith(prefix):

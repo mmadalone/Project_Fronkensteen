@@ -87,22 +87,14 @@ FEEDBACK_GOOD_THRESHOLD = 15    # minutes — prediction within this = reinforce
 FEEDBACK_BAD_THRESHOLD = 30     # minutes — prediction off by more = weakened
 L2_EXPIRATION_DAYS = 365
 
-_DEFAULT_FP2_ZONES = {
-    "binary_sensor.fp2_presence_sensor_workshop": "workshop",
-    "binary_sensor.fp2_presence_sensor_living_room": "living_room",
-    "binary_sensor.fp2_presence_sensor_main_room": "main_room",
-    "binary_sensor.fp2_presence_sensor_kitchen": "kitchen",
-    "binary_sensor.fp2_presence_sensor_bed": "bed",
-    "binary_sensor.fp2_presence_sensor_lobby": "lobby",
-    "binary_sensor.fp2_presence_sensor_bathroom": "bathroom",
-    "binary_sensor.fp2_presence_sensor_shower": "shower",
-}
-
-
 def _get_fp2_zones() -> dict:
-    """Get entity→zone map. Falls back to hardcoded defaults if config missing."""
+    """Get entity→zone map from entity_config.yaml."""
     cfg = load_entity_config()
-    return cfg.get("fp2_zones") or _DEFAULT_FP2_ZONES
+    fp2 = cfg.get("fp2_zones")
+    if not fp2:
+        log.warning("predictive_schedule: fp2_zones not found in entity_config.yaml")  # noqa: F821
+        return {}
+    return fp2
 
 # ── Module-Level State ───────────────────────────────────────────────────────
 

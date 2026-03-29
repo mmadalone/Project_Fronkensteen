@@ -34,24 +34,24 @@ L2_KEY = "sleep_lights:targets"
 L2_SCOPE = "household"
 L2_TAGS = "sleep lights targets config"
 
-# All FP2 presence sensors
-_DEFAULT_FP2_SENSORS = [
-    "binary_sensor.fp2_presence_sensor_main_room",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_bed",
-    "binary_sensor.fp2_presence_sensor_workshop",
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_lobby",
-    "binary_sensor.fp2_presence_sensor_bathroom",
-    "binary_sensor.fp2_presence_sensor_shower",
-]
-
-
 def _get_fp2_sensors() -> list:
     """Get FP2 sensor entities from config (keys of fp2_zones map)."""
     cfg = load_entity_config()
     fp2 = cfg.get("fp2_zones")
-    return list(fp2.keys()) if fp2 else _DEFAULT_FP2_SENSORS
+    if not fp2:
+        log.warning("sleep_config: fp2_zones not found in entity_config.yaml")  # noqa: F821
+        return []
+    return list(fp2.keys())
+
+
+def _get_bed_sensor() -> str:
+    """Resolve the bed zone sensor from fp2_zones config."""
+    cfg = load_entity_config()
+    fp2 = cfg.get("fp2_zones", {})
+    for entity_id, zone in fp2.items():
+        if zone == "bed":
+            return entity_id
+    return ""
 
 # ── State ─────────────────────────────────────────────────────────────────────
 _targets: list = []     # current sleep light entity targets
@@ -270,27 +270,29 @@ async def _sleep_config_startup():
     await sleep_config_populate_pickers()
 
     # Set default sensor selections if empty/unknown
-    try:
-        det_val = state.get("input_select.ai_sleep_detection_sensor") or ""  # noqa: F821
-        if det_val in ("unknown", "unavailable", ""):
-            service.call(  # noqa: F821
-                "input_select", "select_option",
-                entity_id="input_select.ai_sleep_detection_sensor",
-                option="binary_sensor.fp2_presence_sensor_bed",
-            )
-    except Exception:
-        pass
+    bed_sensor = _get_bed_sensor()
+    if bed_sensor:
+        try:
+            det_val = state.get("input_select.ai_sleep_detection_sensor") or ""  # noqa: F821
+            if det_val in ("unknown", "unavailable", ""):
+                service.call(  # noqa: F821
+                    "input_select", "select_option",
+                    entity_id="input_select.ai_sleep_detection_sensor",
+                    option=bed_sensor,
+                )
+        except Exception:
+            pass
 
-    try:
-        lights_val = state.get("input_select.ai_sleep_lights_sensor") or ""  # noqa: F821
-        if lights_val in ("unknown", "unavailable", ""):
-            service.call(  # noqa: F821
-                "input_select", "select_option",
-                entity_id="input_select.ai_sleep_lights_sensor",
-                option="binary_sensor.fp2_presence_sensor_bed",
-            )
-    except Exception:
-        pass
+        try:
+            lights_val = state.get("input_select.ai_sleep_lights_sensor") or ""  # noqa: F821
+            if lights_val in ("unknown", "unavailable", ""):
+                service.call(  # noqa: F821
+                    "input_select", "select_option",
+                    entity_id="input_select.ai_sleep_lights_sensor",
+                    option=bed_sensor,
+                )
+        except Exception:
+            pass
 
     try:
         lp_val = state.get("input_select.ai_sleep_lights_light_picker") or ""  # noqa: F821
