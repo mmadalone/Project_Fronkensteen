@@ -564,10 +564,9 @@ blueprint:
             running. Set ON at start, OFF at end. Used as a gate by
             reactive_banter and as a loop condition by the native
             fallback path.
-          default: input_boolean.ai_theatrical_mode_active
+          default: sensor.ai_theatrical_mode_active
           selector:
             entity:
-              domain: input_boolean
 
 mode: single
 max_exceeded: silent

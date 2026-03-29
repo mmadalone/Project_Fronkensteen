@@ -10,10 +10,7 @@ ai_music_follow_me:
   icon: mdi:speaker
   initial: true
 
-ai_ducking_flag:
-  name: ducking flag
-  icon: mdi:duck
-  initial: false
+# ai_ducking_flag removed — migrated to sensor (state.set, Session 8)
 
 ########################################
 # Wake-up controls
@@ -34,10 +31,7 @@ ai_wake_up_stop:
 # Bedtime negotiator (Global state + toggles)
 ########################################
 
-ai_bedtime_active:
-  name: Bedtime negotiator active
-  icon: mdi:bed-clock
-  initial: false
+# ai_bedtime_active removed — migrated to sensor (state.set, Session 8)
 
 ai_bedtime_global_lock:
   name: Bedtime negotiator global lock
@@ -62,15 +56,9 @@ ai_notification_follow_me:
   icon: mdi:message-bulleted
   initial: true
 
-ai_handoff_processing:
-  name: AI Handoff - Processing
-  icon: mdi:account-switch
-  initial: false
+# ai_handoff_processing removed — migrated to sensor (state.set, Session 8)
 
-ai_continuous_conversation_active:
-  name: AI Continuous Conversation Active
-  icon: mdi:microphone-message
-  initial: false
+# ai_continuous_conversation_active removed — migrated to sensor (state.set, Session 8)
 
 ai_contact_history_enabled:
   name: AI Contact History Enabled
@@ -274,12 +262,7 @@ ai_guest_mode:
   initial: false
   icon: mdi:account-question
 
-# Set by automation when solo WiFi + exactly 1 FP2 zone has been active
-# for 10+ minutes. Adds 10 pts to identity confidence.
-ai_sustained_solo_zone:
-  name: "AI Sustained Solo Zone"
-  initial: false
-  icon: mdi:account-clock
+# ai_sustained_solo_zone removed — migrated to sensor (state.set, Session 8)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -322,10 +305,7 @@ ai_dedup_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # ai_phone_call_detection — Phone Call Detection
 # ═══════════════════════════════════════════════════════════════════
-ai_phone_call_active:
-  name: "AI Phone Call - Active"
-  initial: false
-  icon: mdi:phone-in-talk
+# ai_phone_call_active removed — migrated to sensor (state.set, Session 8)
 
 ai_phone_call_defer_tts:
   name: "AI Phone Call - Defer TTS During Calls"
@@ -428,10 +408,7 @@ ai_routine_tracking_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # ai_sleep_detection — Sleep Detection
 # ═══════════════════════════════════════════════════════════════════
-ai_sleep_detected:
-  name: "AI Sleep - Detected"
-  initial: false
-  icon: mdi:sleep
+# ai_sleep_detected removed — migrated to sensor (state.set, Session 8)
 
 ai_sleep_detection_enabled:
   name: "AI Sleep Detection - Enabled"
@@ -549,10 +526,7 @@ ai_theatrical_mode_enabled:
   icon: mdi:drama-masks
   initial: true
 
-ai_theatrical_mode_active:
-  name: "AI Theatrical Mode - Active Session"
-  icon: mdi:drama-masks
-  initial: false
+# ai_theatrical_mode_active removed — migrated to sensor (state.set, Session 8)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Voice Mood Modulation — Global kill switch

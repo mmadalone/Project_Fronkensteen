@@ -177,10 +177,9 @@ blueprint:
 
         bedtime_entity:
           name: Bedtime entity
-          default: input_boolean.ai_bedtime_active
+          default: sensor.ai_bedtime_active
           selector:
             entity:
-              domain: input_boolean
 
         bedtime_behavior:
           name: Bedtime behavior

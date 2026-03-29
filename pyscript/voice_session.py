@@ -347,9 +347,9 @@ async def voice_session_continuous(
 
     # Activate stop signal
     try:
-        service.call(  # noqa: F821
-            "input_boolean", "turn_on",
-            entity_id="input_boolean.ai_continuous_conversation_active",
+        state.set(  # noqa: F821
+            "sensor.ai_continuous_conversation_active", "on",
+            new_attributes={"icon": "mdi:microphone-message", "friendly_name": "AI Continuous Conversation Active"},
         )
     except Exception as exc:
         log.warning("voice_session: continuous toggle failed: %s", exc)  # noqa: F821
@@ -435,7 +435,7 @@ async def voice_session_continuous(
     #   - satellite idle for >5s (conversation truly ended)
     # ESPHome handles duplicate_wake_up recovery on-device.
     while time.monotonic() < deadline:
-        if state.get("input_boolean.ai_continuous_conversation_active") == "off":  # noqa: F821
+        if state.get("sensor.ai_continuous_conversation_active") == "off":  # noqa: F821
             log.info("voice_session: stop signal received")  # noqa: F821
             break
 
@@ -475,9 +475,9 @@ async def voice_session_continuous(
             pass
 
     try:
-        service.call(  # noqa: F821
-            "input_boolean", "turn_off",
-            entity_id="input_boolean.ai_continuous_conversation_active",
+        state.set(  # noqa: F821
+            "sensor.ai_continuous_conversation_active", "off",
+            new_attributes={"icon": "mdi:microphone-message", "friendly_name": "AI Continuous Conversation Active"},
         )
     except Exception:
         pass

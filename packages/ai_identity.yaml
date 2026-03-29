@@ -7,7 +7,7 @@
 #   sensor.identity_confidence_jessica      — 0–100 confidence score (current max 70)
 #   sensor.occupancy_mode                   — solo_{slug} | dual | away | guest (Task 22: dynamic)
 #   input_boolean.ai_guest_mode                — manual override, forces all scores to 0
-#   input_boolean.ai_sustained_solo_zone    — set by automation after 10 min sustained
+#   sensor.ai_sustained_solo_zone           — set by automation after 10 min sustained (Session 8 migration)
 #   input_boolean.ai_wifi_stale_jessica     — WiFi stale flag (zeroes Jessica WiFi signal)
 #   input_number.ai_wifi_stale_timeout      — tunable timeout for WiFi staleness (5-60 min)
 #   binary_sensor.ai_wifi_stale_condition_jessica — WiFi home + no FP2 presence
@@ -107,7 +107,7 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on')
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = m_wifi and not j_wifi -%}
-          {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
+          {%- set sustained = is_state('sensor.ai_sustained_solo_zone', 'on') -%}
           {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
           {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(50) -%}
           {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(15) -%}
@@ -145,7 +145,7 @@ template:
           or is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on')
           or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
           {%- set solo = j_wifi and not m_wifi -%}
-          {%- set sustained = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
+          {%- set sustained = is_state('sensor.ai_sustained_solo_zone', 'on') -%}
           {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
           {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(15) -%}
           {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(5) -%}
@@ -197,9 +197,12 @@ automation:
         to: "on"
         for: "00:10:00"
     actions:
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.ai_sustained_solo_zone
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_sustained_solo_zone
+          value: "on"
+          icon: "mdi:account-clock"
+          friendly_name: "AI Sustained Solo Zone"
 
   - id: ai_sustained_solo_zone_off
     alias: "AI Identity - Sustained Solo Zone Off"
@@ -211,9 +214,12 @@ automation:
         entity_id: binary_sensor.ai_solo_single_zone
         to: "off"
     actions:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.ai_sustained_solo_zone
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_sustained_solo_zone
+          value: "off"
+          icon: "mdi:account-clock"
+          friendly_name: "AI Sustained Solo Zone"
 
 # ── WIFI STALE DETECTION (JESSICA) ──────────────────────────────────────────
 

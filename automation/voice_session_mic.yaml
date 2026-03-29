@@ -9,7 +9,7 @@
 #   - pyscript/voice_session.py (shared mic control services)
 #   - sensor.ai_voice_session_pending (trigger flag)
 #   - sensor.ai_last_satellite (satellite routing)
-#   - input_boolean.ai_continuous_conversation_active (stop signal)
+#   - sensor.ai_continuous_conversation_active (stop signal)
 #
 # Create one instance (global — routes to the correct satellite via
 # ai_last_satellite, no per-satellite instances needed).
@@ -78,10 +78,9 @@ blueprint:
       input:
         ducking_flag:
           name: "Ducking flag entity"
-          default: input_boolean.ai_ducking_flag
+          default: sensor.ai_ducking_flag
           selector:
             entity:
-              domain: input_boolean
 
         duck_guard_enabled:
           name: "Duck guard enabled entity"

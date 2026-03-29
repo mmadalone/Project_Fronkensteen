@@ -14,95 +14,25 @@ ai_primary_user:
 # Goodnight Negotiator — last state
 ########################################
 
-ai_gn_last_opening_line:
-  name: Goodnight Negotiator last opening line
-  icon: mdi:message-text-clock-outline
-  max: 255
-
-ai_gn_last_reply:
-  name: Goodnight Negotiator last reply
-  icon: mdi:chat-outline
-  max: 255
+# ai_gn_last_opening_line removed — dead helper, deleted Session 8
+# ai_gn_last_reply removed — dead helper, deleted Session 8
 
 ########################################
 # Quark Goodnight / Bedtime routine helpers
 ########################################
 
-# Pre / Post
-ai_quark_goodnight_pre_line:
-  name: Quark goodnight pre-announcement
-  icon: mdi:weather-night
-  max: 255
-  mode: text
-
-ai_quark_gn_post:
-  name: Quark goodnight post-announcement
-  icon: mdi:weather-night
-  max: 255
-  mode: text
-
-# Stage 1 – Devices
-ai_quark_gn_devices_question:
-  name: Quark GN devices question
-  icon: mdi:power-plug-outline
-  max: 255
-  mode: text
-
-ai_quark_gn_devices_yes:
-  name: Quark GN devices YES line
-  icon: mdi:check-circle-outline
-  max: 255
-  mode: text
-
-ai_quark_gn_devices_no:
-  name: Quark GN devices NO line
-  icon: mdi:close-circle-outline
-  max: 255
-  mode: text
-
-# Stage 2 – TV / IR devices
-ai_quark_gn_ir_question:
-  name: Quark GN TV question
-  icon: mdi:television
-  max: 255
-  mode: text
-
-ai_quark_gn_ir_yes:
-  name: Quark GN TV YES line
-  icon: mdi:check-circle-outline
-  max: 255
-  mode: text
-
-ai_quark_gn_ir_no:
-  name: Quark GN TV NO line
-  icon: mdi:close-circle-outline
-  max: 255
-  mode: text
-
-# Stage 3 – Music / bedtime story
-ai_quark_gn_music_intro_question:
-  name: Quark GN music intro question
-  icon: mdi:music-note
-  max: 255
-  mode: text
-
-ai_quark_gn_music_yes:
-  name: Quark GN music YES line
-  icon: mdi:check-circle-outline
-  max: 255
-  mode: text
-
-ai_quark_gn_music_no:
-  name: Quark GN music NO line
-  icon: mdi:close-circle-outline
-  max: 255
-  mode: text
-
-ai_quark_gn_music_secondary_question:
-  name: Quark GN secondary music question
-  icon: mdi:music-note-plus
-  max: 255
-  mode: text
+# ai_quark_goodnight_pre_line removed — dead helper, deleted Session 8
+# ai_quark_gn_post removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_question removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_no removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_question removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_no removed — dead helper, deleted Session 8
+# ai_quark_gn_music_intro_question removed — dead helper, deleted Session 8
+# ai_quark_gn_music_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_music_no removed — dead helper, deleted Session 8
+# ai_quark_gn_music_secondary_question removed — dead helper, deleted Session 8
 
 # Orphan notification_follow_me_loop_owner removed 2026-03-14 — superseded by I-45b refcount
 # Orphan notification_duck_snapshot removed 2026-03-14 — superseded by duck_manager
@@ -481,35 +411,11 @@ ai_notification_follow_me_last_post_time:
 # Voice Mood Modulation — v3 Audio Tags
 ########################################
 
-ai_voice_mood_rick_tags:
-  name: "Voice Mood - Rick Tags"
-  icon: mdi:tag-text
-  initial: ""
-  max: 100
-
-ai_voice_mood_quark_tags:
-  name: "Voice Mood - Quark Tags"
-  icon: mdi:tag-text
-  initial: ""
-  max: 100
-
-ai_voice_mood_kramer_tags:
-  name: "Voice Mood - Kramer Tags"
-  icon: mdi:tag-text
-  initial: ""
-  max: 100
-
-ai_voice_mood_deadpool_tags:
-  name: "Voice Mood - Deadpool Tags"
-  icon: mdi:tag-text
-  initial: ""
-  max: 100
-
-ai_voice_mood_doctor_portuondo_tags:
-  name: "Voice Mood - Dr. Portuondo Tags"
-  icon: mdi:tag-text
-  initial: ""
-  max: 100
+# ai_voice_mood_rick_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_quark_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_kramer_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_deadpool_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_doctor_portuondo_tags removed — migrated to sensor (state.set, Session 8)
 
 
 # ═══════════════════════════════════════════════════════════════════

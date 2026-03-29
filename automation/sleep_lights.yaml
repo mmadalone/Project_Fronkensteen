@@ -10,7 +10,7 @@ blueprint:
     accidental triggers outside nighttime hours.
 
     Requires the sleep detection system
-    (input_boolean.ai_sleep_detected) or equivalent flag.
+    (sensor.ai_sleep_detected) or equivalent flag.
 
     ### Recent changes
     - **v1:** Initial blueprint — replaces package ai_sleep_lights.yaml
@@ -33,11 +33,10 @@ blueprint:
           name: Sleep detected entity
           description: >
             The input_boolean that signals sleep has been detected
-            (e.g. input_boolean.ai_sleep_detected).
-          default: ""
+            (e.g. sensor.ai_sleep_detected).
+          default: sensor.ai_sleep_detected
           selector:
             entity:
-              domain: input_boolean
 
     # ===========================================================================
     # ② TARGETS

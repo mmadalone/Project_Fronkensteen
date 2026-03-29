@@ -6,13 +6,7 @@
 # Goodnight negotiator
 ########################################
 
-ai_gn_last_run_epoch:
-  name: Goodnight Negotiator last run (epoch)
-  icon: mdi:clock-check-outline
-  min: 0
-  max: 9999999999
-  step: 1
-  mode: box
+# ai_gn_last_run_epoch removed — dead helper, deleted Session 8
 
 
 # ═══════════════════════════════════════════════════════════════════

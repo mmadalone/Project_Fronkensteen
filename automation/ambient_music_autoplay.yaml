@@ -210,7 +210,7 @@ blueprint:
           name: Skip if TTS/ducking active
           description: >
             Don't start music if voice ducking is active
-            (input_boolean.ai_ducking_flag).
+            (sensor.ai_ducking_flag).
           default: true
           selector:
             boolean: {}
@@ -280,10 +280,9 @@ blueprint:
 
         bedtime_entity:
           name: Bedtime entity
-          default: input_boolean.ai_bedtime_active
+          default: sensor.ai_bedtime_active
           selector:
             entity:
-              domain: input_boolean
 
         bedtime_behavior:
           name: Bedtime behavior
@@ -433,7 +432,7 @@ conditions:
   # ── Skip if TTS/ducking active ──
   - condition: template
     value_template: >-
-      {{ not v_skip_tts or states('input_boolean.ai_ducking_flag') != 'on' }}
+      {{ not v_skip_tts or states('sensor.ai_ducking_flag') != 'on' }}
 
   # ── Skip if follow-me active ──
   - condition: template

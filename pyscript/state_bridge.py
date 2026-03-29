@@ -81,6 +81,20 @@ _STARTUP_SENSORS = [
     ("sensor.ai_routine_deviation", "none", "mdi:alert-decagram", "AI Routine Deviation"),
     ("sensor.ai_predicted_next_zone_raw", "", "mdi:map-marker-path", "AI Predicted Next Zone Raw"),
     ("sensor.ai_email_last_priority", "", "mdi:email-alert", "AI Email Last Priority"),
+    # Session 8 — high-impact booleans + voice mood tags
+    ("sensor.ai_ducking_flag", "off", "mdi:duck", "AI Ducking Flag"),
+    ("sensor.ai_phone_call_active", "off", "mdi:phone-in-talk", "AI Phone Call Active"),
+    ("sensor.ai_sleep_detected", "off", "mdi:sleep", "AI Sleep Detected"),
+    ("sensor.ai_theatrical_mode_active", "off", "mdi:drama-masks", "AI Theatrical Mode Active"),
+    ("sensor.ai_handoff_processing", "off", "mdi:account-switch", "AI Handoff Processing"),
+    ("sensor.ai_bedtime_active", "off", "mdi:bed-clock", "AI Bedtime Active"),
+    ("sensor.ai_continuous_conversation_active", "off", "mdi:microphone-message", "AI Continuous Conversation Active"),
+    ("sensor.ai_sustained_solo_zone", "off", "mdi:account-clock", "AI Sustained Solo Zone"),
+    ("sensor.ai_voice_mood_rick_tags", "", "mdi:tag-text", "AI Voice Mood Rick Tags"),
+    ("sensor.ai_voice_mood_quark_tags", "", "mdi:tag-text", "AI Voice Mood Quark Tags"),
+    ("sensor.ai_voice_mood_kramer_tags", "", "mdi:tag-text", "AI Voice Mood Kramer Tags"),
+    ("sensor.ai_voice_mood_deadpool_tags", "", "mdi:tag-text", "AI Voice Mood Deadpool Tags"),
+    ("sensor.ai_voice_mood_doctor_portuondo_tags", "", "mdi:tag-text", "AI Voice Mood Doctor Portuondo Tags"),
 ]
 
 

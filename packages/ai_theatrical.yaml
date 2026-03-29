@@ -49,4 +49,4 @@ template:
           enabled: >-
             {{ is_state('input_boolean.ai_theatrical_mode_enabled', 'on') }}
           active: >-
-            {{ is_state('input_boolean.ai_theatrical_mode_active', 'on') }}
+            {{ is_state('sensor.ai_theatrical_mode_active', 'on') }}

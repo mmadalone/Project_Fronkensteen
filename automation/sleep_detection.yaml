@@ -64,11 +64,10 @@ blueprint:
         sleep_detected_flag:
           name: Sleep detected flag
           description: >
-            Input boolean set ON when sleep is detected, OFF on wake.
-          default: ""
+            Sensor set to "on" when sleep is detected, "off" on wake.
+          default: sensor.ai_sleep_detected
           selector:
             entity:
-              domain: input_boolean
 
         sleep_start_datetime:
           name: Sleep start datetime

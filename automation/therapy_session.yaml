@@ -435,10 +435,9 @@ blueprint:
         continuous_conversation_entity:
           name: Continuous conversation entity
           description: Input boolean that keeps the mic cycling.
-          default: input_boolean.ai_continuous_conversation_active
+          default: sensor.ai_continuous_conversation_active
           selector:
             entity:
-              domain: input_boolean
 
         follow_me_entity:
           name: Follow-me entity

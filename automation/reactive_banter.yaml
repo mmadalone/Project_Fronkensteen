@@ -314,10 +314,9 @@ blueprint:
         theatrical_mode_entity:
           name: "Theatrical mode active entity"
           description: "Boolean tracking whether theatrical mode is currently running."
-          default: input_boolean.ai_theatrical_mode_active
+          default: sensor.ai_theatrical_mode_active
           selector:
             entity:
-              domain: input_boolean
 
         last_satellite_entity:
           name: "Last satellite entity"
@@ -330,10 +329,9 @@ blueprint:
         ducking_flag_entity:
           name: "Ducking flag entity"
           description: "Boolean tracking active volume ducking state."
-          default: input_boolean.ai_ducking_flag
+          default: sensor.ai_ducking_flag
           selector:
             entity:
-              domain: input_boolean
 
     # ── ⑦ Prompt ─────────────────────────────────────────────────────────
     prompt:

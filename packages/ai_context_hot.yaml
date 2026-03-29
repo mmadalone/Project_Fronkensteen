@@ -277,7 +277,7 @@ template:
             {%- set ns = namespace(lines=[]) -%}
 
             {# ── HOUSE MODE ── #}
-            {%- if is_state('input_boolean.ai_bedtime_active', 'on') -%}
+            {%- if is_state('sensor.ai_bedtime_active', 'on') -%}
               {%- set mode = 'Bedtime routine active.' -%}
             {%- elif is_state('input_boolean.ai_bedtime_global_lock', 'on') -%}
               {%- set mode = 'Bedtime locked — good night mode.' -%}

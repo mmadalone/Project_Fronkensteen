@@ -845,7 +845,7 @@ def _get_era_persona(era: str, personas: tuple) -> str | None:
 
 async def _check_bedtime() -> bool:
     """Check if bedtime mode is active."""
-    bedtime = state.get("input_boolean.ai_bedtime_active")  # noqa: F821
+    bedtime = state.get("sensor.ai_bedtime_active")  # noqa: F821
     if bedtime == "on":
         return True
     bedtime_lock = state.get("input_boolean.ai_bedtime_global_lock")  # noqa: F821

@@ -448,8 +448,8 @@ async def voice_handoff(
     if continuous:
         continuous_stop_instruction = (
             "If the user wants to end the conversation (goodbye, stop, done, "
-            "we're done, that's all), call input_boolean.turn_off on "
-            "input_boolean.ai_continuous_conversation_active to signal the system."
+            "we're done, that's all), call pyscript.set_sensor_value with "
+            "entity_id sensor.ai_continuous_conversation_active and value off."
         )
     parts = [p for p in [mic_instruction, (extra_system_prompt or "").strip(),
                          continuous_stop_instruction] if p]
@@ -620,9 +620,9 @@ async def voice_handoff(
         mic_open = time.monotonic()  # Track from initial start_conversation
         # Activate stop signal (if helper exists)
         try:
-            service.call(  # noqa: F821
-                "input_boolean", "turn_on",
-                entity_id="input_boolean.ai_continuous_conversation_active",
+            state.set(  # noqa: F821
+                "sensor.ai_continuous_conversation_active", "on",
+                new_attributes={"icon": "mdi:microphone-message", "friendly_name": "AI Continuous Conversation Active"},
             )
         except Exception as exc:
             log.warning("voice_handoff: continuous_conversation toggle failed: %s", exc)  # noqa: F821
@@ -632,7 +632,7 @@ async def voice_handoff(
         )
         while time.monotonic() < deadline and no_speech_count < 3:
             # Check stop signal
-            if state.get("input_boolean.ai_continuous_conversation_active") == "off":  # noqa: F821
+            if state.get("sensor.ai_continuous_conversation_active") == "off":  # noqa: F821
                 log.info("voice_handoff: stop signal received, exiting loop")  # noqa: F821
                 break
             # Wait for session to start (satellite leaves idle) before
@@ -655,7 +655,7 @@ async def voice_handoff(
             # Check all exit conditions before starting new session
             if (time.monotonic() >= deadline
                     or no_speech_count >= 3
-                    or state.get("input_boolean.ai_continuous_conversation_active") == "off"):  # noqa: F821
+                    or state.get("sensor.ai_continuous_conversation_active") == "off"):  # noqa: F821
                 break
             # _wait_for_audio_done (called above) now handles full audio
             # completion via event-driven waits — no echo guard or polling
@@ -676,9 +676,9 @@ async def voice_handoff(
                 await asyncio.sleep(0.5)
         # Deactivate stop signal
         try:
-            service.call(  # noqa: F821
-                "input_boolean", "turn_off",
-                entity_id="input_boolean.ai_continuous_conversation_active",
+            state.set(  # noqa: F821
+                "sensor.ai_continuous_conversation_active", "off",
+                new_attributes={"icon": "mdi:microphone-message", "friendly_name": "AI Continuous Conversation Active"},
             )
         except Exception:
             pass

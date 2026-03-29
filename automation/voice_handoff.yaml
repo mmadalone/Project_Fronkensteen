@@ -396,12 +396,11 @@ blueprint:
             Boolean helper that prevents feedback loops during handoff. The
             blueprint sets this ON when a handoff starts and OFF when it finishes.
             If the outgoing agent's farewell accidentally triggers another handoff
-            request, this guard blocks re-entry. Create input_boolean.ai_handoff_processing
-            (initial: off) and select it here.
-          default: ""
+            request, this guard blocks re-entry. Select sensor.ai_handoff_processing
+            (seeded by state_bridge on startup).
+          default: sensor.ai_handoff_processing
           selector:
             entity:
-              domain: input_boolean
 
         stale_guard_timeout:
           name: Stale Guard Timeout (seconds)
@@ -728,7 +727,7 @@ actions:
         {% endif %}
       continuous_stop_instruction: >-
         {% if enable_continuous_conversation | default(false) %}
-          If the user wants to end the conversation (goodbye, stop, done, we're done, that's all), call input_boolean.turn_off on input_boolean.ai_continuous_conversation_active to signal the system.
+          If the user wants to end the conversation (goodbye, stop, done, we're done, that's all), call pyscript.set_sensor_value with entity_id sensor.ai_continuous_conversation_active and value off to signal the system.
         {% endif %}
       rendered_extra_prompt: >-
         {{ [mic_instruction | trim, extra_system_prompt_input | trim, continuous_stop_instruction | trim] | reject('eq', '') | join(' ') }}
@@ -1649,9 +1648,12 @@ actions:
     then:
       # Activate stop signal helper (if it exists)
       - alias: "Activate continuous conversation signal"
-        action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.ai_continuous_conversation_active
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_continuous_conversation_active
+          value: "on"
+          icon: "mdi:microphone-message"
+          friendly_name: "AI Continuous Conversation Active"
         continue_on_error: true
       - alias: "Set loop deadline, no speech count, mic open time"
         variables:
@@ -1665,7 +1667,7 @@ actions:
               value_template: >-
                 {{ as_timestamp(now()) < loop_deadline | float
                    and no_speech_count | int(0) < 3
-                   and states('input_boolean.ai_continuous_conversation_active') != 'off' }}
+                   and states('sensor.ai_continuous_conversation_active') != 'off' }}
           sequence:
             # A0. Wait for session to actually start (satellite leaves idle).
             #     Prevents race: start_conversation fires but satellite
@@ -1703,7 +1705,7 @@ actions:
               value_template: >-
                 {{ as_timestamp(now()) < loop_deadline | float
                    and no_speech_count | int(0) < 3
-                   and states('input_boolean.ai_continuous_conversation_active') != 'off' }}
+                   and states('sensor.ai_continuous_conversation_active') != 'off' }}
             # D. Wait for ESP speaker to finish TTS playback (two-phase).
             #    Phase 1: Wait for speaker to START (leave idle → ANNOUNCING).
             #    Phase 2: Wait for speaker to FINISH (return to idle).
@@ -1736,9 +1738,12 @@ actions:
               continue_on_error: true
       # Deactivate stop signal helper
       - alias: "Deactivate continuous conversation signal"
-        action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.ai_continuous_conversation_active
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_continuous_conversation_active
+          value: "off"
+          icon: "mdi:microphone-message"
+          friendly_name: "AI Continuous Conversation Active"
         continue_on_error: true
 
   # 12. Release follow-me bypass BEFORE restore delay

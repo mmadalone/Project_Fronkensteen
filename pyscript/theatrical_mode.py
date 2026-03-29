@@ -440,7 +440,7 @@ async def theatrical_mode_start(
         return {"status": "disabled"}
 
     # M3: Dedup guard — reject if already running
-    if state.get("input_boolean.ai_theatrical_mode_active") == "on":
+    if state.get("sensor.ai_theatrical_mode_active") == "on":
         log.info("theatrical: already active, rejecting duplicate request")
         return {"status": "already_active"}
 
@@ -488,9 +488,9 @@ async def theatrical_mode_start(
             return {"status": "satellite_busy"}
 
     # ── ACTIVATE — C1 fix (service call, not state.set) ────────────────
-    service.call(
-        "input_boolean", "turn_on",
-        entity_id="input_boolean.ai_theatrical_mode_active",
+    state.set(  # noqa: F821
+        "sensor.ai_theatrical_mode_active", "on",
+        new_attributes={"icon": "mdi:drama-masks", "friendly_name": "AI Theatrical Mode Active"},
     )
 
     started_at = time.time()
@@ -666,7 +666,7 @@ async def theatrical_mode_start(
         # ── MAIN TURN LOOP ─────────────────────────────────────────────
         for turn in range(tl):
             # Kill switch check each iteration
-            if state.get("input_boolean.ai_theatrical_mode_active") != "on":
+            if state.get("sensor.ai_theatrical_mode_active") != "on":
                 exchange_status = "killed"
                 break
 
@@ -788,7 +788,7 @@ async def theatrical_mode_start(
                     cur["name"].replace(" ", "_"),  # fallback
                 )
                 _vtags = state.get(
-                    f"input_text.ai_voice_mood_{_agent_key}_tags"
+                    f"sensor.ai_voice_mood_{_agent_key}_tags"
                 )
                 if _vtags not in (None, "unknown", "unavailable", ""):
                     tts_text = f"{_vtags.strip()} {speech}"
@@ -1016,9 +1016,9 @@ async def theatrical_mode_start(
 
     finally:
         # C1: Deactivate via service call (always, even on exception)
-        service.call(
-            "input_boolean", "turn_off",
-            entity_id="input_boolean.ai_theatrical_mode_active",
+        state.set(  # noqa: F821
+            "sensor.ai_theatrical_mode_active", "off",
+            new_attributes={"icon": "mdi:drama-masks", "friendly_name": "AI Theatrical Mode Active"},
         )
 
         # Restore speaker volumes after delay
@@ -1041,10 +1041,10 @@ async def theatrical_mode_start(
 @service(supports_response="optional")  # noqa: F821
 async def theatrical_mode_stop():
     """Stop a running theatrical exchange."""
-    if state.get("input_boolean.ai_theatrical_mode_active") == "on":
-        service.call(
-            "input_boolean", "turn_off",
-            entity_id="input_boolean.ai_theatrical_mode_active",
+    if state.get("sensor.ai_theatrical_mode_active") == "on":
+        state.set(  # noqa: F821
+            "sensor.ai_theatrical_mode_active", "off",
+            new_attributes={"icon": "mdi:drama-masks", "friendly_name": "AI Theatrical Mode Active"},
         )
         log.info("theatrical: stopped via theatrical_mode_stop")
         return {"status": "stopped"}

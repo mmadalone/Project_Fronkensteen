@@ -356,8 +356,8 @@ def _capture_and_duck(skip_duck_entity: str = "") -> None:
 
     # Set ducking flag FIRST — blocks volume_sync before any volume changes
     try:
-        service.call("input_boolean", "turn_on",  # noqa: F821
-                     entity_id="input_boolean.ai_ducking_flag")
+        state.set("sensor.ai_ducking_flag", "on",  # noqa: F821
+                  new_attributes={"icon": "mdi:duck", "friendly_name": "AI Ducking Flag"})
     except Exception:
         pass
 
@@ -591,7 +591,7 @@ async def _restore_and_verify() -> None:
         log.warning("duck_manager: nothing to restore (empty snapshot)")  # noqa: F821
         try:
             service.call("input_boolean", "turn_off",  # noqa: F821
-                         entity_id="input_boolean.ai_ducking_flag")
+                         entity_id="sensor.ai_ducking_flag")
         except Exception:
             pass
         return
@@ -640,8 +640,8 @@ async def _restore_and_verify() -> None:
 
     # Clear ducking flag
     try:
-        service.call("input_boolean", "turn_off",  # noqa: F821
-                     entity_id="input_boolean.ai_ducking_flag")
+        state.set("sensor.ai_ducking_flag", "off",  # noqa: F821
+                  new_attributes={"icon": "mdi:duck", "friendly_name": "AI Ducking Flag"})
     except Exception:
         pass
 
@@ -980,7 +980,7 @@ async def duck_manager_status():
 
     flag = "unknown"
     try:
-        flag = state.get("input_boolean.ai_ducking_flag") or "unknown"  # noqa: F821
+        flag = state.get("sensor.ai_ducking_flag") or "unknown"  # noqa: F821
     except Exception:
         pass
 
@@ -1181,8 +1181,8 @@ async def _duck_manager_startup():
     await _clear_snapshot()
 
     try:
-        service.call("input_boolean", "turn_off",  # noqa: F821
-                     entity_id="input_boolean.ai_ducking_flag")
+        state.set("sensor.ai_ducking_flag", "off",  # noqa: F821
+                  new_attributes={"icon": "mdi:duck", "friendly_name": "AI Ducking Flag"})
     except Exception:
         pass
 

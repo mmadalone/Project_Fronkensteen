@@ -5,19 +5,20 @@
 # When call ends, fires tts_queue_flush_deferred to play deferred items.
 #
 # Provides:
-#   input_boolean.ai_phone_call_active      — auto-set by automation
+#   sensor.ai_phone_call_active             — auto-set by automation (Session 8 migration)
 #   input_boolean.ai_phone_call_defer_tts   — defer TTS during calls
 #   automation.ai_phone_call_start          — detect call start
 #   automation.ai_phone_call_end            — detect call end + flush
 #
 # Sensors: sensor.madaringer_phone_state (idle / ringing / offhook)
 # Dependencies: pyscript/tts_queue.py (deferred queue + flush event)
-# Deployed: 2026-03-04
+#               pyscript/state_bridge.py (set_sensor_value service)
+# Deployed: 2026-03-04 | Updated: 2026-03-29 (Session 8 — boolean→sensor migration)
 # =============================================================================
 
 # ── INPUT HELPERS ────────────────────────────────────────────────────────────
 
-# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+# input_boolean.ai_phone_call_active removed — migrated to sensor (state.set, Session 8)
 
 # ── AUTOMATIONS ──────────────────────────────────────────────────────────────
 
@@ -36,12 +37,15 @@ automation:
         to: "offhook"
     conditions:
       - condition: state
-        entity_id: input_boolean.ai_phone_call_active
+        entity_id: sensor.ai_phone_call_active
         state: "off"
     actions:
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.ai_phone_call_active
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_phone_call_active
+          value: "on"
+          icon: "mdi:phone-in-talk"
+          friendly_name: "AI Phone Call Active"
 
   # ── CALL END ────────────────────────────────────────────────────────────
   - id: ai_phone_call_end
@@ -57,12 +61,15 @@ automation:
         to: "idle"
     conditions:
       - condition: state
-        entity_id: input_boolean.ai_phone_call_active
+        entity_id: sensor.ai_phone_call_active
         state: "on"
     actions:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.ai_phone_call_active
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_phone_call_active
+          value: "off"
+          icon: "mdi:phone-in-talk"
+          friendly_name: "AI Phone Call Active"
       # Flush deferred TTS items
       - delay: "00:00:02"
       - continue_on_error: true

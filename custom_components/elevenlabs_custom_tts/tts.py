@@ -224,7 +224,7 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
                             mood_options["stability"] = float(_st.state)
                         # Tag prefix — for non-agent text (notifications, announcements)
                         _tags = self.hass.states.get(
-                            f"input_text.ai_voice_mood_{_agent}_tags"
+                            f"sensor.ai_voice_mood_{_agent}_tags"
                         )
                         if _tags and _tags.state not in ("unknown", "unavailable", ""):
                             mood_tag_prefix = _tags.state.strip()

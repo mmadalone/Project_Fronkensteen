@@ -315,10 +315,9 @@ blueprint:
         continuous_conversation_entity:
           name: "Continuous conversation entity"
           description: "Boolean controlling the continuous conversation loop."
-          default: input_boolean.ai_continuous_conversation_active
+          default: sensor.ai_continuous_conversation_active
           selector:
             entity:
-              domain: input_boolean
 
         follow_me_entity:
           name: "Follow-me notification entity"

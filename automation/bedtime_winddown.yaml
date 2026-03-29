@@ -205,10 +205,9 @@ blueprint:
         bedtime_active_entity:
           name: "Bedtime active entity"
           description: "Boolean set by the routine script. Wind-down suppresses when on."
-          default: input_boolean.ai_bedtime_active
+          default: sensor.ai_bedtime_active
           selector:
             entity:
-              domain: input_boolean
 
         winddown_active_flag:
           name: "Wind-down active flag"
@@ -747,10 +746,9 @@ blueprint:
 
         ducking_flag:
           name: "Ducking flag"
-          default: input_boolean.ai_ducking_flag
+          default: sensor.ai_ducking_flag
           selector:
             entity:
-              domain: input_boolean
 
         duck_guard_enabled:
           name: "Duck guard enabled"

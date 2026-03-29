@@ -520,7 +520,7 @@ def _is_sleeping() -> bool:
             state.get(_get_fp2_zones()["bed"]) or "off"  # noqa: F821
         ).lower() == "on"
         bedtime_active = str(
-            state.get("input_boolean.ai_bedtime_active") or "off"  # noqa: F821
+            state.get("sensor.ai_bedtime_active") or "off"  # noqa: F821
         ).lower() == "on"
         bedtime_locked = str(
             state.get("input_boolean.ai_bedtime_global_lock") or "off"  # noqa: F821

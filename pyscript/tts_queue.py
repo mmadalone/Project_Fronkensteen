@@ -927,7 +927,7 @@ async def _play_tts(
                 _mood_opts["stability"] = float(_sv)
             # Tag prefix for non-tagged text
             try:
-                _tv = state.get(f"input_text.ai_voice_mood_{_agent}_tags")  # noqa: F821
+                _tv = state.get(f"sensor.ai_voice_mood_{_agent}_tags")  # noqa: F821
             except NameError:
                 _tv = None
             if _tv not in (None, "unknown", "unavailable", ""):
@@ -1253,7 +1253,7 @@ async def _play_item(item: dict) -> None:
     # ── I-30: Defer during phone calls (P0 emergency always plays) ──
     if (
         item.get("priority", 3) > PRIORITY_EMERGENCY
-        and state.get("input_boolean.ai_phone_call_active") == "on"  # noqa: F821
+        and state.get("sensor.ai_phone_call_active") == "on"  # noqa: F821
         and state.get("input_boolean.ai_phone_call_defer_tts") == "on"  # noqa: F821
     ):
         with _queue_lock:

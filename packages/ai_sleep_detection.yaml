@@ -5,7 +5,7 @@
 # minimum duration, and occupant count gate (cat mitigation).
 #
 # Provides:
-#   input_boolean.ai_sleep_detected              — current sleep state
+#   sensor.ai_sleep_detected                      — current sleep state (Session 8 migration)
 #   input_boolean.ai_sleep_detection_enabled      — kill switch
 #   input_datetime.ai_sleep_start                 — sleep start time
 #   input_datetime.ai_sleep_end                   — sleep end time
