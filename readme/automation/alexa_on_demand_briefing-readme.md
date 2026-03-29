@@ -125,7 +125,7 @@ Thin orchestration layer triggered by Alexa-exposed `input_boolean` entities. Tw
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate mode selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 

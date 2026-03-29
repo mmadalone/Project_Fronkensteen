@@ -16,9 +16,8 @@ Scheduled job that compresses whisper interaction logs into per-agent summaries 
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  CONDITION GATES                        │
+│                  CONDITION GATE                         │
 │  • Kill switch not ON?                                 │
-│  • Privacy gate passes?                                │
 └────────────────────────┬────────────────────────────────┘
                          │ pass
                          ▼
@@ -51,7 +50,6 @@ Scheduled job that compresses whisper interaction logs into per-agent summaries 
 - **Auto-embedding** -- summaries are picked up by the next nightly embedding batch run (no special wiring needed).
 - **Budget safety** -- uses the standard LLM budget tier; pauses gracefully if budget drops below 30%.
 - **Kill switch** -- disable summarization without removing the automation.
-- **Privacy gate** -- tier-based suppression.
 
 ## Prerequisites
 
@@ -90,16 +88,6 @@ Scheduled job that compresses whisper interaction logs into per-agent summaries 
 
 </details>
 
-<details>
-<summary>Section 3 -- Privacy and Infrastructure</summary>
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
-| `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
-
-</details>
 
 ## Technical Notes
 

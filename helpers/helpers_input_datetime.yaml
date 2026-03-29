@@ -1,6 +1,20 @@
 # Input datetime helpers
 # Bedtime timestamps (bedtime_last_start/success/abort/reply_received) were orphans — removed 2026-03-04
 
+########################################
+# System Setup — Time Trigger Placeholder
+########################################
+# Used as default for blueprint time-trigger inputs (pref_wake_*, pref_bed_time).
+# HA validates at: triggers at setup — "" fails. This entity satisfies validation
+# while the preference toggle (use_pref_wake) gates actual firing. Replace with
+# your real input_datetime entity when enabling preference wake/bed times.
+
+ai_time_placeholder:
+  name: "Time Placeholder (do not delete)"
+  icon: mdi:clock-outline
+  has_time: true
+  has_date: false
+
 ai_notification_last_announced:
   name: Notification last announced
   icon: mdi:clock-check

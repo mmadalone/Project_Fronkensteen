@@ -1,9 +1,9 @@
 # =============================================================================
-# AI Privacy Gate — Per-Feature Override Helpers (31 entities)
+# AI Privacy Gate — Per-Feature Override Helpers (33 entities)
 # =============================================================================
 # Optional: Per-feature privacy gate overrides.
 # Master toggle (ai_privacy_gate_mode) stays in helpers_input_select.yaml.
-# Provides: 31 input_select entities (ai_privacy_gate_*)
+# Provides: 33 input_select entities (ai_privacy_gate_*)
 # Dependencies: ai_privacy_gate package (template sensors)
 # =============================================================================
 
@@ -96,6 +96,11 @@ input_select:
     options: *privacy_override_options
     initial: auto
     icon: mdi:swap-horizontal
+  ai_privacy_gate_email_priority_filter:
+    name: "Privacy Override — Email Priority Filter"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:email-filter
 
   # T3 — Ambient (Miquel)
   ai_privacy_gate_meal_detection:

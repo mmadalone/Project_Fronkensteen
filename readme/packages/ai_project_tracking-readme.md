@@ -7,6 +7,7 @@ Provides helper entities for the project awareness system, allowing voice agents
 | Type | Count |
 |------|-------|
 | Input helpers (external) | 5 |
+| Pyscript sensors (dynamic) | 1 |
 
 ## Entity Reference
 
@@ -17,6 +18,7 @@ Provides helper entities for the project awareness system, allowing voice agents
 | `input_text.ai_project_last_sync` | Input Text | Timestamp of last project sync |
 | `input_text.ai_project_hot_context_line` | Input Text | Top priorities summary for hot context (max 255 chars) |
 | `input_number.ai_project_hot_context_limit` | Input Number | Max number of projects shown in hot context |
+| `sensor.ai_project_promotion_status` | Pyscript sensor | Last sync result (ok/error/idle); attrs include project counts by status (set by pyscript via `state.set()`) |
 
 ## Dependencies
 
@@ -24,7 +26,7 @@ Provides helper entities for the project awareness system, allowing voice agents
 - **Blueprint:** `project_sync.yaml` — triggers project sync on file changes or schedule
 - **Source files:** `/config/projects/*.md` — markdown with YAML frontmatter (status, priority, category, etc.)
 - **Pyscript:** `pyscript/memory.py` — L2 memory (key=`project:{slug}`, tags=`project {category} {status} {priority}`)
-- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_text.yaml`, `helpers_input_number.yaml`
+- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_text.yaml`; `ai_dev_helpers.yaml` (number helper — hot context limit)
 
 ## Cross-References
 

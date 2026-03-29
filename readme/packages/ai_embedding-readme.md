@@ -7,7 +7,7 @@ Configuration package for the semantic search subsystem (I-2) and memory lifecyc
 ## What's Inside
 
 - **Automations:** 1 (`ai_embedding_dimension_change`)
-- **Input helpers:** 12 (moved to consolidated helper files) -- 3 booleans, 6 numbers, 3 texts
+- **Input helpers:** 17 (moved to consolidated helper files) -- 2 booleans, 9 numbers, 5 texts, 1 datetime
 
 ## Entity Reference
 

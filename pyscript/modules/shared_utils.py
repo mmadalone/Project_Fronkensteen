@@ -144,9 +144,9 @@ _PERSONS_CACHE_TTL = 300  # 5 minutes
 def discover_persons() -> dict[str, dict]:
     """Discover persons from HA person.* entities, overlay non-discoverable config.
 
-    Returns: {"miquel": {"entity_id": "person.miquel", "friendly_name": "Miquel",
-              "trackers": ["device_tracker.oppo_a60"], "state": "home",
-              "slug": "miquel", "calendar": "...", "notify_service": "...", ...}, ...}
+    Returns: {"your_user": {"entity_id": "person.your_user", "friendly_name": "Your User",
+              "trackers": ["device_tracker.phone"], "state": "home",
+              "slug": "your_user", "calendar": "...", "notify_service": "...", ...}, ...}
     """
     global _persons_cache, _persons_cache_ts
     now = time.monotonic()
@@ -188,7 +188,7 @@ def reload_persons() -> dict[str, dict]:
 
 
 def get_person_slugs() -> list[str]:
-    """Return sorted list of person slugs (e.g. ['jessica', 'miquel'])."""
+    """Return sorted list of person slugs (e.g. ['user1', 'user2'])."""
     return sorted(discover_persons().keys())
 
 
@@ -238,7 +238,7 @@ def resolve_active_user() -> str:
             best_slug, best_conf = slug, conf
     if not best_slug:
         slugs = get_person_slugs()
-        best_slug = slugs[0] if slugs else "miquel"
+        best_slug = slugs[0] if slugs else ""
     return best_slug
 
 

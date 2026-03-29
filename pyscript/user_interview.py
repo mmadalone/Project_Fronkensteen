@@ -168,7 +168,7 @@ CATEGORY_ORDER = [
 def _get_first_person() -> str:
     """Return first person slug from discover_persons() (Task 22)."""
     slugs = get_person_slugs()
-    return slugs[0] if slugs else "miquel"
+    return slugs[0] if slugs else ""
 
 
 result_entity_name: dict[str, str] = {}
@@ -449,8 +449,8 @@ async def user_interview_save(
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel, jessica)"
-        default: miquel
+        description: "Username (person slug from HA)"
+        default: ""
         selector:
           text: {}
       category:
@@ -540,8 +540,8 @@ async def user_interview_status(user: str = ""):
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel, jessica)"
-        default: miquel
+        description: "Username (person slug from HA)"
+        default: ""
         selector:
           text: {}
     """
@@ -613,8 +613,8 @@ async def user_interview_reset(user: str = ""):
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel, jessica)"
-        default: miquel
+        description: "Username (person slug from HA)"
+        default: ""
         selector:
           text: {}
     """
@@ -651,8 +651,8 @@ async def user_interview_preseed(user: str = ""):
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel, jessica)"
-        default: miquel
+        description: "Username (person slug from HA)"
+        default: ""
         selector:
           text: {}
     """
@@ -764,8 +764,8 @@ async def user_interview_exchanges(user: str = "", limit: int = 20):
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel, jessica)"
-        default: miquel
+        description: "Username (person slug from HA)"
+        default: ""
         selector:
           text: {}
       limit:
@@ -861,7 +861,7 @@ async def user_interview_import(file: str = ""):
       file:
         name: File name
         description: >-
-          YAML file name inside /config/interview/ (e.g., interview_miquel.yaml).
+          YAML file name inside /config/interview/ (e.g., interview_yourname.yaml).
           Do not include the directory path — just the file name.
         selector:
           text: {}
@@ -1060,7 +1060,7 @@ async def user_interview_refresh_preferences(user: str = ""):
     fields:
       user:
         name: User
-        description: "Username (e.g., miquel). Empty = active user."
+        description: "Username (person slug from HA). Empty = active user."
         default: ""
         selector:
           text: {}

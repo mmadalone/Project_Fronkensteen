@@ -7,6 +7,7 @@ Provides the kill switch, delivery flags, and last-summary storage for the unifi
 | Type | Count |
 |------|-------|
 | Input helpers (external) | 5 |
+| Pyscript sensors (dynamic) | 1 |
 
 ## Entity Reference
 
@@ -17,6 +18,7 @@ Provides the kill switch, delivery flags, and last-summary storage for the unifi
 | `input_boolean.ai_briefing_delivered_afternoon` | Input Boolean | Per-instance delivered flag (afternoon) |
 | `input_boolean.ai_briefing_delivered_evening` | Input Boolean | Per-instance delivered flag (evening) |
 | `input_text.ai_last_briefing_summary` | Input Text | Last delivered briefing content |
+| `sensor.ai_proactive_briefing_status` | Pyscript sensor | Last delivery result and section breakdown (set by pyscript via `state.set()`) |
 
 ## Dependencies
 

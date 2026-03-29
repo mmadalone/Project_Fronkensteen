@@ -6,7 +6,7 @@ Promotes Google Calendar events from L3 (API) to L2 (memory) for fast agent acce
 
 ## What's Inside
 
-- **Input helpers:** 4 (moved to consolidated helper files) -- 2 booleans, 2 texts
+- **Input helpers:** 5 (moved to consolidated helper files) -- 2 booleans, 3 texts
 - **Dashboard card:** Commented YAML for Lovelace integration
 
 Note: The automation (`ai_calendar_pre_event_reminder`) was migrated to a blueprint instance in `automations.yaml`.
@@ -24,7 +24,7 @@ Note: The automation (`ai_calendar_pre_event_reminder`) was migrated to a bluepr
 
 ## Dependencies
 
-- **Pyscript:** `pyscript/calendar_promote.py` (service: `calendar_promote_now`)
+- **Pyscript:** `pyscript/calendar_promote.py` (services: `calendar_promote_now`, `calendar_create_event`, `calendar_find_events`, `calendar_delete_event`, `calendar_edit_event`)
 - **Pyscript:** `pyscript/notification_dedup.py` (Task 14 -- `dedup_announce` for pre-event reminders)
 - **Package:** `ai_test_harness.yaml` (test mode toggle)
 - **Package:** `ai_predictive_schedule.yaml` (`ai_test_calendar_event` helper for test mode mock data)

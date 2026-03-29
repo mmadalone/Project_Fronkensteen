@@ -93,7 +93,7 @@ Turns off selected lights and switches after sleep is detected. Waits a configur
 | **Privacy gate tier** | `off` | Privacy tier: off, t1 (intimate), t2 (personal), t3 (ambient) |
 | **Privacy gate enabled entity** | `input_boolean.ai_privacy_gate_enabled` | Boolean that enables the privacy gate system |
 | **Privacy gate mode entity** | `input_select.ai_privacy_gate_mode` | Select controlling gate behavior |
-| **Privacy gate person** | `miquel` | Person name for tier suppression lookups |
+| **Privacy gate person** | `person.miquel` | Person entity for tier suppression lookups |
 
 ## Technical Notes
 

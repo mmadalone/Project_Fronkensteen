@@ -161,7 +161,21 @@ input_datetime.ai_predicted_wake_time
 | `privacy_tier` | `t1` | Privacy gate tier (off/t1/t2/t3). T1 = intimate |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate mode selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
+
+</details>
+
+<details><summary>⑦ Music</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `wake_melody_enabled` | `false` | Play a personalized wake-up melody before the TTS alarm |
+| `wake_melody_agent` | _(empty)_ | Agent persona for melody style. Empty = use dispatched agent |
+| `wake_melody_volume` | `0.3` | Volume for wake-up melody playback (0.0-1.0) |
+| `wake_melody_source` | `auto` | auto (cached API melody, local fallback) or fluidsynth (free, instant) |
+| `wake_melody_library_id_override` | _(empty)_ | Specific library ID to play, bypassing auto-resolution |
+| `wake_melody_delay_after` | `2` | Seconds to wait after melody before alarm continues |
+| `wake_melody_fallback_url` | _(empty)_ | Static audio URL if library empty and compose is off |
 
 </details>
 

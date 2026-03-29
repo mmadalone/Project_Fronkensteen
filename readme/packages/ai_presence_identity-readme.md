@@ -25,7 +25,7 @@ Provides helper entities for the per-person room identity inference engine (I-48
 - **Pyscript:** `pyscript/presence_identity.py` — 3 services, 4 triggers, creates output sensors via `state.set()`
 - **Pyscript:** `pyscript/presence_patterns.py` — `pyscript.presence_predict_next()` for Markov tiebreaks
 - **Hardware:** FP2 presence sensors, WiFi trackers, voice satellites
-- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_number.yaml`
+- **Helper files:** `helpers_input_boolean.yaml` (kill switch); `ai_dev_helpers.yaml` (number helpers — transition window, confidence floor, departure debounce)
 
 ## Cross-References
 

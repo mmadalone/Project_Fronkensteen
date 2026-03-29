@@ -7,21 +7,21 @@ Tracks which voice agent last responded, what was discussed, and when the intera
 | Type | Count |
 |------|-------|
 | Scripts | 1 |
-| Input helpers (external) | 5 |
+| Input helpers (external) | 2 |
+| Pyscript sensors (dynamic) | 1 |
 
 ## Entity Reference
 
 | Entity ID | Type | Purpose |
 |-----------|------|---------|
-| `script.ai_update_self_awareness` | Script | Updates last agent/topic/time — queued mode, max 3. Accepts `agent_name`, `agent_entity`, `topic` fields |
-| `input_text.ai_last_agent_name` | Input Text | Which agent responded (e.g. "Rick", "Quark") |
-| `input_text.ai_last_agent_entity` | Input Text | Agent entity_id (e.g. `conversation.rick_extended`) |
-| `input_text.ai_last_interaction_topic` | Input Text | One-line summary of what was discussed |
+| `script.ai_update_self_awareness` | Script | Updates last agent/topic/time — queued mode, max 3. Accepts `agent_name`, `agent_entity`, `topic` fields. Calls `pyscript.update_last_interaction` bridge service |
+| `sensor.ai_last_interaction` | Pyscript sensor | Agent name (state); attrs: `agent_entity`, `topic`, `handoff_reason`, `handoff_source` (set by `pyscript.update_last_interaction` via `state.set()`) |
 | `input_datetime.ai_last_interaction_time` | Input Datetime | When the last interaction occurred |
 | `input_text.ai_last_satellite` | Input Text | Last satellite that responded |
 
 ## Dependencies
 
+- **Pyscript:** `pyscript/shared_utils.py` — `set_last_interaction()` helper; `pyscript/agent_dispatcher.py` — `pyscript.update_last_interaction` bridge service (`@service`)
 - **Helper files:** `helpers_input_text.yaml`, `helpers_input_datetime.yaml`
 
 ## Cross-References

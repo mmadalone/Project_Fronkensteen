@@ -50,7 +50,7 @@ LLM calls script with title, player, volume
 - Home Assistant **2024.10.0** or later
 - **Music Assistant** integration installed and configured
 - At least one Music Assistant media player entity
-- Duck guard system (optional -- `input_boolean.ducking_flag` and `input_boolean.ai_duck_guard_enabled`)
+- Duck guard system (optional -- `input_boolean.ai_ducking_flag` and `input_boolean.ai_duck_guard_enabled`)
 
 ## Installation
 
@@ -75,7 +75,7 @@ LLM calls script with title, player, volume
 
 | Input | Default | Description |
 |---|---|---|
-| `ducking_flag` | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
 
 </details>

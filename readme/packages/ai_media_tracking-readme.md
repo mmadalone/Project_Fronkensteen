@@ -4,15 +4,17 @@ Thin storage package for the media tracking subsystem (I-47). Provides helper en
 
 ## What's Inside
 
-- **Input helpers:** 2 (moved to consolidated helper files) -- 1 boolean, 1 text (x2: Sonarr + Radarr)
+- **Input helpers:** 2 (moved to consolidated helper files) -- 2 booleans
+- **Sensors:** 1 pyscript sensor (`sensor.ai_media_upcoming`)
 
 ## Entity Reference
 
 | Entity ID | Type | Purpose |
 |---|---|---|
 | `input_boolean.ai_media_tracking_enabled` | input_boolean | Kill switch for media tracking |
-| `input_text.ai_media_upcoming_sonarr` | input_text | Upcoming Sonarr (TV) releases summary |
-| `input_text.ai_media_upcoming_radarr` | input_text | Upcoming Radarr (movie) releases summary |
+| `input_boolean.ai_media_data_stale` | input_boolean | Set when media API fails |
+| `sensor.ai_media_upcoming` | sensor (pyscript) | Media summary with `sonarr`, `radarr`, `recent_downloads` attributes (created by pyscript `state.set()`) |
+| `sensor.ai_media_promotion_status` | sensor (pyscript) | Last sync result and promoted media counts |
 
 ## Dependencies
 
@@ -21,9 +23,10 @@ Thin storage package for the media tracking subsystem (I-47). Provides helper en
 
 ## Cross-References
 
-- **Package:** `ai_context_hot.yaml` -- Sonarr and Radarr summaries injected into the Media component when tracking is enabled
+- **Package:** `ai_context_hot.yaml` -- `sensor.ai_media_upcoming` attributes (`sonarr`, `radarr`) injected into the Media component when tracking is enabled
 
 ## Notes
 
 - Intentionally thin package -- the blueprint owns all configuration (API URLs, poll intervals, filters) and the pyscript module handles data fetching. This package only provides the storage layer.
+- Phase 2 consolidation replaced `input_text.ai_media_upcoming_sonarr` and `input_text.ai_media_upcoming_radarr` with `sensor.ai_media_upcoming` (pyscript `state.set()`, no 255-char limit).
 - Deployed: 2026-03-10.

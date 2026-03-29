@@ -7,18 +7,16 @@ Fuses data from L1 (presence patterns), L2 (routine fingerprints), and L3 (Googl
 | Type | Count |
 |------|-------|
 | Template sensors | 1 |
-| Input helpers (external) | 5 |
+| Input helpers (external) | 4 |
 
 ## Entity Reference
 
 | Entity ID | Type | Purpose |
 |-----------|------|---------|
 | `sensor.ai_schedule_confidence` | Template sensor | Confidence level (high/medium/low/none) based on which data sources contributed |
-| `sensor.ai_predictive_schedule_status` | Pyscript sensor | Last operation result (set by pyscript via `state.set()`) |
+| `sensor.ai_predictive_schedule_status` | Pyscript sensor | Last operation result (set by pyscript via `state.set()`); attrs include `bedtime_recommendation` and `schedule_sources_raw` |
 | `input_number.ai_target_sleep_hours` | Input Number | Target sleep duration (default: 7h) |
 | `input_number.ai_morning_prep_buffer` | Input Number | Wake-to-ready buffer in minutes (default: 45m) |
-| `input_text.ai_bedtime_recommendation` | Input Text | Latest bedtime recommendation text |
-| `input_text.ai_schedule_sources_raw` | Input Text | JSON payload for confidence template sensor |
 | `input_text.ai_test_calendar_event` | Input Text | Mock calendar data for test mode |
 | `input_datetime.ai_predicted_routine_start` | Input Datetime | Predicted routine start time |
 
@@ -32,7 +30,7 @@ Fuses data from L1 (presence patterns), L2 (routine fingerprints), and L3 (Googl
 - **Package:** `ai_routine_tracker.yaml` — routine stage and bedtime prediction flag
 - **Package:** `ai_test_harness.yaml` — test mode toggle
 - **Integration:** `calendar.miquel_angel_cano_gmail_com` (Google Calendar)
-- **Helper files:** `helpers_input_number.yaml`, `helpers_input_text.yaml`
+- **Helper files:** `helpers_input_number.yaml`, `helpers_input_text.yaml`, `helpers_input_datetime.yaml`
 
 ## Cross-References
 

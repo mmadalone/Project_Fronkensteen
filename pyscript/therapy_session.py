@@ -438,7 +438,7 @@ async def therapy_save_turn(
     fields:
       speaker:
         name: Speaker
-        description: Who spoke (e.g., miquel, jessica).
+        description: Who spoke (person slug from HA).
         required: true
         selector:
           text:

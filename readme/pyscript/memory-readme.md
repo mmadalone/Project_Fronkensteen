@@ -27,6 +27,14 @@ The central persistence layer for the entire Voice Context Architecture. Manages
 | `pyscript.memory_embed` | `key` | `{status, key, dimensions, tokens_used}` | Generate and store a vector embedding for a single memory entry via `llm_direct_embed`. `supports_response="only"` |
 | `pyscript.memory_embed_batch` | `batch_size`, `scope` | `{status, embedded, failed, tokens_used, batch_size, reindexed}` | Embed all entries missing vectors. If `ai_embedding_reindex_needed` is ON, drops and recreates `mem_vec` first. `supports_response="only"` |
 | `pyscript.memory_semantic_search` | `query`, `limit` | `{status, op, query, count, results}` | Pure semantic (vector similarity) search. Does not blend with FTS5. `supports_response="only"` |
+| `pyscript.memory_semantic_autolink` | `batch_size`, `threshold` | `{status, op, linked, keys_processed}` | Create `content_match` relationships between semantically similar memories via vec0 KNN. Processes embeddings without content_match edges. `supports_response="only"` |
+| `pyscript.memory_archive_browse` | `query`, `limit` | `{status, op, query, count}` | Dashboard: search archived memory and write formatted markdown to `sensor.ai_memory_archive_browse`. `supports_response="optional"` |
+| `pyscript.memory_related_browse` | `key` | `{status, op, key, count}` | Dashboard: show related entries for a key and write to `sensor.ai_memory_related_browse`. `supports_response="optional"` |
+| `pyscript.memory_context_force_refresh` | _(none)_ | `{status, op}` | Force-refresh `sensor.ai_memory_context` immediately (used at handoff time). `supports_response="optional"` |
+| `pyscript.memory_todo_sync` | `todo_entity`, `scope_filter`, `tag_filter`, `query_filter`, `max_age_days`, `max_items`, `include_important`, `default_scope` | `{status, op, ...}` | Bidirectional sync between L2 memory and a HA todo list. Completed synced items delete the L2 entry. `supports_response="optional"` |
+| `pyscript.budget_history_record` | `date`, `usage_usd`, `exchange_rate`, `llm_calls`, `llm_tokens`, `tts_chars`, `stt_calls`, `serper_credits`, `model_cost_eur`, `model_breakdown`, `music_generations` | `{status, op, ...}` | Record a daily usage row into `budget_history` table. Called from midnight budget reset automation. `supports_response="only"` |
+| `pyscript.budget_history_rolling` | `months` | `{status, op, ...}` | Query `budget_history` for the rolling window and update `sensor.ai_openrouter_rolling_usage`. `supports_response="only"` |
+| `pyscript.budget_history_backfill` | `fallback_rate` | `{status, op, ...}` | One-time migration: parse existing `budget_daily:*` L2 entries and insert into `budget_history`. `supports_response="only"` |
 
 ## Triggers
 
@@ -34,6 +42,12 @@ The central persistence layer for the entire Voice Context Architecture. Manages
 |---------|----------|-----------|
 | `@time_trigger("startup")` | `memory_health_check` | Runs health check, initializes sqlite-vec, reports to status sensor |
 | `@time_trigger("cron(0 3 * * *)")` | `memory_daily_housekeeping` | Daily at 03:00: purge expired entries (10-day grace), prune orphan relationships |
+| `@time_trigger("startup")`, `@time_trigger("cron(*/15 * * * *)")` | `memory_context_refresh` | Refreshes `sensor.ai_memory_context` with recent summaries, moods, and topics from L2 |
+| `@time_trigger("cron(*/5 * * * *)")` | `_memory_recovery_probe` | Every 5 min: checks if DB is recoverable after a write failure, clears circuit breaker on success |
+| `@time_trigger("startup")`, `@time_trigger("cron(5 0 * * *)")` | `budget_history_auto_refresh` | On startup and daily at 00:05: refreshes rolling budget usage sensor |
+| `@state_trigger("input_number.ai_budget_rolling_months")` | `budget_history_window_change` | Re-queries rolling budget when the window size helper changes |
+| `@state_trigger("sensor.openrouter_credits")` | `budget_history_credits_change` | Re-queries rolling budget when OpenRouter credits sensor changes |
+| `@state_trigger("sensor.serper_account")` | `budget_history_serper_change` | Re-queries rolling budget when Serper account sensor changes |
 
 ## Key Functions
 
@@ -83,4 +97,4 @@ Pairs with `packages/ai_memory.yaml` which defines all memory-related helpers, t
 - Thread safety: all SQLite operations run in `asyncio.to_thread()` to avoid blocking the event loop. `@pyscript_compile` decorators allow pure-Python functions to run outside pyscript's async context.
 - Retry pattern: all DB operations retry once with a forced schema rebuild on `sqlite3.OperationalError`, handling cases where tables or triggers are missing after a database corruption.
 - Semantic search (I-2): optional sqlite-vec integration. When `vec0.so` is available, `memory_search` blends FTS5 scores with KNN vector similarity using the configurable blend weight. Pure semantic search is also available via `memory_semantic_search`.
-- This is the largest pyscript module (~3200 lines, 21 services). Treat it as the "database layer" -- other modules should never access `memory.db` directly.
+- This is the largest pyscript module (~5000 lines, 29 services). Treat it as the "database layer" -- other modules should never access `memory.db` directly.

@@ -130,6 +130,7 @@ bedtime_routine_core:
 | `living_room_lamp` | entity | — | Holdback lamp |
 | `media_players_stop` | entity[] | [] | Extra players to stop |
 | `reset_switches` | entity[] | [] | Speaker reset switches |
+| `reset_switch_delay` | duration | 2s | Delay between power-cycle on and off |
 
 ### ② Media Playback
 
@@ -139,6 +140,7 @@ bedtime_routine_core:
 | `audiobook_player` | media_player | — | MA player |
 | `audiobook_preset_uri` | text | — | MA media ID |
 | `audiobook_volume` | number | 0.25 | Audiobook volume |
+| `audiobook_media_type` | select | audiobook | MA content type (auto/audiobook/album/playlist/track) |
 | `kodi_entity` | media_player | — | Kodi player |
 | `kodi_preset_content` | text | — | Kodi content ID |
 | `kodi_content_type` | select | CHANNEL | Content type |
@@ -154,6 +156,27 @@ bedtime_routine_core:
 | `bathroom_sensor` | binary_sensor | — | Bathroom presence |
 | `bathroom_max_timeout` | duration | 15 min | Max wait |
 | `bathroom_grace_period` | duration | 1m 30s | Grace after clear |
+
+### ④ TTS & Conversation
+
+| Input | Type | Default | Description |
+|---|---|---|---|
+| `conversation_agent` | text | — | Pipeline name or conversation agent entity |
+| `use_dispatcher` | boolean | true | Resolve agent via pyscript.agent_dispatch |
+| `tts_speaker` | media_player | — | Media player for voice announcements |
+| `goodnight_prompt` | text | _(brief warm goodnight)_ | LLM prompt for final goodnight message |
+| `enable_settling_tts` | boolean | false | Play contextual message after media starts |
+| `settling_prompt` | text | _(settling-in prompt)_ | LLM prompt for settling message |
+| `settling_sensors` | entity[] | [] | Entity states injected into TTS prompts |
+
+### ⑤ State & Control
+
+| Input | Type | Default | Description |
+|---|---|---|---|
+| `bedtime_active_entity` | input_boolean | `input_boolean.ai_bedtime_active` | Signals routine is running (suppresses naggers) |
+| `test_mode` | boolean | false | Skip device actions; only run TTS + logbook |
+| `enable_memory` | boolean | true | Store bedtime timestamp via pyscript.memory_set |
+| `post_tts_delay` | number | 3 | Pause after each TTS to let audio finish (0-15s) |
 
 ### Runtime Fields
 

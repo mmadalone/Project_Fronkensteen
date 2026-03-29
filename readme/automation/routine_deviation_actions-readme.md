@@ -60,6 +60,7 @@ Fires when `routine_fingerprint.py` detects that the user's zone sequence has de
 
 - Home Assistant 2024.10.0+
 - `pyscript/routine_fingerprint.py` firing `ai_routine_deviation` events
+- Pyscript integration with `agent_dispatch` and `tts_queue_speak` services
 - An `input_boolean` for the per-instance kill switch
 - Optional: a `media_player` for TTS announcements
 

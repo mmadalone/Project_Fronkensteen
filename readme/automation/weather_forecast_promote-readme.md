@@ -61,7 +61,7 @@ Reads weather sensor states (AEMET, Met.no, etc.) and an optional weather domain
 
 ## Prerequisites
 
-- Home Assistant (no min_version specified)
+- Home Assistant 2024.10.0 or later
 - `pyscript` with `llm_task_call` service
 - Weather sensor entities (e.g., AEMET, Met.no)
 - `input_text` helper for storing the summary

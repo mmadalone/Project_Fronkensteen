@@ -7,7 +7,7 @@ Provides helper entities and a template sensor for the routine fingerprinting an
 | Type | Count |
 |------|-------|
 | Template sensors | 1 |
-| Input helpers (external) | 5 |
+| Input helpers (external) | 4 |
 | Pyscript sensors (dynamic) | 1 |
 
 ## Entity Reference
@@ -15,10 +15,9 @@ Provides helper entities and a template sensor for the routine fingerprinting an
 | Entity ID | Type | Purpose |
 |-----------|------|---------|
 | `sensor.ai_routine_eta` | Template sensor | Estimated minutes remaining in current routine (attrs: fingerprint_id, step, total) |
-| `sensor.ai_routine_tracker_status` | Pyscript sensor | Last operation result (set by pyscript via `state.set()`) |
+| `sensor.ai_routine_tracker_status` | Pyscript sensor | Last operation result (set by pyscript via `state.set()`); attrs include `eta_raw` (JSON for ETA template sensor) |
 | `input_text.ai_routine_stage` | Input Text | Current routine position, e.g. "evening_weekday_living_room_bed:step_3_of_4" |
 | `input_text.ai_routine_deviation` | Input Text | Last deviation description, e.g. "expected:bathroom actual:living_room" |
-| `input_text.ai_routine_eta_raw` | Input Text | JSON payload for the ETA template sensor |
 | `input_boolean.ai_routine_tracking_enabled` | Input Boolean | Kill switch (ON = active) |
 | `input_boolean.ai_bedtime_predicted` | Input Boolean | Set ON when a bed-ending routine starts; arms bedtime automations |
 

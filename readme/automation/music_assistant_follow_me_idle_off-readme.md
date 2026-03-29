@@ -51,7 +51,7 @@ Manages a follow-me toggle (`input_boolean`) for Music Assistant. Automatically 
 
 ## Prerequisites
 
-- Home Assistant (no specific min_version declared)
+- Home Assistant 2024.10.0 or later
 - Music Assistant integration with one or more media players
 - An `input_boolean` entity to act as the follow-me toggle
 

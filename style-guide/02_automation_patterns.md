@@ -483,7 +483,7 @@ automation:
       stored_traces: 20    # Increase during dev; reduce to 5–10 for production
     triggers:
       - trigger: state
-        entity_id: person.miquel
+        entity_id: person.your_name
         to: home
     # ... conditions, actions ...
 ```

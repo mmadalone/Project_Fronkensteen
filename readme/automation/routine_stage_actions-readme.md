@@ -65,6 +65,7 @@ Triggers actions at specific points within a recognized routine. Consumes `input
 | **Progress threshold** | `0.75` | Fire when routine is at least this fraction complete (progress mode, 0.1--1.0) |
 | **Fingerprint filter** | (empty) | Comma-separated fingerprint IDs to watch; empty = all |
 | **Once per routine** | `true` | Only fire once per routine instance; resets when stage goes to "none" |
+| **Routine stage entity** | `input_text.ai_routine_stage` | The input_text helper receiving the routine stage signal |
 
 ### ② Actions
 

@@ -10,15 +10,15 @@ One-shot cleanup script that scans existing whisper interaction entries whose va
 User runs script
         |
         v
-┌───────────────────────────────┐
-│ Call pyscript service          │
-│ pyscript.whisper_retag_auto   │
-│ (dry_run: true/false)         │
-│                               │
-│ → Scans L2 whisper entries    │
-│ → Matches automation patterns │
-│ → Re-tags missing entries     │
-└───────────┬───────────────────┘
+┌────────────────────────────────────┐
+│ Call pyscript service              │
+│ pyscript.whisper_retag_automation  │
+│ (dry_run: true/false)              │
+│                                    │
+│ → Scans L2 whisper entries         │
+│ → Matches automation patterns      │
+│ → Re-tags missing entries          │
+└───────────┬────────────────────────┘
             |
             v
 ┌───────────────────────────────┐

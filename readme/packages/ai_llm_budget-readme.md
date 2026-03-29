@@ -5,9 +5,9 @@ Comprehensive budget tracking and cost control for all AI services: LLM calls/to
 ## What's Inside
 
 - **REST sensors:** 4 (ElevenLabs subscription, USD/EUR exchange rate, OpenRouter credits, Serper account)
-- **Template sensors:** 8 (`ai_llm_budget_remaining`, `ai_tts_budget_remaining`, `ai_total_daily_cost`, `elevenlabs_credits_remaining`, `elevenlabs_daily_usage`, `serper_daily_usage`, `ai_cost_per_serper_credit`, `openrouter_daily_usage`, `ai_budget_fallback_status`)
+- **Template sensors:** 12 (`ai_llm_budget_remaining`, `ai_tts_budget_remaining`, `ai_total_daily_cost`, `elevenlabs_credits_remaining`, `elevenlabs_daily_usage`, `serper_daily_usage`, `ai_cost_per_serper_credit`, `ai_tts_cost_per_1k_chars_derived`, `openrouter_daily_usage`, `ai_budget_daily_average`, `ai_budget_monthly_projection`, `ai_budget_fallback_status`)
 - **Scripts:** 3 (`ai_llm_budget_check`, `ai_llm_budget_increment`, `ai_budget_reset`)
-- **Automations:** 3 (`ai_budget_reset_trigger`, `ai_llm_call_counter`, `ai_budget_fallback_manager`, `ai_rest_sensor_recovery`)
+- **Automations:** 4 (`ai_budget_reset_trigger`, `ai_llm_call_counter`, `ai_budget_fallback_manager`, `ai_rest_sensor_recovery`)
 - **Input helpers:** Many (moved to consolidated helper files) -- numbers, booleans, texts, selects, buttons
 
 ## Entity Reference
@@ -16,7 +16,7 @@ Comprehensive budget tracking and cost control for all AI services: LLM calls/to
 |---|---|---|
 | `sensor.elevenlabs_subscription` | REST sensor | ElevenLabs API: remaining chars, tier, reset date (hourly poll) |
 | `sensor.usd_eur_exchange_rate` | REST sensor | Frankfurter API: USD to EUR rate (daily poll) |
-| `sensor.openrouter_credits` | REST sensor | OpenRouter API: total usage/credits in EUR (hourly poll) |
+| `sensor.openrouter_credits` | REST sensor | OpenRouter API: total usage/credits in EUR (30-min poll) |
 | `sensor.serper_account` | REST sensor | Serper API: remaining search credits (hourly poll) |
 | `sensor.ai_llm_budget_remaining` | template sensor | Multi-metric budget % remaining (min of calls, tokens, cost) |
 | `sensor.ai_tts_budget_remaining` | template sensor | TTS budget % remaining |
@@ -26,19 +26,22 @@ Comprehensive budget tracking and cost control for all AI services: LLM calls/to
 | `sensor.serper_daily_usage` | template sensor | Serper credits used today (delta from midnight) |
 | `sensor.ai_cost_per_serper_credit` | template sensor | Serper cost per credit in EUR |
 | `sensor.openrouter_daily_usage` | template sensor | OpenRouter daily spend in EUR (delta from midnight) |
+| `sensor.ai_tts_cost_per_1k_chars_derived` | template sensor | Derived TTS cost per 1K chars from ElevenLabs plan (C5) |
+| `sensor.ai_budget_daily_average` | template sensor | 7-day rolling daily average cost in EUR (C5) |
+| `sensor.ai_budget_monthly_projection` | template sensor | Monthly cost projection from daily average (C5) |
 | `sensor.ai_budget_fallback_status` | template sensor | Fallback mode status (normal/fallback_active) |
 | `script.ai_llm_budget_check` | script | Budget gate: returns `{allowed, budget_remaining, ...}` for priority tier |
 | `script.ai_llm_budget_increment` | script | Increments daily call counter (optional `cost` param for multi-call patterns) |
 | `script.ai_budget_reset` | script | Full reset: L2 log, zero counters, snapshot APIs, clear breakdown, deactivate fallback |
-| `automation.ai_budget_reset_trigger` | automation | Midnight + manual button trigger for reset script |
+| `automation.ai_budget_reset_trigger` | automation | Midnight + manual button + startup catch-up trigger for reset script |
 | `automation.ai_llm_call_counter` | automation | Counts LLM + STT calls from pipeline runs and conversation state changes |
 | `automation.ai_budget_fallback_manager` | automation | Activates/deactivates fallback mode on exhaustion/recovery (I-46) |
 | `automation.ai_rest_sensor_recovery` | automation | Retries REST sensors after 5 min when they go unavailable |
 
 ## Dependencies
 
-- **Pyscript:** `pyscript/memory.py` (`memory_set` for daily usage logging to L2)
-- **Pyscript:** `pyscript/common_utilities.py` (`budget_track_call` for per-agent breakdown, `budget_history_record`)
+- **Pyscript:** `pyscript/memory.py` (`memory_set` for daily usage logging to L2, `budget_history_record` for daily usage history)
+- **Pyscript:** `pyscript/common_utilities.py` (`budget_track_call` for per-agent breakdown)
 - **Pyscript:** `pyscript/tts_queue.py` (TTS char counting, ElevenLabs credit gating)
 - **APIs:** ElevenLabs (API key in `secrets.yaml`), OpenRouter (API key in `secrets.yaml`), Frankfurter (free, no key), Serper (API key in `secrets.yaml`)
 - **Voice agents:** All conversation agents tracked by the call counter automation

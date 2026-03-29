@@ -61,7 +61,7 @@ END
 
 - Home Assistant **2024.10.0** or newer
 - Music Assistant integration
-- Duck guard system (optional: `input_boolean.ducking_flag`, `input_boolean.ai_duck_guard_enabled`)
+- Duck guard system (optional: `input_boolean.ai_ducking_flag`, `input_boolean.ai_duck_guard_enabled`)
 
 ## Installation
 
@@ -97,7 +97,7 @@ END
 
 | Input | Default | Description |
 |---|---|---|
-| `ducking_flag` | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
 
 </details>

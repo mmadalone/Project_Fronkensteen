@@ -2,7 +2,7 @@
 
 # Voice -- Wake Guard TTS Router (Helper Script)
 
-Routes TTS between ElevenLabs Custom (with `voice_profile` option) and standard `tts.speak`. Called by the wake-up-guard blueprint to avoid duplicating TTS routing logic across pass 1 and pass 2. The ElevenLabs Custom entity ID is configurable, so it also works with other custom TTS integrations that support `voice_profile` options.
+Routes TTS via the centralized `pyscript.tts_queue_speak` service in announce mode. Called by the wake-up-guard blueprint to avoid duplicating TTS logic across pass 1 and pass 2. The ElevenLabs Custom entity ID is configurable for voice_profile passthrough.
 
 ## How It Works
 
@@ -12,29 +12,30 @@ Called from wake-up-guard blueprint
                 |
                 v
   ┌─────────────────────────────────┐
-  │ Is tts_engine == ElevenLabs?    │
-  └──────────┬──────────────────────┘
-         YES |              NO
-             v               v
-  ┌──────────────────┐  ┌──────────────────┐
-  │ tts.speak with   │  │ tts.speak        │
-  │ options:         │  │ (standard, no    │
-  │   voice_profile  │  │  extra options)  │
-  └──────────────────┘  └──────────────────┘
+  │ pyscript.tts_queue_speak        │
+  │   voice: tts_engine             │
+  │   voice_id: tts_voice_profile   │
+  │   target_mode: explicit         │
+  │   announce: true                │
+  │   priority: 1                   │
+  │   metadata: {source: wake_guard}│
+  └─────────────────────────────────┘
 ```
 
 ## Features
 
-- Single TTS routing point -- eliminates duplicated choose blocks in the parent blueprint
-- ElevenLabs Custom support with `voice_profile` option passthrough
-- Standard TTS fallback for all other engines (HA Cloud, Google, etc.)
-- Configurable ElevenLabs entity ID -- works with any TTS integration that uses `voice_profile`
+- Single TTS routing point -- eliminates duplicated TTS logic in the parent blueprint
+- Routes through `pyscript.tts_queue_speak` in announce mode with priority 1
+- Passes `voice_id` (ElevenLabs voice profile) through to the TTS queue
+- Configurable ElevenLabs entity ID for voice_profile support
 - Parallel mode (max 5) -- supports concurrent TTS requests
+- `continue_on_error: true` for resilience
 
 ## Prerequisites
 
 - Home Assistant with at least one TTS integration
-- ElevenLabs Custom TTS integration (optional -- falls back to standard `tts.speak` for other engines)
+- Pyscript integration with `tts_queue_speak` service deployed
+- ElevenLabs Custom TTS integration (optional -- for voice_profile passthrough)
 
 ## Installation
 
@@ -65,8 +66,9 @@ Called from wake-up-guard blueprint
 
 - **Mode:** `parallel`, max `5` -- supports concurrent calls from escalating wake-up sequences
 - **Version:** 1.0
-- Routing is based on exact entity ID match (`tts_engine == elevenlabs_entity`), not integration detection
-- The `voice_profile` option is silently ignored if the TTS engine doesn't support it, but routing avoids sending it to non-ElevenLabs engines regardless
+- Uses `pyscript.tts_queue_speak` with `announce: true` and `target_mode: explicit` -- all TTS goes through the centralized queue
+- The `voice_id` field passes the ElevenLabs voice profile through to the TTS queue; empty string when not using ElevenLabs
+- Includes `metadata: {source: wake_guard}` for queue tracing
 - This is a helper script -- not intended to be called directly by users or LLMs; called internally by the wake-up-guard blueprint
 
 ## Changelog

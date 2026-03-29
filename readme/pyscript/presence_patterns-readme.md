@@ -24,21 +24,21 @@ All services use `supports_response="only"`.
 
 ## Key Functions
 
-- `_extract_data_sync(lookback_days, transition_window_sec, entity_map)` -- Read-only SQLite query against recorder DB. Runs via `asyncio.to_thread`. `@pyscript_compile`.
+- `_extract_data_sync(lookback_days, transition_window_sec, entity_map)` -- Read-only SQLite query against recorder DB. `@pyscript_executor`.
 - `_build_tables(transitions, dwells)` -- Build frequency tables from extracted transition/dwell data. `@pyscript_compile`.
 - `_compute_dwell_stats(durations)` -- Compute avg, median, min, max dwell statistics. `@pyscript_compile`.
-- `_predict_from_cache(current_zone, time_bucket, day_type, min_samples)` -- Local cache prediction with fallback through broader time/day contexts. `@pyscript_compile`.
+- `_predict_from_cache(current_zone, time_bucket, day_type, min_samples)` -- Local cache prediction with fallback through broader time/day contexts.
 - `_parse_pattern_key(key)` -- Parse L2 pattern key handling zone names with underscores. `@pyscript_compile`.
 - `_load_cache_from_l2()` -- Load transition + dwell frequency tables from L2 into local cache.
-- `_update_prediction_sensor(current_zone)` -- Write top-3 predictions to `sensor.ai_presence_prediction`.
+- `_update_prediction_sensor(current_zone)` -- Write top prediction to `input_text.ai_predicted_next_zone_raw`.
 - `_get_time_bucket(hour)` / `_get_day_type(weekday)` -- Map hour/weekday to bucket/type strings. `@pyscript_compile`.
 
 ## State Dependencies
 
-- `input_boolean.ai_presence_tracking_enabled` -- Kill switch
+- `input_boolean.ai_presence_patterns_enabled` -- Kill switch
 - `input_boolean.ai_test_mode` -- Test mode (mock predictions, no cache/L2 writes)
-- `input_number.ai_presence_lookback_days` -- Days of recorder history to query (default 30)
-- `input_number.ai_presence_min_samples` -- Minimum samples for confident predictions
+- `input_number.ai_presence_pattern_lookback_days` -- Days of recorder history to query (default 30)
+- `input_number.ai_presence_pattern_min_samples` -- Minimum samples for confident predictions
 - `input_number.ai_presence_transition_window` -- Seconds between zone OFF and ON to count as transition (default 300)
 - `input_boolean.ai_fp2_zone_*_enabled` -- Per-zone enable toggles
 - `input_datetime.ai_sleep_start` / `ai_sleep_end` -- Sleep detection timestamps
@@ -46,7 +46,7 @@ All services use `supports_response="only"`.
 
 ## Package Pairing
 
-Pairs with `packages/ai_presence_patterns.yaml` (lookback days, min samples, transition window, zone toggles). Output sensors: `sensor.ai_presence_patterns_status`, `sensor.ai_presence_prediction`. Also reads from `packages/ai_sleep_detection.yaml` (sleep start/end).
+Pairs with `packages/ai_presence_patterns.yaml` (lookback days, min samples, transition window, zone toggles). Output sensor: `sensor.ai_presence_pattern_status`. Prediction output: `input_text.ai_predicted_next_zone_raw`. Also reads from `packages/ai_sleep_detection.yaml` (sleep start/end).
 
 ## Called By
 

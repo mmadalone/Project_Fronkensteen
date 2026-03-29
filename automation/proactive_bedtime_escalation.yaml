@@ -196,7 +196,7 @@ blueprint:
           description: >
             Comma-separated list of names or nicknames. One is picked randomly
             each run, adding variety. Leave empty to use fallback terms.
-            Example: "Miquel, Miky, boss"
+            Example: "Name, Nickname, title"
           default: ""
           selector:
             text:
@@ -1860,7 +1860,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -2230,10 +2230,11 @@ variables:
 
   # ── User preference context (Preference Consumption B3) ──
   _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-    {% else %}miquel{% endif %}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
   _user_prefs_block: >-
     {% set ns = namespace(lines=[]) %}
     {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}

@@ -54,7 +54,7 @@ from shared_utils import (
 #   - All DB queries via asyncio.to_thread (never block event loop)
 #   - Frequency tables live in L2 memory, local cache for fast prediction
 #   - Departure debounced (configurable, default 300s) — WiFi flap protection
-#   - Tracks Miquel and Jessica independently (with household correlation)
+#   - Tracks each person independently (with household correlation)
 #   - Calendar fusion v2: start+end time parsing, gap detection, confirmation
 #   - Statistical foundation: MAD outlier filtering, exponential decay weights,
 #     weighted percentile, KDE mode detection, empirical MRL for remaining time,

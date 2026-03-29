@@ -98,7 +98,7 @@ Passive meal time logging from kitchen presence patterns. When the kitchen senso
 |-------|---------|-------------|
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 

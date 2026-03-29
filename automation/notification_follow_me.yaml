@@ -278,7 +278,7 @@ blueprint:
           name: "Your name(s) — outgoing message filter"
           description: >-
             Comma-separated list of names that identify YOU as the
-            sender (e.g., "Miquel Madalone,Miquel"). When the
+            sender (e.g., "Your Name,Nickname"). When the
             notification sender matches any of these names, the
             message is treated as outgoing and silently dropped.
             Also drops notifications with category "transport"
@@ -294,8 +294,7 @@ blueprint:
           name: Sender alias map
           description: >-
             Comma-separated Key=Value pairs that map raw sender names
-            to friendly display names (e.g., "Mare=Mum,Jessica=Love
-            of my life,Sebastián Caicedo=Sebastián"). Matched names
+            to friendly display names (e.g., "Name=Alias"). Matched names
             are replaced in all user-facing output (TTS, push
             notifications, LLM prompt). Blocked contacts and system
             logs always use the raw name. Case-insensitive matching.
@@ -1143,7 +1142,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -1359,8 +1358,8 @@ blueprint:
           default: >-
             When "you" or "tú" appears in the message text, it usually
             refers to the notification recipient — not to you.
-            Arden and Sebastián use he/him pronouns. All other common
-            senders (Mare, Jessica, Sara, Dani) use she/her.
+            Adjust pronoun hints to match your contacts — use he/him,
+            she/her, or they/them as appropriate for each sender.
           selector:
             text:
               multiline: true
@@ -1729,10 +1728,11 @@ conditions:
       {% if not (enable_threshold | bool(false)) %}
         true
       {% else %}
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
-        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = _notif_priority | int(3) %}
         {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}

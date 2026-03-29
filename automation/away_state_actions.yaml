@@ -53,6 +53,13 @@ blueprint:
             entity:
               domain: input_boolean
 
+        person_display_name:
+          name: "Person display name"
+          description: "Friendly name used in departure/arrival messages (e.g. the person's first name)."
+          default: ""
+          selector:
+            text: {}
+
     # ===========================================================================
     # ② DEPARTURE
     # ===========================================================================
@@ -265,12 +272,13 @@ variables:
   v_tts_speaker: !input tts_speaker
   v_dep_message: !input departure_message
   v_arr_message: !input arrival_message
+  person_display_name: !input person_display_name
   v_person: >-
-    {% set tracker_person = {
-      'device_tracker.oppo_a60': 'Miquel',
-      'device_tracker.oppo_a38': 'Jessica'
-    } %}
-    {{ tracker_person.get(v_tracker, v_tracker.split('.')[-1] | title) }}
+    {% if person_display_name | default('', true) not in ['', 'unknown', 'unavailable'] %}
+      {{ person_display_name }}
+    {% else %}
+      {{ v_tracker.split('.')[-1] | replace('_', ' ') | title }}
+    {% endif %}
   v_person_lower: "{{ v_person | lower }}"
   v_confidence_map:
     low: 1

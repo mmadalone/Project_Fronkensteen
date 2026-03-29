@@ -121,6 +121,7 @@ Unified briefing blueprint that replaces both `proactive_briefing_morning` and `
 | Input | Default | Description |
 |-------|---------|-------------|
 | `kill_switch` | *(empty)* | Master enable/disable toggle |
+| `notification_master_gate` | `input_boolean.ai_notifications_master_enabled` | Global notification gate -- suppresses when OFF |
 | `delivered_flag` | *(empty)* | Per-instance delivery flag (auto-resets) |
 | `reset_time` | `00:01:00` | Time to self-reset delivered flag |
 
@@ -154,26 +155,42 @@ Unified briefing blueprint that replaces both `proactive_briefing_morning` and `
 </details>
 
 <details>
-<summary><strong>⑥ Infrastructure</strong></summary>
+<summary><strong>⑥ Briefing music</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_briefing_music` | `false` | Play the dispatched agent's theme before TTS |
+| `briefing_music_agent` | *(empty)* | Which agent's theme to use (empty = dispatched agent) |
+| `briefing_music_content_type` | `theme` | theme (agent intro) or chime (short cue) |
+| `compose_briefing_if_missing` | `true` | Generate a theme via FluidSynth if not in library |
+| `briefing_library_id_override` | *(empty)* | Play a specific composition by library ID |
+| `briefing_music_volume` | `0.0` | Volume for composed tune playback (0 = keep current) |
+| `briefing_delay_after` | `5` | Seconds to wait after tune before TTS |
+| `briefing_fallback_media_url` | *(empty)* | Static audio URL fallback if library is empty |
+
+</details>
+
+<details>
+<summary><strong>⑦ Infrastructure</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `use_dispatcher` | `true` | Use agent dispatcher for persona selection |
 | `conversation_agent` | `Rick` | Pipeline when dispatcher is disabled |
-| `ducking_flag` | `input_boolean.ducking_flag` | Ducking active flag |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Ducking active flag |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle |
 
 </details>
 
 <details>
-<summary><strong>⑦ Privacy</strong></summary>
+<summary><strong>⑧ Privacy</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression |
 
 </details>
 

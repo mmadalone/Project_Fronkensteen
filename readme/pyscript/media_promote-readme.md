@@ -29,9 +29,7 @@ I-47 of the Voice Context Architecture. Fetches upcoming releases and recent dow
 
 - `input_boolean.ai_media_tracking_enabled` — Kill switch
 - `input_boolean.ai_media_data_stale` — Stale flag set on API failure
-- `input_text.ai_media_upcoming_summary` — Combined upcoming L1 helper
-- `input_text.ai_media_upcoming_sonarr` / `ai_media_upcoming_radarr` — Per-service L1 helpers
-- `input_text.ai_media_recent_downloads` — Recent downloads L1 helper
+- `sensor.ai_media_upcoming` — Consolidated L1 sensor (state=summary, attrs: `sonarr`, `radarr`, `recent_downloads`). Replaced the four `input_text` helpers in Phase 2.
 - `sensor.sonarr_upcoming` — Native Sonarr sensor (daily upcoming, zero API cost)
 - `sensor.sonarr_queue` / `sensor.radarr_queue` — Queue count sensors
 

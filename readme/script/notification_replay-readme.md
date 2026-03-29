@@ -177,6 +177,8 @@ Start
 | Input | Default | Description |
 |-------|---------|-------------|
 | `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Boolean that enables the AI agent dispatcher |
+| `follow_me_entity` | `input_boolean.ai_notification_follow_me` | Follow-me boolean (checked before claiming bypass) |
+| `tts_queue_status_entity` | `sensor.ai_tts_queue_status` | TTS queue status sensor (used for playback completion wait) |
 
 </details>
 

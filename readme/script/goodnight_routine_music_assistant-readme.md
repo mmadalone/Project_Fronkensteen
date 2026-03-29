@@ -195,15 +195,18 @@ END
 | `enable_music_question` | `true` | Enable Stage 3 |
 | `music_intro_question_text` | `Would you like some music or maybe a bedtime story?` | Intro question |
 | `music_use_helper_intro` / `music_intro_question_helper` | `false` / _(empty)_ | Helper for intro |
-| `music_yes_confirm_message` | `Excellent. Let me get something playing...` | YES confirm |
-| `music_no_confirm_message` | `Alright, no music or stories...` | NO confirm |
+| `music_yes_confirm_message` | `Excellent. Let me get something playing for you.` | YES confirm |
+| `music_use_helper_yes` / `music_yes_helper` | `false` / _(empty)_ | Helper for YES confirm |
+| `music_no_confirm_message` | `Alright, no music or stories. Just silence and your thoughts.` | NO confirm |
+| `music_use_helper_no` / `music_no_helper` | `false` / _(empty)_ | Helper for NO confirm |
 | `music_mode` | `preset_single` | preset_single / preset_multi / from_input_text / free_text_name |
 | `music_player` | _(empty)_ | Music Assistant player entity |
 | `music_volume` | `0.15` | Playback volume (0 = skip) |
 | `music_media_type` | `auto` | auto / playlist / album / track / artist / radio |
 | `music_media_id` | _(empty)_ | Media ID for preset_single mode |
 | `music_media_input_text` | _(empty)_ | input_text entity for from_input_text mode |
-| `music_question_text` | `What do you want me to play...?` | Secondary question for multi/free_text |
+| `music_question_text` | `What do you want me to play from your Music Assistant library?` | Secondary question for multi/free_text |
+| `music_use_helper_secondary` / `music_secondary_question_helper` | `false` / _(empty)_ | Helper for secondary question |
 | `music_preset_1_label` / `music_preset_1_media_id` | _(empty)_ | Preset 1 (preset_multi mode) |
 | `music_preset_2_label` / `music_preset_2_media_id` | _(empty)_ | Preset 2 |
 | `music_preset_3_label` / `music_preset_3_media_id` | _(empty)_ | Preset 3 |
@@ -227,7 +230,7 @@ END
 
 | Input | Default | Description |
 |---|---|---|
-| `ducking_flag` | `input_boolean.ducking_flag` | Ducking active flag |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Ducking active flag |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Duck guard toggle |
 | `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Dispatcher toggle |
 

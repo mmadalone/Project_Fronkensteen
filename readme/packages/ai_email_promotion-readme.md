@@ -7,7 +7,7 @@ Filters incoming IMAP emails and promotes only priority messages to L2 memory. U
 ## What's Inside
 
 - **Template sensors:** 1 (`sensor.ai_email_priority_count`)
-- **Input helpers:** 5 (moved to consolidated helper files) -- 1 boolean, 1 number, 3 texts, 1 select
+- **Input helpers:** 11 (moved to consolidated helper files) -- 3 booleans, 1 number, 6 texts, 1 select
 
 Note: The automation (`ai_email_priority_filter`) was migrated to a blueprint instance in `automations.yaml`.
 
@@ -16,11 +16,17 @@ Note: The automation (`ai_email_priority_filter`) was migrated to a blueprint in
 | Entity ID | Type | Purpose |
 |---|---|---|
 | `sensor.ai_email_priority_count` | template sensor | Mirror of `input_number.ai_email_priority_count` for dashboard display |
+| `input_boolean.ai_email_master_toggle` | input_boolean | Master toggle for email system |
 | `input_boolean.ai_email_promotion_enabled` | input_boolean | Kill switch (default ON) |
+| `input_boolean.ai_email_stale` | input_boolean | Set when email API data is stale |
+| `input_number.ai_email_priority_count` | input_number | Unread priority email count |
 | `input_text.ai_email_known_contacts` | input_text | Comma-separated trusted senders/domains |
 | `input_text.ai_email_priority_keywords` | input_text | Comma-separated custom filter keywords |
+| `input_text.ai_email_blocked_senders` | input_text | Comma-separated blocked senders/domains (blacklist mode) |
+| `input_text.ai_email_blocked_keywords` | input_text | Comma-separated blocked keywords (blacklist mode) |
 | `input_text.ai_email_last_priority` | input_text | Last priority email subject (quick reference) |
-| `input_number.ai_email_priority_count` | input_number | Unread priority email count |
+| `input_text.ai_email_urgent_keywords` | input_text | Keywords that trigger urgent TTS announcement |
+| `input_select.ai_email_filter_mode` | input_select | Filter mode: whitelist, blacklist, or hybrid |
 | `sensor.ai_email_promotion_status` | sensor (pyscript) | Last operation status (created by pyscript) |
 
 ## Dependencies

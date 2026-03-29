@@ -30,7 +30,7 @@ blueprint:
           name: Calendar entity
           description: >
             The calendar entity to monitor for upcoming events
-            (e.g. calendar.miquel_angel_cano_gmail_com).
+            (e.g. calendar.your_google_calendar).
           default: ""
           selector:
             entity:
@@ -194,7 +194,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -261,10 +261,11 @@ conditions:
       {% if not (enable_threshold | bool(false)) %}
         true
       {% else %}
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
-        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = _tts_priority | int(2) %}
         {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}

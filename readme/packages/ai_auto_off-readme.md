@@ -24,7 +24,7 @@ Note: This package file now contains only comments after the C3 helper consolida
 
 ## Cross-References
 
-- **Blueprint:** `blueprints/automation/ai_auto_off/zone_vacancy.yaml` -- per-zone instances consume these toggles
+- **Blueprint:** `blueprints/automation/madalone/zone_vacancy.yaml` -- per-zone instances consume these toggles
 - **Package:** `ai_context_hot.yaml` -- presence zones referenced by the same FP2 sensors
 
 ## Notes

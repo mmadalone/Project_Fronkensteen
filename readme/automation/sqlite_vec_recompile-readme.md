@@ -69,7 +69,7 @@ Monitors Home Assistant Core updates and recompiles `vec0.so` if the sqlite-vec 
 
 ## Prerequisites
 
-- Home Assistant (no specific min_version declared)
+- Home Assistant 2024.10.0 or later
 - SSH addon installed and running
 - `shell_command.recompile_vec0` configured in `configuration.yaml`
 - `/config/scripts/recompile_vec0.sh` present on the HA instance
@@ -87,7 +87,7 @@ Monitors Home Assistant Core updates and recompiles `vec0.so` if the sqlite-vec 
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| **Notification Target** | (required) | Mobile notification service (e.g., `notify.mobile_app_iphone`) |
+| **Notification Target** | `""` | Mobile notification service (e.g., `notify.mobile_app_iphone`) |
 | **Kill Switch** | (optional) | `input_boolean` to disable recompile; ON = disabled |
 
 ## Technical Notes

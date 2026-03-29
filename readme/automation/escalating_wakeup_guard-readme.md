@@ -188,7 +188,7 @@ Multi-stage escalation alarm that uses inverted presence logic: instead of check
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Ducking flag entity | `input_boolean.ducking_flag` | Audio ducking active flag. |
+| Ducking flag entity | `input_boolean.ai_ducking_flag` | Audio ducking active flag. |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle. |
 | Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | AI agent dispatcher toggle. |
 
@@ -202,13 +202,27 @@ Multi-stage escalation alarm that uses inverted presence logic: instead of check
 | Privacy gate tier | `t1` | Privacy tier (off/T1/T2/T3). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
-| Privacy gate person | `miquel` | Person name for suppression lookups. |
+| Privacy gate person | `person.miquel` | Person entity for suppression lookups. |
+
+</details>
+
+<details>
+<summary><strong>Section 11 -- User Preferences</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Enable user preferences | `true` | Inject user preferences into wake-up escalation prompts. |
+| Use preference wake time | `false` | Override static guard time with user's preference wake time helpers. |
+| Weekday wake time entity | `input_datetime.ai_context_wake_time_weekday_miquel` | Input datetime for weekday wake time. |
+| Weekend wake time entity | `input_datetime.ai_context_wake_time_weekend_miquel` | Input datetime for weekend wake time. |
+| Alt weekday wake time entity | `input_datetime.ai_context_wake_time_alt_weekday_miquel` | Input datetime for alternate weekday wake time. |
+| Alt wake days | `""` | Comma-separated day abbreviations using the alt wake time. |
 
 </details>
 
 ## Technical Notes
 
-- **Mode:** `single` (silent on overflow)
+- **Mode:** `restart` (stored traces: 15)
 - Volume and brightness are interpolated linearly: `start + (end - start) * (stage - 1) / (total - 1)`
 - Placeholder tokens `{STAGE}`, `{TOTAL}`, `{STAGE_DELAY}` use non-Jinja syntax to avoid premature evaluation at variable-resolution time
 - The minimum active presence filter applies to the pre-loop check, inter-stage lookback, and the `wait_for_trigger` gate

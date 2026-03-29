@@ -294,7 +294,7 @@ blueprint:
           description: ESP instructions for speaker identification in couple mode.
           default: |-
             SPEAKER TRACKING: Users identify themselves by saying their name
-            (e.g., "Miquel here", "Jessica here"). If you cannot determine
+            (e.g., "Name1 here", "Name2 here"). If you cannot determine
             who is speaking, ask before responding. Always call save_therapy_turn
             after each patient speaks, identifying the speaker.
           selector:
@@ -467,15 +467,15 @@ blueprint:
       input:
         couple_users:
           name: Couple user slugs
-          description: Comma-separated user slugs for couple session (e.g., "miquel,jessica").
-          default: "miquel,jessica"
+          description: Comma-separated user slugs for couple session (e.g., "person1,person2").
+          default: ""
           selector:
             text:
 
         speaker_id_phrases:
           name: Speaker identification phrases
           description: Phrases users say to identify themselves (for prompt guidance).
-          default: "Miquel here, Jessica here"
+          default: ""
           selector:
             text:
               multiline: true
@@ -688,10 +688,11 @@ actions:
   - alias: "0a · Resolve user"
     variables:
       resolved_user: >-
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-        {% elif occ in ['dual', 'home'] %}miquel
-        {% else %}miquel{% endif %}
+        {% elif occ in ['dual', 'home'] %}{{ _primary }}
+        {% else %}{{ _primary }}{% endif %}
 
   # 0b. Budget gate (fail-open, skipped in test mode)
   - alias: "0b · Budget gate"
@@ -715,7 +716,7 @@ actions:
           {%- if mode == 'force_allow_all' or override == 'force_allow' -%}true
           {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
           {%- else -%}
-            {%- set slug = resolved_user | default('miquel') -%}
+            {%- set slug = resolved_user | default('', true) -%}
             {{ is_state('input_boolean.ai_privacy_gate_' ~ slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
           {%- endif -%}
         {%- endif -%}

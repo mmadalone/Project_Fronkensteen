@@ -115,13 +115,13 @@ Detects sleep from sustained presence in a bed zone. Manages the full lifecycle:
 | **Log sleep to L2** | `true` | Call `pyscript.sleep_detect_log` on sleep end |
 | **Fire sleep_ended event** | `true` | Fire `ai_sleep_ended` event with start/end timestamps |
 
-### Privacy
+### ⑥ Privacy
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | **Privacy gate enabled entity** | `input_boolean.ai_privacy_gate_enabled` | Boolean that enables the privacy gate system |
 | **Privacy gate mode entity** | `input_select.ai_privacy_gate_mode` | Select controlling gate behavior (auto/force_suppress/force_allow) |
-| **Privacy gate person** | `miquel` | Person name for tier suppression lookups |
+| **Privacy gate person** | `person.miquel` | Person entity for tier suppression lookups |
 
 ## Technical Notes
 

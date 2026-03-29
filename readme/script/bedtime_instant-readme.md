@@ -63,10 +63,10 @@ END
 
 ## Prerequisites
 
-- Home Assistant (no explicit min_version set)
+- Home Assistant **2024.10.0** or newer
 - Music Assistant integration (for audiobook playback)
 - TTS entity (Piper, ElevenLabs, HA Cloud, etc.)
-- Duck guard system (optional: `input_boolean.ducking_flag`, `input_boolean.ai_duck_guard_enabled`)
+- Duck guard system (optional: `input_boolean.ai_ducking_flag`, `input_boolean.ai_duck_guard_enabled`)
 
 ## Installation
 
@@ -123,7 +123,7 @@ END
 
 | Input | Default | Description |
 |---|---|---|
-| `announcement_message` | `That's it, I'm shutting everything down...` | Initial bedtime announcement |
+| `announcement_message` | `That's it, I'm shutting everything down, and putting you to bed!` | Initial bedtime announcement |
 | `warning_message` | `You have seven minutes til lights out.` | Warning before lights go out |
 | `goodnight_message` | `Good night!` | Final message after lights off |
 
@@ -134,7 +134,7 @@ END
 
 | Input | Default | Description |
 |---|---|---|
-| `ducking_flag` | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
 
 </details>

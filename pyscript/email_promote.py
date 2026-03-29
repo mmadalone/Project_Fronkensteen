@@ -14,6 +14,7 @@ from shared_utils import (
     get_person_config,
     get_person_slugs,
     load_entity_config,
+    resolve_active_user,
 )
 
 # =============================================================================
@@ -37,7 +38,7 @@ from shared_utils import (
 # Key design:
 #   - Aggressive filtering: only known contacts + keyword matches promoted
 #   - Privacy: sender + subject only — NEVER store email body in L2
-#   - User-scoped: all L2 keys include ":miquel:" (per-user)
+#   - User-scoped: all L2 keys include ":{person}:" (per-user)
 #   - Identity gate: suppressed entirely when confidence < 70%
 #   - Configurable: contacts and keywords in input_text helpers
 #   - Test mode: log filter decisions, no L2 writes or TTS
@@ -427,11 +428,13 @@ def _resolve_person_from_imap(sensor_entity: str = "") -> str:
                 return slug
     # Fallback: first person slug
     slugs = get_person_slugs()
-    return slugs[0] if slugs else "miquel"
+    return slugs[0] if slugs else ""
 
 
-def _check_identity_confidence(person: str = "miquel") -> int:
+def _check_identity_confidence(person: str = "") -> int:
     """Get identity confidence score for a person."""
+    if not person:
+        person = resolve_active_user()
     try:
         return int(float(
             state.get(f"sensor.identity_confidence_{person}") or 0  # noqa: F821
@@ -444,7 +447,7 @@ def _check_identity_confidence(person: str = "miquel") -> int:
 
 async def _process_email(
     sender: str, subject: str, test_mode: bool, suppress_tts: str = "false",
-    person: str = "miquel",
+    person: str = "",
 ) -> dict[str, Any]:
     """Core email processing logic.
 
@@ -455,6 +458,8 @@ async def _process_email(
     5. If priority: write to L2, increment counter
     6. If urgent: also announce via TTS dedup (routed through persona LLM)
     """
+    if not person:
+        person = resolve_active_user()
 
     # ── Identity gate ──
     confidence = _check_identity_confidence(person)

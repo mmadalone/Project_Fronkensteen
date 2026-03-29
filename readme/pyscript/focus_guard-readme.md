@@ -16,30 +16,31 @@ Task 20 of the Voice Context Architecture. Evaluates 6 nudge conditions every 15
 |---------|----------|-----------|
 | `@time_trigger("cron(*/15 * * * *)")` | `_cron_evaluate` | 15-minute evaluation cycle |
 | `@state_trigger("binary_sensor.fp2_presence_sensor_workshop")` | `_on_workshop_zone_change` | Workshop zone entry/exit triggers evaluation (primary focus zone) |
-| `@state_trigger("binary_sensor.fp2_presence_sensor_living_room == 'on'", ...)` | `_on_other_zone_entry` | Living room, kitchen, bathroom, bedroom zone entry triggers evaluation for social nudge and break suggestion |
+| `@state_trigger("binary_sensor.fp2_presence_sensor_living_room == 'on'", ...)` | `_zone_change_re_eval` | Living room, kitchen, bathroom, bed, main room zone entry triggers zone tracking update and break suggestion reset |
 | `@time_trigger("startup")` | `_startup` | Initializes status sensor and workshop tracking state |
 
 ## Key Functions
 
-- `_evaluate_time_check()` — Workshop duration nudge: escalates P4 to P3 to P2 at 30-minute intervals when workshop time exceeds threshold
-- `_evaluate_meal_reminder()` — Meal nudge: fires when last meal was over 4 hours ago, escalates through P4/P3/P2
-- `_evaluate_calendar_warn()` — Calendar proximity: fires at 60/30/15 minutes before appointments with escalating priority P3/P2/P1
-- `_evaluate_social_nudge()` — Social awareness: fires when partner has been home for 30+ minutes and user is in a solo zone
-- `_evaluate_break_suggest()` — Break suggestion: fires when user has been in the same zone for 2+ hours without moving
-- `_evaluate_bedtime()` — Bedtime nudge: fires when current time exceeds bedtime threshold, escalates through priorities
-- `_check_snooze()` — Returns True if all nudges are currently snoozed
+- `_evaluate_all()` — Core evaluation: runs all 6 nudge condition checks inline (time_check, meal_reminder, calendar_warn, social_nudge, break_suggest, bedtime_approach), manages escalation states, and delivers nudges
 - `_deliver_nudge()` — Delivers a nudge via TTS priority queue with persona routing through the dispatcher
+- `_is_snoozed()` — Returns True if all nudges are currently snoozed
+- `_get_active_zones()` — Returns list of currently active FP2 zones
+- `_clear_escalation()` — Resets escalation level for a specific nudge type
 
 ## State Dependencies
 
 - `input_boolean.ai_focus_guard_enabled` — Kill switch
 - `input_boolean.ai_focus_mode` — When ON, suppresses non-critical nudges (only P1 calendar warnings pass through)
-- `input_number.ai_focus_workshop_threshold_hours` — Workshop time before first nudge (default: 2h)
-- `input_number.ai_focus_meal_threshold_hours` — Hours since last meal before nudge (default: 4h)
-- `input_datetime.ai_focus_last_meal_time` — Timestamp of last meal
-- `input_datetime.ai_focus_bedtime` — Configured bedtime for bedtime nudge
-- `input_datetime.ai_focus_snooze_until` — Snooze expiry timestamp
-- `binary_sensor.fp2_presence_sensor_*` — FP2 zone sensors (workshop, living room, kitchen, bathroom, bedroom)
+- `input_number.ai_focus_guard_threshold_hours` — Workshop time before first nudge (default: 2h)
+- `input_number.ai_focus_meal_reminder_hours` — Hours since last meal before nudge (default: 4h)
+- `input_number.ai_focus_nudge_cooldown_minutes` — Cooldown between nudges of the same type (default: 30 min)
+- `input_number.ai_focus_social_nudge_minutes` — Partner present time before social nudge (default: 30 min)
+- `input_number.ai_focus_break_suggest_hours` — Hours in same zone before break suggestion (default: 2h)
+- `input_number.ai_focus_bedtime_approach_minutes` — Minutes before bedtime to start nudging (default: 60 min)
+- `input_datetime.ai_last_meal_time` — Timestamp of last meal
+- `input_datetime.ai_context_bed_time` — Configured bedtime for bedtime approach nudge
+- `input_datetime.ai_focus_guard_snooze_until` — Snooze expiry timestamp
+- `binary_sensor.fp2_presence_sensor_*` — FP2 zone sensors (workshop, living room, main room, kitchen, bathroom, shower, bed, lobby). Configured via `entity_config.yaml` `fp2_zones` with hardcoded defaults as fallback.
 - `input_text.ai_calendar_today_summary` — Calendar data for appointment proximity checks
 - `person.miquel` / `person.jessica` — Home/away state for social nudge
 
@@ -55,7 +56,7 @@ Pairs with `packages/ai_focus_guard.yaml` which defines the kill switch, focus m
 
 ## Notes
 
-- 6 nudge types with independent escalation chains: `time_check` (P4-P3-P2), `meal_reminder` (P4-P3-P2), `calendar_warn` (P3-P2-P1), `social_nudge` (P4-P3), `break_suggest` (P4 only), `bedtime` (P4-P3-P2).
+- 6 nudge types with independent escalation chains: `time_check` (P4-P3-P2), `meal_reminder` (P4-P3-P2), `calendar_warn` (P3-P2-P1), `social_nudge` (P4-P3), `break_suggest` (P4 only), `bedtime_approach` (P3-P2-P1).
 - Escalation is time-based: each nudge type tracks its own escalation level. Moving to a new zone resets some escalations (break_suggest). Marking a meal resets meal_reminder.
 - Focus mode suppression: when `ai_focus_mode` is ON, only P1 (critical calendar) nudges pass through. All others are silently skipped.
 - Snooze is global: `focus_guard_snooze` suppresses all non-critical nudges for the specified duration.

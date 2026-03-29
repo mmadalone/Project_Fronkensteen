@@ -44,7 +44,7 @@ Done
 
 - Home Assistant
 - A `media_player` entity
-- `input_boolean.ducking_flag` (ducking status flag)
+- `input_boolean.ai_ducking_flag` (ducking status flag)
 - `input_boolean.ai_duck_guard_enabled` (duck guard toggle)
 - `pyscript/duck_manager.py` (for duck snapshot updates)
 
@@ -70,7 +70,7 @@ Done
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `ducking_flag` | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
 
 </details>
@@ -87,7 +87,7 @@ Done
 
 ## Author
 
-**madalone**
+**Madalone + Assistant**
 
 ## License
 

@@ -151,7 +151,7 @@ Each slot has two inputs:
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Ducking flag entity | `input_boolean.ducking_flag` | Audio ducking active flag. |
+| Ducking flag entity | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active. |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle. |
 
 </details>

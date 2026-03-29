@@ -32,20 +32,20 @@ Reference-counted session-based volume ducking for media players. The first sess
 ## State Dependencies
 
 - `input_boolean.ai_duck_manager_enabled` — Kill switch
-- `input_boolean.ducking_flag` — Set ON during active ducking, used by volume_sync to skip synchronization
-- `input_text.ai_duck_group` — CSV list of media players to duck
-- `input_text.ai_duck_announcement_players` — CSV list of players to boost for TTS
-- `input_text.ai_duck_satellites` — CSV list of satellites that trigger ducking
-- `input_number.ai_tts_duck_volume` — Volume level during ducking (0.0-1.0)
-- `input_number.ai_tts_announcement_volume` — Volume level for announcement players
+- `input_boolean.ai_ducking_flag` — Set ON during active ducking, used by volume_sync to skip synchronization
+- `entity_config.yaml` `duck.group` — List of media players to duck (moved from `input_text` in Phase 2)
+- `entity_config.yaml` `duck.announcement_players` — List of players to boost for TTS (moved from `input_text` in Phase 2)
+- `entity_config.yaml` `duck.satellites` — List of satellites that trigger ducking (moved from `input_text` in Phase 2)
+- `input_number.ai_duck_volume` — Volume level during ducking (0.0-1.0)
+- `input_number.ai_duck_announce_volume` — Volume level for announcement players
 - `input_number.ai_duck_watchdog_timeout` — Seconds before watchdog force-restores (default: 120)
 - `input_select.ai_tts_restore_mode` — Restore timing: `fixed` or `dynamic`
-- `input_number.ai_tts_restore_fixed_delay` / `ai_tts_restore_timeout` / `ai_tts_restore_post_buffer` — Restore timing parameters
+- `input_number.ai_duck_restore_delay` / `ai_duck_restore_timeout` / `ai_duck_post_buffer` — Restore timing parameters
 - `input_select.ai_duck_behavior` — I-39: `volume`, `pause`, or `both`
 - `input_number.ai_duck_pre_delay_ms` — I-21: Pre-delay before first duck (0-2000ms)
 - `input_boolean.ai_duck_allow_manual_override` — I-22: Whether user volume changes during duck are respected
 - `input_number.ai_duck_default_volume` — Fallback volume when capture fails and no buddy available
-- `input_text.ai_vsync_{group}_players` / `ai_vsync_{group}_alexa` — Volume sync group membership for buddy fallback
+- `entity_config.yaml` `vsync_zones` — Volume sync zone config (players + alexa lists per zone) for buddy fallback (moved from `input_text` in Phase 2)
 
 ## Package Pairing
 
@@ -65,4 +65,4 @@ Pairs with `packages/ai_duck_manager.yaml` which defines all ducking helpers, th
 - I-39 (duck behavior): supports `pause` mode (pause media instead of reducing volume) and `both` mode (pause and reduce). Media is resumed on restore.
 - I-22 (manual override): if a user manually adjusts volume during ducking, that entity is skipped during restore to respect the user's intent.
 - Crash recovery: the volume snapshot is persisted to `/config/pyscript/duck_snapshot.json` after every duck. On startup, if the file exists, volumes are restored and the file is cleared.
-- The `@state_trigger` hardcodes satellite entity IDs (required by pyscript's decorator), but the `input_text.ai_duck_satellites` helper controls which satellites are actually active for ducking (removing one from the helper disables it without a code edit).
+- Satellite triggers are registered dynamically at startup from `entity_config.yaml` `duck.satellites`. To add/remove satellites: update `entity_config.yaml`, then `pyscript.reload` or HA restart.

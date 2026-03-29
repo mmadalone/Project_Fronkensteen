@@ -372,7 +372,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -401,21 +401,21 @@ blueprint:
         pref_wake_weekday_entity:
           name: "Weekday wake time entity"
           description: "input_datetime helper for weekday wake time."
-          default: input_datetime.ai_context_wake_time_weekday_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
         pref_wake_weekend_entity:
           name: "Weekend wake time entity"
           description: "input_datetime helper for weekend wake time."
-          default: input_datetime.ai_context_wake_time_weekend_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
         pref_wake_alt_entity:
           name: "Alt weekday wake time entity"
           description: "input_datetime helper for alternate weekday wake time."
-          default: input_datetime.ai_context_wake_time_alt_weekday_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
@@ -463,10 +463,11 @@ variables:
   pref_alt_days_val: !input pref_wake_alt_days
   # ── User preference context ──
   _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-    {% else %}miquel{% endif %}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
   _user_prefs_block: >-
     {% set ns = namespace(lines=[]) %}
     {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}

@@ -71,7 +71,7 @@ Pairs with `packages/ai_user_interview.yaml` (interview mode toggle, progress tr
 ## Notes
 
 - **Agent-driven**: The LLM conducts the interview naturally using its system prompt + hot context guidance. No pyscript-driven conversation loops.
-- **9 categories, 38 keys**: identity (6), household (3), work (5), schedule (6), health (3), environment (4), media (6), communication (5), privacy (2).
+- **9 categories, 40 keys**: identity (6), household (3), work (5), schedule (6), health (3), environment (4), media (6), communication (5), privacy (2).
 - **L1 map**: Known helpers (wake time, bedtime, name, etc.) get set directly via HA service calls. Everything else falls back to L2 memory with key format `preference:{category}:{key}:{user}`. Includes `wake_alt_weekday` (input_datetime) and `wake_alt_days` (input_text) for per-day wake time variation.
 - **Day-name normalization**: `_DAY_ABBREV_NORM` translates Spanish day abbreviations on ingest (`jue→thu`, `vie→fri`, `lun→mon`, etc.) since `strftime` uses C/en_US locale. Applied in both `user_interview_save` and `user_interview_import` paths via `_normalize_l1_value()`.
 - **Auto-detect**: If no L1 map entry exists but `input_text.ai_context_user_{key}_{user}` exists as a helper, writes directly to it. New convention-named helpers are auto-writable AND auto-discoverable with zero code changes.

@@ -79,7 +79,7 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 
 ## Prerequisites
 
-- Home Assistant (no min_version specified)
+- Home Assistant 2024.10.0 or later
 - `input_boolean.ai_voice_handoff_enabled`
 - `input_text.ai_handoff_pending`
 - `input_boolean.ai_handoff_processing` (re-entry guard)
@@ -145,8 +145,6 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 | Input | Default | Description |
 |---|---|---|
 | `bypass_follow_me` | `true` | Pause notification follow-me during handoff |
-| `bypass_ducking` | `false` | Disable ducking during handoff |
-| `duck_toggle_helper` | `input_boolean.ai_duck_manager_enabled` | Duck manager master toggle |
 | `bypass_claim_script` | `script.refcount_bypass_claim` | Refcount claim script |
 | `bypass_release_script` | `script.refcount_bypass_release` | Refcount release script |
 
@@ -169,10 +167,27 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 | `voice_handoff_enabled` | `input_boolean.ai_voice_handoff_enabled` | Master kill switch |
 | `processing_guard` | _(empty)_ | Re-entry prevention boolean |
 | `stale_guard_timeout` | `30` | Seconds before stuck guard is bypassed |
+| `restore_mode` | `source` | Pipeline restore after handoff: source / preferred / never |
+| `restore_timeout` | `300` | Seconds before restoring pipeline (0 = disabled) |
 | `privacy_tier` | `t2` | Privacy gate tier (off / t1 / t2 / t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
+
+</details>
+
+<details><summary><strong>⑧ Music</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `enable_agent_jingle` | `false` | Play target agent's theme jingle before greeting |
+| `jingle_cooldown_s` | `60` | Minimum seconds between jingles on same speaker |
+| `enable_handoff_stinger` | `false` | Play transition stinger between farewell and greeting |
+| `enable_thinking_music` | `false` | Play thinking loop during LLM response wait |
+| `jingle_library_id_override` | `""` | Explicit library ID for jingle (bypasses auto-resolve) |
+| `stinger_library_id_override` | `""` | Explicit library ID for stinger (bypasses auto-resolve) |
+| `music_delay_after` | `2` | Seconds to wait after music before continuing |
+| `music_fallback_media_url` | `""` | Fallback audio URL if library is empty |
 
 </details>
 

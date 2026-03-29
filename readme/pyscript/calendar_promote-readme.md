@@ -7,6 +7,10 @@ Task 18a of the Voice Context Architecture. Promotes Google Calendar events from
 | Service | Parameters | Returns | Description |
 |---------|-----------|---------|-------------|
 | `pyscript.calendar_promote_now` | `force` (bool, default false) | `{status, op, today_events, tomorrow_events, today_summary, tomorrow_summary, l2_today, l2_tomorrow, api_failed, stale, test_mode, elapsed_ms}` | On-demand calendar promotion. Fetches today + tomorrow events from Google Calendar (plus holidays and birthdays), formats for agent consumption, writes to L2 memory and updates L1 input_text helpers. `supports_response="only"` |
+| `pyscript.calendar_create_event` | `summary`, `start_date_time`, `end_date_time`, `start_date`, `description`, `location`, `calendar_entity` | `{status, op, ...}` | Create a new Google Calendar event. Validates parameters, creates via `calendar.create_event`, refreshes L2/L1 data. `supports_response="only"` |
+| `pyscript.calendar_find_events` | `summary`, `start_date`, `end_date`, `calendar_entity` | `{status, op, events, ...}` | Search for calendar events by summary and/or date range. Returns matching events with UIDs for delete/edit operations. Uses `calendar_utils` for UID access. `supports_response="only"` |
+| `pyscript.calendar_delete_event` | `summary`, `start_date`, `uid`, `recurrence_id`, `scope`, `calendar_entity` | `{status, op, ...}` | Delete a calendar event by summary+date or UID. Supports recurring event scopes: `this_instance`, `this_and_future`, `entire_series`. `supports_response="only"` |
+| `pyscript.calendar_edit_event` | `summary`, `start_date`, `uid`, `recurrence_id`, `new_summary`, `new_start_date_time`, `new_end_date_time`, `new_start_date`, `new_description`, `new_location`, `calendar_entity` | `{status, op, ...}` | Edit a calendar event via delete + recreate. Finds by summary+date or UID. Applies `new_*` field overrides. `supports_response="only"` |
 
 ## Triggers
 
@@ -48,6 +52,7 @@ Pairs with `packages/ai_calendar_promotion.yaml` which defines all calendar-rela
 - **proactive_briefing.py** — reads L1 helpers for calendar sections in morning/afternoon/evening briefings
 - **predictive_schedule.py** — reads the tomorrow work-day flag for wake time prediction
 - **calendar_alarm.yaml** — uses the predicted work-day state for alarm decisions
+- **Voice agents** — call `calendar_create_event`, `calendar_find_events`, `calendar_delete_event`, `calendar_edit_event` via the unified `calendar_event` agent tool
 
 ## Notes
 

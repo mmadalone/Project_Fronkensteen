@@ -83,6 +83,7 @@ Pre-activates scenes, lights, or climate before the user arrives in a predicted 
 | `min_probability` | `60` | Minimum prediction probability (%) to trigger |
 | `min_confidence` | `medium` | Minimum confidence level (low / medium / high) |
 | `occupancy_gate` | `any` | Only fire when occupancy mode matches (any / solo_miquel / solo_jessica / dual) |
+| `predicted_zone_entity` | `input_text.ai_predicted_next_zone_raw` | The input_text helper holding predicted zone JSON |
 
 </details>
 

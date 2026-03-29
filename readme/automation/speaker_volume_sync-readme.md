@@ -1,8 +1,8 @@
-# Alexa / Music Assistant Volume Sync
+# Speaker Volume Sync
 
 ![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/alexa_ma_volume_sync_blueprint-header.jpeg)
 
-Keeps the volume of paired media players in sync -- bidirectionally. Change the volume on either device and its partner follows. Supports two sync modes: **Paired** (1:1 by list order) and **Group** (all devices sync together). Includes mute sync, duck guard integration with I-22 manual override support, and ESP boot protection for Voice PE satellites.
+Keeps the volume of paired speakers in sync -- bidirectionally. Change the volume on either device and its partner follows. Supports two sync modes: **Paired** (1:1 by list order) and **Group** (all devices sync together). Includes mute sync, duck guard integration with I-22 manual override support, and ESP boot protection for Voice PE satellites.
 
 ## How It Works
 
@@ -62,7 +62,7 @@ Keeps the volume of paired media players in sync -- bidirectionally. Change the 
 
 ## Installation
 
-1. Copy `alexa_ma_volume_sync.yaml` to `config/blueprints/automation/madalone/`
+1. Copy `speaker_volume_sync.yaml` to `config/blueprints/automation/madalone/`
 2. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
 
 ## Configuration
@@ -83,7 +83,7 @@ Keeps the volume of paired media players in sync -- bidirectionally. Change the 
 | Input | Default | Description |
 |-------|---------|-------------|
 | Sync mode | `paired` | Paired (1:1 matching) or Group (all devices sync together). |
-| Ducking flag | _(required)_ | `input_boolean` used by the Voice PE duck/restore system. |
+| Ducking flag | _(empty)_ | `input_boolean` used by the Voice PE duck/restore system. |
 | Ducking grace period | `3` s | Seconds to ignore volume changes after ducking ends. |
 | Allow manual override during ducking | `true` | When enabled, manual volume changes during ducking notify the duck manager (I-22). |
 | Sync direction | `both` | Both ways, A->B only, or B->A only. |

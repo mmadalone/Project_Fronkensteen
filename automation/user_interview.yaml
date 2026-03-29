@@ -595,8 +595,8 @@ actions:
         {% else %}
           {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
           {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-          {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-          {% else %}miquel{% endif %}
+          {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('') }}
+          {% else %}{% endif %}
         {% endif %}
 
   - alias: "0a-guard · Abort if no user (away/unknown)"
@@ -626,7 +626,7 @@ actions:
         {%- if mode == 'force_allow_all' or override == 'force_allow' -%}true
         {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
         {%- else -%}
-          {%- set slug = resolved_user | default('miquel') -%}
+          {%- set slug = resolved_user | default('') -%}
           {{ is_state('input_boolean.ai_privacy_gate_' ~ slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
         {%- endif -%}
       {%- endif -%}

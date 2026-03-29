@@ -136,7 +136,7 @@ NUDGE_TEXTS = {
         "Your {event} starts in {minutes} minutes. You need to go NOW.",
     ],
     "social_nudge": [
-        "Jessica's been home for a bit. Maybe say hello?",
+        "Your partner's been home for a bit. Maybe say hello?",
         "Your partner's been home for a while. Don't forget about the real world.",
     ],
     "break_suggest": [

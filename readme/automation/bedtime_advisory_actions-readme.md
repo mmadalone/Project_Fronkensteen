@@ -83,11 +83,12 @@ ai_bedtime_advisory event
 | Input | Default | Description |
 |-------|---------|-------------|
 | `advisory_actions` | `[]` | Actions to run (e.g., dim lights, wind-down playlist) |
-| `tts_speaker` | _(empty)_ | Media player for TTS announcements |
+| `tts_speaker` | `{}` | Media player for TTS announcements |
 | `tts_mode` | `static` | TTS mode: `static` (text) or `llm` (LLM-generated) |
 | `tts_message` | `Time to start winding down.` | Static TTS message (static mode only) |
 | `llm_prompt` | `Generate a brief, gentle bedtime reminder...` | LLM prompt with `{recommendation}` placeholder (llm mode only) |
-| `llm_agent` | _(empty)_ | Conversation agent entity for LLM-generated messages |
+| `llm_agent` | `{}` | Conversation agent entity for LLM-generated messages |
+| `enable_user_preferences` | `true` | Inject user preferences and sleep budget into advisory prompts |
 
 </details>
 

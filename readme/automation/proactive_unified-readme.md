@@ -116,8 +116,10 @@ Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `p
 | Input | Default | Description |
 |-------|---------|-------------|
 | `proactive_mode` | `llm` | template (from helpers) or llm (conversation agent) |
+| `budget_floor` | `60` | Budget floor (%) -- force template mode below this (0 = disable) |
 | `use_dispatcher` | `true` | Use AI dispatcher for persona selection |
 | `tts_output_volume` | `0.0` | Volume before TTS (0 = don't change) |
+| `tts_restore_delay` | `8` | Seconds to wait after TTS before restoring volume |
 | `tts_collision_mode` | `queue` | dedup / queue / barge_in |
 
 </details>
@@ -201,16 +203,50 @@ Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `p
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression |
 
 </details>
 
 <details>
-<summary><strong>⑨ Infrastructure</strong></summary>
+<summary><strong>⑨ Music</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_pre_tts_stinger` | `false` | Enable pre-TTS stinger/chime playback |
+| `stinger_agent` | *(empty)* | Agent persona for library/compose lookups (empty = dispatched) |
+| `stinger_library_id_override` | *(empty)* | Explicit music library ID (bypasses auto-resolve) |
+| `compose_stinger_if_missing` | `true` | Compose via FluidSynth if not in library |
+| `stinger_fallback_media_url` | *(empty)* | Fallback chime URL when library + compose fail |
+
+</details>
+
+<details>
+<summary><strong>⑩ User preferences</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_user_preferences` | `true` | Inject user preferences and sleep budget into proactive prompts |
+
+</details>
+
+<details>
+<summary><strong>⑪ Notification threshold</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_notify_threshold` | `false` | Gate TTS against the active user's notification threshold preference |
+| `tts_priority_input` | `3` | TTS queue priority for this instance (0=emergency to 4=ambient) |
+
+</details>
+
+<details>
+<summary><strong>⑫ Infrastructure</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Dispatcher system toggle |
+| `identity_confidence_threshold` | `50` | Minimum identity confidence (pts) before speaking (0 = disable) |
+| `bedtime_active_entity` | `input_boolean.ai_bedtime_active` | Suppress proactive nudges when bedtime routine is running |
 
 </details>
 

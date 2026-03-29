@@ -6,7 +6,7 @@ Routes all TTS speech and media playback through a priority queue with presence-
 
 | Service | Parameters | Returns | Description |
 |---------|-----------|---------|-------------|
-| `pyscript.tts_queue_speak` | `text` (str), `voice` (str), `priority` (int, default 3: 0=emergency..4=ambient), `cache` (str, default "none": static/daily/session/none), `target_mode` (str, default "presence": presence/explicit/broadcast/source_room), `target` (str), `volume_level` (float), `announce` (bool, default true), `chime_path` (str), `media_file` (str), `voice_id` (str) | `{status, op, queue_length, priority, speaker, preempted, test_mode, cache_hit, cache_key}` | Enqueue TTS or audio for prioritized playback. Core entry point for all audio output. `supports_response="only"`. |
+| `pyscript.tts_queue_speak` | `text` (str), `voice` (str), `priority` (int, default 3: 0=emergency..4=ambient), `cache` (str, default "none": static/daily/session/none), `target_mode` (str, default "presence": presence/explicit/broadcast/source_room), `target` (str), `volume_level` (float), `announce` (bool, default true), `duck` (bool, default true), `chime_path` (str), `chime_duration_ms` (int, default 0), `media_file` (str), `voice_id` (str), `restore_volume` (bool, default false), `volume_restore_delay` (int, default 8), `agent` (str), `metadata` (dict) | `{status, op, queue_length, priority, speaker, preempted, test_mode, cache_hit, cache_key}` | Enqueue TTS or audio for prioritized playback. Core entry point for all audio output. `supports_response="only"`. |
 | `pyscript.tts_queue_clear` | `target` (str, optional) | `{status, op, cleared}` | Remove pending items from queue. If target specified, only remove items for that speaker. `supports_response="only"`. |
 | `pyscript.tts_queue_stop` | `target` (str, optional) | `{status, op, cleared}` | Stop current playback AND clear queue. If target specified, only stop/clear that speaker. `supports_response="only"`. |
 | `pyscript.tts_queue_flush_deferred` | (none) | `{status, op, flushed}` | Move items deferred during phone calls back to main queue and trigger processing. `supports_response="optional"`. |
@@ -19,9 +19,11 @@ Routes all TTS speech and media playback through a priority queue with presence-
 |---------|----------|-----------|
 | `@event_trigger("tts_queue_item_added")` | `_on_queue_item_added` | Process queue when new item added. Serialized via lock. |
 | `@event_trigger("tts_queue_flush_deferred")` | `_on_flush_deferred` | Process queue after deferred items flushed. |
-| `@time_trigger("startup")` | `tts_queue_startup` | Create cache dir, rebuild speaker config, restore budget counters from L2. |
+| `@state_trigger("input_boolean.ai_tts_test_mode")` | `_on_tts_test_mode_changed` | Toggle ON: swap all ElevenLabs pipelines to HA Cloud. Toggle OFF: restore from backup. |
+| `@time_trigger("startup")` | `tts_queue_startup` | Create cache dir, load TTS entity remap, rebuild speaker config, restore budget counters from L2, auto-restore orphaned TTS test backups. |
 | `@time_trigger("cron(*/30 * * * *)")` | `_budget_periodic_save` | Save budget counters to L2 every 30 minutes. |
-| `@time_trigger("cron(0 0 * * *)")` | `tts_queue_daily_housekeeping` | Cache cleanup (daily/expired/size eviction), HA TTS dir cleanup, reset daily budget counters, save to L2. |
+| `@time_trigger("cron(0 0 * * *)")` | `tts_queue_daily_housekeeping` | Cache cleanup (daily/expired/size eviction), HA TTS dir cleanup, reset daily budget counters. |
+| `@time_trigger("cron(* * * * *)")` | `_tts_queue_stuck_watchdog` | Detect and recover from stuck queue processor (every 60s). |
 
 ## Key Functions
 
@@ -29,7 +31,7 @@ Routes all TTS speech and media playback through a priority queue with presence-
 - `_resolve_speaker(target_mode, target)` -- Resolve speaker based on mode: presence (scan FP2 zones by priority), explicit, broadcast, source_room.
 - `_get_default_speaker()` -- Fallback speaker from helper or hardcoded default.
 - `_rebuild_speaker_config()` -- Auto-discover speakers from entity registry area assignments + merge with config file.
-- `_discover_speakers_from_registry_sync(registry_file)` -- Read entity registry, extract area-assigned media_players. `@pyscript_compile`.
+- `_discover_speakers_from_registry_sync(registry_file)` -- Read entity registry, extract area-assigned media_players. `@pyscript_executor`.
 
 ### Playback
 - `_play_tts(speaker, text, voice, ...)` -- Core TTS playback via `tts.speak`. Handles announce mode and voice_id options.
@@ -63,9 +65,10 @@ Routes all TTS speech and media playback through a priority queue with presence-
 
 - `input_boolean.ai_tts_queue_active` -- Kill switch (off = reject all TTS)
 - `input_boolean.ai_test_mode` -- Test mode
+- `input_boolean.ai_tts_test_mode` -- TTS test mode (state trigger: swap ElevenLabs pipelines to HA Cloud)
 - `input_boolean.ai_budget_fallback_active` -- Budget fallback flag (swap ElevenLabs to HA Cloud)
-- `input_text.ai_tts_default_speaker` -- Default speaker entity
-- `input_number.ai_tts_playback_timeout` -- Playback timeout override
+- `input_text.ai_default_speaker` -- Default speaker entity
+- `input_number.ai_tts_max_timeout` -- Playback timeout (default 30s)
 - `input_number.ai_tts_chars_today` -- Output: daily TTS character counter
 - `input_number.ai_llm_calls_today`, `ai_llm_tokens_today`, `ai_tts_calls_today`, `ai_stt_calls_today` -- Budget counters
 - `input_number.ai_tts_cache_static_max_days`, `ai_tts_cache_max_size_mb`, `ai_tts_cache_protect_hours` -- Cache eviction settings

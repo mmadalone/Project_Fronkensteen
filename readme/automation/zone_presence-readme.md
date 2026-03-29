@@ -53,7 +53,7 @@ Turns on lights and/or media when a presence sensor (e.g., Aqara FP2) reports "o
 
 ## Prerequisites
 
-- Home Assistant (no min_version specified)
+- Home Assistant 2024.10.0 or later
 - A `binary_sensor` for zone presence detection (e.g., Aqara FP2)
 - `input_boolean.ai_auto_off_enabled` (default master switch, can be changed)
 
@@ -96,6 +96,18 @@ Turns on lights and/or media when a presence sensor (e.g., Aqara FP2) reports "o
 | `weekend_days` | `sat, sun` | Which days count as weekend |
 | `weekend_start_time` | `00:00:00` | Weekend-specific active window start |
 | `weekend_end_time` | `23:59:59` | Weekend-specific active window end |
+
+</details>
+
+<details><summary><strong>Quiet Hours</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `quiet_hours_mode` | `off` | Off (disabled), delayed (longer delay), or disabled (no lights) during quiet hours |
+| `quiet_hours_delay` | `0h 3m 0s` | Alternative longer delay during quiet hours |
+| `quiet_hours_start` | `23:00:00` | When quiet hours begin |
+| `quiet_hours_end` | `06:00:00` | When quiet hours end |
+| `quiet_hours_days` | all 7 days | Days quiet hours apply |
 
 </details>
 

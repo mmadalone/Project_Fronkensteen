@@ -2,7 +2,7 @@
 
 # Follow-Me Refcount Watchdog
 
-Safety net for the follow-me bypass refcount system used by Notification Follow-Me, Email Follow-Me, Voice Handoff, Wake-Up Guard, Calendar Alarm, Phone Charge Reminder, and Email Priority Filter. When parallel automation instances die mid-flight (automation reload, HA restart, supersede exit), the bypass owner list stays populated and `notification_follow_me` stays OFF permanently. This watchdog detects the stranded state and force-resets everything.
+Safety net for the follow-me bypass refcount system used by Notification Follow-Me, Email Follow-Me, Voice Handoff, Wake-Up Guard, Calendar Alarm, Phone Charge Reminder, and Email Priority Filter. When parallel automation instances die mid-flight (automation reload, HA restart, `mode: restart` kill), the bypass counter stays incremented and `notification_follow_me` stays OFF permanently. This watchdog detects the stranded state and force-resets.
 
 ## How It Works
 
@@ -27,14 +27,12 @@ Safety net for the follow-me bypass refcount system used by Notification Follow-
 ┌─────────────────────────────────────────────────────────┐
 │                  ACTION SEQUENCE                        │
 │  0. Entity settle delay (10s, startup/reload only)     │
-│  1. Parse JSON owner list from helper                  │
-│     • Identify stale entries (older than TTL)          │
-│     • Identify fresh entries (within TTL)              │
+│  1. Snapshot counter + debug log before reset          │
 │  2. Choose path:                                       │
-│     ├─ startup/reload → full reset (clear list,        │
-│     │   restore toggle)                                │
-│     └─ poll → evict stale entries only                 │
-│        └─ if list now empty → restore toggle           │
+│     ├─ startup/reload → full reset (reset counter,     │
+│     │   restore toggle, clear debug log)               │
+│     └─ poll → check counter > 0 AND last_changed       │
+│        older than TTL → reset if stale                 │
 │  3. Persistent notification (optional)                 │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -42,18 +40,19 @@ Safety net for the follow-me bypass refcount system used by Notification Follow-
 ## Features
 
 - **Configurable poll interval** -- check every 1, 2, 3, 5, or 10 minutes (default 2).
-- **TTL-based eviction** -- individual owner entries older than the TTL (default 60s) are evicted; fresh entries are preserved.
-- **Startup/reload instant reset** -- clears the entire owner list and restores the toggle immediately on HA restart or automation reload.
-- **Stuck-toggle recovery** -- if the owner list is already empty but the toggle is stuck OFF, restores it anyway.
-- **Optional persistent notification** -- shows trigger source, evicted owner count, and owner names for audit trail.
+- **Counter-based stale detection** -- uses `last_changed` age on the counter entity instead of per-entry timestamps. Zero JSON, zero `from_json`, zero `selectattr`.
+- **Startup/reload instant reset** -- resets the counter and restores the toggle immediately on HA restart or automation reload.
+- **Debug log cleanup** -- clears the debug log helper on every reset.
+- **Optional persistent notification** -- shows trigger source, counter snapshot, and debug log for audit trail.
 - **Privacy gate** -- tier-based suppression with per-automation override support.
 
 ## Prerequisites
 
 - Home Assistant
 - Follow-me bypass system helpers:
-  - `input_text` for bypass owner list (JSON array, e.g., `input_text.notification_follow_me_bypass_owners`)
-  - `input_boolean` for follow-me toggle (e.g., `input_boolean.notification_follow_me`)
+  - `counter` for bypass refcount (e.g., `counter.ai_notification_follow_me_bypass_refcount`)
+  - `input_boolean` for follow-me toggle (e.g., `input_boolean.ai_notification_follow_me`)
+  - `input_text` for debug log (e.g., `input_text.ai_notification_follow_me_bypass_log`)
 
 ## Installation
 
@@ -67,8 +66,9 @@ Safety net for the follow-me bypass refcount system used by Notification Follow-
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `bypass_owners_helper` | `input_text.notification_follow_me_bypass_owners` | Input text holding the JSON owner list |
-| `follow_me_toggle` | `input_boolean.notification_follow_me` | Input boolean for notification follow-me |
+| `refcount_entity` | `counter.ai_notification_follow_me_bypass_refcount` | Counter entity tracking active bypass claims |
+| `follow_me_toggle` | `input_boolean.ai_notification_follow_me` | Input boolean for notification follow-me |
+| `debug_log_entity` | `input_text.ai_notification_follow_me_bypass_log` | Input text for owner debug logging (cleared on reset) |
 
 </details>
 
@@ -99,7 +99,7 @@ Safety net for the follow-me bypass refcount system used by Notification Follow-
 | `privacy_tier` | `off` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 
@@ -107,15 +107,17 @@ Safety net for the follow-me bypass refcount system used by Notification Follow-
 
 - **Mode:** `single` -- only one watchdog run at a time; `max_exceeded: silent`.
 - **Worst-case recovery time:** TTL + poll interval (default ~3 minutes with 60s TTL + 2 min poll).
-- **Poll vs. state trigger:** v1.1.0 replaced the one-shot state trigger with `time_pattern` because the state trigger with `for:` fired exactly once per OFF transition -- if the TTL hadn't elapsed yet, the watchdog was exhausted.
-- **JSON owner format:** Each entry is `{"o": "automation.entity_id", "t": unix_timestamp}`. TTL comparison uses `selectattr`/`rejectattr` Jinja filters.
+- **Counter-based design (v2.0.0):** Replaced JSON owner list with HA `counter` helper. Stale detection uses `last_changed` age on the counter entity. Zero JSON, zero `from_json`, zero `selectattr` -- eliminates BRP-WATCHDOG-001 class entirely.
+- **Condition gate:** Follow-me toggle must be OFF (confirms the stranded state) plus privacy gate.
 - **continue_on_error:** All helper mutations use `continue_on_error: true` to prevent cascading failures.
 
 ## Changelog
 
-- **v1.2.0:** Configurable `poll_interval_minutes` input (default 2). Reduced TTL default from 180s to 60s.
+- **v2.0.0:** Replaced JSON owner list with HA `counter` helper. Stale detection uses `last_changed` age. Zero JSON, zero `from_json`, zero `selectattr`. Eliminates BRP-WATCHDOG-001 class entirely.
+- **v1.3.0:** Inline stale/fresh owner filtering (BRP-WATCHDOG-001).
+- **v1.2.0:** Configurable `poll_interval_minutes`, reduced TTL.
 - **v1.1.0:** Replace one-shot state trigger with `time_pattern` poll.
-- **v1.0.0:** Initial release -- startup/reload instant reset, TTL-based eviction, optional persistent notification.
+- **v1.0.0:** Initial release.
 
 ## Author
 

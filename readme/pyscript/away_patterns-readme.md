@@ -14,29 +14,34 @@ I-40 of the Voice Context Architecture. Queries the HA recorder database for his
 
 | Trigger | Function | Condition |
 |---------|----------|-----------|
-| `@state_trigger("device_tracker.oppo_a60", "device_tracker.oppo_a38")` | `_on_tracker_change` | Logs departure/arrival events, runs prediction on state change. Departure debounced via `asyncio.sleep` using `ai_away_flap_debounce_seconds`. |
+| `@state_trigger` (dynamic, per tracker) | `_on_tracker_change` | Registered at startup from `entity_config.yaml` person trackers. Logs departure/arrival events, runs prediction on state change. Departure debounced via `asyncio.sleep` using `ai_away_flap_debounce_seconds`. |
 | `@time_trigger("cron(15 4 * * *)")` | `_daily_rebuild` | Daily full pattern rebuild at 04:15 (15 min after presence_patterns at 04:00) |
 | `@time_trigger("cron(*/5 * * * *)")` | `_periodic_prediction_update` | Re-runs predictions every 5 minutes while someone is away |
 | `@time_trigger("startup")` | `_startup` | Initializes status sensor, loads cached patterns from L2, syncs current tracker state |
 
 ## Key Functions
 
-- `_query_recorder_sync()` — Runs raw SQL against the HA recorder SQLite database to extract state change history for device_tracker entities
-- `_build_frequency_tables()` — Converts raw departure/arrival pairs into time-bucketed frequency distributions
-- `_predict_return_for_person()` — Computes predicted return time using frequency table lookup, time-of-day weighting, and day-of-week adjustment
-- `_log_departure()` / `_log_arrival()` — Real-time event logging with flap debounce
+- `_extract_cycles_sync()` — Runs raw SQL against the HA recorder SQLite database to extract departure/arrival cycles for device_tracker entities
+- `_build_tables()` — Converts raw cycles into time-bucketed duration and return-time frequency tables with ordinal tracking (I-40b)
+- `_empirical_mrl()` — Empirical Mean Residual Life (Kaplan-Meier framework) for remaining trip time estimation
+- `_kde_find_modes()` — Gaussian KDE mode detection for multimodal return-time distributions
+- `_filter_outliers()` — MAD-based outlier removal for frequency table values
+- `_blend_buckets()` — Cross-bucket blending with quadratic falloff for adjacent time-of-day buckets (G9)
+- `_on_tracker_change()` — Real-time departure/arrival event handling with flap debounce
 
 ## State Dependencies
 
 - `input_boolean.ai_away_patterns_enabled` — Kill switch
-- `input_number.ai_away_lookback_days` — How many days of recorder history to query (default: 90)
-- `input_number.ai_away_flap_debounce_seconds` — Debounce window for departure detection (prevents rapid home/away flapping)
-- `input_number.ai_away_prediction_confidence_floor` — Minimum confidence threshold for predictions
-- `device_tracker.oppo_a60` / `device_tracker.oppo_a38` — Phone-based device trackers for Miquel and Jessica
+- `input_number.ai_away_pattern_lookback_days` — How many days of recorder history to query (default: 30)
+- `input_number.ai_away_pattern_min_samples` — Minimum sample count for predictions (default: 5)
+- `input_number.ai_away_flap_debounce_seconds` — Debounce window for departure detection (prevents rapid home/away flapping, default: 300s)
+- `input_number.ai_away_travel_buffer_minutes` — Buffer added to predicted return time (default: 30 min)
+- `input_number.ai_away_prediction_update_minutes` — Interval for periodic prediction updates while away (default: 15 min)
+- Device trackers — Discovered dynamically from `entity_config.yaml` persons section via `shared_utils.discover_persons()`
 
 ## Package Pairing
 
-Pairs with `packages/ai_away_patterns.yaml` which defines the kill switch, lookback days, debounce window, confidence floor helpers, and the `sensor.ai_away_patterns_status` result entity.
+Pairs with `packages/ai_away_patterns.yaml` which defines the kill switch, lookback days, debounce window, min samples, travel buffer, prediction update interval helpers, and the `sensor.ai_away_pattern_status` result entity.
 
 ## Called By
 
@@ -47,7 +52,10 @@ Pairs with `packages/ai_away_patterns.yaml` which defines the kill switch, lookb
 ## Notes
 
 - Recorder access uses direct SQLite queries against `/config/home-assistant_v2.db` (the HA recorder database). This is read-only and uses a short-lived connection to avoid locking.
-- The frequency table approach avoids ML complexity: it simply counts how often departures happen at each hour and how long they typically last, weighted by recency. Day-of-week patterns (weekday vs. weekend) are tracked separately.
+- Statistical foundation (I-40a): MAD outlier filtering, exponential decay weights, weighted percentile, KDE mode detection, empirical MRL for remaining time, cross-bucket blending, prediction intervals, and accuracy tracking.
+- I-40b ordinal-aware: tracks multi-trip days (1st, 2nd, 3rd departure), stores ordinals in frequency tables, filters predictions by trip ordinal when data permits.
+- G13 Phase 1: Shannon entropy (Miller-Madow corrected) and Fano predictability score on return-time distributions. Diagnostic metric only -- no behavior change.
 - Departure debounce is critical: phone-based trackers can flap between home/not_home rapidly (e.g., weak WiFi). The configurable debounce window via `asyncio.sleep` prevents false departure logging.
 - Daily rebuild at 04:15 is scheduled 15 minutes after `presence_patterns` (04:00) to avoid concurrent recorder access.
 - All pattern data is stored in L2 memory with key prefix `away_pattern:` and 365-day expiry. Predictions are stored with shorter TTLs.
+- Tracker entities are discovered dynamically from `entity_config.yaml` at startup (no hardcoded entity IDs).

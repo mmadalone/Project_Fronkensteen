@@ -245,7 +245,7 @@ blueprint:
           description: >
             Static message text used when LLM generation is disabled or when
             the LLM call fails. Always have a sensible fallback here.
-          default: "good morning miquel, time to get up."
+          default: ""
           selector:
             text:
               multiline: true
@@ -287,7 +287,7 @@ blueprint:
             The blueprint appends the snooze/stop window duration automatically
             so the LLM can calibrate message length.
           default: >-
-            you are a sarcastic but supportive assistant waking miquel up. make a
+            you are a sarcastic but supportive assistant waking the user up. make a
             single, continuous rant that roughly fits within the snooze/stop window,
             is annoying but not genuinely cruel, and ends with a clear call to get
             out of bed now.
@@ -379,9 +379,9 @@ blueprint:
         person_display_name:
           name: Person display name
           description: >
-            Name used in notification messages (e.g. "time to get up, miquel").
+            Name used in notification messages (e.g. "time to get up, <name>").
             Change this to the name of the person being woken up.
-          default: "miquel"
+          default: ""
           selector:
             text: {}
 
@@ -393,7 +393,7 @@ blueprint:
           name: Mobile notify service
           description: >
             Notify service for mobile push with Snooze/Stop buttons (e.g.
-            notify.mobile_app_miquel). Leave empty to skip mobile notifications.
+            notify.mobile_app_yourphone). Leave empty to skip mobile notifications.
             The notification uses actions GUARD_SNOOZE and GUARD_STOP.
           default: ""
           selector:
@@ -593,7 +593,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -624,21 +624,21 @@ blueprint:
         pref_wake_weekday_entity:
           name: "Weekday wake time entity"
           description: "input_datetime helper for weekday wake time."
-          default: input_datetime.ai_context_wake_time_weekday_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
         pref_wake_weekend_entity:
           name: "Weekend wake time entity"
           description: "input_datetime helper for weekend wake time."
-          default: input_datetime.ai_context_wake_time_weekend_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
         pref_wake_alt_entity:
           name: "Alt weekday wake time entity"
           description: "input_datetime helper for alternate weekday wake time."
-          default: input_datetime.ai_context_wake_time_alt_weekday_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
@@ -703,10 +703,11 @@ variables:
   pref_alt_days_val: !input pref_wake_alt_days
   # ── User preference context ──
   _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-    {% else %}miquel{% endif %}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
   _user_prefs_block: >-
     {% set ns = namespace(lines=[]) %}
     {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}

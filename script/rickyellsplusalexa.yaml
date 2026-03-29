@@ -89,11 +89,7 @@ blueprint:
           name: Rick's message
           description: >
             The text Rick will shout. Customize freely per script instance.
-          default: >
-            Hey Miquel, it's after eight. Get your lazy carbon-based ass out of bed
-            before I start charging you rent for lying there. Come on, I know you
-            hate your job but get up! Come on, get up and start your day! Come on
-            Come on Come on Come on!
+          default: ""
           selector:
             text:
               multiline: true

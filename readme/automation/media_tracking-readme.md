@@ -121,14 +121,26 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 </details>
 
 <details>
-<summary>Section 6 -- Privacy</summary>
+<summary>Section 6 -- Infrastructure</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `sonarr_queue_entity` | `sensor.sonarr_queue` | Sensor tracking the Sonarr download queue |
+| `radarr_queue_entity` | `sensor.radarr_queue` | Sensor tracking the Radarr download queue |
+| `tracking_enabled_entity` | `input_boolean.ai_media_tracking_enabled` | Kill switch for media tracking |
+| `data_stale_entity` | `input_boolean.ai_media_data_stale` | Boolean flagged when media data promotion fails |
+
+</details>
+
+<details>
+<summary>Section 7 -- Privacy</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `privacy_tier` | `off` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 

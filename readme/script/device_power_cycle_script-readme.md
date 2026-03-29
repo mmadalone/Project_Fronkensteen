@@ -31,7 +31,7 @@ END
 
 ## Prerequisites
 
-- Home Assistant (no explicit min_version set)
+- Home Assistant **2024.10.0** or newer
 - A switch entity controlling the device to power cycle
 
 ## Installation

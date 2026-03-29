@@ -25,7 +25,7 @@ Service uses `supports_response="only"`.
 - `_format_hot_context_entry(meta, summary_text)` -- Format single project for hot context line. `@pyscript_compile`.
 - `_build_hot_context_line(projects, limit)` -- Build 255-char hot context line from sorted projects. `@pyscript_compile`.
 - `_build_summary_line(projects)` -- Build active/blocked counts + high-priority names. `@pyscript_compile`.
-- `_scan_project_files(directory)` -- Scan directory for .md files. Runs via `task.executor()`. `@pyscript_compile`.
+- `_scan_project_files(directory)` -- Scan directory for .md files. `@pyscript_executor`.
 - `_simple_hash(text)` -- Simple hash for change detection (no crypto needed). `@pyscript_compile`.
 - `_generate_llm_summary(slug, body)` -- LLM-generated 1-2 sentence summary, cached by body hash.
 - `_promote_internal(test_mode, force)` -- Core promotion logic: scan, parse, filter, write L2 + L1.

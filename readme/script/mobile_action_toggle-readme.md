@@ -68,7 +68,7 @@ Done
 
 ## Author
 
-**madalone**
+**Madalone + Assistant**
 
 ## License
 

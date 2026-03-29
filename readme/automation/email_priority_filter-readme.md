@@ -17,8 +17,8 @@ Listens for IMAP content events from a specific email account and passes sender 
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │                  CONDITION GATES                        │
+│  • Notification master gate ON?                        │
 │  • Kill switch ON?                                     │
-│  • Privacy gate passes?                                │
 └────────────────────────┬────────────────────────────────┘
                          │ all pass
                          ▼
@@ -37,7 +37,7 @@ Listens for IMAP content events from a specific email account and passes sender 
 - **L2 memory promotion** -- urgent/important emails are promoted to L2 memory for agent context.
 - **TTS suppression option** -- suppress urgent TTS announcements when Email Follow-Me instances already handle them (avoids duplicate speech).
 - **Follow-me bypass** -- refcount-based bypass prevents notification follow-me from interrupting during processing.
-- **Ducking bypass** -- optionally disables the duck manager during processing.
+- **Notification master gate** -- respects the global notification gate toggle.
 - **Privacy gate** -- tier-based suppression (default: T2 Personal).
 
 ## Prerequisites
@@ -69,6 +69,7 @@ Listens for IMAP content events from a specific email account and passes sender 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `kill_switch` | `""` *(required)* | Input boolean to enable/disable the filter |
+| `notification_master_gate` | `input_boolean.ai_notifications_master_enabled` | Global notification gate -- when OFF, all notification automations are suppressed |
 | `suppress_urgent_tts` | `false` | Skip TTS for urgent emails (use when Email Follow-Me handles announcements) |
 
 </details>
@@ -79,8 +80,6 @@ Listens for IMAP content events from a specific email account and passes sender 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `bypass_follow_me` | `true` | Bypass notification follow-me during processing |
-| `bypass_ducking` | `false` | Bypass ducking during processing |
-| `duck_toggle_helper` | `input_boolean.ai_duck_manager_enabled` | Duck manager master toggle |
 | `bypass_claim_script` | `script.refcount_bypass_claim` | Refcount claim script |
 | `bypass_release_script` | `script.refcount_bypass_release` | Refcount release script |
 
@@ -92,9 +91,6 @@ Listens for IMAP content events from a specific email account and passes sender 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
-| `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
-| `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
 
 </details>
 

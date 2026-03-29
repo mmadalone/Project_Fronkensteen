@@ -151,7 +151,7 @@ Time-based alarm that fires on selected weekdays, optionally generates a wake-up
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Ducking flag entity | `input_boolean.ducking_flag` | Audio ducking active flag. |
+| Ducking flag entity | `input_boolean.ai_ducking_flag` | Audio ducking active flag. |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle. |
 | Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | AI agent dispatcher toggle. |
 
@@ -165,7 +165,21 @@ Time-based alarm that fires on selected weekdays, optionally generates a wake-up
 | Privacy gate tier | `t2` | Privacy tier (off/T1/T2/T3). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
-| Privacy gate person | `miquel` | Person name for suppression lookups. |
+| Privacy gate person | `person.miquel` | Person entity for suppression lookups. |
+
+</details>
+
+<details>
+<summary><strong>Section 8 -- User Preferences</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Enable user preferences | `true` | Inject user preferences into wake-up prompts. |
+| Use preference wake time | `false` | Override static wake-up time with user's preference wake time helpers. |
+| Weekday wake time entity | `input_datetime.ai_context_wake_time_weekday_miquel` | Input datetime for weekday wake time. |
+| Weekend wake time entity | `input_datetime.ai_context_wake_time_weekend_miquel` | Input datetime for weekend wake time. |
+| Alt weekday wake time entity | `input_datetime.ai_context_wake_time_alt_weekday_miquel` | Input datetime for alternate weekday wake time. |
+| Alt wake days | `""` | Comma-separated day abbreviations using the alt wake time. |
 
 </details>
 

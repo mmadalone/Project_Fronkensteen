@@ -9,6 +9,7 @@ Uses FP2 mmWave zones, WiFi device trackers, voice satellite events, and Markov 
 | `pyscript.presence_identity_status` | (none) | `{miquel: {zone, zone_friendly, confidence, confidence_label, source, elapsed_min}, jessica: {...}, engine: {enabled, occupancy_mode, active_zones, zone_state}}` | Debug dump of current tracking state. `supports_response="only"`. |
 | `pyscript.presence_identity_force_anchor` | `person` (str, required: miquel/jessica), `zone` (str, required) | (none) | Manually pin a person to a zone with max confidence. |
 | `pyscript.presence_identity_reset` | (none) | (none) | Clear all tracking state and reinitialize from current FP2/WiFi readings. |
+| `pyscript.discover_persons_status` | (none) | `{status, person_count, persons}` | Return current person discovery cache for debugging. `supports_response="only"`. |
 
 ## Triggers
 
@@ -18,7 +19,8 @@ Uses FP2 mmWave zones, WiFi device trackers, voice satellite events, and Markov 
 | `@state_trigger` (2 WiFi device trackers) | `presence_identity_wifi_trigger` | WiFi arrival/departure: anchor arriving person, eliminate departed person. Departure has debounce delay. |
 | `@state_trigger("input_text.ai_last_satellite")` | `presence_identity_satellite_trigger` | Voice satellite interaction: anchor speaker to satellite's zone. In dual mode, uses elimination to resolve speaker identity. |
 | `@time_trigger("cron(*/5 * * * *)")` | `presence_identity_decay_tick` | Periodic confidence decay. Applies Markov fallback when confidence drops below floor in dual mode. |
-| `@time_trigger("startup")` | `presence_identity_startup` | Initialize zone state from FP2 readings. Anchor if solo mode detected. |
+| `@time_trigger("cron(*/15 * * * *)")` | `presence_identity_person_check` | Detect person additions/removals every 15 minutes (Task 22 Phase 7). |
+| `@time_trigger("startup")` | `presence_identity_startup` | Initialize zone state from FP2 readings. Register FP2/WiFi triggers dynamically from config. Anchor if solo mode detected. |
 
 ## Key Functions
 
@@ -40,7 +42,7 @@ Uses FP2 mmWave zones, WiFi device trackers, voice satellite events, and Markov 
 - `input_number.ai_presence_identity_confidence_floor` -- Minimum confidence to report (default 20%)
 - `input_number.ai_presence_identity_departure_debounce` -- Departure debounce in seconds (default 60)
 - `sensor.occupancy_mode` -- Current mode: solo_miquel, solo_jessica, dual, away, guest
-- `device_tracker.oppo_a60` / `device_tracker.oppo_a38` -- WiFi trackers for Miquel/Jessica
+- WiFi device trackers -- Auto-discovered per person from `discover_persons()` (Task 22)
 - `input_text.ai_last_satellite` -- Last-used voice satellite entity
 - 8 FP2 binary sensors -- Zone presence detection
 - `input_boolean.ai_test_mode` -- Test mode toggle

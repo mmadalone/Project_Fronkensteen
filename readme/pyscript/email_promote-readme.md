@@ -13,8 +13,9 @@ Task 18b of the Voice Context Architecture. Filters incoming IMAP emails and pro
 
 | Trigger | Function | Condition |
 |---------|----------|-----------|
-| `@time_trigger("startup")` | `email_promote_startup` | Initializes status sensor, runs IMAP health check after 30s delay |
+| `@time_trigger("startup")` | `email_promote_startup` | Initializes status sensor, runs IMAP health check after 30s delay, requests IMAP config entry reload for catch-up events |
 | `@time_trigger("cron(2 0 * * *)")` | `email_promote_midnight` | Midnight reset: clears email count, runs IMAP health check |
+| `@time_trigger("cron(*/30 * * * *)")` | `email_check_stale` | Every 30 minutes: flags email as stale if IMAP sensor hasn't changed within configurable timeout |
 
 ## Key Functions
 
@@ -36,7 +37,7 @@ Task 18b of the Voice Context Architecture. Filters incoming IMAP emails and pro
 - `input_text.ai_email_blocked_keywords` — CSV of blocked subject keywords (blacklist/hybrid)
 - `input_number.ai_email_priority_count` — Rolling priority email counter
 - `input_text.ai_email_last_priority` — Last priority email subject
-- `sensor.identity_confidence_miquel` — Identity confidence gate (suppressed below 70%)
+- `sensor.identity_confidence_{person}` — Identity confidence gate (suppressed below 70%, person resolved dynamically from IMAP sensor)
 - `sensor.ai_llm_budget_remaining` — Budget gate for LLM reformulation
 - `sensor.gmail_messages` — IMAP sensor (health check target)
 

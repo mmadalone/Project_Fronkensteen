@@ -63,24 +63,21 @@ from shared_utils import (
 #   - packages/ai_context_hot.yaml (default wake times)
 #   - packages/ai_routine_tracker.yaml (routine stage, bedtime predicted)
 #   - packages/ai_test_harness.yaml (test mode toggle)
-#   - calendar.miquel_angel_cano_gmail_com (Google Calendar integration)
 #
 # Deployed: 2026-03-02
 # =============================================================================
-
-_DEFAULT_CALENDAR_ENTITY = "calendar.miquel_angel_cano_gmail_com"
 
 
 def _get_calendar_entity() -> str:
     """Resolve calendar entity from person config (Task 22).
 
-    Uses the first person with a configured calendar, falls back to default.
+    Uses the first person with a configured calendar, falls back to empty string.
     """
     for slug in get_person_slugs():
         cal = get_person_config(slug, "calendar", "")
         if cal:
             return cal
-    return _DEFAULT_CALENDAR_ENTITY
+    return ""
 RESULT_ENTITY = "sensor.ai_predictive_schedule_status"
 CALENDAR_CACHE_TTL = 3600       # 1 hour
 DEFAULT_ROUTINE_DURATION = 45   # minutes

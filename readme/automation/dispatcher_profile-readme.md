@@ -122,7 +122,7 @@ Options per era: None (skip), Rotate, Rick, Quark, Kramer, Deadpool, Doctor Port
 | `privacy_tier` | `off` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 
@@ -133,6 +133,16 @@ Options per era: None (skip), Rotate, Rick, Quark, Kramer, Deadpool, Doctor Port
 |-------|---------|-------------|
 | `tts_strip_stage_directions` | `input_boolean.ai_tts_strip_stage_directions` | Entity for stage direction stripping toggle |
 | `voice_handoff_enabled` | `input_boolean.ai_voice_handoff_enabled` | Entity for voice handoff toggle |
+| `dispatcher_mode_entity` | `input_select.ai_dispatcher_mode` | Input select controlling dispatch mode |
+| `fixed_agent_entity` | `input_text.ai_dispatcher_fixed_agent` | Input text storing the fixed agent persona name |
+| `agent_pool_entity` | `input_text.ai_dispatcher_agent_pool` | Input text storing the comma-separated agent pool |
+| `era_late_night_entity` | `input_select.ai_dispatcher_era_late_night` | Input select for the late night persona |
+| `era_morning_entity` | `input_select.ai_dispatcher_era_morning` | Input select for the morning persona |
+| `era_afternoon_entity` | `input_select.ai_dispatcher_era_afternoon` | Input select for the afternoon persona |
+| `era_evening_entity` | `input_select.ai_dispatcher_era_evening` | Input select for the evening persona |
+| `continuity_window_entity` | `input_number.ai_conversation_continuity_window` | Input number for continuity window in minutes |
+| `expertise_routing_entity` | `input_select.ai_expertise_routing_mode` | Input select controlling expertise routing mode |
+| `budget_fallback_entity` | `input_text.ai_budget_fallback_agent` | Input text storing the budget fallback agent name |
 
 </details>
 

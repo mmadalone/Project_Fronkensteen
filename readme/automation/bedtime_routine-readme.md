@@ -202,7 +202,7 @@ Fully LLM-orchestrated bedtime wind-down with audiobook playback via Music Assis
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Ducking flag entity | `input_boolean.ducking_flag` | Audio ducking active flag. |
+| Ducking flag entity | `input_boolean.ai_ducking_flag` | Audio ducking active flag. |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle. |
 | Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | AI agent dispatcher toggle. |
 
@@ -216,7 +216,7 @@ Fully LLM-orchestrated bedtime wind-down with audiobook playback via Music Assis
 | Privacy gate tier | `t1` | Privacy tier (off/T1/T2/T3). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
-| Privacy gate person | `miquel` | Person name for suppression lookups. |
+| Privacy gate person | `person.miquel` | Person entity for suppression lookups. |
 
 </details>
 

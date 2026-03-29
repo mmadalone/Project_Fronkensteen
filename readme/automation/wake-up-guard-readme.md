@@ -160,27 +160,48 @@ Time-based wake-up automation with bed/workshop presence conditions, TTS announc
 | Refcount claim script | `script.refcount_bypass_claim` | Bypass claim script |
 | Refcount release script | `script.refcount_bypass_release` | Bypass release script |
 
-### Section 7 -- Infrastructure
+### Section 7 -- Music
 
 | Input | Default | Description |
 |---|---|---|
-| Ducking flag entity | `input_boolean.ducking_flag` | Boolean indicating audio ducking is active |
+| Enable pre-TTS stinger | `false` | Play chime before TTS via `tts_queue_speak` chime_path |
+| Stinger agent override | `""` | Agent persona for library/compose lookups; empty = dispatched persona |
+| Stinger library ID override | `""` | Explicit library ID; skips auto-resolve when set |
+| Compose if not in library | `true` | Compose locally via FluidSynth when auto-resolve finds no match |
+| Stinger fallback media URL | `""` | Fallback chime URL when library and compose both fail |
+
+### Section 8 -- Infrastructure
+
+| Input | Default | Description |
+|---|---|---|
+| Ducking flag entity | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | Duck guard enabled entity | `input_boolean.ai_duck_guard_enabled` | Boolean enabling duck guard system |
 | Dispatcher enabled entity | `input_boolean.ai_dispatcher_enabled` | Boolean enabling AI agent dispatcher |
 
-### Section 8 -- Privacy
+### Section 9 -- Privacy
 
 | Input | Default | Description |
 |---|---|---|
 | Privacy gate tier | t1 | Privacy tier for suppression (off / t1 / t2 / t3) |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| Privacy gate person | "miquel" | Person name for tier suppression lookups |
+| Privacy gate person | `person.miquel` | Person entity for tier suppression lookups |
+
+### Section 10 -- User Preferences
+
+| Input | Default | Description |
+|---|---|---|
+| Enable user preference injection | `true` | Inject user preferences into wake-up prompts |
+| Use preference wake time | `false` | Override static wake-up time with preference helpers |
+| Weekday wake time entity | `input_datetime.ai_context_wake_time_weekday_miquel` | Weekday wake time helper |
+| Weekend wake time entity | `input_datetime.ai_context_wake_time_weekend_miquel` | Weekend wake time helper |
+| Alt weekday wake time entity | `input_datetime.ai_context_wake_time_alt_weekday_miquel` | Alt weekday wake time helper |
+| Alt wake days | `""` | Comma-separated 3-letter day abbreviations for alt wake time |
 
 ## Technical Notes
 
 - **Mode:** `single` / `max_exceeded: silent`
-- **Trigger:** Time trigger at configured wake-up time (trigger ID: `wake_time`)
+- **Trigger:** Four time triggers: static wake-up time (trigger ID: `wake_time`) plus three preference-based triggers (`pref_weekday`, `pref_weekend`, `pref_alt`). A gate condition selects the correct trigger based on `use_preference_wake_time` and the current day.
 - **Weekday check:** Uses template condition mapping `now().weekday()` to abbreviation list -- no native HA condition exists for user-selected weekday lists
 - **Bed presence:** Uses `last_changed` timestamps to verify actual continuous duration, not just current state
 - **One snooze only:** Second snooze press is treated as Stop to prevent endless snooze cycling

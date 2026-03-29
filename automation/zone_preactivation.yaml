@@ -106,12 +106,18 @@ blueprint:
               options:
                 - label: "Any"
                   value: "any"
-                - label: "Solo Miquel"
-                  value: "solo_miquel"
-                - label: "Solo Jessica"
-                  value: "solo_jessica"
+                - label: "Solo (use person below)"
+                  value: "solo"
                 - label: "Dual (both home)"
                   value: "dual"
+
+        occupancy_gate_person:
+          name: Solo mode person
+          description: "Person entity for solo mode gate (only used when occupancy gate = 'solo')."
+          default: ""
+          selector:
+            entity:
+              domain: person
 
         predicted_zone_entity:
           name: Predicted zone entity
@@ -170,6 +176,7 @@ variables:
   v_min_prob: !input min_probability
   v_min_conf: !input min_confidence
   v_occ_gate: !input occupancy_gate
+  v_occ_gate_person: !input occupancy_gate_person
   v_deact_actions: !input deactivation_actions
   v_deact_timeout: !input deactivation_timeout_minutes
   _predicted_zone: !input predicted_zone_entity
@@ -190,10 +197,17 @@ conditions:
   # ── Occupancy gate ──
   - condition: template
     value_template: >-
-      {% if v_occ_gate == 'any' %}
+      {% set gate = v_occ_gate %}
+      {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+      {% if gate == 'any' %}
         true
+      {% elif gate == 'solo' %}
+        {% set slug = (v_occ_gate_person | default('')).split('.')[-1] %}
+        {{ occ == 'solo_' ~ slug }}
+      {% elif gate == 'dual' %}
+        {{ occ == 'dual' }}
       {% else %}
-        {{ states('sensor.occupancy_mode') == v_occ_gate }}
+        {{ occ == gate }}
       {% endif %}
 
 actions:

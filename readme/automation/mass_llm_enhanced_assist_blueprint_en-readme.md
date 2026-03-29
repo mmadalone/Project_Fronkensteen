@@ -151,7 +151,7 @@ Uses an LLM conversation agent to parse voice commands into structured media que
 
 ## Technical Notes
 
-- **Mode:** Not explicitly set (defaults to `single`)
+- **Mode:** `parallel` / `max: 10`
 - **Trigger:** Conversation trigger matching configurable sentence patterns
 - **LLM output:** Expects raw JSON (no code fences) with `action_data`, `media_description`, and `target_data` keys
 - **Safe-split:** Area and player names use `|||` delimiter internally because names may contain commas

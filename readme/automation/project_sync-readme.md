@@ -51,7 +51,7 @@ Periodically syncs project files from `/config/projects/` into L2 memory and L1 
 
 ## Prerequisites
 
-- Home Assistant (no specific min_version declared)
+- Home Assistant 2024.10.0+
 - `pyscript.project_promote_now` service (from `pyscript/project_promote.py`)
 - Project files in `/config/projects/*.md` with YAML frontmatter
 - An `input_boolean` for manual trigger (default: `input_boolean.ai_project_data_stale`)

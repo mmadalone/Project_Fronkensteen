@@ -7,7 +7,7 @@ Provides helper entities and a cache hit rate sensor for the centralized TTS que
 | Type | Count |
 |------|-------|
 | Template sensors | 1 |
-| Input helpers (external) | ~15 |
+| Input helpers (external) | 11 |
 
 ## Entity Reference
 
@@ -23,12 +23,6 @@ Provides helper entities and a cache hit rate sensor for the centralized TTS que
 | `input_number.ai_tts_calls_today` | Input Number | Total TTS calls today |
 | `input_number.ai_tts_duck_volume` | Input Number | Volume level during ducking |
 | `input_number.ai_tts_announcement_volume` | Input Number | Volume level for announcements |
-| `input_number.ai_tts_restore_fixed_delay` | Input Number | Fixed delay before volume restore |
-| `input_number.ai_tts_restore_timeout` | Input Number | Max time to wait for restore |
-| `input_number.ai_tts_restore_post_buffer` | Input Number | Buffer after restore completes |
-| `input_number.ai_tts_cache_static_max_days` | Input Number | Max age for static cache entries |
-| `input_number.ai_tts_cache_max_size_mb` | Input Number | Max cache size in MB |
-| `input_number.ai_tts_cache_protect_hours` | Input Number | Hours to protect recent cache entries from eviction |
 | `input_text.ai_tts_zone_priority` | Input Text | Zone priority ordering for multi-zone playback |
 | `input_text.ai_tts_restore_satellites` | Input Text | Satellites to restore after TTS |
 

@@ -1,4 +1,4 @@
-# Notification Follow-Me (v3.18.0)
+# Notification Follow-Me (v3.20.0)
 
 ![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
 
@@ -142,6 +142,7 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 |---|---|---|
 | Notification sensor | _(required)_ | Android Companion App `last_notification` sensor |
 | Master enable toggle | _(required)_ | `input_boolean` to enable/disable the automation |
+| Notification master gate | `input_boolean.ai_notifications_master_enabled` | Global notification gate -- suppresses all notification automations when OFF |
 | Voice Assistant | "Rick" | Assist Pipeline for notification summary (overridden by dispatcher) |
 | LLM summarization prompt | _(long default)_ | Instructions for how the AI summarizes notifications |
 | Direct-address prompt override | _(long default)_ | Prompt used when sender addresses the agent by name |
@@ -170,6 +171,7 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Message character cap | 500 | Max characters sent to the LLM |
 | Junk patterns | _(empty)_ | Substrings that identify system notifications to suppress |
 | Last announced sender helper | _(empty)_ | `input_text` for per-sender cooldown |
+| Last processed post_time helper | _(empty)_ | `input_text` for dedup of attribute-only re-fires |
 | Burst handling mode | thread_aware | How to handle rapid bursts (thread_aware / debounce / catch_up) |
 | Debounce window | 15 s | Settle time for debounce mode |
 | Burst batch tail window | 15 s | Tail wait for catch_up mode |
@@ -204,16 +206,12 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Quiet volume | 0.15 | Volume when phone is in vibrate mode |
 | Volume restore delay | 8 s | Seconds to wait before restoring original volume |
 
-### Section 7 -- Duck other players
+### Section 7 -- Duck guard
 
 | Input | Default | Description |
 |---|---|---|
-| Players eligible for ducking | _(empty)_ | Media players to duck during TTS |
-| Duck volume level | 0.10 | Volume to set on ducked players |
-| Duck snapshot helper | _(empty)_ | `input_text` for shared pre-duck volume snapshot |
 | Ducking flag | _(empty)_ | `input_boolean` signaling active duck cycle |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Boolean enabling duck guard system |
-| Duck refcount helper | _(empty)_ | `input_number` tracking active duck cycles (for parallel mode) |
 
 ### Section 8 -- Unread message reminders
 
@@ -245,8 +243,6 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Use Dispatcher | true | AI dispatcher selects persona dynamically |
 | Fallback persona name | _(empty)_ | Human-readable name when dispatcher returns no name |
 | Bypass Follow-Me | false | Pause follow-me during processing |
-| Bypass Ducking | false | Disable ducking during processing |
-| Duck toggle helper | `input_boolean.ai_duck_manager_enabled` | Duck manager master toggle |
 | Refcount claim script | `script.refcount_bypass_claim` | Bypass claim script |
 | Refcount release script | `script.refcount_bypass_release` | Bypass release script |
 
@@ -257,7 +253,7 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Privacy gate tier | t2 | Privacy tier for suppression (off / t1 / t2 / t3) |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| Privacy gate person | "miquel" | Person name for tier suppression lookups |
+| Privacy gate person | `person.miquel` | Person entity for tier suppression lookups |
 
 ### Section 11 -- Contact history
 
@@ -280,9 +276,32 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Thread format rules | _(default)_ | Explains "You:" prefix in threads |
 | Outgoing message guard | _(default)_ | Detects and skips outgoing action notifications |
 
+### Section 13 -- Music (pre-TTS stinger)
+
+| Input | Default | Description |
+|---|---|---|
+| Enable pre-TTS stinger | false | Play a chime/stinger before TTS; swaps delivery to `tts_queue_speak` |
+| Stinger agent override | _(empty)_ | Agent persona for library/compose lookups (empty = dispatched persona) |
+| Stinger library ID override | _(empty)_ | Explicit music library ID; skips auto-resolve and compose |
+| Compose if not in library | true | Compose locally via FluidSynth when library lookup fails |
+| Stinger fallback media URL | _(empty)_ | Fallback chime file URL when both library and compose fail |
+
+### Section 14 -- Infrastructure
+
+| Input | Default | Description |
+|---|---|---|
+| Dispatcher enabled entity | `input_boolean.ai_dispatcher_enabled` | Boolean that enables the AI agent dispatcher |
+
+### Section 15 -- User Preferences
+
+| Input | Default | Description |
+|---|---|---|
+| Enable notification threshold | false | Gate TTS against user's notification threshold preference (`input_text.ai_context_user_notify_threshold_{user}`) |
+| Notification priority level | 3 | TTS queue priority (0=emergency … 4=ambient); used for queue ordering and threshold gating |
+
 ## Technical Notes
 
-- **Mode:** `single` / `max_exceeded: silent`
+- **Mode:** `parallel` / `max: 10`
 - **Trigger:** State change on the notification sensor
 - **Parallel arrays:** Presence sensors and target satellites must be in matching order
 - **Cooldown:** Per-sender when `last_announced_sender_helper` is configured; time-only otherwise
@@ -295,6 +314,8 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 
 ## Changelog
 
+- **v3.20.0:** Eliminate duplicate announcements under `mode: parallel` -- trigger `to:` filter, context_id claim-check, post-debounce TOCTOU race guard, cooldown timestamp written before TTS
+- **v3.19.0:** Fix repeated announcements -- post_time dedup gate; HA startup trigger clears stale reminder state; all tts.speak calls migrated to tts_queue_speak
 - **v3.18.0:** Watchdog loop recovery fix -- context ID ownership guard prevents zombie loops; second heartbeat after TTS keeps watchdog fresh
 - **v3.17.0:** Agent randomizer support -- optional script overrides agent + TTS; "called by name trumps random" detection; alias-aware matching
 - **v3.16.0:** App-aware R3c gate -- evicts only the app being viewed; new `last_used_app_sensor` and `notification_app_packages` inputs

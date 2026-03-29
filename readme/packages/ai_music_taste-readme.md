@@ -4,14 +4,15 @@ Kill switch package for the music taste logging and profile aggregation system (
 
 ## What's Inside
 
-- **Input helpers:** 1 (moved to `helpers_input_boolean.yaml`)
+- **Input helpers:** 2 (moved to consolidated helper files) -- 1 boolean, 1 button
 
 ## Entity Reference
 
 | Entity ID | Type | Purpose |
 |---|---|---|
 | `input_boolean.ai_music_taste_enabled` | input_boolean | Kill switch for music taste logging |
-| `sensor.ai_music_taste_status` | sensor (pyscript) | Taste profile with `genre_summary` and `summary` attributes (created by pyscript) |
+| `input_button.ai_music_taste_rebuild` | input_button | Manual trigger for taste profile rebuild |
+| `sensor.ai_music_taste_status` | sensor (pyscript) | Taste profile with `genre_summary`, `top_artists`, `top_tracks`, `total_plays`, `has_spotify`, `last_updated` attributes (created by pyscript) |
 
 ## Dependencies
 

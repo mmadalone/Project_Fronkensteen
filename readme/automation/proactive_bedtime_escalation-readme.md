@@ -68,7 +68,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 
 ## Features
 
-- 18 configurable input sections (numbered ①-⑲), 25 prompts, zero hardcoded strings
+- 22 configurable input sections (numbered ①-㉒), 33 prompts, zero hardcoded strings
 - Multi-stage escalation engine with configurable stage count (2-8)
 - Three cooldown curves: fixed, accelerating (halves each stage), or custom per-stage intervals
 - Absence gap tolerance: session resumes if user returns within configured window
@@ -279,7 +279,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑬ Kodi playback</strong></summary>
+<summary><strong>⑫ Kodi playback</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -296,7 +296,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑭ Sleepy TV detection</strong></summary>
+<summary><strong>⑬ Sleepy TV detection</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -307,7 +307,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑮ Settling-in TTS</strong></summary>
+<summary><strong>⑭ Settling-in TTS</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -320,7 +320,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑯ Final goodnight TTS</strong></summary>
+<summary><strong>⑮ Final goodnight TTS</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -333,7 +333,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑰ Weekend overrides -- bedtime layer</strong></summary>
+<summary><strong>⑯ Weekend overrides -- bedtime layer</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -343,7 +343,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 </details>
 
 <details>
-<summary><strong>⑱ Memory & history</strong></summary>
+<summary><strong>⑰ Memory & history</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -353,7 +353,69 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 | `memory_history_search_tags` | `bedtime sleep routine` | Tags for history search |
 | `memory_history_inject_prompt` | *(history context prompt)* | Prompt for history injection |
 | `memory_scope` | `user` | Memory scope: user / household |
-| `memory_expiration_days` | *(configurable)* | Days before memory entries expire |
+| `memory_expiration_days` | `90` | Days before memory entries expire (0 = forever) |
+
+</details>
+
+<details>
+<summary><strong>⑱ Bed presence sensor</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `bed_presence_sensor` | *(empty)* | Binary sensor confirming user is in bed; bypasses escalation |
+| `bed_presence_minutes` | `5` | Minutes bed sensor must be ON before triggering bedtime (1-60) |
+| `bed_confirm_countdown_minutes` | `0` | Lamp countdown minutes after bed trigger (0 = skip countdown) |
+| `bed_confirm_settling_tts` | `true` | Speak a settling-in announcement instead of full bedtime TTS |
+| `bed_confirm_prompt` | *(settling prompt)* | LLM prompt for settling-in announcement when bed sensor triggers |
+
+</details>
+
+<details>
+<summary><strong>⑲ Ducking infrastructure</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
+| `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Boolean that enables the duck guard system |
+| `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Boolean that enables the AI agent dispatcher |
+
+</details>
+
+<details>
+<summary><strong>⑳ Privacy</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
+| `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
+| `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression |
+
+</details>
+
+<details>
+<summary><strong>㉑ User Preferences</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_user_preferences` | `true` | Inject user preferences and sleep budget into bedtime prompts |
+
+</details>
+
+<details>
+<summary><strong>㉒ Prompts</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `safety_prefix` | *(safety prefix)* | Prepended to every LLM call to prevent tool invocations |
+| `memory_search_instruction` | *(search prompt)* | Prompt for memory tool bedtime history search |
+| `bedtime_question_system_prompt` | *(system prompt)* | System prompt for satellite bedtime question conversation |
+| `audiobook_offer_start_message` | *(offer prompt)* | Opening message for audiobook satellite conversation |
+| `audiobook_offer_system_prompt` | *(system prompt)* | System prompt for audiobook satellite conversation |
+| `kodi_media_start_message` | *(offer prompt)* | Opening message for Kodi media satellite conversation |
+| `kodi_media_prompt` | *(selection prompt)* | Instruction prompt for curated Kodi media conversation |
+| `memory_store_instruction` | *(store prompt)* | Prompt for storing bedtime memory entry via memory tool |
+| `goodnight_default_prompt` | *(warm goodnight)* | Fallback goodnight prompt when goodnight_prompt is empty |
 
 </details>
 
@@ -371,7 +433,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 
 ## Changelog
 
-- **v1.7:** Bed presence sensor (⑲) -- binary sensor confirms user is in bed, bypasses escalation
+- **v1.7:** Bed presence sensor (⑱) -- binary sensor confirms user is in bed, bypasses escalation
 - **v1.6:** Shared bedtime routine refactor (E-02) -- deduplicated action sequences
 - **v1.5:** Bed presence sensor, stale mutex safety net, removed freeform/both Kodi modes
 - **v1.4:** Hybrid escalation prompt gap-fill for stages without explicit overlays

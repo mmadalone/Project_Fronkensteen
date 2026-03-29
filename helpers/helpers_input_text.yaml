@@ -1,5 +1,14 @@
 # Orphan voice_spotify_last_search removed 2026-03-14
 ########################################
+# System Setup — Primary User
+########################################
+
+ai_primary_user:
+  name: "AI Primary User"
+  icon: mdi:account
+  max: 50
+
+########################################
 # Goodnight Routine — dynamic media ID
 ########################################
 

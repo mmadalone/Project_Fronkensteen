@@ -30,12 +30,12 @@ This package reads from a wide range of entities across the system:
 - **Weather:** `weather.forecast_home` (Met.no)
 - **Calendar:** `input_text.ai_calendar_today_summary`, `input_text.ai_calendar_tomorrow_summary`
 - **Email:** `input_number.ai_email_priority_count`
-- **Focus:** `sensor.workshop_hours_today`, `input_boolean.focus_mode`, `input_datetime.last_meal_time`
+- **Focus:** `sensor.workshop_hours_today`, `input_boolean.ai_focus_mode`, `input_datetime.ai_last_meal_time`
 - **Projects:** `input_text.ai_project_hot_context_line`
 - **Memory:** `sensor.ai_memory_context`
-- **Media tracking:** `input_text.ai_media_upcoming_sonarr`, `input_text.ai_media_upcoming_radarr`
+- **Media tracking:** `sensor.ai_media_upcoming` (attrs: `sonarr`, `radarr`, `recent_downloads`)
 - **Music taste:** `sensor.ai_music_taste_status`
-- **Away patterns:** `input_text.ai_away_prediction_raw`
+- **Away patterns:** `sensor.ai_away_prediction` (pyscript `state.set()` sensor with `predictions` attribute)
 - **Schedule preferences:** `input_datetime.ai_context_wake_time_weekday_{user}`, `_weekend_{user}`, `_alt_weekday_{user}`, `input_datetime.ai_context_bed_time_{user}`, `input_text.ai_context_wake_time_alt_days_{user}`
 - **Privacy:** Privacy gate helpers
 - **Packages:** `ai_identity.yaml`, `ai_away_patterns.yaml`, `ai_focus_guard.yaml`, `ai_media_tracking.yaml`, `ai_music_taste.yaml`, `ai_calendar_promotion.yaml`, `ai_email_promotion.yaml`

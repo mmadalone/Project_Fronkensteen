@@ -51,10 +51,11 @@ ai_escalation_request event
 - Configurable cooldown between follow-throughs (any type)
 - Bluff and follow-through logging to L2 memory with configurable retention
 - Agent whisper context injection after every escalation attempt
-- Prompt barrage: summons another agent with persona-specific prompt pools, resolves their conversation engine, and plays their TTS response in their voice
+- Prompt barrage: summons another agent with persona-specific prompt pools (configurable via pipe-delimited inputs), resolves their conversation engine, and plays their TTS response in their voice
 - Persona switch reuses `voice_handoff.yaml` via the handoff pending flag
 - Volume boost uses TTS priority 0 (emergency) at configurable volume
 - Map-based permission and probability lookups (no if/elif chains)
+- Music composition integration for play_media escalations (3-tier: library, compose, static fallback)
 
 ## Prerequisites
 
@@ -139,12 +140,38 @@ ai_escalation_request event
 
 </details>
 
+<details><summary>⑥ Music</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_escalation_music` | `false` | Enable 3-tier music resolution for play_media escalations |
+| `escalation_music_agent` | _(empty)_ | Agent persona for library/compose lookups. Empty = use current agent |
+| `escalation_library_id_override` | _(empty)_ | Explicit library ID to play. Skips auto-resolve and compose |
+| `escalation_music_volume` | `0.0` | Volume for music playback (0.0 = use current volume) |
+| `escalation_delay_after` | `1` | Seconds to pause after music playback |
+| `compose_escalation_if_missing` | `true` | Compose via FluidSynth if not in library |
+
+</details>
+
+<details><summary>⑦ Prompts</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `escalation_safety_prefix` | _(safety text)_ | Safety prefix prepended to every prompt_barrage call |
+| `escalation_prompts_quark` | _(default prompts)_ | Pipe-separated prompt pool for Quark persona |
+| `escalation_prompts_deadpool` | _(default prompts)_ | Pipe-separated prompt pool for Deadpool persona |
+| `escalation_prompts_rick` | _(default prompts)_ | Pipe-separated prompt pool for Rick persona |
+| `escalation_prompts_kramer` | _(default prompts)_ | Pipe-separated prompt pool for Kramer persona |
+| `escalation_prompts_portuondo` | _(default prompts)_ | Pipe-separated prompt pool for Doctor Portuondo persona |
+
+</details>
+
 ## Technical Notes
 
 - **Mode:** `single` -- only one escalation can process at a time
 - **Event-driven:** Triggered by `ai_escalation_request` events, typically fired by the LLM `escalate_action` tool
 - **Satellite scoping:** Each instance handles one satellite; the condition block matches `input_text.ai_last_satellite` against the configured satellite entity
-- **Prompt pool:** Embedded in the variables block with per-agent prompt lists (quark, deadpool, rick, kramer, doctor portuondo). Edit the `prompt_pool` variable directly to customize
+- **Prompt pool:** Built from pipe-delimited inputs in section ⑦ Prompts (quark, deadpool, rick, kramer, doctor portuondo). Edit the pipe-delimited inputs in the UI to customize
 - **Voice resolution:** TTS voice resolved dynamically from Assist Pipeline config via `dispatcher_resolve_engine`
 - **Error handling:** All action execution steps use `continue_on_error: true`; guard checks bail early with `stop:` on validation failures
 

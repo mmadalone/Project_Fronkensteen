@@ -24,13 +24,13 @@ Note: No cron triggers in the pyscript module. All scheduling (morning, afternoo
 ### Section Assemblers (each independently failable)
 - `_section_greeting(hour)` -- Time-aware greeting (pure Python, no external calls)
 - `_section_weather()` -- Weather from `weather.forecast_home` entity
-- `_section_calendar(hour)` -- Calendar from L2 (`calendar_today:miquel`) or L1 helper
+- `_section_calendar(hour)` -- Calendar from `input_text.ai_calendar_today_summary` (L1 helper populated by calendar_promote)
 - `_section_email(hour)` -- From `input_number.ai_email_priority_count`
-- `_section_schedule()` -- Bedtime recommendation + wake time
+- `_section_schedule()` -- Next upcoming event advisory with prep timing
 - `_section_household(entities_override)` -- Monitored entity states
 - `_section_memory()` -- Memory highlights from L2 search
 - `_section_projects()` -- Active project summaries from L2
-- `_section_media(upcoming_days, download_window)` -- Radarr/Sonarr download activity
+- `_section_media(upcoming_days, download_window)` -- Radarr/Sonarr from `media_promote_now` or `sensor.ai_media_upcoming` attrs fallback
 
 ### Core Pipeline
 - `_assemble_briefing(sections_override, download_window)` -- Orchestrate all section assemblers, collect results
@@ -44,20 +44,19 @@ Note: No cron triggers in the pyscript module. All scheduling (morning, afternoo
 
 - `input_boolean.ai_proactive_briefing_enabled` -- Kill switch
 - `input_boolean.ai_test_mode` -- Test mode
-- `input_text.ai_proactive_last_summary` -- Output: last briefing summary text
-- `input_text.ai_proactive_sections_default` -- Default enabled sections CSV
+- `input_text.ai_last_briefing_summary` -- Output: last briefing summary text
 - `weather.forecast_home` -- Weather data
 - `input_number.ai_email_priority_count` -- Email count
-- `input_text.ai_bedtime_recommendation` -- Bedtime advisory
+- `sensor.ai_predictive_schedule_status` attr `bedtime_recommendation` -- Bedtime advisory
 - `input_datetime.ai_predicted_wake_time` -- Wake time
 - `input_boolean.ai_context_work_day_tomorrow` -- Work day status
-- `sensor.ai_total_daily_cost` -- Budget for stripped mode check
-- `input_number.ai_budget_stripped_threshold` -- Budget threshold
+- `sensor.ai_llm_budget_remaining` -- Budget remaining percentage for stripped mode check
+- `input_number.ai_budget_personality_threshold` -- Budget threshold
 - Various household monitoring entities (configurable per instance)
 
 ## Package Pairing
 
-Pairs with `packages/ai_proactive_briefing.yaml` (kill switch, last summary, per-instance delivered flags for morning/afternoon/evening). Status sensor: `sensor.ai_proactive_briefing_status`.
+Pairs with `packages/ai_proactive_briefing.yaml` (kill switch, last briefing summary, per-instance delivered flags for morning/afternoon/evening). Status sensor: `sensor.ai_proactive_briefing_status`.
 
 ## Called By
 

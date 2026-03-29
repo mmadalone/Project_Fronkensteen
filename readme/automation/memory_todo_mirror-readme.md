@@ -113,7 +113,7 @@ Bidirectional sync between L2 memory and a native HA todo list. L2 entries match
 |-------|---------|-------------|
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Boolean that enables the privacy gate system |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior (auto/force_suppress/force_allow) |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 

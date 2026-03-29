@@ -86,7 +86,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 
 ## Prerequisites
 
-- Home Assistant (no specific min_version declared)
+- Home Assistant 2024.10.0 or later
 - An `assist_satellite` entity
 - A `media_player` entity for the satellite's speaker
 - A TTS entity for the agent's voice
@@ -111,22 +111,53 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 | **Interview mode toggle** | `input_boolean.ai_interview_mode` | Input boolean that activates/deactivates interview mode |
 | **Satellite** | (required) | The `assist_satellite` entity to run the interview on |
 | **Speaker** | (required) | The `media_player` entity for the satellite speaker |
+| **Interview target user** | `""` | Person entity for the interview target; empty = auto-detect from occupancy |
+| **Use AI dispatcher for voice** | `true` | Resolve TTS voice via dispatcher; when off, uses TTS voice entity directly |
 
 ### ② Configuration
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | **Auto-timeout (minutes)** | `30` | Automatically deactivate after this many minutes (5--120) |
-| **Start message** | `"Alright, time to get to know you. First question — what's your full name?"` | Opening line spoken when the interview begins |
-| **TTS voice entity** | (required) | TTS entity for the agent's voice (e.g., `tts.elevenlabs_rick_text_to_speech`) |
+| **Interview language** | `"English"` | Language for the interview (English, Spanish, Valencian, Dutch, Portuguese) |
+| **Start message** | `"Alright, time to get to know you..."` | Opening line spoken when the interview begins |
+| **TTS voice entity** | `""` | TTS entity for the agent's voice (e.g., `tts.elevenlabs_rick_text_to_speech`) |
 | **Suppress during interview** | `[]` | Input booleans to turn OFF during interview; restored to ON when done |
+| **Interview system prompt** | *(built-in)* | LLM guidance injected via `extra_system_prompt` on every mic reopen |
+| **Progress prompt template** | *(built-in)* | Template for "already asked" context; `{done_list}` placeholder |
+| **Voice mood during interview** | `true` | When OFF, disables voice mood modulation for neutral tone |
+| **Interview style** | `"casual"` | Tone: casual, formal, playful, or brief |
+| **Question depth** | `"standard"` | How deeply the agent probes: surface, standard, or deep |
+| **Interviewer context template** | *(built-in)* | Template with `{user}` and `{language}` placeholders |
+| **Empty progress prompt** | `"No preferences saved yet..."` | Message when no progress exists |
 
 ### ③ Infrastructure
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | **Silence media URL** | `http://homeassistant.local:8123/local/silence.wav` | URL to a short silence clip for reopening mic without speaking |
+| **Use HA Cloud TTS** | `false` | Use Home Assistant Cloud TTS instead of ElevenLabs to save API credits |
+| **Budget floor (%)** | `30` | Minimum budget remaining % to start/continue the interview |
+| **Bypass follow-me** | `false` | Pause notification follow-me during interview |
 | **Auto-import on startup** | `true` | Scan `/config/interview/` on HA start for `interview_{user}.yaml` files and import matching persons |
+| **Continuous conversation entity** | `input_boolean.ai_continuous_conversation_active` | Boolean controlling the conversation loop |
+| **Follow-me notification entity** | `input_boolean.ai_notification_follow_me` | Boolean controlling follow-me notifications |
+| **Voice mood entity** | `input_boolean.ai_voice_mood_enabled` | Boolean controlling voice mood modulation |
+| **Interview progress entity** | `input_text.ai_interview_progress` | input_text storing interview progress JSON |
+
+### ④ Privacy
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| **Privacy tier** | `"off"` | Privacy gate tier (off / t1 / t2 / t3) |
+| **Privacy gate person** | `""` | Person entity for privacy resolution |
+
+### ⑤ Topics
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| **Interview categories** | `"identity, household, work, schedule, health, environment, media, communication, privacy"` | Comma-separated built-in categories; remove any to skip |
+| **Custom topics** | `""` | Additional topics in `category_name: key1, key2` format (one per line) |
 
 ## Technical Notes
 

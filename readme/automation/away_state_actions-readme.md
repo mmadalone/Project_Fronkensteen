@@ -65,7 +65,7 @@ device_tracker entity
 - Home Assistant 2024.10.0+
 - `device_tracker` entity for the target person
 - `input_boolean` entity for the per-instance kill switch
-- `input_text.ai_away_prediction_raw` (I-40 away prediction data, for pre-return)
+- `sensor.ai_away_prediction` (I-40 away prediction data, for pre-return)
 - `input_datetime.ai_away_departed_<person>` (departure timestamp, for arrival duration)
 - Media player entity (if TTS announcements enabled)
 
@@ -128,7 +128,7 @@ device_tracker entity
 |-------|---------|-------------|
 | `announce_departure` | `false` | Speak TTS on departure |
 | `announce_arrival` | `false` | Speak TTS on arrival (includes away duration) |
-| `tts_speaker` | _(empty)_ | Media player for TTS announcements |
+| `tts_speaker` | `{}` | Media player for TTS announcements |
 | `departure_message` | `{{ person }} has left home.` | TTS departure message template |
 | `arrival_message` | `{{ person }} is back after {{ duration }} minutes.` | TTS arrival message template |
 
@@ -140,7 +140,7 @@ device_tracker entity
 - **Pre-return polling:** Uses a 5-minute `time_pattern` trigger; only fires when the tracker is `not_home`, pre-return actions are configured, and the prediction data passes confidence and time-window checks
 - **Person resolution:** Maps tracker entity IDs to person names via an embedded lookup map; falls back to titlecased entity ID suffix
 - **Confidence mapping:** `low=1`, `medium=2`, `high=3` -- prediction must meet or exceed the configured minimum
-- **Prediction parsing:** Reads `input_text.ai_away_prediction_raw` JSON, supports both single and multi-person prediction formats
+- **Prediction parsing:** Reads `sensor.ai_away_prediction` attributes (`predictions` list), supports multi-person prediction format
 - **Empty action guard:** All action blocks check `length > 0` before execution to skip gracefully when unconfigured
 
 ## Author

@@ -81,9 +81,15 @@ blueprint:
               options:
                 - all
                 - user
-                - miquel
-                - jessica
                 - household
+
+        owner_filter:
+          name: "Owner filter"
+          description: "Optional: only sync entries owned by this person."
+          default: ""
+          selector:
+            entity:
+              domain: person
 
         tag_filter:
           name: "Tag filter"
@@ -140,8 +146,6 @@ blueprint:
             select:
               options:
                 - user
-                - miquel
-                - jessica
                 - household
 
     # =========================================================================
@@ -185,7 +189,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person

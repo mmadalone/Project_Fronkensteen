@@ -5,8 +5,8 @@
 # when the score crosses configurable thresholds with hysteresis.
 #
 # Instantiate 6 times: 3 tiers × 2 persons.
-#   - Miquel T1/T2/T3: watch Jessica's confidence → suppress Miquel's features
-#   - Jessica T1/T2/T3: watch Miquel's confidence → suppress Jessica's features
+#   - Person A T1/T2/T3: watch Person B's confidence → suppress Person A's features
+#   - Person B T1/T2/T3: watch Person A's confidence → suppress Person B's features
 #
 # Deployed: 2026-03-10
 # =============================================================================
@@ -38,7 +38,7 @@ blueprint:
           name: Confidence sensor
           description: >
             The identity confidence sensor to monitor (the OTHER person's score).
-            E.g., sensor.identity_confidence_jessica for gating Miquel's features.
+            E.g., sensor.identity_confidence_other_person for gating this person's features.
           selector:
             entity:
               filter:

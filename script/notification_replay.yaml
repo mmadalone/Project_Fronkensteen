@@ -136,8 +136,8 @@ blueprint:
           name: Sender alias map
           description: >-
             Comma-separated Key=Value pairs that map raw sender names
-            to friendly display names (e.g., "Mare=Mum,Jessica=Love
-            of my life"). Same format as Notification Follow-Me.
+            to friendly display names (e.g., "Name=Alias").
+            Same format as Notification Follow-Me.
           default: ""
           selector:
             text:

@@ -14,11 +14,14 @@ Note: This package file now contains only comments after helper consolidation. A
 
 | Entity ID | Type | Purpose |
 |---|---|---|
-| `input_button.ai_dispatcher_*` | input_button | Manual dispatch triggers |
-| `input_boolean.ai_dispatcher_*` | input_boolean | Dispatcher feature toggles |
-| `input_select.ai_dispatcher_*` | input_select | Agent selection and mode controls |
-| `input_text.ai_dispatcher_*` | input_text | Configuration values |
-| `input_number.ai_dispatcher_*` | input_number | Numeric tuning parameters |
+| `sensor.ai_dispatcher_status` | sensor (pyscript) | Dispatcher status: agent, persona, verbosity, reason, tts_engine, elapsed_ms |
+| `input_boolean.ai_dispatcher_enabled` | input_boolean | Dispatcher master toggle |
+| `input_button.ai_dispatcher_apply_config` | input_button | Manual config apply trigger |
+| `input_select.ai_dispatcher_mode` | input_select | Dispatch mode selector |
+| `input_select.ai_dispatcher_era_*` | input_select | Per-era (morning, afternoon, evening, late_night) default agent |
+| `input_text.ai_dispatcher_fixed_agent` | input_text | Fixed agent override |
+| `input_text.ai_dispatcher_agent_pool` | input_text | Available agent pool |
+| `input_number.ai_dispatcher_cache_ttl` | input_number | Pipeline cache TTL |
 
 ## Dependencies
 

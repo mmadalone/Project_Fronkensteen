@@ -56,7 +56,7 @@ Entry Points                          Orchestration
 - **Cooldown** — configurable minimum time between exchanges (default: 60 min)
 - **Banter escalation** — reactive banter can probabilistically escalate into a full theatrical exchange (Section ⑧ in `reactive_banter.yaml`)
 - **Volume save/restore** — optional exchange-level volume override with automatic restore
-- **42 blueprint knobs** across 11 collapsible sections (①–⑪)
+- **40 blueprint knobs** across 11 collapsible sections (①–⑪)
 - **Native fallback** — simplified single-agent loop when pyscript/dispatcher is unavailable
 
 ## Prerequisites
@@ -167,6 +167,7 @@ Entry Points                          Orchestration
 |-------|---------|-------------|
 | `speaker_list` | `[]` | Media players in same order as agent pool (positional mapping) |
 | `tts_priority` | `2` | TTS queue priority (0–4) |
+| `native_fallback_voice` | `tts.google_en_com` | TTS engine for participants without pipeline TTS configured |
 | `tts_output_volume` | `0.0` | Volume override during exchange (0 = use current) |
 | `tts_volume_restore_delay` | `5` | Seconds before restoring volume |
 | `tts_playback_buffer` | `1` | Extra seconds after speaker idle before next turn |
@@ -188,8 +189,12 @@ Entry Points                          Orchestration
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `theatrical_prompt_template` | *(built-in)* | Jinja2 template with `{topic}`, `{context_text}`, `{persona}`, `{turn}`, `{total_turns}` |
+| `theatrical_prompt_template` | *(built-in)* | Full mode template with `{topic}`, `{context_text}`, `{persona}`, `{opponents}`, `{turn}`, `{total_turns}` |
+| `topic_only_template` | *(built-in)* | Topic-only mode template (agents know topic but not others' responses) |
+| `whisper_template` | *(built-in)* | Whisper mode template (L2 context) |
 | `i45a_prefix` | *(built-in)* | Tool-suppression prefix for all LLM calls |
+| `lang_hint` | *(built-in)* | Language hint suffix for multilingual personas |
+| `native_fallback_prompt` | *(built-in)* | Prompt for native fallback path (single-agent loop) |
 
 </details>
 
@@ -209,6 +214,7 @@ Entry Points                          Orchestration
 |-------|---------|-------------|
 | `bypass_claim_script` | `script.refcount_bypass_claim` | Follow-me bypass during exchange |
 | `bypass_release_script` | `script.refcount_bypass_release` | Release bypass after exchange |
+| `theatrical_mode_active_entity` | `input_boolean.ai_theatrical_mode_active` | Boolean tracking active exchange state |
 
 </details>
 
@@ -225,7 +231,7 @@ Entry Points                          Orchestration
 
 ## Changelog
 
-- **v1.0:** Initial implementation. 6-phase build with plan audit corrections (C1–C3, H1–H5, M1–M5). 42 blueprint knobs, 3 interrupt modes, 3 context modes, spatial staging, banter escalation, own pipeline cache.
+- **v1.0:** Initial implementation. 6-phase build with plan audit corrections (C1–C3, H1–H5, M1–M5). 40 blueprint knobs, 3 interrupt modes, 3 context modes, spatial staging, banter escalation, own pipeline cache.
 
 ## Author
 

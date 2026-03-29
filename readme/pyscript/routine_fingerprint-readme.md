@@ -27,7 +27,7 @@ Both services use `supports_response="only"`.
 - `_parse_pattern_key(key)` -- Parse L2 pattern key format handling zone names with underscores. `@pyscript_compile`.
 - `_load_frequency_tables()` -- Load Task 15 transition + dwell frequency tables from L2.
 - `_load_fingerprints_from_l2()` -- Load known fingerprints from L2 into module cache.
-- `_update_routine_helpers(match, test_mode)` -- Update `ai_routine_stage` and `ai_routine_eta_raw` helpers.
+- `_update_routine_helpers(match, test_mode)` -- Update `ai_routine_stage` helper and `eta_raw` attribute on the status sensor.
 - `_handle_deviation(deviation, test_mode)` -- Fire `ai_routine_deviation` event when expected zone does not match actual.
 - `_check_bedtime_prediction(match, test_mode)` -- Set `ai_bedtime_predicted` ON when a bed-ending fingerprint is detected.
 - `_prune_window()` -- Remove transitions older than 60 min from sliding window.
@@ -38,7 +38,7 @@ Both services use `supports_response="only"`.
 - `input_boolean.ai_test_mode` -- Test mode
 - `input_boolean.ai_fp2_zone_*_enabled` -- Per-zone enable toggles
 - `input_text.ai_routine_stage` -- Output: current routine position (e.g., `evening_weekday_kitchen_bed:step_3_of_5`)
-- `input_text.ai_routine_eta_raw` -- Output: JSON with ETA minutes, fingerprint ID, step, total
+- `sensor.ai_routine_tracker_status` attr `eta_raw` -- Output: JSON with ETA minutes, fingerprint ID, step, total
 - `input_text.ai_routine_deviation` -- Output: deviation description
 - `input_boolean.ai_bedtime_predicted` -- Output: set ON when bed-ending routine detected
 - 8 FP2 binary sensors -- Zone presence detection

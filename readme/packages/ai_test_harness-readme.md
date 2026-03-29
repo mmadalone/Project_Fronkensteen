@@ -7,7 +7,7 @@ Provides a global test mode toggle and override helpers for identity and routine
 | Type | Count |
 |------|-------|
 | Scripts | 2 |
-| Input helpers (external) | 4 |
+| Input helpers (external) | 3 |
 
 ## Entity Reference
 
@@ -18,7 +18,6 @@ Provides a global test mode toggle and override helpers for identity and routine
 | `input_boolean.ai_test_mode` | Input Boolean | Global test flag (OFF = production) |
 | `input_text.ai_test_identity` | Input Text | Override identity ("miquel"/"jessica"/"guest"/"") |
 | `input_text.ai_test_routine_stage` | Input Text | Override routine stage |
-| `input_text.ai_test_calendar_event` | Input Text | Mock calendar data for test mode |
 
 ## Dependencies
 

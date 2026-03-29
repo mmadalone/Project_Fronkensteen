@@ -6,7 +6,7 @@ Detects sleep and wake states from FP2 presence sensors with configurable detect
 
 | Type | Count |
 |------|-------|
-| Input helpers (external) | 8 |
+| Input helpers (external) | 9 |
 | Blueprint instance (external) | 1 |
 
 ## Entity Reference
@@ -29,7 +29,7 @@ Detects sleep and wake states from FP2 presence sensors with configurable detect
 - **Pyscript:** `pyscript/presence_patterns.py` — `sleep_detect_log` service for logging sleep events
 - **Pyscript:** `pyscript/sleep_config.py` — populates the sensor picker dropdown
 - **Hardware:** FP2 presence sensors (configurable via `ai_sleep_detection_sensor`)
-- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_datetime.yaml`, `helpers_input_number.yaml`, `helpers_input_select.yaml`
+- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_datetime.yaml`, `helpers_input_select.yaml`; `ai_dev_helpers.yaml` (number helper — min duration)
 
 ## Cross-References
 

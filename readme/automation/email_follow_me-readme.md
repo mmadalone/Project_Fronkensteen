@@ -104,6 +104,7 @@ When a new email arrives via the IMAP integration, this blueprint determines whi
 | `imap_entry_id` | `""` | IMAP integration config entry ID |
 | `email_account_label` | `"Email"` | Friendly label for the account (used in TTS) |
 | `enable_toggle` | `""` *(required)* | Master enable/disable toggle |
+| `notification_master_gate` | `input_boolean.ai_notifications_master_enabled` | Global notification gate -- suppresses all notification automations when OFF |
 | `conversation_agent` | `Rick` | Assist Pipeline name (overridden by dispatcher) |
 | `email_prompt` | *(see blueprint)* | LLM summarization instructions |
 | `context_entities` | `[]` | Extra sensors/entities for LLM context |
@@ -176,13 +177,10 @@ When a new email arrives via the IMAP integration, this blueprint determines whi
 </details>
 
 <details>
-<summary>Section 7 -- Duck Other Players</summary>
+<summary>Section 7 -- Duck Guard</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `duck_player_list` | `[]` | Media players eligible for ducking |
-| `duck_volume` | `0.10` | Volume level for ducked players |
-| `duck_snapshot_helper` | `""` | Input text for shared duck volume snapshot (JSON) |
 | `ducking_flag` | `""` | Input boolean for duck cycle signaling |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle |
 
@@ -211,8 +209,6 @@ When a new email arrives via the IMAP integration, this blueprint determines whi
 |-------|---------|-------------|
 | `use_dispatcher` | `true` | Use the AI dispatcher for dynamic agent selection |
 | `bypass_follow_me` | `true` | Bypass notification follow-me during processing |
-| `bypass_ducking` | `false` | Bypass ducking during processing |
-| `duck_toggle_helper` | `input_boolean.ai_duck_manager_enabled` | Duck manager master toggle |
 | `bypass_claim_script` | `script.refcount_bypass_claim` | Refcount claim script |
 | `bypass_release_script` | `script.refcount_bypass_release` | Refcount release script |
 
@@ -226,16 +222,39 @@ When a new email arrives via the IMAP integration, this blueprint determines whi
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 
 <details>
-<summary>Section 11 -- Infrastructure</summary>
+<summary>Section 11 -- Music (Pre-TTS Stinger)</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_pre_tts_stinger` | `false` | Play a chime/stinger before the TTS announcement |
+| `stinger_agent` | `""` | Agent persona for library/compose lookups (empty = use dispatched persona) |
+| `stinger_library_id_override` | `""` | Explicit music library ID (skips auto-resolve when set) |
+| `compose_stinger_if_missing` | `true` | Compose locally via FluidSynth when library lookup fails |
+| `stinger_fallback_media_url` | `""` | Fallback chime file URL when both library and compose fail |
+
+</details>
+
+<details>
+<summary>Section 12 -- Infrastructure</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Dispatcher enabled entity |
+
+</details>
+
+<details>
+<summary>Section 13 -- User Preferences</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_notify_threshold` | `false` | Gate TTS against user's notification threshold preference |
+| `email_priority` | `3` | TTS queue priority (0=emergency, 1=alert, 2=normal, 3=low, 4=ambient) |
 
 </details>
 

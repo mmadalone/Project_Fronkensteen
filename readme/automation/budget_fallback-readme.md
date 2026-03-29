@@ -87,6 +87,16 @@ input_boolean.ai_budget_fallback_active
 | `fallback_pipeline` | `Davis` | Pipeline name to switch to when budget exhausted |
 | `announcement_text` | `Budget limit reached. Switching to basic mode.` | TTS announcement text. Empty = skip |
 | `tts_speaker` | _(empty)_ | Speaker for the fallback announcement |
+| `tts_fallback_voice` | `tts.home_assistant_cloud` | TTS engine entity for fallback announcements |
+
+</details>
+
+<details><summary>③ Infrastructure</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `fallback_active_entity` | `input_boolean.ai_budget_fallback_active` | Boolean that signals budget fallback is active |
+| `saved_pipelines_entity` | `input_text.ai_budget_saved_pipelines` | input_text storing saved pipeline JSON for restore |
 
 </details>
 

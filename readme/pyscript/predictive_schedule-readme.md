@@ -28,20 +28,20 @@ Both services use `supports_response="only"`.
 - `_fetch_calendar_tomorrow()` -- Fetch events from Google Calendar with 1-hour cache. Stores earliest event in L2 as fallback.
 - `_get_first_event_tomorrow()` -- Fallback chain: Calendar API -> L2 cached data -> None.
 - `_get_bedtime_routine_duration()` -- Average duration of bed-ending routines from L2 fingerprints.
-- `_get_default_wake_time(for_tomorrow)` -- Per-day overrides -> weekday/weekend defaults -> hard defaults.
-- `_update_helpers(result, test_mode)` -- Write recommendation text, predicted routine start, predicted wake time, and sources JSON to helpers.
+- `_get_default_wake_time(for_tomorrow)` -- Per-day overrides -> per-user weekday/weekend defaults -> hard defaults.
+- `_update_helpers(result, test_mode)` -- Write recommendation text and sources JSON to status sensor attributes, predicted routine start and wake time to input_datetime helpers.
 
 ## State Dependencies
 
 - `input_number.ai_target_sleep_hours` -- Target hours of sleep (default 7.0)
 - `input_number.ai_morning_prep_buffer` -- Minutes from wake to leaving house (default 45)
 - `input_number.ai_bedtime_relaxed_extension_minutes` -- Extra minutes when no timed event tomorrow (default 90)
-- `input_datetime.ai_context_wake_time_weekday` / `_weekend` -- Default wake times
+- `input_datetime.ai_context_wake_time_weekday_{user}` / `_weekend_{user}` -- Per-user default wake times
 - `input_text.ai_schedule_day_overrides` -- JSON per-day-of-week wake time overrides
-- `input_text.ai_bedtime_recommendation` -- Output: recommendation text
+- `sensor.ai_predictive_schedule_status` attr `bedtime_recommendation` -- Output: recommendation text
 - `input_datetime.ai_predicted_routine_start` -- Output: predicted routine start time
 - `input_datetime.ai_predicted_wake_time` -- Output: predicted wake time (used by calendar_alarm blueprint)
-- `input_text.ai_schedule_sources_raw` -- Output: confidence sources JSON
+- `sensor.ai_predictive_schedule_status` attr `schedule_sources_raw` -- Output: confidence sources JSON
 - `input_text.ai_routine_stage` -- Current routine stage from routine_fingerprint.py
 - `input_boolean.ai_bedtime_predicted` -- Whether bedtime routine is predicted/active
 - `input_boolean.ai_context_work_day_tomorrow` -- Work day status from calendar_promote

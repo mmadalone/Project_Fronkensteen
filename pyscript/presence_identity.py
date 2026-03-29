@@ -216,7 +216,7 @@ def _get_active_zone_count() -> int:
 # ── Occupancy Mode ───────────────────────────────────────────────────────────
 
 def _get_occupancy_mode() -> str:
-    """Return current occupancy mode: solo_miquel, solo_jessica, dual, away, guest."""
+    """Return current occupancy mode: solo_{slug}, dual, away, guest."""
     val = state.get("sensor.occupancy_mode")  # noqa: F821
     if val in ("unavailable", "unknown", None, ""):
         return "unknown"
@@ -538,7 +538,7 @@ async def _apply_markov_tiebreak(active_zones: list):
 
     z1, z2 = active_zones
 
-    # Query Markov for which zone is more likely for Miquel at this time
+    # Query Markov for which zone is more likely for the active user at this time
     try:
         result = pyscript.presence_predict_next(current_zone=z1)  # noqa: F821
         resp = await result
@@ -921,14 +921,11 @@ async def presence_identity_force_anchor(person: str = "", zone: str = ""):
     fields:
       person:
         description: Person name
-        example: "miquel"
+        example: "your_name"
         required: true
         selector:
-          # Static options — sync with person.* entities if persons change
-          select:
-            options:
-              - miquel
-              - jessica
+          entity:
+            domain: person
       zone:
         description: Zone name
         example: "workshop"
@@ -947,6 +944,8 @@ async def presence_identity_force_anchor(person: str = "", zone: str = ""):
               - away
               - unknown
     """
+    person = person.split(".", 1)[1] if "." in str(person) else person
+
     if _is_test_mode():
         log.info("presence_identity [TEST]: would force-anchor %s to %s", person, zone)  # noqa: F821
         return

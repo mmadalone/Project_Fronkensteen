@@ -27,7 +27,7 @@ Provides the helper entities and template sensor for presence-based pattern reco
 - **Pyscript:** `pyscript/memory.py` — L2 memory for persisting frequency tables
 - **Package:** `ai_test_harness.yaml` — test mode toggle
 - **Hardware:** FP2 binary sensors (zone transition detection)
-- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_number.yaml`, `helpers_input_text.yaml`
+- **Helper files:** `helpers_input_boolean.yaml`, `helpers_input_text.yaml`; `ai_dev_helpers.yaml` (number helpers — lookback days, min samples)
 
 ## Cross-References
 

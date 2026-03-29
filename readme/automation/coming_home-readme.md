@@ -113,6 +113,8 @@ Triggers when a person arrives home, waits for entrance occupancy to confirm phy
 | Voice Assistant | `Rick` | Assist Pipeline for the greeting. Overridden by dispatcher. |
 | Use Dispatcher | `true` | Let the dispatcher select the persona dynamically. |
 | AI greeting prompt | _(default)_ | Prompt for the greeting. Supports `{{ person_name }}`. |
+| Greeting safety prefix | _(default safety text)_ | Tool-suppression prefix prepended to the greeting prompt. |
+| Arrival satellite system prompt | _(default)_ | Extra system prompt for satellite conversation. Supports `{{ person_name }}`, `{{ welcome_line }}`. |
 | Assist satellites | `{}` | Voice PE satellites for the greeting and follow-up conversation. |
 
 </details>
@@ -134,12 +136,29 @@ Triggers when a person arrives home, waits for entrance occupancy to confirm phy
 | Privacy gate tier | `off` | Privacy tier (off/T1/T2/T3). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
-| Privacy gate person | `miquel` | Person name for suppression lookups. |
+| Privacy gate person | `person.miquel` | Person entity for suppression lookups. |
 
 </details>
 
 <details>
-<summary><strong>Section 6 -- Infrastructure</strong></summary>
+<summary><strong>Section 6 -- Arrival Music</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Enable arrival theme | `false` | Play agent's theme music before the AI greeting. |
+| Theme agent | _(empty)_ | Agent persona for theme. Empty = use dispatched agent. |
+| Content type | `theme` | Library tune type: theme, chime, or stinger. |
+| Music output player | _(empty)_ | Speaker for theme music. |
+| Compose if missing | `true` | Generate via FluidSynth if not in library. |
+| Tune override (library ID) | _(empty)_ | Specific library ID, bypassing auto-resolution. |
+| Music volume | `0.0` | Volume for tune playback (0.0 = keep current). |
+| Pause after tune | `5` s | Seconds to wait after tune before greeting. |
+| Fallback audio URL | _(empty)_ | Static audio URL if library empty and compose is off. |
+
+</details>
+
+<details>
+<summary><strong>Section 7 -- Infrastructure</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|

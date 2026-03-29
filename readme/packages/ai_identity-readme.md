@@ -13,14 +13,14 @@ Core identity layer of the Voice Context Architecture. Computes per-person confi
 
 | Entity ID | Type | Purpose |
 |---|---|---|
-| `sensor.identity_confidence_miquel` | template sensor | 0-100 confidence score (WiFi 40 + GPS 30 + FP2 solo 20 + sustained 10) |
-| `sensor.identity_confidence_jessica` | template sensor | 0-70 confidence score (WiFi 40 + FP2 solo 20 + sustained 10; no GPS) |
+| `sensor.identity_confidence_miquel` | template sensor | 0-100 confidence score (WiFi 30 + GPS 50 + FP2 solo 15 + sustained 5, configurable via `ai_wifi_score_*` helpers) |
+| `sensor.identity_confidence_jessica` | template sensor | 0-50 confidence score (WiFi 30 + FP2 solo 15 + sustained 5; no GPS, configurable via `ai_wifi_score_*` helpers) |
 | `sensor.occupancy_mode` | template sensor | `solo_miquel`, `solo_jessica`, `dual`, `away`, or `guest` |
 | `binary_sensor.ai_solo_single_zone` | template binary_sensor | True when one phone on WiFi + exactly one FP2 zone occupied |
 | `binary_sensor.ai_wifi_stale_condition_jessica` | template binary_sensor | True when Jessica WiFi home but no FP2 presence detected |
-| `input_boolean.guest_mode` | input_boolean | Manual override, forces all scores to 0 |
-| `input_boolean.ai_sustained_solo_zone` | input_boolean | Set after 10 min sustained solo occupancy (+10 pts) |
-| `input_boolean.ai_wifi_stale_jessica` | input_boolean | WiFi stale flag (zeroes Jessica's 40-pt WiFi signal) |
+| `input_boolean.ai_guest_mode` | input_boolean | Manual override, forces all scores to 0 |
+| `input_boolean.ai_sustained_solo_zone` | input_boolean | Set after 10 min sustained solo occupancy (+5 pts default) |
+| `input_boolean.ai_wifi_stale_jessica` | input_boolean | WiFi stale flag (zeroes Jessica's WiFi signal) |
 | `input_number.ai_wifi_stale_timeout` | input_number | Tunable WiFi staleness timeout (5-60 min) |
 | `automation.ai_sustained_solo_zone_on` | automation | Sets sustained flag after 10 min solo + single FP2 zone |
 | `automation.ai_sustained_solo_zone_off` | automation | Clears sustained flag immediately when condition breaks |
@@ -44,8 +44,8 @@ Core identity layer of the Voice Context Architecture. Computes per-person confi
 
 ## Notes
 
-- Jessica's max score is 70 pts (no companion app GPS yet). Miquel's max is 100 pts.
-- WiFi staleness handles the common case where Jessica's phone stays on WiFi after she leaves (router slow to deregister). If WiFi says home but no FP2 zone detects a body for N minutes, the 40-pt WiFi signal is zeroed.
+- Jessica's max score is 50 pts with default weights (no companion app GPS yet). Miquel's max is 100 pts. Scoring weights are configurable via `input_number.ai_wifi_score_primary` (default 30), `ai_wifi_score_secondary` (default 50), `ai_wifi_score_tertiary` (default 15), `ai_wifi_score_quaternary` (default 5).
+- WiFi staleness handles the common case where Jessica's phone stays on WiFi after she leaves (router slow to deregister). If WiFi says home but no FP2 zone detects a body for N minutes, the WiFi signal (default 30 pts) is zeroed.
 - Guest mode is a hard override: all confidence scores forced to 0, no exceptions.
 - The occupancy mode sensor incorporates WiFi staleness for Jessica -- if her WiFi is stale, she's treated as not home for occupancy purposes.
 - Deployed: 2026-03-01. Updated: 2026-03-06 (WiFi staleness for Jessica).

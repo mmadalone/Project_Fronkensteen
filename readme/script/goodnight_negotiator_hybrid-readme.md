@@ -1,4 +1,4 @@
-# Goodnight Negotiator (Hybrid) v8.8.0
+# Goodnight Negotiator (Hybrid) v8.9.0
 
 ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
 
@@ -127,7 +127,7 @@ END
 
 ## Prerequisites
 
-- Home Assistant (no explicit min_version set)
+- Home Assistant **2024.10.0** or newer
 - Assist Satellite (Voice PE) entity
 - Music Assistant integration (for Stage 3)
 - `pyscript.agent_dispatch` service (agent dispatcher)
@@ -162,6 +162,7 @@ END
 | `inter_stage_delay` | `1` | Seconds between stages (0-600) |
 | `qa_unclear_retries` | `1` | Re-ask count on unclear yes/no answers (0-10) |
 | `run_debounce_seconds` | `20` | Ignore new trigger if script ran within this window (0-300) |
+| `tts_output_volume` | `0.0` | Volume for satellite TTS (0 = use current; only raises volume) |
 
 </details>
 
@@ -293,6 +294,13 @@ END
 
 </details>
 
+<details>
+<summary><strong>Section 12 -- Prompts</strong></summary>
+
+All 17 LLM prompts exposed as editable inputs (v8.9.0). Defaults match previous hardcoded text. Includes `safety_prefix`, opening/closing prompts, ask/confirm prompts for stages 1-3, cancel, unclear proceed/skip, not-found, MA error, playing, and category-empty prompts.
+
+</details>
+
 ## Technical Notes
 
 - **Mode:** `single` / `max_exceeded: silent`
@@ -304,6 +312,7 @@ END
 
 ## Changelog
 
+- **v8.9.0:** Prompt externalization -- all 17 hardcoded LLM prompts exposed as `!input` declarations in new section 12; safety_prefix now editable; zero breaking changes
 - **v8.8.0:** Audit remediation -- fixed 14 mislabeled Stage 1 aliases, added missing defaults on Stage 3 inputs, corrected indentation, trimmed historical changelog
 - Earlier versions: see repository history
 

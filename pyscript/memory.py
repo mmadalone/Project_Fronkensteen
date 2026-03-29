@@ -294,16 +294,12 @@ def _ensure_db() -> None:
         ).fetchone()
         if _qs5_row is None:
             _now_bf = datetime.now(UTC).isoformat()
-            conn.execute("""
-                UPDATE mem SET owner='miquel'
-                WHERE owner='' AND scope='user'
-                  AND (key LIKE '%:miquel' OR key LIKE '%:miquel:%')
-            """)
-            conn.execute("""
-                UPDATE mem SET owner='jessica'
-                WHERE owner='' AND scope='user'
-                  AND (key LIKE '%:jessica' OR key LIKE '%:jessica:%')
-            """)
+            for _slug in get_person_slugs():
+                conn.execute("""
+                    UPDATE mem SET owner=?
+                    WHERE owner='' AND scope='user'
+                      AND (key LIKE ? OR key LIKE ?)
+                """, (_slug, f'%:{_slug}', f'%:{_slug}:%'))
             conn.execute("""
                 INSERT OR IGNORE INTO mem(
                     key, value, scope, tags, tags_search,
@@ -1871,7 +1867,7 @@ async def memory_set(
           Person slug who owns this memory (QS-5 isolation).
           Auto-resolved from identity confidence when empty.
         default: ""
-        example: miquel
+        example: "your_name"
         selector:
           text:
     """
@@ -2882,13 +2878,7 @@ async def memory_health_check():
                 _ec = _yaml.safe_load(_ec_raw) or {}
                 for _name in (_ec.get("persons") or {}):
                     _discovered.add(_name)
-            _docstring_persons = {"miquel", "jessica"}  # Static YAML options — HA limitation
-            if _discovered and _discovered != _docstring_persons:
-                log.warning(  # noqa: F821
-                    "memory.py: scope options mismatch — discovered=%s, "
-                    "docstring=%s. Update memory_todo_sync YAML docstrings.",
-                    _discovered, _docstring_persons,
-                )
+            # Person validation — entity selectors are now dynamic (no static options to check)
         except Exception:
             pass
 
@@ -3433,7 +3423,7 @@ async def memory_browse(query: str = "", limit: int = 10):
         name: Query
         description: FTS search query. If empty, reads from dashboard helper.
         required: false
-        example: "miquel music"
+        example: "cooking dinner"
         selector:
           text:
       limit:
@@ -4226,6 +4216,7 @@ def _extract_tags_from_description(desc: str) -> str:
 async def memory_todo_sync(
     todo_entity: str = TODO_DEFAULT_ENTITY,
     scope_filter: str = "all",
+    owner_filter: str = "",
     tag_filter: str = "",
     query_filter: str = "",
     max_age_days: int = 0,
@@ -4250,12 +4241,18 @@ async def memory_todo_sync(
             domain: todo
       scope_filter:
         name: Scope filter
-        description: Only sync entries with this scope. 'all' = no filter.
+        description: "Filter by scope type: all (no filter), user, or household."
         default: all
         selector:
           select:
-            # Static options — sync with person.* entities if persons change
-            options: [all, user, miquel, jessica, household]
+            options: [all, user, household]
+      owner_filter:
+        name: Owner filter
+        description: "Optional: filter by a specific person. Only applies when scope is 'user' or 'all'."
+        default: ""
+        selector:
+          entity:
+            domain: person
       tag_filter:
         name: Tag filter
         description: Comma-separated tags. Entry must have at least one. Empty = all.
@@ -4292,16 +4289,17 @@ async def memory_todo_sync(
           boolean:
       default_scope:
         name: Default scope for user items
-        description: Scope assigned to user-created todo items synced to L2.
+        description: "Scope assigned to user-created todo items synced to L2."
         default: user
         selector:
           select:
-            # Static options — sync with person.* entities if persons change
-            options: [user, miquel, jessica, household]
+            options: [user, household]
     """
     if _is_test_mode():
         log.info("memory [TEST]: would sync todo entity=%s", todo_entity)  # noqa: F821
         return
+
+    owner_slug = owner_filter.split(".", 1)[1] if "." in str(owner_filter) else (owner_filter or "")
 
     added_to_todo = 0
     removed_from_todo = 0
@@ -4417,6 +4415,9 @@ async def memory_todo_sync(
     for key, entry in all_entries.items():
         # Scope filter
         if scope_filter != "all" and entry.get("scope", "") != scope_filter:
+            continue
+        # Owner filter — match scope == owner_slug (person-scoped entries)
+        if owner_slug and entry.get("scope", "") != owner_slug:
             continue
         # Tag filter
         if tag_set:

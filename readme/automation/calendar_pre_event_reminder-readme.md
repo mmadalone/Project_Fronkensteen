@@ -98,14 +98,23 @@ calendar entity
 
 </details>
 
-<details><summary>④ Privacy</summary>
+<details><summary>④ Notification Threshold</summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `enable_notify_threshold` | `false` | Gate TTS against the active user's notification threshold preference |
+| `tts_priority` | `2` | TTS queue priority (0=emergency, 1=alert, 2=normal, 3=low, 4=ambient) |
+
+</details>
+
+<details><summary>⑤ Privacy</summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate mode selector |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression lookups |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
 
 </details>
 

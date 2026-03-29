@@ -667,7 +667,7 @@ blueprint:
         pref_bed_time_entity:
           name: "Bed time preference entity"
           description: "input_datetime helper for the user's preferred bed time."
-          default: input_datetime.ai_context_bed_time_miquel
+          default: input_datetime.ai_time_placeholder
           selector:
             entity:
               domain: input_datetime
@@ -814,7 +814,7 @@ blueprint:
         privacy_gate_person:
           name: "Privacy gate person"
           description: "Person entity for tier suppression lookups."
-          default: person.miquel
+          default: ""
           selector:
             entity:
               domain: person
@@ -1171,10 +1171,11 @@ variables:
 
   # ── User preference context (Preference Consumption B3) ──
   _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-    {% else %}miquel{% endif %}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
   _user_prefs_block: >-
     {% set ns = namespace(lines=[]) %}
     {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}

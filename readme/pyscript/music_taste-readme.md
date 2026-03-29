@@ -13,7 +13,7 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 
 | Trigger | Function | Condition |
 |---------|----------|-----------|
-| `@state_trigger(*MA_PLAYERS playing/media_title)` | `_on_media_playing` | Logs tracks as they start playing on configured Music Assistant players. Filters out radio streams and TTS. |
+| `@state_trigger` (dynamic, per MA player) | `_on_media_playing` | Registered at startup from `entity_config.yaml` `music_players`. Logs tracks as they start playing. Filters out radio streams and TTS. |
 | `@time_trigger("period(0, 30)")` | `_poll_playing_media` | 30-second polling fallback: catches tracks on players not in the MA_PLAYERS list (only `media_content_type == "music"`). |
 | `@time_trigger("cron(0 4 * * *)")` | `_spotify_daily_pull` | Daily at 04:00: pulls top artists (medium_term), top tracks, and recently played from SpotifyPlus. |
 | `@time_trigger("cron(30 4 * * *)")` | `_daily_aggregate` | Daily at 04:30: merges MA play logs + Spotify data into a unified taste profile. Optionally generates LLM genre summary. |
@@ -31,8 +31,8 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 
 - `input_boolean.ai_music_taste_enabled` — Kill switch
 - `input_text.ai_task_instance` — LLM instance for genre summary generation
-- `media_player.spotifyplus_miquel_angel_madalone` — SpotifyPlus entity for Spotify API access
-- `media_player.workshop_ma` / `media_player.bathroom_ma` — Configured Music Assistant players
+- SpotifyPlus entity — discovered from `entity_config.yaml` `spotifyplus_entity`
+- Music Assistant players — discovered from `entity_config.yaml` `music_players`
 
 ## Package Pairing
 

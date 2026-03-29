@@ -10,7 +10,7 @@ Turns off lights and/or media when a presence sensor (e.g., Aqara FP2) reports "
 ┌─────────────────────────────────────┐
 │ Trigger                             │
 │  Presence sensor: on → off          │
-│  (held for delay_minutes)           │
+│  (held for vacancy_delay)           │
 └──────────────┬──────────────────────┘
                │
     ┌──────────▼──────────────────┐
@@ -42,7 +42,7 @@ Turns off lights and/or media when a presence sensor (e.g., Aqara FP2) reports "
 ## Features
 
 - Per-zone automation via blueprint instances
-- Configurable vacancy delay (5-120 minutes) prevents premature shutoffs
+- Configurable vacancy delay (duration selector) prevents premature shutoffs
 - Lights: area-based or specific entity targeting (or both -- switches always from specific list)
 - Media: area-based or specific player targeting
 - Optional exit script for custom actions (e.g., thermostat to away mode)
@@ -54,7 +54,7 @@ Turns off lights and/or media when a presence sensor (e.g., Aqara FP2) reports "
 
 ## Prerequisites
 
-- Home Assistant (no min_version specified)
+- Home Assistant 2024.10.0 or later
 - A `binary_sensor` for zone presence detection (e.g., Aqara FP2)
 - `input_boolean.ai_auto_off_enabled` (default master switch, can be changed)
 
@@ -68,7 +68,7 @@ Turns off lights and/or media when a presence sensor (e.g., Aqara FP2) reports "
 | Input | Default | Description |
 |---|---|---|
 | `presence_sensor` | _(required)_ | Binary sensor for zone occupancy |
-| `delay_minutes` | `15` | Minutes to wait after sensor reports "off" (5-120) |
+| `vacancy_delay` | `0h 15m 0s` | Duration to wait after sensor reports "off" before turning things off |
 | `master_switch` | `input_boolean.ai_auto_off_enabled` | Global on/off toggle |
 | `lights_enabled` | `true` | Turn off lights when zone is vacant |
 | `use_area_lights` | `true` | Use area-based light control (vs. specific entities) |

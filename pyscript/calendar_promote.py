@@ -36,7 +36,7 @@ from shared_utils import (
 #
 # Key design:
 #   - Fetches 48h window (today + tomorrow) in one call per calendar
-#   - L2 keys: calendar_today:miquel, calendar_tomorrow:miquel
+#   - L2 keys: calendar_today:{person}, calendar_tomorrow:{person}
 #   - L1 helpers: input_text.ai_calendar_today_summary, _tomorrow_summary
 #   - Stale flag: input_boolean.ai_calendar_stale (set on API failure)
 #   - Promote cache: 5 min TTL to debounce rapid state-change triggers
@@ -49,7 +49,7 @@ from shared_utils import (
 #   - packages/ai_calendar_promotion.yaml (helpers)
 #   - packages/ai_test_harness.yaml (test mode toggle)
 #   - packages/ai_predictive_schedule.yaml (input_text.ai_test_calendar_event)
-#   - calendar.miquel_angel_cano_gmail_com (Google Calendar)
+#   - Primary calendar (from entity_config.yaml persons section)
 #   - calendar.holidays_in_spain (Spanish holidays)
 #   - calendar.birthdays (Google Contacts birthdays)
 #
@@ -89,7 +89,7 @@ def _get_calendar_entities() -> tuple[str, str, str]:
     if not main and not holidays and not birthdays:
         log.error("cal_promote: no calendar entities in entity_config.yaml")  # noqa: F821
     return (
-        main or "calendar.miquel_angel_cano_gmail_com",
+        main or "",
         holidays or "calendar.holidays_in_spain",
         birthdays or "calendar.birthdays",
     )

@@ -103,7 +103,7 @@ Speaks a single, AI-generated "last call" message when presence is detected in a
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| Media player | _(required)_ | Speaker for the spoken announcement. |
+| Media player | _(empty)_ | Speaker for the spoken announcement. |
 
 </details>
 
@@ -125,6 +125,8 @@ Speaks a single, AI-generated "last call" message when presence is detected in a
 | Voice Assistant | `Rick - Bedtime` | Assist Pipeline for message generation (overridden by dispatcher). |
 | Use Dispatcher | `true` | Let the AI dispatcher select the persona dynamically. |
 | LLM prompt style | _(default prompt)_ | Instructions for the AI's last-call message. |
+| Safety prefix | _(default safety text)_ | Tool-suppression prefix prepended to the LLM prompt. |
+| Task instruction | _(default instruction)_ | Formatting instruction appended after the prompt and context block. |
 | Extra context entities | `[]` | Entities whose state is passed to the AI as context. |
 
 </details>
@@ -148,12 +150,22 @@ Speaks a single, AI-generated "last call" message when presence is detected in a
 | Privacy gate tier | `t1` | Privacy tier (off/T1 intimate/T2 personal/T3 ambient). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Toggle for the privacy gate system. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector (auto/force_suppress/force_allow). |
-| Privacy gate person | `miquel` | Person name for tier suppression lookups. |
+| Privacy gate person | `person.miquel` | Person entity for tier suppression lookups. |
 
 </details>
 
 <details>
-<summary><strong>Section 8 -- Infrastructure</strong></summary>
+<summary><strong>Section 8 -- User Preferences</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| Enable user preference injection | `true` | Inject user preferences into last call prompts. |
+| Enable sleep budget context | `true` | Inject sleep budget (hours until wake time) into last call prompts. |
+
+</details>
+
+<details>
+<summary><strong>Section 9 -- Infrastructure</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|

@@ -192,13 +192,42 @@ END
 </details>
 
 <details>
-<summary><strong>Section 6 -- Infrastructure</strong></summary>
+<summary><strong>Section 6 -- Wind-Down Music</strong></summary>
 
 | Input | Default | Description |
 |---|---|---|
-| `ducking_flag` | `input_boolean.ducking_flag` | Ducking active flag |
+| `enable_winddown_music` | `false` | Play ambient wind-down music before MA playlist |
+| `winddown_agent` | `portuondo` | Musical identity for the ambient piece |
+| `winddown_content_type` | `bedtime` | Content type: bedtime / theme / ambient |
+| `compose_winddown_if_missing` | `true` | Generate via FluidSynth if not in library |
+| `winddown_library_id_override` | _(empty)_ | Play specific composition by library ID |
+| `winddown_delay_after` | `3` | Seconds after wind-down tune before MA playlist |
+| `winddown_fallback_media_url` | _(empty)_ | Static fallback audio URL |
+
+</details>
+
+<details>
+<summary><strong>Section 7 -- Infrastructure</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `ducking_flag` | `input_boolean.ai_ducking_flag` | Ducking active flag |
 | `duck_guard_enabled` | `input_boolean.ai_duck_guard_enabled` | Duck guard toggle |
 | `dispatcher_enabled` | `input_boolean.ai_dispatcher_enabled` | Dispatcher toggle |
+
+</details>
+
+<details>
+<summary><strong>Section 8 -- Prompts</strong></summary>
+
+| Input | Default | Description |
+|---|---|---|
+| `safety_prefix` | _(tool suppression prefix)_ | Prepended to every LLM call to prevent function/tool invocation |
+| `opening_default_prompt` | _(default opening prompt)_ | Fallback prompt for opening line (when custom is empty) |
+| `tv_ask_prompt` | _(default TV ask prompt)_ | Prompt for LLM to generate TV/IR yes/no question |
+| `devices_ask_prompt` | _(default devices ask prompt)_ | Prompt for LLM to generate devices yes/no question |
+| `music_ask_prompt` | _(default music ask prompt)_ | Prompt for LLM to generate bedtime audio yes/no question |
+| `closing_default_prompt` | _(default closing prompt)_ | Fallback prompt for closing line (when custom is empty) |
 
 </details>
 

@@ -515,10 +515,11 @@ variables:
   # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
   # ── User preference context for banter shaping ──
   _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') }}
-    {% else %}miquel{% endif %}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
   _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) }}"
   _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) }}"
   _user_pet_peeves: "{{ states('input_text.ai_context_user_pet_peeves_' ~ _resolved_user) | default('', true) }}"
@@ -606,10 +607,11 @@ conditions:
       {% if not (enable_threshold | bool(false)) %}
         true
       {% else %}
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default('miquel') %}
-        {% else %}{% set _u = 'miquel' %}{% endif %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = tts_priority_val | int(2) %}
         {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}

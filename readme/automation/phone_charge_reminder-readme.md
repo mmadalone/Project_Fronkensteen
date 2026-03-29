@@ -120,7 +120,19 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 </details>
 
 <details>
-<summary><strong>⑤ Features & presence</strong></summary>
+<summary><strong>⑤ Quiet hours & DND</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `dnd_sensor` | *(empty)* | Phone DND sensor -- suppresses when not "off" or "unavailable" |
+| `enable_quiet_hours` | `false` | Enable time-based quiet window |
+| `quiet_start` | `23:00:00` | Quiet hours start time |
+| `quiet_end` | `07:00:00` | Quiet hours end time |
+
+</details>
+
+<details>
+<summary><strong>⑥ Features & presence</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -133,32 +145,30 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 </details>
 
 <details>
-<summary><strong>⑥ Bypass controls</strong></summary>
+<summary><strong>⑦ Bypass controls</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `bypass_follow_me` | `true` | Pause follow-me during reminder sequence |
-| `bypass_ducking` | `false` | Disable volume ducking during TTS |
-| `duck_toggle_helper` | `input_boolean.ai_duck_manager_enabled` | Duck manager master toggle |
 | `bypass_claim_script` | `script.refcount_bypass_claim` | Refcount claim script |
 | `bypass_release_script` | `script.refcount_bypass_release` | Refcount release script |
 
 </details>
 
 <details>
-<summary><strong>⑦ Privacy</strong></summary>
+<summary><strong>⑧ Privacy</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
-| `privacy_gate_person` | `miquel` | Person name for tier suppression |
+| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression |
 
 </details>
 
 <details>
-<summary><strong>⑧ Infrastructure</strong></summary>
+<summary><strong>⑨ Infrastructure</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -178,6 +188,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 
 ## Changelog
 
+- **v5:** Quiet hours & DND -- optional time-based quiet window and phone DND sensor gate
 - **v4:** Optional "fully charged" TTS announcement at 100% while charging
 - **v3:** Per-tier prompts and factual messages, reminder count with repeat loops, bypass follow-me and ducking, mode restart
 - **v2:** Dispatcher support, conversation-agent selector, editable prompts, presence sensor

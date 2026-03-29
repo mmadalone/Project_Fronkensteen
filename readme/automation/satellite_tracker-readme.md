@@ -28,7 +28,7 @@ Tracks when a voice assistant satellite starts responding and stores its `entity
 
 ## Prerequisites
 
-- Home Assistant (no specific min_version declared)
+- Home Assistant 2024.10.0+
 - `input_text.ai_last_satellite` helper (defined in `packages/ai_self_awareness.yaml`)
 - One or more `assist_satellite` entities
 
@@ -44,6 +44,7 @@ Tracks when a voice assistant satellite starts responding and stores its `entity
 | Input | Default | Description |
 |-------|---------|-------------|
 | **Voice PE Satellite** | (required) | The `assist_satellite` entity to track |
+| **Last satellite entity** | `input_text.ai_last_satellite` | Helper that stores the last-active satellite entity_id |
 
 ## Technical Notes
 

@@ -85,7 +85,7 @@ Done (automation finds +
 | Input | Default | Description |
 |-------|---------|-------------|
 | `pause_phrases` | `[pause, pause it, pause the TV, stop the music, stop that sound, hold on a second]` | Example phrases that should trigger a media pause (for LLM prompt) |
-| `pause_exclude_phrases` | `[don't pause keep going, I said don't pause it]` | Example phrases where "pause" appears but should NOT trigger this tool |
+| `pause_exclude_phrases` | `["don't pause, keep going", "I said don't pause it"]` | Example phrases where "pause" appears but should NOT trigger this tool |
 
 </details>
 
