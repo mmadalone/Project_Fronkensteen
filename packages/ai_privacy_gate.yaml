@@ -108,6 +108,7 @@ template:
               'bedtime_routine': {'owner': 'miquel', 'tier': 't1'},
               'bedtime_routine_plus': {'owner': 'miquel', 'tier': 't1'},
               'bedtime_last_call': {'owner': 'miquel', 'tier': 't1'},
+              'therapy_session': {'owner': 'miquel', 'tier': 't1'},
               'email_follow_me': {'owner': 'miquel', 'tier': 't2'},
               'notification_follow_me': {'owner': 'miquel', 'tier': 't2'},
               'email_priority_filter': {'owner': 'miquel', 'tier': 't2'},
@@ -118,6 +119,9 @@ template:
               'calendar_pre_event': {'owner': 'miquel', 'tier': 't2'},
               'llm_alarm': {'owner': 'miquel', 'tier': 't2'},
               'voice_handoff': {'owner': 'miquel', 'tier': 't2'},
+              'bedtime_winddown': {'owner': 'miquel', 'tier': 't2'},
+              'user_interview': {'owner': 'miquel', 'tier': 't2'},
+              'alexa_on_demand_briefing': {'owner': 'miquel', 'tier': 't2'},
               'meal_detection': {'owner': 'miquel', 'tier': 't3'},
               'sleep_detection': {'owner': 'miquel', 'tier': 't3'},
               'memory_todo_mirror': {'owner': 'miquel', 'tier': 't3'},
@@ -127,7 +131,10 @@ template:
               'sleep_lights': {'owner': 'miquel', 'tier': 'off'},
               'media_tracking': {'owner': 'miquel', 'tier': 'off'},
               'refcount_watchdog': {'owner': 'miquel', 'tier': 'off'},
-              'coming_home': {'owner': 'miquel', 'tier': 'off'}
+              'coming_home': {'owner': 'miquel', 'tier': 'off'},
+              'circadian_lighting': {'owner': 'miquel', 'tier': 'off'},
+              'scene_preference': {'owner': 'miquel', 'tier': 'off'},
+              'ambient_music': {'owner': 'miquel', 'tier': 'off'}
             } -%}
             {%- set enabled = is_state('input_boolean.ai_privacy_gate_enabled', 'on') -%}
             {%- set mode = states('input_select.ai_privacy_gate_mode') -%}

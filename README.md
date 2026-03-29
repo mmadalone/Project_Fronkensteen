@@ -24,7 +24,7 @@ Five AI personas with distinct personalities run a house from a Raspberry Pi 5. 
 | Presence zones | 8 (Aqara FP2, multi-room) |
 | Languages | 3 (English, Spanish, Catalan) |
 | Style guide | 11 files, ~126K tokens |
-| README documentation | 152 files |
+| README documentation | 162 files |
 | Dashboard | 6 tabs, 2,945 lines |
 
 ---
@@ -80,7 +80,7 @@ Maximum effort. Say "pass me to Deadpool" mid-conversation and the satellite swi
 
 ### Theatrical Mode
 
-Say "debate this" and the house becomes a stage. `theatrical_mode.py` orchestrates multi-turn debates between 2–5 AI personas — each arguing in character, each on their own TTS voice, optionally on different physical speakers for a spatial staging effect. The `theatrical_mode.yaml` blueprint (45 knobs across 11 collapsible sections) exposes everything: turn limits, word count caps, speaker-to-agent mapping, three interrupt modes (turn limit, mic gap with `ask_question` and `question_media_id` voice override so the last speaker asks in their own voice, event-driven wake word detection via `task.wait_until` with 5s window), three context modes (sliding window of previous turns, topic-only, or L2 whisper network) — each with user-customizable prompt templates supporting `{topic}`, `{persona}`, `{opponents}`, `{turn}`, and `{total_turns}` placeholders — budget gating, cooldown, and banter escalation (a reactive banter comment can probabilistically escalate into a full debate). Agents address each other by name during debates, not the user — opponent-aware prompts ensure Rick argues with Quark, not at you. The pyscript engine resolves participants from its own pipeline cache in a single pass, builds tool-suppression prompts with language preservation (non-English agents like Portuondo respond in their native language), calls each agent via `conversation_with_timeout`, sanitizes the output, and delivers through the TTS queue with per-agent speaker targeting. Inter-turn coordination uses event-driven playback wait (`tts_queue_item_completed`) instead of speaker state polling, preventing agents from talking over each other. Voice mood tags (ElevenLabs v3 audio tags like `[thick Cuban accent]`, `[whispers]`, `[excited]`) are injected per-agent from the mood schedule, so each persona sounds like themselves even in debate.
+Say "debate this" and the house becomes a stage. `theatrical_mode.py` orchestrates multi-turn debates between 2–5 AI personas — each arguing in character, each on their own TTS voice, optionally on different physical speakers for a spatial staging effect. The `theatrical_mode.yaml` blueprint (40 knobs across 11 collapsible sections) exposes everything: turn limits, word count caps, speaker-to-agent mapping, three interrupt modes (turn limit, mic gap with `ask_question` and `question_media_id` voice override so the last speaker asks in their own voice, event-driven wake word detection via `task.wait_until` with 5s window), three context modes (sliding window of previous turns, topic-only, or L2 whisper network) — each with user-customizable prompt templates supporting `{topic}`, `{persona}`, `{opponents}`, `{turn}`, and `{total_turns}` placeholders — budget gating, cooldown, and banter escalation (a reactive banter comment can probabilistically escalate into a full debate). Agents address each other by name during debates, not the user — opponent-aware prompts ensure Rick argues with Quark, not at you. The pyscript engine resolves participants from its own pipeline cache in a single pass, builds tool-suppression prompts with language preservation (non-English agents like Portuondo respond in their native language), calls each agent via `conversation_with_timeout`, sanitizes the output, and delivers through the TTS queue with per-agent speaker targeting. Inter-turn coordination uses event-driven playback wait (`tts_queue_item_completed`) instead of speaker state polling, preventing agents from talking over each other. Voice mood tags (ElevenLabs v3 audio tags like `[thick Cuban accent]`, `[whispers]`, `[excited]`) are injected per-agent from the mood schedule, so each persona sounds like themselves even in debate.
 
 ### Memory System
 
@@ -88,7 +88,7 @@ The system remembers what you said on the couch with the tenacity of a certain C
 
 ### Per-Person Room Identity
 
-The system knows who just entered the room with the certainty of a man who never knocks. `presence_identity.py` implements an Anchor-and-Track algorithm that infers which specific person is in which room using FP2 zones, WiFi device tracking, voice satellite activity, and Markov transition priors. Confidence scoring decays over time. This powers the 3-tier privacy gate system (T1 intimate / T2 personal / T3 ambient — 22 gated features, 40+ per-feature override selects, hysteresis to prevent flapping), identity-aware hot context injection, and per-person notification routing.
+The system knows who just entered the room with the certainty of a man who never knocks. `presence_identity.py` implements an Anchor-and-Track algorithm that infers which specific person is in which room using FP2 zones, WiFi device tracking, voice satellite activity, and Markov transition priors. Confidence scoring decays over time. This powers the 3-tier privacy gate system (T1 intimate / T2 personal / T3 ambient — 33 gated features, 33 per-feature override selects, hysteresis to prevent flapping), identity-aware hot context injection, and per-person notification routing.
 
 ### Therapy Mode
 
@@ -193,7 +193,7 @@ Four deployed patterns for agent-to-agent interaction:
 ### Voice & Conversation
 - **Reactive Banter** — After one agent responds, another probabilistically chimes in with in-character commentary. Agents roasting each other's responses, unprompted, with probability gates and budget floors.
 - **Agent Escalation** — 7 escalation action types with per-type probability gates: persona switch, play media, flash lights, volume boost, mobile notification, prompt barrage (fire a prompt at another agent and play their response), and run script.
-- **Theatrical Mode** — Multi-agent orchestrated debate. 2–5 personas take turns arguing a topic on separate speakers. Three interrupt modes (turn limit, mic gap with last-speaker voice override, event-driven wake word detection), three context modes with user-customizable prompt templates, opponent-aware prompts, banter escalation, 45 blueprint knobs.
+- **Theatrical Mode** — Multi-agent orchestrated debate. 2–5 personas take turns arguing a topic on separate speakers. Three interrupt modes (turn limit, mic gap with last-speaker voice override, event-driven wake word detection), three context modes with user-customizable prompt templates, opponent-aware prompts, banter escalation, 40 blueprint knobs.
 - **Agent Whisper** — Silent inter-agent context sharing. Post-interaction mood detection (happy/sad/neutral/angry), topic tracking, auto-keyword learning for the dispatcher. Zero LLM calls.
 - **Voice Mood Modulation** — Time-of-day voice shaping via ElevenLabs v3. Per-agent stability slider (the one VoiceSettings param v3 respects) + audio tag prefixes (`[slurring]`, `[whispers]`, `[excited]`, etc.) injected into non-agent TTS text (notifications, announcements, briefings). Agent conversation responses already inject their own tags via system prompts — the mood system fills the gap for non-agent TTS routed through the queue. Five time blocks per character, tunable via blueprint instances.
 - **Voice Session Manager** — Mic lifecycle management: continuous listening mode, audio device discovery, session timeouts, pending queue.
@@ -211,7 +211,7 @@ Four deployed patterns for agent-to-agent interaction:
 - **Presence Patterns** — Markov transition probabilities from FP2 zone history. Predicts next zone, powers pre-activation.
 - **Away Patterns** — Departure/return prediction with multi-trip tracking and per-person daily trip counters.
 - **Zone Presence / Vacancy / Preactivation** — Per-zone automations: actions on occupancy, actions on vacancy, pre-stage devices when a user approaches.
-- **Privacy Gate** — Per-person, per-tier feature suppression. T1 (intimate: bedtime, wake-up), T2 (personal: notifications, briefings), T3 (ambient: tracking, recommendations). 22 gated features, 40+ per-feature overrides, hysteresis to prevent flapping.
+- **Privacy Gate** — Per-person, per-tier feature suppression. T1 (intimate: bedtime, wake-up), T2 (personal: notifications, briefings), T3 (ambient: tracking, recommendations). 33 gated features, 33 per-feature overrides, hysteresis to prevent flapping.
 - **Coming Home** — Arrival automation with pre-arrival actions and welcome scene.
 
 ### Bedtime & Sleep
@@ -262,7 +262,7 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 
 - **Overview** — 13-module health glance, LLM budget gauges, per-agent cost breakdown, ElevenLabs credits, OpenRouter usage
 - **Configuration** — 34 cards covering all subsystems, 27 kill switches, zone-to-speaker mapping, expertise routing
-- **User Profiles** — Identity confidence scores, sleep schedule, language preferences, privacy gate with 25 per-feature overrides
+- **User Profiles** — Identity confidence scores, sleep schedule, language preferences, privacy gate with 33 per-feature overrides
 - **Presence** — Routine tracking, predictive patterns, bedtime advisor, 8-zone FP2 presence map
 - **Debug** — Focus guard, duck manager status, media tracking, music composer, test harness
 - **Memory** — Recent topics, memory DB health, archive browser, relationship browser
@@ -321,9 +321,9 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 ├── images/header/                 100+ Gemini-generated blueprint headers
 ├── readme/
 │   ├── automation/                77 automation READMEs
-│   ├── script/                    35 script READMEs
-│   ├── packages/                  40 package READMEs
-│   └── pyscript/                  35 module READMEs
+│   ├── script/                    33 script READMEs
+│   ├── packages/                  29 package READMEs
+│   └── pyscript/                  23 module READMEs
 ├── style-guide/                   Rules of Acquisition (11 files, ~126K tokens)
 └── archive/                       Superseded blueprints and READMEs
 ```

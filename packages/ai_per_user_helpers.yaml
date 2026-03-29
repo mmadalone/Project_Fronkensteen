@@ -199,6 +199,28 @@ input_select:
 # ═══════════════════════════════════════════════════════════════════
 
 input_text:
+  # ── Shared User Profile (household-specific) ──
+  ai_context_user_name:
+    name: "AI Context - User Name"
+    initial: "Miquel"
+    max: 50
+  ai_context_user_name_spoken:
+    name: "AI Context - User Name (TTS pronunciation)"
+    initial: "Mee-kel"
+    max: 50
+  ai_context_user_languages:
+    name: "AI Context - User Languages"
+    initial: "English, Spanish, Valencian, Dutch, Portuguese"
+    max: 200
+  ai_context_household:
+    name: "AI Context - Household Members"
+    initial: "Miquel, Jessica (partner)"
+    max: 200
+  ai_context_pets:
+    name: "AI Context - Pets"
+    initial: "none"
+    max: 100
+
   # ── Per-Person Calendar Summaries ──
   ai_calendar_today_summary_miquel:
     name: "AI Calendar Today Summary (Miquel)"

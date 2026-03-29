@@ -252,31 +252,10 @@ ai_calendar_tomorrow_summary:
 # ai_context_hot — Hot Context (Layer 1)
 # ═══════════════════════════════════════════════════════════════════
 
-# ── STATIC USER PROFILE (Shared / Generic) ──
-# These original helpers are preserved for backward compatibility.
-# The template sensor now references the per-user _miquel variants below.
-
-ai_context_user_name:
-  name: "AI Context - User Name"
-  initial: "Miquel"
-  max: 50
-ai_context_user_name_spoken:
-  name: "AI Context - User Name (TTS pronunciation)"
-  initial: "Mee-kel"
-  max: 50
-ai_context_user_languages:
-  name: "AI Context - User Languages"
-  initial: "English, Spanish, Valencian, Dutch, Portuguese"
-  max: 200
-ai_context_household:
-  name: "AI Context - Household Members"
-  initial: "Miquel, Jessica (partner)"
-  max: 200
-ai_context_pets:
-  name: "AI Context - Pets"
-  initial: "none"
-  max: 100
-
+# ── STATIC USER PROFILE ──
+# Moved to packages/ai_per_user_helpers.yaml (household-specific).
+# Helpers: ai_context_user_name, ai_context_user_name_spoken,
+# ai_context_user_languages, ai_context_household, ai_context_pets.
 
 # I-27: Work calendar keywords for auto-detection
 ai_work_calendar_keywords:
@@ -529,8 +508,8 @@ ai_last_satellite:
 # ═══════════════════════════════════════════════════════════════════
 
 # Identity override. Only active when ai_test_mode is ON.
-# Valid values: "miquel", "jessica", "guest", "" (empty = use real identity).
-# Allows testing Jessica's automations without her phone/presence.
+# Valid values: any person slug from entity_config.yaml, "guest", or "" (empty = use real identity).
+# Allows testing another user's automations without their phone/presence.
 ai_test_identity:
   name: "AI Test - Identity Override"
   initial: ""

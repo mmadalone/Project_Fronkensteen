@@ -350,6 +350,7 @@ Rationale: Keep the “first-run essentials” visible, and tuck advanced/option
     - selector: target → default: `{}`
     - selector: device (single) → default: `""` ; (multiple: true) → default: `[]`
   - If an input is functionally required, do not “fake it” with a non-empty default — keep the default empty and say “required” clearly in description:.
+  - **Exception — time trigger entity inputs:** If an entity input is referenced in `at: !input <field>` inside a `trigger: time` block, the default CANNOT be `””` even when condition-gated. HA validates `at:` trigger values at automation setup time regardless of conditions. Use `default: input_datetime.ai_time_placeholder` (a system-provided midnight entity) to satisfy the validator. The condition gate (`use_pref_wake`, etc.) prevents the placeholder from ever firing (Decision #91).
   - Section ① inputs are **NOT exempt** from the mandatory-default requirement. HA's UI requires every input in a section to have a `default:` before it will render the collapsible chevron — regardless of the `collapsed:` value. A section with `collapsed: false` and one default-less input will render as a flat, non-collapsible block. Provide sensible defaults for all inputs in all sections, and note in the `description:` when an input is functionally required (e.g., "At least one person entity is required").
 - The `collapsed:` key is part of the collapsible input sections feature introduced in HA 2024.6.0. Any blueprint using `collapsed: true` inherits the `min_version: 2024.6.0` requirement (see §3.1 threshold table)
 

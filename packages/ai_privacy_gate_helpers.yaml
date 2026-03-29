@@ -123,6 +123,11 @@ input_select:
     options: *privacy_override_options
     initial: auto
     icon: mdi:creation
+  ai_privacy_gate_interaction_summarizer:
+    name: "Privacy Override — Interaction Summarizer"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:text-box-check
 
   # New — Off-by-default features
   ai_privacy_gate_dispatcher_profile:
