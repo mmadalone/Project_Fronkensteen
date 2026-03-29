@@ -5,7 +5,7 @@ blueprint:
     # Zone Pre-Activation
 
     Pre-activates scenes, lights, or climate before the user arrives in a
-    predicted zone. Consumes `input_text.ai_predicted_next_zone_raw` from
+    predicted zone. Consumes `sensor.ai_predicted_next_zone_raw` from
     `presence_patterns.py`.
 
     ### How it works
@@ -122,12 +122,12 @@ blueprint:
         predicted_zone_entity:
           name: Predicted zone entity
           description: >
-            The input_text helper that holds the predicted next zone
+            The sensor that holds the predicted next zone
             from presence_patterns.py.
-          default: input_text.ai_predicted_next_zone_raw
+          default: sensor.ai_predicted_next_zone_raw
           selector:
             entity:
-              domain: input_text
+              domain: sensor
 
     # ===========================================================================
     # ② ACTIONS

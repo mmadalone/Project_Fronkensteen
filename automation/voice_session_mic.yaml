@@ -7,7 +7,7 @@
 #
 # Requires:
 #   - pyscript/voice_session.py (shared mic control services)
-#   - input_text.ai_voice_session_pending (trigger flag)
+#   - sensor.ai_voice_session_pending (trigger flag)
 #   - sensor.ai_last_satellite (satellite routing)
 #   - input_boolean.ai_continuous_conversation_active (stop signal)
 #
@@ -92,11 +92,11 @@ blueprint:
 
         session_pending_entity:
           name: "Session pending entity"
-          description: "The input_text that triggers a voice session when set."
-          default: input_text.ai_voice_session_pending
+          description: "The sensor that triggers a voice session when set."
+          default: sensor.ai_voice_session_pending
           selector:
             entity:
-              domain: input_text
+              domain: sensor
 
         last_satellite_entity:
           name: "Last satellite entity"

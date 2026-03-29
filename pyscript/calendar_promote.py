@@ -506,10 +506,12 @@ def _update_helper(entity_id: str, value: str) -> None:
 def _set_stale_flag(stale: bool) -> None:
     """Set or clear the calendar stale flag."""
     try:
-        svc = "turn_on" if stale else "turn_off"
-        service.call(  # noqa: F821
-            "input_boolean", svc,
-            entity_id="input_boolean.ai_calendar_stale",
+        state.set(  # noqa: F821
+            "sensor.ai_calendar_stale", "on" if stale else "off",
+            new_attributes={
+                "icon": "mdi:calendar-alert",
+                "friendly_name": "AI Calendar Data Stale",
+            },
         )
     except Exception as exc:
         log.warning(f"cal_promote: stale flag failed: {exc}")  # noqa: F821
@@ -796,13 +798,15 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
                 target_val = "on" if is_work else "off"
                 # Update shared household helper
                 current = state.get(  # noqa: F821
-                    "input_boolean.ai_context_work_day"
+                    "sensor.ai_context_work_day"
                 )
                 if current != target_val:
-                    service.call(  # noqa: F821
-                        "input_boolean",
-                        "turn_on" if is_work else "turn_off",
-                        entity_id="input_boolean.ai_context_work_day",
+                    state.set(  # noqa: F821
+                        "sensor.ai_context_work_day", target_val,
+                        new_attributes={
+                            "icon": "mdi:briefcase",
+                            "friendly_name": "AI Context Work Day",
+                        },
                     )
                     log.info(  # noqa: F821
                         f"cal_promote: auto-set work_day={is_work} "
@@ -829,13 +833,15 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
                 is_work_tomorrow = _detect_work_day(tomorrow_events, keywords)
                 target_tmrw = "on" if is_work_tomorrow else "off"
                 current_tmrw = state.get(  # noqa: F821
-                    "input_boolean.ai_context_work_day_tomorrow"
+                    "sensor.ai_context_work_day_tomorrow"
                 )
                 if current_tmrw != target_tmrw:
-                    service.call(  # noqa: F821
-                        "input_boolean",
-                        "turn_on" if is_work_tomorrow else "turn_off",
-                        entity_id="input_boolean.ai_context_work_day_tomorrow",
+                    state.set(  # noqa: F821
+                        "sensor.ai_context_work_day_tomorrow", target_tmrw,
+                        new_attributes={
+                            "icon": "mdi:briefcase-clock",
+                            "friendly_name": "AI Context Work Day Tomorrow",
+                        },
                     )
                     log.info(  # noqa: F821
                         f"cal_promote: auto-set work_day_tomorrow="

@@ -10,7 +10,7 @@
 #   input_boolean.ai_briefing_delivered_morning   — per-instance flag
 #   input_boolean.ai_briefing_delivered_afternoon — per-instance flag
 #   input_boolean.ai_briefing_delivered_evening   — per-instance flag
-#   input_text.ai_last_briefing_summary           — last delivered content
+#   sensor.ai_last_briefing_summary               — last delivered content (state.set)
 #
 # Service (pyscript):
 #   pyscript.proactive_build_briefing  — content assembly only

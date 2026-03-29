@@ -49,7 +49,7 @@ template:
             {%- endfor -%}
             {%- set user = best.slug if best.slug else (states.person | map(attribute='object_id') | first | default('unknown')) -%}
             {%- set day_type = 'Work day' if is_state('input_boolean.ai_context_work_day_' ~ user, 'on') else 'Weekend/day off' -%}
-            {%- set tmrw_type = 'Work day' if is_state('input_boolean.ai_context_work_day_tomorrow', 'on') else 'Day off' -%}
+            {%- set tmrw_type = 'Work day' if is_state('sensor.ai_context_work_day_tomorrow', 'on') else 'Day off' -%}
             {%- set ns.lines = ns.lines + ['Time: ' ~ now().strftime('%-I:%M %p') ~ ' (CET), ' ~ now().strftime('%A %-d %B %Y') ~ '. ' ~ day_type ~ '. Tomorrow: ' ~ tmrw_type ~ '.'] -%}
 
             {# ── USER IDENTITY (dynamic from person.* entities) ── #}
@@ -252,7 +252,7 @@ template:
             {%- endif -%}
 
             {# ── Active music feedback session (I-56) ── #}
-            {%- set mfc = states('input_text.ai_music_feedback_context') -%}
+            {%- set mfc = states('sensor.ai_music_feedback_context') -%}
             {%- if mfc not in ['', 'unknown', 'unavailable', none] and '|' in mfc -%}
               {%- set mf_file = mfc.split('|')[0] -%}
               {%- set mf_key = mfc.split('|')[1] -%}
@@ -349,8 +349,8 @@ template:
             {# Per-person helper with shared fallback #}
             {%- set cal_per = states('input_text.ai_calendar_today_summary_' ~ sched_user) | default('', true) -%}
             {%- set cal_raw = cal_per if cal_per not in ['', 'none', 'unknown', 'unavailable'] else (states('sensor.ai_calendar_today_summary') | default('', true)) -%}
-            {%- set cal_stale = is_state('input_boolean.ai_calendar_stale', 'on') -%}
-            {%- set email_stale = is_state('input_boolean.ai_email_stale', 'on') -%}
+            {%- set cal_stale = is_state('sensor.ai_calendar_stale', 'on') -%}
+            {%- set email_stale = is_state('sensor.ai_email_stale', 'on') -%}
             {%- set email_ct = states('sensor.ai_email_priority_count') | int(0) -%}
             {%- set sns = namespace(parts=[]) -%}
             {%- if cal_raw not in ['', 'none', 'unknown', 'unavailable', 'No events'] -%}
@@ -399,11 +399,11 @@ template:
             {%- if email_stale -%}
               {%- set sns.parts = sns.parts + ['(Email may be outdated)'] -%}
             {%- endif -%}
-            {%- set media_stale = is_state('input_boolean.ai_media_data_stale', 'on') -%}
+            {%- set media_stale = is_state('sensor.ai_media_data_stale', 'on') -%}
             {%- if media_stale -%}
               {%- set sns.parts = sns.parts + ['(Media data may be outdated)'] -%}
             {%- endif -%}
-            {%- set project_stale = is_state('input_boolean.ai_project_data_stale', 'on') -%}
+            {%- set project_stale = is_state('sensor.ai_project_data_stale', 'on') -%}
             {%- if project_stale -%}
               {%- set sns.parts = sns.parts + ['(Project data may be outdated)'] -%}
             {%- endif -%}

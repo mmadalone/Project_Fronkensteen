@@ -49,6 +49,38 @@ _STARTUP_SENSORS = [
     ("sensor.ai_recovery_pending_category", "", "mdi:wrench-clock", "AI Recovery Pending Category"),
     ("sensor.ai_budget_saved_pipelines", "{}", "mdi:content-save", "AI Budget Saved Pipelines"),
     ("sensor.ai_interview_progress", "{}", "mdi:clipboard-check-outline", "AI Interview Progress"),
+    # Session 5 — stale flags + session mutexes (booleans)
+    ("sensor.ai_calendar_stale", "off", "mdi:calendar-alert", "AI Calendar Data Stale"),
+    ("sensor.ai_email_stale", "off", "mdi:email-alert", "AI Email Data Stale"),
+    ("sensor.ai_media_data_stale", "off", "mdi:alert-circle-outline", "AI Media Data Stale"),
+    ("sensor.ai_project_data_stale", "off", "mdi:clipboard-alert", "AI Project Data Stale"),
+    ("sensor.ai_embedding_reindex_needed", "off", "mdi:database-refresh", "AI Embedding Reindex Needed"),
+    ("sensor.ai_dispatcher_bypass_mode", "off", "mdi:highway", "AI Dispatcher Bypass Mode"),
+    ("sensor.ai_gn_bedtime_lock", "off", "mdi:lock", "AI Goodnight Bedtime Lock"),
+    ("sensor.ai_bedtime_active_mutex_proactive_bedtime_escalation", "off", "mdi:volume-mute", "AI Bedtime Active Mutex"),
+    ("sensor.ai_notification_follow_me_reminder_loop_active", "off", "mdi:bell", "AI Notification Follow-Me Reminder Loop Active"),
+    ("sensor.ai_winddown_active", "off", "mdi:moon-waning-crescent", "AI Wind-Down Active"),
+    # Session 6 — briefing flags + stage/TTS/music counters
+    ("sensor.ai_briefing_delivered_morning", "off", "mdi:check-circle", "AI Briefing Delivered Morning"),
+    ("sensor.ai_briefing_delivered_afternoon", "off", "mdi:check-circle", "AI Briefing Delivered Afternoon"),
+    ("sensor.ai_briefing_delivered_evening", "off", "mdi:check-circle", "AI Briefing Delivered Evening"),
+    ("sensor.ai_winddown_stage", "0", "mdi:stairs", "AI Wind-Down Stage"),
+    ("sensor.ai_stage_counter_helper_proactive_bedtime_escalation_rick", "0", "mdi:counter", "AI Proactive Bedtime Stage Counter"),
+    ("sensor.ai_tts_calls_today", "0", "mdi:message-processing", "AI TTS Calls Today"),
+    ("sensor.ai_tts_cache_hits_today", "0", "mdi:cached", "AI TTS Cache Hits Today"),
+    ("sensor.ai_music_generations_today", "0", "mdi:counter", "AI Music Generations Today"),
+    # Session 7 — work day flags + misc text state
+    ("sensor.ai_context_work_day", "off", "mdi:briefcase", "AI Context Work Day"),
+    ("sensor.ai_context_work_day_tomorrow", "off", "mdi:briefcase-clock", "AI Context Work Day Tomorrow"),
+    ("sensor.ai_bedtime_predicted", "off", "mdi:bed-clock", "AI Bedtime Predicted"),
+    ("sensor.ai_voice_session_pending", "", "mdi:microphone-message", "AI Voice Session Pending"),
+    ("sensor.ai_music_feedback_context", "", "mdi:music-note", "AI Music Feedback Context"),
+    ("sensor.ai_handoff_pending", "", "mdi:account-switch", "AI Handoff Pending"),
+    ("sensor.ai_last_briefing_summary", "", "mdi:text-box-outline", "AI Last Briefing Summary"),
+    ("sensor.ai_routine_stage", "none", "mdi:routes", "AI Routine Stage"),
+    ("sensor.ai_routine_deviation", "none", "mdi:alert-decagram", "AI Routine Deviation"),
+    ("sensor.ai_predicted_next_zone_raw", "", "mdi:map-marker-path", "AI Predicted Next Zone Raw"),
+    ("sensor.ai_email_last_priority", "", "mdi:email-alert", "AI Email Last Priority"),
 ]
 
 
@@ -82,57 +114,51 @@ def _seed_migrated_sensors():
 
 
 def _seed_snapshot_sensors():
-    """Seed midnight snapshot sensors from current API values if missing."""
-    snapshots = [
-        (
-            "sensor.ai_openrouter_usage_midnight",
-            lambda: str(
-                (state.getattr("sensor.openrouter_credits") or {}).get(  # noqa: F821
-                    "total_usage", 0
-                )
-            ),
-            "mdi:router-wireless",
-            "AI OpenRouter Usage Midnight",
-        ),
-        (
-            "sensor.ai_elevenlabs_chars_midnight",
-            lambda: str(
-                (state.getattr("sensor.elevenlabs_subscription") or {}).get(  # noqa: F821
-                    "character_count", 0
-                )
-            ),
-            "mdi:account-voice",
-            "AI ElevenLabs Chars Midnight",
-        ),
-        (
-            "sensor.ai_serper_credits_midnight",
-            lambda: str(state.get("sensor.serper_account") or 0),  # noqa: F821
-            "mdi:web",
-            "AI Serper Credits Midnight",
-        ),
-    ]
-    for entity_id, value_fn, icon, fname in snapshots:
-        # Check if sensor already has a real value (avoid nested try/except
-        # — pyscript AST can't resolve builtins in nested except blocks)
-        current = None
-        try:
-            current = state.get(entity_id)  # noqa: F821
-        except Exception:
-            pass
-        if current not in (None, "unknown", "unavailable", "0"):
-            continue  # already has a real value from midnight reset
-        # Try to get the live API value
-        val = "0"
-        try:
-            val = value_fn()
-        except Exception:
-            pass  # API sensor not ready — fall through with "0"
-        # Create/update the sensor
-        state.set(  # noqa: F821
-            entity_id, val,
-            new_attributes={"icon": icon, "friendly_name": fname},
-        )
-        log.info(f"state_bridge: snapshot {entity_id} = {val}")  # noqa: F821
+    """Seed midnight snapshot sensors from current API values if missing.
+
+    No lambdas — pyscript AST can't resolve builtins inside lambdas.
+    """
+    _seed_one_snapshot(
+        "sensor.ai_openrouter_usage_midnight",
+        "sensor.openrouter_credits", "total_usage", True,
+        "mdi:router-wireless", "AI OpenRouter Usage Midnight",
+    )
+    _seed_one_snapshot(
+        "sensor.ai_elevenlabs_chars_midnight",
+        "sensor.elevenlabs_subscription", "character_count", True,
+        "mdi:account-voice", "AI ElevenLabs Chars Midnight",
+    )
+    _seed_one_snapshot(
+        "sensor.ai_serper_credits_midnight",
+        "sensor.serper_account", None, False,
+        "mdi:web", "AI Serper Credits Midnight",
+    )
+
+
+def _seed_one_snapshot(entity_id, source_entity, attr_key, use_attr, icon, fname):
+    """Seed a single snapshot sensor from a live API sensor."""
+    current = None
+    try:
+        current = state.get(entity_id)  # noqa: F821
+    except Exception:
+        pass
+    if current not in (None, "unknown", "unavailable", "0"):
+        return  # already has a real value
+    # Read from the API sensor
+    val = "0"
+    try:
+        if use_attr:
+            attrs = state.getattr(source_entity) or {}  # noqa: F821
+            val = str(attrs.get(attr_key, 0))
+        else:
+            val = str(state.get(source_entity) or 0)  # noqa: F821
+    except Exception:
+        pass
+    state.set(  # noqa: F821
+        entity_id, val,
+        new_attributes={"icon": icon, "friendly_name": fname},
+    )
+    log.info(f"state_bridge: snapshot {entity_id} = {val}")  # noqa: F821
 
 
 @service  # noqa: F821

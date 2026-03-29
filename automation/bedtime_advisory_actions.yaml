@@ -234,7 +234,7 @@ conditions:
       {% if not v_suppress_routine %}
         true
       {% else %}
-        {% set stage = states('input_text.ai_routine_stage') | default('none') %}
+        {% set stage = states('sensor.ai_routine_stage') | default('none') %}
         {{ stage in ['none', '', 'unknown', 'unavailable'] }}
       {% endif %}
 

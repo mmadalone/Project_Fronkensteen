@@ -207,21 +207,8 @@ ai_morning_prep_buffer:
 # ai_tts_queue — TTS Queue & Cache
 # ═══════════════════════════════════════════════════════════════════
 
-ai_tts_cache_hits_today:
-  name: AI TTS Cache Hits Today
-  min: 0
-  max: 10000
-  step: 1
-  mode: box
-  icon: mdi:cached
-
-ai_tts_calls_today:
-  name: AI TTS Calls Today
-  min: 0
-  max: 10000
-  step: 1
-  mode: box
-  icon: mdi:message-processing
+# ai_tts_cache_hits_today removed — migrated to sensor (state.set, Session 6)
+# ai_tts_calls_today removed — migrated to sensor (state.set, Session 6)
 
 # ── Ducking Controls (Dashboard V2.1) ──────────────────────────────────
 ai_tts_duck_volume:
@@ -249,13 +236,7 @@ ai_music_daily_generation_limit:
   mode: box
   initial: 10
 
-ai_music_generations_today:
-  name: "AI Music - API Generations Today"
-  icon: mdi:counter
-  min: 0
-  max: 999
-  step: 1
-  mode: box
+# ai_music_generations_today removed — migrated to sensor (state.set, Session 6)
 
 ai_music_cache_size_mb:
   name: "AI Music - Cache Size Limit (MB)"
@@ -312,14 +293,7 @@ ai_briefing_evening_hour:
 # ai_winddown — Bedtime Wind-Down System (C11)
 # ═══════════════════════════════════════════════════════════════════
 
-ai_winddown_stage:
-  name: "AI Wind-Down - Escalation Stage"
-  icon: mdi:stairs
-  min: 0
-  max: 8
-  step: 1
-  initial: 0
-  mode: box
+# ai_winddown_stage removed — migrated to sensor (state.set, Session 6)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -338,10 +312,4 @@ ai_bedtime_now_countdown_minutes:
 # Proactive Bedtime Escalation (migrated from UI)
 # ═══════════════════════════════════════════════════════════════════
 
-ai_stage_counter_helper_proactive_bedtime_escalation_rick:
-  name: "Stage Counter — Proactive Bedtime Escalation — Rick"
-  icon: mdi:counter
-  min: 0
-  max: 255
-  step: 1
-  mode: slider
+# ai_stage_counter_helper_proactive_bedtime_escalation_rick removed — migrated to sensor (state.set, Session 6)

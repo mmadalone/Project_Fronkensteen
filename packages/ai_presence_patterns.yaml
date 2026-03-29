@@ -7,7 +7,7 @@
 #   input_boolean.ai_presence_patterns_enabled — kill switch (ON = active)
 #   input_number.ai_presence_pattern_lookback_days — recorder query window
 #   input_number.ai_presence_pattern_min_samples — minimum transitions for validity
-#   input_text.ai_predicted_next_zone_raw — JSON from pyscript (prediction data)
+#   sensor.ai_predicted_next_zone_raw — JSON from pyscript (prediction data)
 #   sensor.ai_predicted_next_zone — human-readable "bed (67%)" or "unknown"
 #   sensor.ai_presence_pattern_status — created by pyscript (last op result)
 #
@@ -46,7 +46,7 @@ template:
         unique_id: ai_predicted_next_zone
         icon: mdi:map-marker-right
         state: >-
-          {%- set raw = states('input_text.ai_predicted_next_zone_raw') -%}
+          {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
           {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
             {%- set data = raw | from_json -%}
             {{ data.zone | default('unknown') }} ({{ data.probability | default(0) }}%)
@@ -55,28 +55,28 @@ template:
           {%- endif -%}
         attributes:
           zone: >-
-            {%- set raw = states('input_text.ai_predicted_next_zone_raw') -%}
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).zone | default('unknown') }}
             {%- else -%}
               unknown
             {%- endif -%}
           probability: >-
-            {%- set raw = states('input_text.ai_predicted_next_zone_raw') -%}
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).probability | default(0) }}
             {%- else -%}
               0
             {%- endif -%}
           confidence: >-
-            {%- set raw = states('input_text.ai_predicted_next_zone_raw') -%}
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).confidence | default('unknown') }}
             {%- else -%}
               unknown
             {%- endif -%}
           sample_count: >-
-            {%- set raw = states('input_text.ai_predicted_next_zone_raw') -%}
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
             {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
               {{ (raw | from_json).sample_count | default(0) }}
             {%- else -%}
@@ -106,7 +106,7 @@ template:
 #     entities:
 #       - entity: sensor.ai_predicted_next_zone
 #         name: "Predicted Next Zone"
-#       - entity: input_text.ai_predicted_next_zone_raw
+#       - entity: sensor.ai_predicted_next_zone_raw
 #         name: "Raw JSON"
 #
 #   # ── Status ──

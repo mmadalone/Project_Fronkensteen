@@ -5,7 +5,7 @@ blueprint:
     # Routine Stage Actions
 
     Triggers actions at specific points within a recognized routine. Consumes
-    `input_text.ai_routine_stage` from `routine_fingerprint.py`.
+    `sensor.ai_routine_stage` from `routine_fingerprint.py`.
 
     ### Signal format
 
@@ -103,12 +103,12 @@ blueprint:
         routine_stage_entity:
           name: Routine stage entity
           description: >
-            The input_text helper that receives the current routine stage
+            The sensor that receives the current routine stage
             signal from routine_fingerprint.py.
-          default: input_text.ai_routine_stage
+          default: sensor.ai_routine_stage
           selector:
             entity:
-              domain: input_text
+              domain: sensor
 
     # ===========================================================================
     # ② ACTIONS

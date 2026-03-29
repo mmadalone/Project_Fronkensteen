@@ -546,10 +546,12 @@ async def _l2_set(
 def _set_stale_flag(stale: bool) -> None:
     """Set or clear the media data stale flag."""
     try:
-        svc = "turn_on" if stale else "turn_off"
-        service.call(  # noqa: F821
-            "input_boolean", svc,
-            entity_id="input_boolean.ai_media_data_stale",
+        state.set(  # noqa: F821
+            "sensor.ai_media_data_stale", "on" if stale else "off",
+            new_attributes={
+                "icon": "mdi:alert-circle-outline",
+                "friendly_name": "AI Media Data Stale",
+            },
         )
     except Exception as exc:
         log.warning("media_promote: stale flag failed: %s", exc)  # noqa: F821

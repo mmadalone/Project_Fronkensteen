@@ -118,7 +118,7 @@ automation:
     id: ai_recovery_calendar_stale
     triggers:
       - trigger: state
-        entity_id: input_boolean.ai_calendar_stale
+        entity_id: sensor.ai_calendar_stale
         to: "on"
         for:
           minutes: 15
@@ -134,7 +134,7 @@ automation:
     id: ai_recovery_email_stale
     triggers:
       - trigger: state
-        entity_id: input_boolean.ai_email_stale
+        entity_id: sensor.ai_email_stale
         to: "on"
         for:
           minutes: 15

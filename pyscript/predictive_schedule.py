@@ -826,7 +826,7 @@ async def schedule_bedtime_advisor(
     is_work_tomorrow = False
     try:
         is_work_tomorrow = (
-            state.get("input_boolean.ai_context_work_day_tomorrow") == "on"  # noqa: F821
+            state.get("sensor.ai_context_work_day_tomorrow") == "on"  # noqa: F821
         )
     except NameError:
         pass
@@ -1073,7 +1073,7 @@ async def _bedtime_check():
     # Check if bedtime routine is already active
     try:
         routine_stage = str(
-            state.get("input_text.ai_routine_stage") or "none"  # noqa: F821
+            state.get("sensor.ai_routine_stage") or "none"  # noqa: F821
         )
     except NameError:
         routine_stage = "none"
@@ -1081,7 +1081,7 @@ async def _bedtime_check():
 
     try:
         bedtime_predicted = (
-            str(state.get("input_boolean.ai_bedtime_predicted") or "off").lower()  # noqa: F821
+            str(state.get("sensor.ai_bedtime_predicted") or "off").lower()  # noqa: F821
             == "on"
         )
     except NameError:

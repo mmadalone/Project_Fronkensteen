@@ -8,14 +8,7 @@ ai_primary_user:
   icon: mdi:account
   max: 50
 
-########################################
-# Goodnight Routine — dynamic media ID
-########################################
-
-ai_dynamic_media_id:
-  name: "AI Goodnight Routine — Dynamic Media ID"
-  icon: mdi:music-box
-  max: 255
+# ai_dynamic_media_id removed — orphaned dead code, deleted Session 7
 
 ########################################
 # Goodnight Negotiator — last state
@@ -115,31 +108,14 @@ ai_quark_gn_music_secondary_question:
 # Orphan notification_duck_snapshot removed 2026-03-14 — superseded by duck_manager
 # Orphan notification_satellite_volume_snapshot removed 2026-03-14 — superseded by duck_manager
 
-########################################
-# Voice Session (I-56)
-########################################
-
-ai_voice_session_pending:
-  name: "AI Voice Session Pending"
-  icon: mdi:microphone-message
-  max: 255
-  initial: ""
-
-ai_music_feedback_context:
-  name: "AI Music Feedback Context"
-  icon: mdi:music-note-eighth
-  max: 255
-  initial: ""
+# ai_voice_session_pending removed — migrated to sensor (state.set, Session 7)
+# ai_music_feedback_context removed — migrated to sensor (state.set, Session 7)
 
 ########################################
 # Voice Handoff (I-24 / I-45)
 ########################################
 
-ai_handoff_pending:
-  name: AI Handoff - Pending
-  icon: mdi:account-clock
-  max: 255
-  mode: text
+# ai_handoff_pending removed — migrated to sensor (state.set, Session 7)
 
 ai_handoff_persona_aliases:
   name: AI Handoff - Persona Aliases
@@ -292,12 +268,7 @@ ai_email_blocked_keywords:
   max: 255
   icon: mdi:tag-off
 
-# Last priority email subject — quick reference for dashboards and agents.
-ai_email_last_priority:
-  name: "AI Email Last Priority"
-  initial: ""
-  max: 255
-  icon: mdi:email-open
+# ai_email_last_priority removed — migrated to sensor (state.set, Session 7)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_embedding — Semantic Search & Memory
@@ -364,15 +335,7 @@ ai_budget_fallback_agent:
 # ai_presence_patterns — Presence Pattern Recognition
 # ═══════════════════════════════════════════════════════════════════
 
-# Raw JSON prediction data, updated by pyscript on every zone transition.
-# Format: {"zone": "bed", "probability": 67, "confidence": "high", "sample_count": 70}
-# Empty string = no prediction available.
-# Template sensor below parses this into human-readable state.
-ai_predicted_next_zone_raw:
-  name: "AI Predicted Next Zone (Raw JSON)"
-  initial: ""
-  max: 255
-  icon: mdi:crystal-ball
+# ai_predicted_next_zone_raw removed — migrated to sensor (state.set, Session 7)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_predictive_schedule — Predictive Scheduling
@@ -406,36 +369,14 @@ ai_test_calendar_event:
 # ai_proactive_briefing — Proactive Briefing
 # ═══════════════════════════════════════════════════════════════════
 
-# Last briefing summary. Updated after each delivery for logging and
-# dashboard display. Truncated to 250 chars.
-ai_last_briefing_summary:
-  name: "AI Briefing - Last Summary"
-  initial: ""
-  max: 255
-  icon: mdi:text-box-outline
+# ai_last_briefing_summary removed — migrated to sensor (state.set, Session 7)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_routine_tracker — Routine Fingerprinting
 # ═══════════════════════════════════════════════════════════════════
 
-# Current routine position. Updated by pyscript on every zone transition.
-# Format: "{fingerprint_id}:step_{N}_of_{M}" or "none"
-# Example: "evening_weekday_living_room_bed:step_3_of_4"
-# Resets to "none" on restart (pyscript rebuilds from live transitions).
-ai_routine_stage:
-  name: "AI Routine Stage"
-  initial: "none"
-  max: 255
-  icon: mdi:routes
-
-# Last deviation description. Set when the user breaks from a known routine.
-# Format: "expected:{zone} actual:{zone}" or "none"
-# Stays until overwritten by next deviation or manually cleared.
-ai_routine_deviation:
-  name: "AI Routine Deviation"
-  initial: "none"
-  max: 255
-  icon: mdi:alert-decagram
+# ai_routine_stage removed — migrated to sensor (state.set, Session 7)
+# ai_routine_deviation removed — migrated to sensor (state.set, Session 7)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_self_awareness — Agent Self-Awareness

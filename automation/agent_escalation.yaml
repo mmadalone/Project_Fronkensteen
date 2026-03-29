@@ -22,7 +22,7 @@
 #   - sensor.ai_last_satellite               (satellite tracking)
 #   - input_text.ai_escalation_last_outcome      (status tracking)
 #   - input_datetime.ai_escalation_last_followthrough (cooldown gate)
-#   - input_text.ai_handoff_pending              (for persona_switch)
+#   - sensor.ai_handoff_pending                  (for persona_switch)
 #   - input_text.ai_last_agent_name              (current agent)
 #   - pyscript/memory.py                         (L2 logging)
 #   - pyscript/agent_whisper.py                  (whisper context)
@@ -722,11 +722,12 @@ actions:
           {{ action_type == 'persona_switch' and target_persona | length > 0 }}
     then:
       - alias: "Set handoff pending flag to trigger persona switch"
-        action: input_text.set_value
-        target:
-          entity_id: input_text.ai_handoff_pending
+        action: pyscript.set_sensor_value
         data:
+          entity_id: sensor.ai_handoff_pending
           value: "{{ target_persona }}"
+          icon: "mdi:account-switch"
+          friendly_name: "AI Handoff Pending"
 
   # 7b. Play media clip — 3-tier: library → compose → static fallback
   - alias: "7b · Play escalation media clip"

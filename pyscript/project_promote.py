@@ -363,10 +363,12 @@ def _update_helper(entity_id: str, value: str) -> None:
 def _set_stale_flag(stale: bool) -> None:
     """Set or clear the project data stale flag."""
     try:
-        svc = "turn_on" if stale else "turn_off"
-        service.call(  # noqa: F821
-            "input_boolean", svc,
-            entity_id="input_boolean.ai_project_data_stale",
+        state.set(  # noqa: F821
+            "sensor.ai_project_data_stale", "on" if stale else "off",
+            new_attributes={
+                "icon": "mdi:clipboard-alert",
+                "friendly_name": "AI Project Data Stale",
+            },
         )
     except Exception as exc:
         log.warning(f"project_promote: stale flag failed: {exc}")  # noqa: F821

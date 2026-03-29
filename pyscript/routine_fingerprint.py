@@ -608,9 +608,12 @@ async def _update_routine_helpers(
         return
 
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_routine_stage", value=stage_str,
+        state.set(  # noqa: F821
+            "sensor.ai_routine_stage", stage_str,
+            new_attributes={
+                "icon": "mdi:routes",
+                "friendly_name": "AI Routine Stage",
+            },
         )
     except Exception:
         pass
@@ -644,9 +647,12 @@ async def _handle_deviation(
         return
 
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_routine_deviation", value=desc,
+        state.set(  # noqa: F821
+            "sensor.ai_routine_deviation", desc,
+            new_attributes={
+                "icon": "mdi:alert-decagram",
+                "friendly_name": "AI Routine Deviation",
+            },
         )
     except Exception:
         pass
@@ -676,9 +682,12 @@ async def _check_bedtime_prediction(
         _bedtime_predicted_at = 0.0
         if not test_mode:
             try:
-                service.call(  # noqa: F821
-                    "input_boolean", "turn_off",
-                    entity_id="input_boolean.ai_bedtime_predicted",
+                state.set(  # noqa: F821
+                    "sensor.ai_bedtime_predicted", "off",
+                    new_attributes={
+                        "icon": "mdi:bed-clock",
+                        "friendly_name": "AI Bedtime Predicted",
+                    },
                 )
             except Exception:
                 pass
@@ -706,9 +715,12 @@ async def _check_bedtime_prediction(
         )
     else:
         try:
-            service.call(  # noqa: F821
-                "input_boolean", "turn_on",
-                entity_id="input_boolean.ai_bedtime_predicted",
+            state.set(  # noqa: F821
+                "sensor.ai_bedtime_predicted", "on",
+                new_attributes={
+                    "icon": "mdi:bed-clock",
+                    "friendly_name": "AI Bedtime Predicted",
+                },
             )
         except Exception:
             pass
@@ -728,9 +740,10 @@ async def _reset_bedtime_prediction(test_mode: bool) -> None:
         log.info("routine [TEST]: WOULD reset ai_bedtime_predicted OFF")  # noqa: F821
     else:
         try:
-            service.call(  # noqa: F821
-                "input_boolean", "turn_off",
-                entity_id="input_boolean.ai_bedtime_predicted",
+            state.set(  # noqa: F821
+                "sensor.ai_bedtime_predicted", "off",
+                new_attributes={"icon": "mdi:bed-clock",
+                                "friendly_name": "AI Bedtime Predicted"},
             )
         except Exception:
             pass

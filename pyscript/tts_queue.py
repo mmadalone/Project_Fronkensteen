@@ -1076,8 +1076,8 @@ def _increment_counter(entity_id: str) -> None:
     global _budget_save_counter
     try:
         current = float(state.get(entity_id) or 0)  # noqa: F821
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id=entity_id, value=current + 1)
+        state.set(entity_id, current + 1,  # noqa: F821
+                  new_attributes=dict(state.getattr(entity_id) or {}))  # noqa: F821
     except Exception:
         pass
     # I-33: Trigger budget save every 10 TTS calls
@@ -1307,7 +1307,7 @@ async def _play_item(item: dict) -> None:
         except Exception:
             pass  # fail-open: play with original voice
 
-    _increment_counter("input_number.ai_tts_calls_today")
+    _increment_counter("sensor.ai_tts_calls_today")
 
     # I-33: Count TTS characters (ElevenLabs billing unit)
     if text:
@@ -1391,7 +1391,7 @@ async def _play_item(item: dict) -> None:
                 key = await _cache_key(text, voice)
                 hit = await _cache_check(key)
                 if hit:
-                    _increment_counter("input_number.ai_tts_cache_hits_today")
+                    _increment_counter("sensor.ai_tts_cache_hits_today")
                     await _play_media(
                         speaker=speaker,
                         media_path=f"/local/tts_cache/{key}.mp3",
@@ -2043,8 +2043,8 @@ async def _budget_save_to_l2() -> None:
             "sensor.ai_llm_calls_today": float(
                 state.get("sensor.ai_llm_calls_today") or 0  # noqa: F821
             ),
-            "input_number.ai_tts_calls_today": float(
-                state.get("input_number.ai_tts_calls_today") or 0  # noqa: F821
+            "sensor.ai_tts_calls_today": float(
+                state.get("sensor.ai_tts_calls_today") or 0  # noqa: F821
             ),
             "sensor.ai_llm_tokens_today": float(
                 state.get("sensor.ai_llm_tokens_today") or 0  # noqa: F821
@@ -2304,10 +2304,10 @@ async def tts_queue_daily_housekeeping():
     except Exception as ex:
         log.error(f"tts_queue housekeeping cache cleanup failed: {ex}")  # noqa: F821
     try:
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id="input_number.ai_tts_cache_hits_today", value=0)
-        service.call("input_number", "set_value",  # noqa: F821
-                     entity_id="input_number.ai_tts_calls_today", value=0)
+        state.set("sensor.ai_tts_cache_hits_today", 0,  # noqa: F821
+                  new_attributes={"icon": "mdi:cached", "friendly_name": "AI TTS Cache Hits Today"})
+        state.set("sensor.ai_tts_calls_today", 0,  # noqa: F821
+                  new_attributes={"icon": "mdi:message-processing", "friendly_name": "AI TTS Calls Today"})
     except Exception as ex:
         log.error(f"tts_queue housekeeping counter reset failed: {ex}")  # noqa: F821
 

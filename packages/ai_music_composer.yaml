@@ -47,11 +47,12 @@ automation:
         at: "00:00:00"
     actions:
       - alias: "Reset daily generation counter"
-        action: input_number.set_value
-        target:
-          entity_id: input_number.ai_music_generations_today
+        action: pyscript.set_sensor_value
         data:
-          value: 0
+          entity_id: sensor.ai_music_generations_today
+          value: "0"
+          icon: "mdi:counter"
+          friendly_name: "AI Music Generations Today"
       - alias: "Log to L2 (best-effort)"
         continue_on_error: true
         action: pyscript.memory_set
@@ -60,6 +61,6 @@ automation:
           key: >-
             music_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
           value: >-
-            generations={{ states('input_number.ai_music_generations_today') | int(0) }}
+            generations={{ states('sensor.ai_music_generations_today') | int(0) }}
           scope: "system"
           tags: "budget,music,daily"

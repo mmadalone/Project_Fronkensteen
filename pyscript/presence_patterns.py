@@ -544,7 +544,7 @@ def _predict_from_cache(
 
 
 async def _update_prediction_sensor(current_zone: str) -> None:
-    """Update input_text.ai_predicted_next_zone_raw with current prediction."""
+    """Update sensor.ai_predicted_next_zone_raw with current prediction."""
     if not _is_zone_enabled(current_zone):
         return
     now = datetime.now()
@@ -568,9 +568,12 @@ async def _update_prediction_sensor(current_zone: str) -> None:
     else:
         raw = ""
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_predicted_next_zone_raw", value=raw,
+        state.set(  # noqa: F821
+            "sensor.ai_predicted_next_zone_raw", raw,
+            new_attributes={
+                "icon": "mdi:map-marker-path",
+                "friendly_name": "AI Predicted Next Zone Raw",
+            },
         )
     except Exception:
         pass

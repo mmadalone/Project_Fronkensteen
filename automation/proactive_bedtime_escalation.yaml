@@ -623,15 +623,14 @@ blueprint:
               step: 1
 
         escalation_stage_helper:
-          name: Stage counter helper (input_number)
+          name: Stage counter helper
           description: >
-            An input_number helper that tracks the current escalation stage.
-            Create one with min=0, max=8, step=1. The blueprint reads and
-            writes this helper to persist stage across automation runs.
-          default: ""
+            Entity that tracks the current escalation stage.
+            Accepts a sensor (via pyscript.set_sensor_value bridge)
+            or a legacy input_number.
+          default: sensor.ai_stage_counter_helper_proactive_bedtime_escalation_rick
           selector:
-            entity:
-              domain: input_number
+            entity: {}
 
         escalation_session_helper:
           name: Session timestamp helper (input_datetime)
@@ -822,18 +821,18 @@ blueprint:
               domain: input_boolean
 
         conflict_guard_entity:
-          name: Bedtime active mutex (input_boolean)
+          name: Bedtime active mutex (sensor)
           description: >
-            An input_boolean set to ON while a bedtime routine is running
-            (either from this blueprint or a standalone one). This blueprint
-            checks it before starting its own bedtime flow — if already ON,
-            the bedtime routine is skipped (another instance is running).
-            The blueprint sets it ON when it starts bedtime and OFF on
-            cleanup. Leave empty to disable conflict guarding.
+            A pyscript-managed sensor set to "on" while a bedtime routine is
+            running (either from this blueprint or a standalone one). This
+            blueprint checks it before starting its own bedtime flow — if
+            already "on", the bedtime routine is skipped (another instance is
+            running). The blueprint sets it "on" when it starts bedtime and
+            "off" on cleanup via pyscript.set_sensor_value. Leave empty to
+            disable conflict guarding.
           default: ""
           selector:
             entity:
-              domain: input_boolean
 
     # ===========================================================================
     # ⑨ TEST MODE & NOTIFICATIONS
@@ -2720,11 +2719,12 @@ actions:
                       datetime: "{{ now().isoformat() }}"
 
                   - alias: "Reset stage to 0"
-                    action: input_number.set_value
-                    target:
-                      entity_id: !input escalation_stage_helper
+                    action: pyscript.set_sensor_value
                     data:
-                      value: 0
+                      entity_id: !input escalation_stage_helper
+                      value: "0"
+                      icon: "mdi:counter"
+                      friendly_name: "AI Proactive Bedtime Stage Counter"
 
                   - alias: "Log session start"
                     action: logbook.log
@@ -2751,11 +2751,12 @@ actions:
                               {{ elapsed > gap and gap > 0 }}
                         sequence:
                           - alias: "Reset stage to 0 — gap exceeded"
-                            action: input_number.set_value
-                            target:
-                              entity_id: !input escalation_stage_helper
+                            action: pyscript.set_sensor_value
                             data:
-                              value: 0
+                              entity_id: !input escalation_stage_helper
+                              value: "0"
+                              icon: "mdi:counter"
+                              friendly_name: "AI Proactive Bedtime Stage Counter"
 
                           - alias: "Update session timestamp"
                             action: input_datetime.set_datetime
@@ -2792,11 +2793,12 @@ actions:
           # --- Advance escalation stage ---
           - alias: "Advance escalation stage"
             continue_on_error: true
-            action: input_number.set_value
-            target:
-              entity_id: !input escalation_stage_helper
+            action: pyscript.set_sensor_value
             data:
+              entity_id: !input escalation_stage_helper
               value: "{{ (current_stage | int(0)) + 1 }}"
+              icon: "mdi:counter"
+              friendly_name: "AI Proactive Bedtime Stage Counter"
 
           - alias: "Update session timestamp for cooldown tracking"
             continue_on_error: true
@@ -2860,9 +2862,12 @@ actions:
                             value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
                         sequence:
                           - alias: "Activate conflict guard for bedtime"
-                            action: homeassistant.turn_on
-                            target:
+                            action: pyscript.set_sensor_value
+                            data:
                               entity_id: "{{ conflict_guard_entity_val }}"
+                              value: "on"
+                              icon: "mdi:volume-mute"
+                              friendly_name: "AI Bedtime Active Mutex"
                             continue_on_error: true
 
                   # --- Autonomous bedtime TTS announcement ---
@@ -3210,9 +3215,12 @@ actions:
                         Previous routine may have crashed. Clearing and proceeding.
                     continue_on_error: true
                   - alias: "Clear stale mutex"
-                    action: input_boolean.turn_off
-                    target:
+                    action: pyscript.set_sensor_value
+                    data:
                       entity_id: "{{ conflict_guard_entity_val }}"
+                      value: "off"
+                      icon: "mdi:volume-mute"
+                      friendly_name: "AI Bedtime Active Mutex"
                     continue_on_error: true
 
           # --- Entry log (bed sensor vs scheduled) ---
@@ -3238,9 +3246,12 @@ actions:
                     value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
                 sequence:
                   - alias: "Activate conflict guard for final stage"
-                    action: homeassistant.turn_on
-                    target:
+                    action: pyscript.set_sensor_value
+                    data:
                       entity_id: "{{ conflict_guard_entity_val }}"
+                      value: "on"
+                      icon: "mdi:volume-mute"
+                      friendly_name: "AI Bedtime Active Mutex"
                     continue_on_error: true
 
           # --- Initialize countdown ---
@@ -3251,11 +3262,12 @@ actions:
                     value_template: "{{ escalation_stage_entity | default('') | length > 0 }}"
                 sequence:
                   - alias: "Update escalation stage counter"
-                    action: input_number.set_value
-                    target:
-                      entity_id: "{{ escalation_stage_entity }}"
+                    action: pyscript.set_sensor_value
                     data:
-                      value: 0
+                      entity_id: "{{ escalation_stage_entity }}"
+                      value: "0"
+                      icon: "mdi:counter"
+                      friendly_name: "AI Proactive Bedtime Stage Counter"
             continue_on_error: true
 
           # --- Speaker reset ---
@@ -4242,18 +4254,22 @@ actions:
             value_template: "{{ conflict_guard_entity_val | default('') | length > 0 }}"
         sequence:
           - alias: "Deactivate conflict guard after bedtime routine"
-            action: input_boolean.turn_off
-            target:
+            action: pyscript.set_sensor_value
+            data:
               entity_id: "{{ conflict_guard_entity_val }}"
+              value: "off"
+              icon: "mdi:volume-mute"
+              friendly_name: "AI Bedtime Active Mutex"
             continue_on_error: true
 
   - alias: "Reset escalation stage to 0 (idle)"
     continue_on_error: true
-    action: input_number.set_value
-    target:
-      entity_id: !input escalation_stage_helper
+    action: pyscript.set_sensor_value
     data:
-      value: 0
+      entity_id: !input escalation_stage_helper
+      value: "0"
+      icon: "mdi:counter"
+      friendly_name: "AI Proactive Bedtime Stage Counter"
 
   - alias: "Clear escalation session timestamp"
     continue_on_error: true

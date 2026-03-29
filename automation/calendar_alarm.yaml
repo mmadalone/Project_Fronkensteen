@@ -68,12 +68,12 @@ blueprint:
         workday_entity:
           name: Workday entity
           description: >
-            The input_boolean that indicates whether tomorrow is a work day.
+            The sensor that indicates whether tomorrow is a work day.
             Set automatically by calendar_promote.py.
-          default: input_boolean.ai_context_work_day_tomorrow
+          default: sensor.ai_context_work_day_tomorrow
           selector:
             entity:
-              domain: input_boolean
+              domain: sensor
 
     # ===========================================================================
     # ② PRESENCE

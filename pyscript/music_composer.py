@@ -293,7 +293,7 @@ def _ensure_dirs() -> None:
 
 def _get_generations_today() -> int:
     try:
-        return int(float(state.get("input_number.ai_music_generations_today") or 0))  # noqa: F821
+        return int(float(state.get("sensor.ai_music_generations_today") or 0))  # noqa: F821
     except Exception:
         return 0
 
@@ -309,10 +309,13 @@ def _increment_generations() -> None:
     """Increment the daily API generation counter."""
     current = _get_generations_today()
     try:
-        service.call(  # noqa: F821
-            "input_number", "set_value",
-            entity_id="input_number.ai_music_generations_today",
-            value=current + 1,
+        state.set(  # noqa: F821
+            "sensor.ai_music_generations_today",
+            current + 1,
+            new_attributes={
+                "icon": "mdi:counter",
+                "friendly_name": "AI Music Generations Today",
+            },
         )
     except Exception:
         pass

@@ -19,8 +19,8 @@ template:
         unit_of_measurement: "%"
         icon: mdi:chart-arc
         state: >-
-          {% set hits = states('input_number.ai_tts_cache_hits_today') | float(0) %}
-          {% set calls = states('input_number.ai_tts_calls_today') | float(0) %}
+          {% set hits = states('sensor.ai_tts_cache_hits_today') | float(0) %}
+          {% set calls = states('sensor.ai_tts_calls_today') | float(0) %}
           {% if calls > 0 %}
             {{ [[(hits / calls * 100) | round(0) | int, 0] | max, 100] | min }}
           {% else %}

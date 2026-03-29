@@ -977,9 +977,9 @@ blueprint:
               domain: input_text
 
         reminder_loop_flag:
-          name: Reminder loop active flag (input_boolean)
+          name: Reminder loop active flag (sensor)
           description: >-
-            An input_boolean helper that tracks whether the unified
+            A pyscript-managed sensor that tracks whether the unified
             reminder loop is currently running. Only one pipeline
             run owns the loop at a time — subsequent notifications
             append to the ledger and trust the existing loop owner.
@@ -987,7 +987,6 @@ blueprint:
           default: ""
           selector:
             entity:
-              domain: input_boolean
 
         reminder_loop_watchdog:
           name: Reminder loop watchdog (input_datetime)
@@ -1882,10 +1881,13 @@ actions:
                 {{ ns.kept | join(',') }}
           # --- Watchdog recovery: prepare for full loop re-entry ---
           - alias: "0w-RECOVER · Clear orphaned flag for clean ownership claim"
-            action: input_boolean.turn_off
+            action: pyscript.set_sensor_value
             continue_on_error: true
-            target:
+            data:
               entity_id: "{{ reminder_flag_entity }}"
+              value: "off"
+              icon: "mdi:bell"
+              friendly_name: "AI Notification Follow-Me Reminder Loop Active"
           - alias: "0w-RECOVER · Populate pipeline stubs from ledger + sensor"
             variables:
               _wd_ledger_raw: "{{ states(ledger_entity) | default('') }}"
@@ -1929,10 +1931,13 @@ actions:
         value_template: "{{ trigger.id == 'ha_startup' }}"
     then:
       - alias: "0s · Turn off reminder flag"
-        action: input_boolean.turn_off
+        action: pyscript.set_sensor_value
         continue_on_error: true
-        target:
+        data:
           entity_id: "{{ reminder_flag_entity }}"
+          value: "off"
+          icon: "mdi:bell"
+          friendly_name: "AI Notification Follow-Me Reminder Loop Active"
       - alias: "0s · Clear ledger"
         action: input_text.set_value
         continue_on_error: true
@@ -3768,10 +3773,13 @@ actions:
           - alias: "Stop: Reminder loop already active — ledger updated, trusting e..."
             stop: "Reminder loop already active — ledger updated, trusting existing owner"
       - alias: "9c-flag · Turn on reminder loop flag"
-        action: input_boolean.turn_on
+        action: pyscript.set_sensor_value
         continue_on_error: true
-        target:
+        data:
           entity_id: "{{ reminder_flag_entity }}"
+          value: "on"
+          icon: "mdi:bell"
+          friendly_name: "AI Notification Follow-Me Reminder Loop Active"
       - alias: "9c-wd · Update reminder watchdog timestamp"
         action: input_datetime.set_datetime
         continue_on_error: true
@@ -4378,10 +4386,13 @@ actions:
                       value_template: "{{ _ledger_after_dismiss | length == 0 }}"
                   then:
                     - alias: "R3d-cleanup · Loop exit cleanup"
-                      action: input_boolean.turn_off
+                      action: pyscript.set_sensor_value
                       continue_on_error: true
-                      target:
+                      data:
                         entity_id: "{{ reminder_flag_entity }}"
+                        value: "off"
+                        icon: "mdi:bell"
+                        friendly_name: "AI Notification Follow-Me Reminder Loop Active"
                     - alias: "R3d-cleanup · Clear watchdog"
                       action: input_datetime.set_datetime
                       continue_on_error: true
@@ -4874,10 +4885,13 @@ actions:
 
       # --- LOOP EXIT CLEANUP ---
       - alias: "9d-EXIT · Turn off reminder flag"
-        action: input_boolean.turn_off
+        action: pyscript.set_sensor_value
         continue_on_error: true
-        target:
+        data:
           entity_id: "{{ reminder_flag_entity }}"
+          value: "off"
+          icon: "mdi:bell"
+          friendly_name: "AI Notification Follow-Me Reminder Loop Active"
 
       - alias: "9d-EXIT · Clear watchdog"
         action: input_datetime.set_datetime

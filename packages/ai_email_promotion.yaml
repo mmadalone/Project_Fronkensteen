@@ -11,7 +11,7 @@
 #   input_boolean.ai_email_promotion_enabled — kill switch (default ON)
 #   input_text.ai_email_known_contacts — comma-separated trusted senders/domains
 #   input_text.ai_email_priority_keywords — comma-separated custom keywords
-#   input_text.ai_email_last_priority — last priority email subject (quick ref)
+#   sensor.ai_email_last_priority — last priority email subject (state.set)
 #   sensor.ai_email_priority_count — unread priority email count
 #   automation.ai_email_priority_filter — IMAP trigger → pyscript filter
 #   sensor.ai_email_promotion_status — created by pyscript (last op status)
@@ -84,7 +84,7 @@
 #     entities:
 #       - entity: sensor.ai_email_priority_count
 #         name: "Unread Priority"
-#       - entity: input_text.ai_email_last_priority
+#       - entity: sensor.ai_email_last_priority
 #         name: "Last Priority"
 #       - entity: sensor.ai_email_promotion_status
 #         name: "Filter Status"

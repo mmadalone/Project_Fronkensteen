@@ -708,16 +708,14 @@ blueprint:
 
 
         helper_lock_boolean:
-          name: Helper input_boolean lock (in-progress) (optional)
+          name: Helper sensor lock (in-progress) (optional)
           description: >
-            Optional. Example: input_boolean.ai_gn_bedtime_lock
-            If provided, the script refuses to start while it is ON, then sets it ON during the run
-            and turns it OFF at the end.
+            Optional. Example: sensor.ai_gn_bedtime_lock
+            A pyscript-managed sensor. If provided, the script refuses to start while it is "on",
+            then sets it "on" during the run and "off" at the end via pyscript.set_sensor_value.
           default: ""
           selector:
             entity:
-              filter:
-                domain: input_boolean
 
 
         helper_last_opening_line:
@@ -1176,10 +1174,13 @@ sequence:
             value_template: "{{ helpers_enabled and (h_lock_boolean | trim) != '' }}"
         sequence:
           - alias: "Preflight: activate lock helper"
-            action: input_boolean.turn_on
+            action: pyscript.set_sensor_value
             continue_on_error: true
             data:
               entity_id: "{{ h_lock_boolean }}"
+              value: "on"
+              icon: "mdi:lock"
+              friendly_name: "AI Goodnight Bedtime Lock"
 
   - alias: "Choose action path"
     choose:
@@ -2727,7 +2728,10 @@ sequence:
             value_template: "{{ helpers_enabled and (h_lock_boolean | trim) != '' }}"
         sequence:
           - alias: "Cleanup: release lock helper"
-            action: input_boolean.turn_off
+            action: pyscript.set_sensor_value
             continue_on_error: true
             data:
               entity_id: "{{ h_lock_boolean }}"
+              value: "off"
+              icon: "mdi:lock"
+              friendly_name: "AI Goodnight Bedtime Lock"

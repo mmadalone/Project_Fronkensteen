@@ -44,10 +44,7 @@ ai_bedtime_global_lock:
   icon: mdi:lock
   initial: false
 
-ai_gn_bedtime_lock:
-  name: Goodnight Negotiator lock (internal)
-  icon: mdi:lock
-  initial: false
+# ai_gn_bedtime_lock removed — migrated to sensor (state.set, Session 5)
 
 
 ai_voice_handoff_enabled:
@@ -127,18 +124,12 @@ ai_calendar_promotion_enabled:
 # Set when Google Calendar API fails. Agents check this flag and adjust
 # language: "I think you have..." instead of "You have...".
 # Cleared automatically when next sync succeeds.
-ai_calendar_stale:
-  name: "AI Calendar Data Stale"
-  initial: false
-  icon: mdi:calendar-alert
+# ai_calendar_stale removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Hot Context
 # ═══════════════════════════════════════════════════════════════════
-ai_context_work_day:
-  name: "AI Context - Work Day"
-  initial: false
-  icon: mdi:briefcase
+# ai_context_work_day removed — migrated to sensor (state.set, Session 7)
 ai_context_guests_present:
   name: "AI Context - Guests Present"
   initial: false
@@ -150,11 +141,7 @@ ai_work_day_manual_override:
   initial: false
   icon: mdi:hand-back-left
 
-# I-29: Tomorrow's workday status (set by calendar_promote.py)
-ai_context_work_day_tomorrow:
-  name: "AI Tomorrow is a work day"
-  initial: false
-  icon: mdi:briefcase-clock
+# ai_context_work_day_tomorrow removed — migrated to sensor (state.set, Session 7)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -200,10 +187,7 @@ ai_email_promotion_enabled:
 
 # Gap 2: Email stale flag (mirrors ai_calendar_stale pattern).
 # Set ON when IMAP sensor is unavailable or hasn't changed in N minutes.
-ai_email_stale:
-  name: "AI Email Data Stale"
-  initial: false
-  icon: mdi:email-alert
+# ai_email_stale removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_entity_history — Entity History Query (Gap 3)
@@ -218,10 +202,7 @@ ai_entity_history_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # When ON, the next batch run drops mem_vec and re-embeds all records.
 # Flipped ON automatically when dimensions change. Flipped OFF after reindex completes.
-ai_embedding_reindex_needed:
-  name: "AI Embedding - Reindex Needed"
-  initial: false
-  icon: mdi:database-refresh
+# ai_embedding_reindex_needed removed — migrated to sensor (state.set, Session 5)
 
 # ── Auto-archive (I-42 Phase 2) ──────────────────────────────────
 # Master toggle for memory auto-archiving.
@@ -314,9 +295,7 @@ ai_budget_fallback_active:
 ai_media_tracking_enabled:
   name: "AI media tracking enabled"
   icon: mdi:filmstrip
-ai_media_data_stale:
-  name: "AI media data stale"
-  icon: mdi:alert-circle-outline
+# ai_media_data_stale removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_music_composer — Music Composition Engine (I-10)
@@ -417,19 +396,9 @@ ai_proactive_briefing_enabled:
   name: "AI Proactive Briefing - Enabled"
   icon: mdi:weather-sunset-up
 
-# Per-instance delivered flags. Each blueprint instance points to one of
-# these and self-resets it at the configured reset_time.
-ai_briefing_delivered_morning:
-  name: "AI Briefing - Delivered Morning"
-  icon: mdi:check-circle
-
-ai_briefing_delivered_afternoon:
-  name: "AI Briefing - Delivered Afternoon"
-  icon: mdi:check-circle
-
-ai_briefing_delivered_evening:
-  name: "AI Briefing - Delivered Evening"
-  icon: mdi:check-circle
+# ai_briefing_delivered_morning removed — migrated to sensor (state.set, Session 6)
+# ai_briefing_delivered_afternoon removed — migrated to sensor (state.set, Session 6)
+# ai_briefing_delivered_evening removed — migrated to sensor (state.set, Session 6)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_project_tracking — Project Tracking
@@ -437,10 +406,7 @@ ai_briefing_delivered_evening:
 ai_project_tracking_enabled:
   name: "AI Project Tracking Enabled"
   icon: mdi:clipboard-check-multiple
-ai_project_data_stale:
-  name: "AI Project Data Stale"
-  initial: false
-  icon: mdi:clipboard-alert
+# ai_project_data_stale removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_routine_tracker — Routine Tracker
@@ -457,10 +423,7 @@ ai_routine_tracking_enabled:
 # bed-ending routine fingerprint. Arms bedtime automations to respond
 # instantly when bed presence actually fires (shaves 3-5s response time).
 # Reset to OFF on: routine completion, deviation, or 2-hour timeout.
-ai_bedtime_predicted:
-  name: "AI Bedtime Predicted"
-  initial: false
-  icon: mdi:bed-clock
+# ai_bedtime_predicted removed — migrated to sensor (state.set, Session 7)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_sleep_detection — Sleep Detection
@@ -576,10 +539,7 @@ ai_winddown_enabled:
   initial: true
   icon: mdi:weather-night
 
-ai_winddown_active:
-  name: "AI Wind-Down - Active"
-  initial: false
-  icon: mdi:moon-waning-crescent
+# ai_winddown_active removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_theatrical — Theatrical Mode (C12 / Pattern 4)
@@ -652,16 +612,12 @@ ai_proactive_bedtime_escalation_killswitch:
   name: "Proactive Bedtime Escalation — Kill Switch — Rick"
   icon: mdi:stop-circle-outline
 
-ai_bedtime_active_mutex_proactive_bedtime_escalation:
-  name: "Bedtime Active Mutex — Proactive Bedtime Escalation — Rick"
-  icon: mdi:volume-mute
+# ai_bedtime_active_mutex_proactive_bedtime_escalation removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # Notification Follow-Me (migrated from UI)
 # ═══════════════════════════════════════════════════════════════════
-ai_notification_follow_me_reminder_loop_active:
-  name: "Notification Follow-Me — Reminder Loop Active"
-  icon: mdi:bell
+# ai_notification_follow_me_reminder_loop_active removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # Memory & Embedding (migrated from UI)
@@ -729,10 +685,7 @@ ai_toggle_audit_enabled:
 # ═══════════════════════════════════════════════════════════════════
 # Dispatcher Bypass Mode (set by pyscript on cache failure)
 # ═══════════════════════════════════════════════════════════════════
-ai_dispatcher_bypass_mode:
-  name: "AI Dispatcher Bypass Mode"
-  icon: mdi:highway
-  initial: false
+# ai_dispatcher_bypass_mode removed — migrated to sensor (state.set, Session 5)
 
 # ═══════════════════════════════════════════════════════════════════
 # System Recovery Engine

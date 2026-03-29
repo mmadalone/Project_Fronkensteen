@@ -259,12 +259,13 @@ blueprint:
         delivered_flag:
           name: Delivered flag
           description: >
-            Per-instance input_boolean — prevents repeat delivery.
+            Per-instance flag entity — prevents repeat delivery.
             Set ON after delivery, self-resets at reset_time.
+            Accepts a sensor (via pyscript.set_sensor_value bridge)
+            or a legacy input_boolean.
           default: ""
           selector:
-            entity:
-              domain: input_boolean
+            entity: {}
 
         reset_time:
           name: Delivered flag reset time
@@ -825,9 +826,12 @@ actions:
         value_template: "{{ trigger.id == 'reset' }}"
     then:
       - alias: "Turn off delivered flag for next-day reuse"
-        action: input_boolean.turn_off
-        target:
+        action: pyscript.set_sensor_value
+        data:
           entity_id: !input delivered_flag
+          value: "off"
+          icon: "mdi:check-circle"
+          friendly_name: "AI Briefing Delivered Flag"
       - stop: "Delivered flag reset"
 
   # ── 2. Manual trigger → auto-reset the manual boolean ──────────────────
@@ -842,9 +846,12 @@ actions:
         delay:
           seconds: 1
       - alias: "Auto-reset manual trigger boolean"
-        action: input_boolean.turn_off
-        target:
+        action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_manual_trigger }}"
+          value: "off"
+          icon: "mdi:check-circle"
+          friendly_name: "AI Briefing Delivered Flag"
 
   # ── 3. Set TTS volume on output speaker (if > 0) → duck guard ─────────
   - alias: "Set TTS volume before briefing"
@@ -1096,9 +1103,12 @@ actions:
 
   # ── 6. Set delivered flag ──────────────────────────────────────────────
   - alias: "Set delivered flag after briefing"
-    action: input_boolean.turn_on
-    target:
+    action: pyscript.set_sensor_value
+    data:
       entity_id: !input delivered_flag
+      value: "on"
+      icon: "mdi:check-circle"
+      friendly_name: "AI Briefing Delivered Flag"
 
   # ── 7. Wait for TTS buffer drain ──────────────────────────────────────
   - alias: "Wait for TTS buffer drain before restore"

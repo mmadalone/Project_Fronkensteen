@@ -246,7 +246,7 @@ async def voice_session_continuous(
     """Continuous conversation with dynamic hot-context agent awareness.
 
     For music feedback sessions, context is injected into a hot-context
-    helper (input_text.ai_music_feedback_context) so the agent sees it on
+    sensor (sensor.ai_music_feedback_context) so the agent sees it on
     EVERY pipeline turn — even after duplicate_wake_up recovery or
     satellite auto-restart. No extra_system_prompt needed for music.
 
@@ -324,7 +324,7 @@ async def voice_session_continuous(
         name: Feedback Context
         description: >-
           "filename|cache_key" for hot context. Sets
-          input_text.ai_music_feedback_context so agent sees composition
+          sensor.ai_music_feedback_context so agent sees composition
           info on every pipeline turn automatically.
         required: false
         selector:
@@ -362,10 +362,13 @@ async def voice_session_continuous(
 
     # ── 1. Set hot context (agent sees it on every turn) ──────────
     if feedback_context:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_music_feedback_context",
-            value=feedback_context[:255],
+        state.set(  # noqa: F821
+            "sensor.ai_music_feedback_context",
+            feedback_context[:255],
+            new_attributes={
+                "icon": "mdi:music-note",
+                "friendly_name": "AI Music Feedback Context",
+            },
         )
 
     # ── Phase A: Announce composition (no mic, no pipeline) ──────────
@@ -437,7 +440,7 @@ async def voice_session_continuous(
             break
 
         pending = (
-            state.get("input_text.ai_voice_session_pending") or ""  # noqa: F821
+            state.get("sensor.ai_voice_session_pending") or ""  # noqa: F821
         ).strip()
         if pending:
             log.info("voice_session: new session request, exiting loop")  # noqa: F821
@@ -461,10 +464,12 @@ async def voice_session_continuous(
     # ── Cleanup ───────────────────────────────────────────────────
     if feedback_context:
         try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_music_feedback_context",
-                value="",
+            state.set(  # noqa: F821
+                "sensor.ai_music_feedback_context", "",
+                new_attributes={
+                    "icon": "mdi:music-note",
+                    "friendly_name": "AI Music Feedback Context",
+                },
             )
         except Exception:
             pass
@@ -569,10 +574,12 @@ async def voice_session_request(
         payload["file"] = payload["file"][-80:] if payload["file"] else ""
         json_str = _json.dumps(payload)
 
-    service.call(  # noqa: F821
-        "input_text", "set_value",
-        entity_id="input_text.ai_voice_session_pending",
-        value=json_str,
+    state.set(  # noqa: F821
+        "sensor.ai_voice_session_pending", json_str,
+        new_attributes={
+            "icon": "mdi:microphone-message",
+            "friendly_name": "AI Voice Session Pending",
+        },
     )
 
     log.info(  # noqa: F821

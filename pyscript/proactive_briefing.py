@@ -1084,10 +1084,12 @@ async def _deliver_briefing(
     summary = assembled[:250]
     if not test_mode:
         try:
-            service.call(  # noqa: F821
-                "input_text", "set_value",
-                entity_id="input_text.ai_last_briefing_summary",
-                value=summary,
+            state.set(  # noqa: F821
+                "sensor.ai_last_briefing_summary", summary,
+                new_attributes={
+                    "icon": "mdi:text-box-outline",
+                    "friendly_name": "AI Last Briefing Summary",
+                },
             )
         except Exception as exc:
             log.warning(f"dispatcher: {exc}")  # noqa: F821

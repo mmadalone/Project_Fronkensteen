@@ -5,14 +5,14 @@
 #   and "Prediction Engine Build Path"
 #
 # Provides:
-#   input_text.ai_routine_stage — current routine position (e.g.,
+#   sensor.ai_routine_stage — current routine position (state.set, e.g.,
 #     "evening_weekday_living_room_bed:step_3_of_4" or "none")
-#   input_text.ai_routine_deviation — last deviation description (e.g.,
+#   sensor.ai_routine_deviation — last deviation description (state.set, e.g.,
 #     "expected:bathroom actual:living_room" or "none")
 #   sensor.ai_routine_tracker_status attr eta_raw — JSON for ETA template sensor
 #   input_boolean.ai_routine_tracking_enabled — kill switch (ON = active)
-#   input_boolean.ai_bedtime_predicted — set ON when a bed-ending routine
-#     starts; arms bedtime automations for instant response
+#   sensor.ai_bedtime_predicted — set "on" when a bed-ending routine
+#     starts; arms bedtime automations for instant response (state.set)
 #   sensor.ai_routine_eta — estimated minutes to routine completion
 #   sensor.ai_routine_tracker_status — created by pyscript (last op result)
 #
@@ -101,18 +101,18 @@ template:
 #     entities:
 #       - entity: input_boolean.ai_routine_tracking_enabled
 #         name: "Tracking Enabled"
-#       - entity: input_boolean.ai_bedtime_predicted
+#       - entity: sensor.ai_bedtime_predicted
 #         name: "Bedtime Predicted"
 #
 #   # ── Current Routine ──
 #   - type: entities
 #     title: "Current Routine"
 #     entities:
-#       - entity: input_text.ai_routine_stage
+#       - entity: sensor.ai_routine_stage
 #         name: "Routine Stage"
 #       - entity: sensor.ai_routine_eta
 #         name: "ETA to Completion"
-#       - entity: input_text.ai_routine_deviation
+#       - entity: sensor.ai_routine_deviation
 #         name: "Last Deviation"
 #
 #   # ── Status ──

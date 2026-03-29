@@ -3844,7 +3844,7 @@ async def memory_embed_batch(
     # Check if reindex is needed
     reindex = False
     try:
-        reindex_val = state.get("input_boolean.ai_embedding_reindex_needed")  # noqa: F821
+        reindex_val = state.get("sensor.ai_embedding_reindex_needed")  # noqa: F821
         reindex = reindex_val == "on"
     except (TypeError, AttributeError):
         pass
@@ -3906,9 +3906,12 @@ async def memory_embed_batch(
         # Clear reindex flag if it was on
         if reindex:
             try:
-                service.call(  # noqa: F821
-                    "input_boolean", "turn_off",
-                    entity_id="input_boolean.ai_embedding_reindex_needed",
+                state.set(  # noqa: F821
+                    "sensor.ai_embedding_reindex_needed", "off",
+                    new_attributes={
+                        "icon": "mdi:database-refresh",
+                        "friendly_name": "AI Embedding Reindex Needed",
+                    },
                 )
             except Exception:
                 pass
@@ -3934,7 +3937,7 @@ async def memory_embed_batch(
         try:
             service.call(  # noqa: F821
                 "input_boolean", "turn_off",
-                entity_id="input_boolean.ai_embedding_reindex_needed",
+                entity_id="sensor.ai_embedding_reindex_needed",
             )
         except Exception:
             pass

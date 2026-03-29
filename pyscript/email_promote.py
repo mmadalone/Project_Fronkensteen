@@ -369,10 +369,13 @@ def _set_email_count(count: int) -> None:
 def _update_last_priority(subject: str) -> None:
     """Update last priority email subject helper."""
     try:
-        service.call(  # noqa: F821
-            "input_text", "set_value",
-            entity_id="input_text.ai_email_last_priority",
-            value=str(subject)[:255],
+        state.set(  # noqa: F821
+            "sensor.ai_email_last_priority",
+            str(subject)[:255],
+            new_attributes={
+                "icon": "mdi:email-alert",
+                "friendly_name": "AI Email Last Priority",
+            },
         )
     except Exception as exc:
         log.warning(f"email_promote: last priority update failed: {exc}")  # noqa: F821
@@ -381,10 +384,12 @@ def _update_last_priority(subject: str) -> None:
 def _set_email_stale(stale_val: bool) -> None:
     """Set or clear the email stale flag (Gap 2)."""
     try:
-        svc = "turn_on" if stale_val else "turn_off"
-        service.call(  # noqa: F821
-            "input_boolean", svc,
-            entity_id="input_boolean.ai_email_stale",
+        state.set(  # noqa: F821
+            "sensor.ai_email_stale", "on" if stale_val else "off",
+            new_attributes={
+                "icon": "mdi:email-alert",
+                "friendly_name": "AI Email Data Stale",
+            },
         )
     except Exception as exc:
         log.warning(f"email_promote: stale flag update failed: {exc}")  # noqa: F821

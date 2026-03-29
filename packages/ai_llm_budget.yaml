@@ -176,7 +176,7 @@ template:
         unit_of_measurement: "%"
         state_class: measurement
         state: >-
-          {% set calls = states('input_number.ai_tts_calls_today') | int(0) %}
+          {% set calls = states('sensor.ai_tts_calls_today') | int(0) %}
           {% set limit = [states('input_number.ai_tts_daily_limit') | int(500), 1] | max %}
           {{ [[((limit - calls) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
 
@@ -193,7 +193,7 @@ template:
           {% set tts_chars = states('sensor.ai_tts_chars_today') | int(0) %}
           {% set stt_calls = states('sensor.ai_stt_calls_today') | int(0) %}
           {% set serper = states('sensor.serper_daily_usage') | int(0) %}
-          {% set music_gens = states('input_number.ai_music_generations_today') | int(0) %}
+          {% set music_gens = states('sensor.ai_music_generations_today') | int(0) %}
           {% set llm_rate = states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01) %}
           {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
           {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
@@ -231,7 +231,7 @@ template:
             {{ (states('sensor.serper_daily_usage') | int(0)
                 * states('sensor.ai_cost_per_serper_credit') | float(0)) | round(4) }}
           music_cost: >-
-            {{ (states('input_number.ai_music_generations_today') | int(0)
+            {{ (states('sensor.ai_music_generations_today') | int(0)
                 * states('input_number.ai_cost_per_music_generation') | float(0.02)) | round(4) }}
           cost_limit: >-
             {{ states('input_number.ai_budget_daily_cost_limit') | float(5) }}
@@ -597,10 +597,10 @@ script:
           value: >-
             llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
             llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
-            tts_calls={{ states('input_number.ai_tts_calls_today') | int(0) }},
+            tts_calls={{ states('sensor.ai_tts_calls_today') | int(0) }},
             tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
             stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
-            music_gens={{ states('input_number.ai_music_generations_today') | int(0) }},
+            music_gens={{ states('sensor.ai_music_generations_today') | int(0) }},
             cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
             openrouter_usage=${{
               (state_attr('sensor.openrouter_credits', 'total_usage') | float(0)
@@ -645,7 +645,7 @@ script:
               {% endfor %}
               {{ ns.models | tojson }}
             {% else %}{}{% endif %}
-          music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
+          music_generations: "{{ states('sensor.ai_music_generations_today') | int(0) }}"
       # ── Step 2: Reset all counters (via bridge service — sensors) ──
       - alias: "Reset LLM calls counter"
         action: pyscript.set_sensor_value
@@ -789,10 +789,10 @@ automation:
                   value: >-
                     llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
                     llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
-                    tts_calls={{ states('input_number.ai_tts_calls_today') | int(0) }},
+                    tts_calls={{ states('sensor.ai_tts_calls_today') | int(0) }},
                     tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
                     stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
-                    music_gens={{ states('input_number.ai_music_generations_today') | int(0) }},
+                    music_gens={{ states('sensor.ai_music_generations_today') | int(0) }},
                     cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
                     serper_credits={{ states('sensor.serper_daily_usage') | int(0) }},
                     source=startup_catchup
@@ -813,7 +813,7 @@ automation:
                   serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
                   model_cost_eur: "{{ states('sensor.ai_model_cost_today') | float(0) }}"
                   model_breakdown: "{}"
-                  music_generations: "{{ states('input_number.ai_music_generations_today') | int(0) }}"
+                  music_generations: "{{ states('sensor.ai_music_generations_today') | int(0) }}"
               # Phase 1b: Zero all counters — budget gate unblocks immediately
               - alias: "Reset LLM calls"
                 action: pyscript.set_sensor_value

@@ -212,11 +212,10 @@ blueprint:
 
         winddown_active_flag:
           name: "Wind-down active flag"
-          description: "Boolean showing wind-down automation is running."
-          default: input_boolean.ai_winddown_active
+          description: "Pyscript-managed sensor showing wind-down automation is running."
+          default: sensor.ai_winddown_active
           selector:
             entity:
-              domain: input_boolean
 
     # =========================================================================
     # ③ AI CONVERSATION
@@ -320,11 +319,13 @@ blueprint:
 
         escalation_stage_helper:
           name: "Stage counter helper"
-          description: "input_number entity tracking the current stage."
-          default: input_number.ai_winddown_stage
+          description: >
+            Entity tracking the current escalation stage.
+            Accepts a sensor (via pyscript.set_sensor_value bridge)
+            or a legacy input_number.
+          default: sensor.ai_winddown_stage
           selector:
-            entity:
-              domain: input_number
+            entity: {}
 
         escalation_session_helper:
           name: "Session start helper"
@@ -1159,15 +1160,21 @@ actions:
       - condition: template
         value_template: "{{ is_state(v_winddown_active, 'on') }}"
     then:
-      - action: input_boolean.turn_off
-        target:
+      - action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
 
   # ── 2. Set winddown_active ON ──────────────────────────────────────────
   - alias: "2. Set winddown_active ON"
-    action: input_boolean.turn_on
-    target:
+    action: pyscript.set_sensor_value
+    data:
       entity_id: "{{ v_winddown_active }}"
+      value: "on"
+      icon: "mdi:moon-waning-crescent"
+      friendly_name: "AI Wind-Down Active"
 
   # ── 3. Nag tick guard — only proceed if repeat enabled + bed occupied ──
   - alias: "3. Nag tick guard"
@@ -1178,9 +1185,12 @@ actions:
              and (not repeat_while_present or not bed_is_occupied) }}
     then:
       - alias: "Skip — nag tick but no repeat/presence"
-        action: input_boolean.turn_off
-        target:
+        action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
       - stop: "Nag tick skipped"
 
   # ── 4. Media playing guard ─────────────────────────────────────────────
@@ -1191,9 +1201,12 @@ actions:
           {{ block_if_media_playing and media_is_playing
              and not is_sleepy_tv }}
     then:
-      - action: input_boolean.turn_off
-        target:
+      - action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
       - stop: "Media playing — suppressed"
 
   # ── 5. Sleepy TV trigger guard ─────────────────────────────────────────
@@ -1204,9 +1217,12 @@ actions:
           {{ trigger.id | default('') == 'sleepy_tv_detected'
              and not is_sleepy_tv }}
     then:
-      - action: input_boolean.turn_off
-        target:
+      - action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
       - stop: "TV playing but not sleepy content"
 
   # ── 6. Escalation stage management ─────────────────────────────────────
@@ -1228,11 +1244,12 @@ actions:
       - condition: template
         value_template: "{{ session_expired }}"
     then:
-      - action: input_number.set_value
-        target:
-          entity_id: "{{ v_stage_helper }}"
+      - action: pyscript.set_sensor_value
         data:
-          value: 0
+          entity_id: "{{ v_stage_helper }}"
+          value: "0"
+          icon: "mdi:stairs"
+          friendly_name: "AI Wind-Down Stage"
 
   - alias: "6c. Start or resume session"
     if:
@@ -1310,9 +1327,12 @@ actions:
       - condition: template
         value_template: "{{ not cooldown_ok }}"
     then:
-      - action: input_boolean.turn_off
-        target:
+      - action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
       - stop: "Cooldown not elapsed"
 
   # ── 8. Update scenario helper ──────────────────────────────────────────
@@ -1496,19 +1516,23 @@ actions:
         continue_on_error: true
 
       # Reset stage + cleanup
-      - action: input_number.set_value
-        target:
-          entity_id: "{{ v_stage_helper }}"
+      - action: pyscript.set_sensor_value
         data:
-          value: 0
+          entity_id: "{{ v_stage_helper }}"
+          value: "0"
+          icon: "mdi:stairs"
+          friendly_name: "AI Wind-Down Stage"
       - action: input_datetime.set_datetime
         target:
           entity_id: !input winddown_last_offer_entity
         data:
           datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-      - action: input_boolean.turn_off
-        target:
+      - action: pyscript.set_sensor_value
+        data:
           entity_id: "{{ v_winddown_active }}"
+          value: "off"
+          icon: "mdi:moon-waning-crescent"
+          friendly_name: "AI Wind-Down Active"
       - stop: "Autonomous execution complete"
 
   # ── 13. Budget gate ────────────────────────────────────────────────────
@@ -1609,11 +1633,12 @@ actions:
       - condition: template
         value_template: "{{ enable_escalation }}"
     then:
-      - action: input_number.set_value
-        target:
-          entity_id: "{{ v_stage_helper }}"
+      - action: pyscript.set_sensor_value
         data:
+          entity_id: "{{ v_stage_helper }}"
           value: "{{ [stage_now + 1, escalation_stage_count | int] | min }}"
+          icon: "mdi:stairs"
+          friendly_name: "AI Wind-Down Stage"
 
   - alias: "15b. Record last offer timestamp"
     action: input_datetime.set_datetime
@@ -1655,6 +1680,9 @@ actions:
 
   # ── 17. Cleanup ────────────────────────────────────────────────────────
   - alias: "17. Cleanup — winddown_active OFF"
-    action: input_boolean.turn_off
-    target:
+    action: pyscript.set_sensor_value
+    data:
       entity_id: "{{ v_winddown_active }}"
+      value: "off"
+      icon: "mdi:moon-waning-crescent"
+      friendly_name: "AI Wind-Down Active"

@@ -468,9 +468,12 @@ async def _ensure_cache() -> None:
             _bypass_active = True
             log.warning("agent_dispatch: entering BYPASS mode — cache load failed %d times", _cache_fail_count)  # noqa: F821
             try:
-                service.call(  # noqa: F821
-                    "input_boolean", "turn_on",
-                    entity_id="input_boolean.ai_dispatcher_bypass_mode",
+                state.set(  # noqa: F821
+                    "sensor.ai_dispatcher_bypass_mode", "on",
+                    new_attributes={
+                        "icon": "mdi:highway",
+                        "friendly_name": "AI Dispatcher Bypass Mode",
+                    },
                 )
             except Exception:
                 pass
@@ -481,9 +484,12 @@ async def _ensure_cache() -> None:
             _cache_fail_count = 0
             log.info("agent_dispatch: exiting BYPASS mode — cache recovered with %d personas", len(personas))  # noqa: F821
             try:
-                service.call(  # noqa: F821
-                    "input_boolean", "turn_off",
-                    entity_id="input_boolean.ai_dispatcher_bypass_mode",
+                state.set(  # noqa: F821
+                    "sensor.ai_dispatcher_bypass_mode", "off",
+                    new_attributes={
+                        "icon": "mdi:highway",
+                        "friendly_name": "AI Dispatcher Bypass Mode",
+                    },
                 )
             except Exception:
                 pass
