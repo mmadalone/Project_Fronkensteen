@@ -74,8 +74,10 @@ def _seed_migrated_sensors():
     if seeded:
         log.info(f"state_bridge: seeded {seeded} migrated sensors")  # noqa: F821
 
-    # Seed snapshot sensors from live API values (not 0 — that would make
-    # the daily delta = entire cumulative usage, blowing the budget gate).
+    # Seed snapshot sensors — first pass may get 0 if REST sensors aren't
+    # ready yet. Retry after 60s to catch them once loaded.
+    _seed_snapshot_sensors()
+    task.sleep(60)  # noqa: F821
     _seed_snapshot_sensors()
 
 
@@ -110,26 +112,27 @@ def _seed_snapshot_sensors():
         ),
     ]
     for entity_id, value_fn, icon, fname in snapshots:
+        # Check if sensor already has a real value (avoid nested try/except
+        # — pyscript AST can't resolve builtins in nested except blocks)
+        current = None
         try:
             current = state.get(entity_id)  # noqa: F821
         except Exception:
-            current = None
-        if current in (None, "unknown", "unavailable", "0"):
-            try:
-                val = value_fn()
-                state.set(  # noqa: F821
-                    entity_id, val,
-                    new_attributes={"icon": icon, "friendly_name": fname},
-                )
-                log.info(f"state_bridge: snapshot {entity_id} = {val}")  # noqa: F821
-            except Exception as exc:
-                # API sensor not ready yet — seed with 0, budget automation
-                # will correct at midnight or next startup catch-up
-                state.set(  # noqa: F821
-                    entity_id, "0",
-                    new_attributes={"icon": icon, "friendly_name": fname},
-                )
-                log.warning(f"state_bridge: snapshot fallback {entity_id}: {exc}")  # noqa: F821
+            pass
+        if current not in (None, "unknown", "unavailable", "0"):
+            continue  # already has a real value from midnight reset
+        # Try to get the live API value
+        val = "0"
+        try:
+            val = value_fn()
+        except Exception:
+            pass  # API sensor not ready — fall through with "0"
+        # Create/update the sensor
+        state.set(  # noqa: F821
+            entity_id, val,
+            new_attributes={"icon": icon, "friendly_name": fname},
+        )
+        log.info(f"state_bridge: snapshot {entity_id} = {val}")  # noqa: F821
 
 
 @service  # noqa: F821
