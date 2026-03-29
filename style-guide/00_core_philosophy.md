@@ -15,7 +15,7 @@ Sections 1, 2, 9, and 12 — Design principles, versioning, naming conventions, 
 - **Blueprints** = orchestration (triggers, conditions, flow control, timing).
 - **Conversation agents** = personality, permissions, behavior rules.
 - **Scripts** = reusable device-control sequences.
-- **Helpers** = shared state between automations and agents.
+- **Helpers** = user-configured shared state between automations and agents (preferences, toggles, thresholds). Runtime state (code-written flags, counters, tracking) uses `state.set()` sensors — see AP-74.
 - Never bake large LLM system prompts into blueprints. The blueprint passes only dynamic, per-run context via `extra_system_prompt`. The agent's own system prompt (configured in the HA UI) handles everything static.
 
 ### 1.3 Never remove features without asking
@@ -500,6 +500,7 @@ Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Pu
 - Always include `description`, `icon`, and `alias` fields
 
 ### 9.3 Helpers
+- **Helpers are for user-configured values only.** Runtime state (code-written flags, counters, state tracking) must use `state.set()` sensors. Use `pyscript.set_sensor_value` bridge service for YAML automations/blueprints. See AP-74, Decision #92.
 - **All helpers use the `ai_` prefix.** Two bulk renames enforced this: F14 (2026-03-19, 20 entities) and F14b (2026-03-28, 48 entities).
 - Input helpers use `ai_` plus persona and context:
   - Bedtime: `ai_<persona>_bedtime_<field>` (e.g., `ai_rick_bedtime_morning`, `ai_quark_gn_devices_question`)

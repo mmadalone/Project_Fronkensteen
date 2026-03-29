@@ -351,10 +351,9 @@ blueprint:
         bedtime_active_entity:
           name: "Bedtime active entity"
           description: "Boolean signalling routine is running. Suppresses naggers."
-          default: input_boolean.ai_bedtime_active
+          default: sensor.ai_bedtime_active
           selector:
             entity:
-              domain: input_boolean
 
         test_mode:
           name: "Test mode"

@@ -169,10 +169,9 @@ blueprint:
         ducking_flag:
           name: "Ducking flag entity"
           description: "Boolean indicating audio ducking is active."
-          default: input_boolean.ai_ducking_flag
+          default: sensor.ai_ducking_flag
           selector:
             entity:
-              domain: input_boolean
         duck_guard_enabled:
           name: "Duck guard enabled entity"
           description: "Boolean that enables the duck guard system."
