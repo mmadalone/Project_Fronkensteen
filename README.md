@@ -399,7 +399,7 @@ No YAML in this repository was written by hand. Budget sustainability is a desig
 
 | Project | Author | License | Role |
 |---------|--------|---------|------|
-| [Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation) | jekalmin | Apache 2.0 | Conversation agent framework — execution backend for all 22 voice pipeline agents |
+| [Extended OpenAI Conversation](https://github.com/jekalmin/extended_openai_conversation) | jekalmin | Apache 2.0 | Conversation agent framework — patched with 4-layer speech sanitizer that strips tool-call leaks from TTS output (Gemini bare calls, Maverick orphaned args, inline params). HACS auto-updates disabled. |
 | [Pyscript](https://github.com/custom-components/pyscript) | Craig Barratt (@craigbarratt) | Apache 2.0 | Python scripting runtime for all 29 orchestration modules |
 | [Voice Assistant Long-term Memory](https://github.com/luuquangvu/tutorials) | luuquangvu | — | Foundation of L2 memory system (SQLite+FTS5); extended with auto-relationships, scopes, tag linking, embeddings, archiving |
 | [ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) | Loryan Strant (@loryanstrant) | MIT | Voice profile system — patched with v3 mood modulation: stability slider + audio tag prefix injection for non-agent TTS. HACS auto-updates disabled. |

@@ -379,5 +379,6 @@ L1 is injected into every agent system prompt via the `ai_context_hot.yaml` pack
 ├── memory.db                         L2 memory database (auto-created)
 ├── ai-dashboard.yaml                 6-tab management dashboard
 └── custom_components/
-    └── elevenlabs_custom_tts/        Patched TTS with mood modulation
+    ├── elevenlabs_custom_tts/        Patched TTS with mood modulation
+    └── extended_openai_conversation/ Patched with tool-call speech sanitizer
 ```

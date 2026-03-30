@@ -21,7 +21,7 @@ Install these via HACS before proceeding. All are required for core functionalit
 | Component | HACS Category | Purpose | Notes |
 |-----------|--------------|---------|-------|
 | **pyscript** | Integration | Python scripting runtime. Runs all 36 pyscript modules. | [Docs](https://hacs-pyscript.readthedocs.io/) |
-| **Extended OpenAI Conversation** | Integration | LLM conversation agents. Powers all 5 AI personas. | [Repo](https://github.com/jekalmin/extended_openai_conversation) |
+| **Extended OpenAI Conversation** | Integration | LLM conversation agents. Powers all 5 AI personas. | **Use the patched version in `source_components/extended_openai_conversation/`** — do NOT install from HACS. Adds a 4-layer speech sanitizer that strips tool-call leaks from TTS output. Disable HACS auto-update for this component. |
 | **ElevenLabs Custom TTS** | Integration | Multi-voice TTS with mood modulation. | **Use the patched version in `custom_components/elevenlabs_custom_tts/`** — do NOT install from HACS. Disable HACS auto-update for this component. |
 | **ha_text_ai** | Integration | LLM task execution (summarization, embedding, classification). | [Repo](https://github.com/SmartHomeEra/ha_text_ai) |
 | **OpenAI STT** | Integration | Speech-to-text via OpenAI Whisper API. | Replaceable with any HA-compatible STT provider. |

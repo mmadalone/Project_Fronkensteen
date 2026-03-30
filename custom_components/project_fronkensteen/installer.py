@@ -28,7 +28,7 @@ for _tag in ("!secret", "!include", "!include_dir_named", "!include_dir_merge_na
 from .const import (
     BUNDLE_TO_DEST,
     CODE_SUBDIRS,
-    ELEVENLABS_RENAME,
+    COMPONENT_RENAMES,
     HELPER_FILES,
     SKIP_ON_UPDATE_SUBDIRS,
     get_files_for_groups,
@@ -238,7 +238,7 @@ def _process_file(
         return "skipped"
 
     # Code files — apply renames (e.g., manifest.json.bundle -> manifest.json)
-    target_name = ELEVENLABS_RENAME.get(filename, filename)
+    target_name = COMPONENT_RENAMES.get(filename, filename)
     dst = dest_dir / target_name
     if mode == "update" and dst.exists() and _file_hash(src) == _file_hash(dst):
         return "skipped"

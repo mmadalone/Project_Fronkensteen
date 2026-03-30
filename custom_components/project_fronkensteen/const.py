@@ -32,13 +32,14 @@ BUNDLE_TO_DEST = {
     "helpers": "",  # config root
     "scripts": "scripts",
     "elevenlabs_custom_tts": "custom_components/elevenlabs_custom_tts",
+    "extended_openai_conversation": "custom_components/extended_openai_conversation",
 }
 
 # Subdirectories that contain code files (always overwritten on update)
 CODE_SUBDIRS = {
     "pyscript", "packages",
     "blueprints_automation", "blueprints_script",
-    "elevenlabs_custom_tts",
+    "elevenlabs_custom_tts", "extended_openai_conversation",
 }
 
 # Subdirectories that are never overwritten on update
@@ -323,6 +324,27 @@ ELEVENLABS_TTS_FILES = [
 
 ELEVENLABS_RENAME = {"manifest.json.bundle": "manifest.json"}
 
+# Patched Extended OpenAI Conversation — tool-call speech sanitizer.
+# Installed as a separate custom_component by the installer. HACS
+# auto-updates must be disabled for this component (it's a patched fork).
+EOC_FILES = [
+    "__init__.py",
+    "config_flow.py",
+    "const.py",
+    "conversation.py",
+    "exceptions.py",
+    "helpers.py",
+    "manifest.json.bundle",
+    "services.py",
+    "services.yaml",
+    "strings.json",
+]
+
+EOC_RENAME = {"manifest.json.bundle": "manifest.json"}
+
+# Combined rename map for all patched components
+COMPONENT_RENAMES = {**ELEVENLABS_RENAME, **EOC_RENAME}
+
 
 def get_files_for_groups(selected_groups: list[str]) -> dict[str, list[str]]:
     """Return files to install for the selected feature groups.
@@ -349,5 +371,8 @@ def get_files_for_groups(selected_groups: list[str]) -> dict[str, list[str]]:
     # Patched ElevenLabs TTS — installed with Voice Pipeline
     if "voice" in active:
         result["elevenlabs_custom_tts"] = ELEVENLABS_TTS_FILES
+
+    # Patched Extended OpenAI Conversation — always installed (core dependency)
+    result["extended_openai_conversation"] = EOC_FILES
 
     return result

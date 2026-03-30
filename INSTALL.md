@@ -60,15 +60,21 @@ Step 13: Restart and verify
 Install via HACS > Integrations > Search:
 
 1. **pyscript** (Custom Components)
-2. **Extended OpenAI Conversation**
-3. **ha_text_ai**
-4. **OpenAI STT**
-5. **OpenAI TTS**
+2. **ha_text_ai**
+3. **OpenAI STT**
+4. **OpenAI TTS**
 
-**For ElevenLabs Custom TTS:** Do NOT install from HACS. Copy the patched version:
+**For Extended OpenAI Conversation:** Do NOT install from HACS. Use the patched version (adds a 4-layer speech sanitizer that strips tool-call leaks from TTS):
 ```
-custom_components/elevenlabs_custom_tts/ -> /config/custom_components/elevenlabs_custom_tts/
+source_components/extended_openai_conversation/ -> /config/custom_components/extended_openai_conversation/
 ```
+
+**For ElevenLabs Custom TTS:** Do NOT install from HACS. Use the patched version (adds voice mood modulation):
+```
+source_components/elevenlabs_custom_tts/ -> /config/custom_components/elevenlabs_custom_tts/
+```
+
+Disable HACS auto-updates for both patched components.
 
 Install any optional components you want (SpotifyPlus, Alexa Media Player, Music Assistant, Calendar Utils).
 
