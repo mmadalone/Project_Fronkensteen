@@ -1,12 +1,41 @@
 # Installation Guide
 
-Step-by-step instructions for installing Project Fronkensteen on your Home Assistant instance.
-
-> **Read [PREREQUISITES.md](PREREQUISITES.md) first.** This guide assumes you have all required HACS components, API keys, and hardware ready.
+> **Read [PREREQUISITES.md](PREREQUISITES.md) first.** This guide assumes you have HACS installed, API keys ready, and hardware set up.
 
 ---
 
-## Overview
+## Recommended: Install via HACS
+
+The easiest way to install Project Fronkensteen is through the HACS integration, which handles file copying, feature selection, and initial configuration via a setup wizard.
+
+1. Open HACS in your Home Assistant UI
+2. Click the three-dot menu (top right) > **Custom repositories**
+3. Add `https://github.com/mmadalone/Project_Fronkensteen` with category **Integration**
+4. Click **Add**
+5. Search for "Project Fronkensteen" in HACS and click **Install**
+6. **Restart Home Assistant**
+7. Go to Settings > Integrations > **Add Integration** > search "Project Fronkensteen"
+8. Follow the 5-step setup wizard:
+   - **Welcome** — prerequisites check (verifies pyscript is installed)
+   - **Features** — select which feature groups to install (all ON by default)
+   - **Household** — primary user name, person slug, language
+   - **Speakers** — default speaker entity, TTS provider
+   - **Confirm** — review and install
+9. **Restart Home Assistant** again
+
+The installer copies pyscript modules, packages, blueprints, helpers, config templates, and the patched ElevenLabs TTS to the correct `/config/` locations. Only files for your selected feature groups are installed.
+
+After installation, continue from [Step 8: Configure Pyscript](#step-8-configure-pyscript) below — the installer handles Steps 1-7 for you.
+
+> **To reconfigure later:** Go to Settings > Integrations > Project Fronkensteen > **Reconfigure** to change feature selection or reinstall files.
+
+---
+
+## Manual Installation
+
+If you prefer not to use HACS, follow the full manual process below.
+
+### Overview
 
 ```
 Step 1:  Install HACS components
