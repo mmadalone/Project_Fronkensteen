@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
+import zipfile
 from pathlib import Path
 
 import yaml
@@ -29,6 +30,7 @@ from .const import (
     BUNDLE_TO_DEST,
     CODE_SUBDIRS,
     COMPONENT_RENAMES,
+    COMPONENT_ZIPS,
     HELPER_FILES,
     SKIP_ON_UPDATE_SUBDIRS,
     get_files_for_groups,
@@ -65,6 +67,40 @@ def _copy_file(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
     _LOGGER.debug("Copied %s -> %s", src.name, dst)
+
+
+def _extract_component_zip(hass: HomeAssistant, zip_name: str, dest_subdir: str) -> int:
+    """Extract a zipped component from the bundle to /config/.
+
+    The zip contains the component files + manifest.json.bundle which
+    gets renamed to manifest.json on extraction. Returns files extracted.
+    """
+    bundle = _bundle_path(hass)
+    zip_path = bundle / zip_name
+    if not zip_path.is_file():
+        _LOGGER.warning("Component zip not found: %s", zip_path)
+        return 0
+
+    dest = _dest_path(hass, dest_subdir)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            # Rename manifest.json.bundle -> manifest.json
+            target_name = info.filename
+            if target_name.endswith("manifest.json.bundle"):
+                target_name = target_name.replace("manifest.json.bundle", "manifest.json")
+            target = dest / target_name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            count += 1
+
+    _LOGGER.info("Extracted %d files from %s -> %s", count, zip_name, dest)
+    return count
 
 
 # ── Template placeholders ───────────────────────────────────────────────────
@@ -276,6 +312,13 @@ async def install(
                 else:
                     report["skipped"] += 1
 
+        # Extract zipped patched components
+        active = {"core"} | set(selected_groups)
+        for zip_name, (dest_subdir, gate) in COMPONENT_ZIPS.items():
+            if gate is not None and gate not in active:
+                continue
+            report["copied"] += _extract_component_zip(hass, zip_name, dest_subdir)
+
         return report
 
     return await hass.async_add_executor_job(_do_install)
@@ -310,6 +353,13 @@ async def update(
                     report["copied"] += 1
                 else:
                     report["skipped"] += 1
+
+        # Re-extract zipped patched components on update
+        active = {"core"} | set(selected_groups)
+        for zip_name, (dest_subdir, gate) in COMPONENT_ZIPS.items():
+            if gate is not None and gate not in active:
+                continue
+            report["copied"] += _extract_component_zip(hass, zip_name, dest_subdir)
 
         _LOGGER.info("Update %s -> %s: %d copied, %d skipped", old_version, new_version, report["copied"], report["skipped"])
         return report

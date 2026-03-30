@@ -31,15 +31,12 @@ BUNDLE_TO_DEST = {
     "blueprints_script": "blueprints/script/madalone",
     "helpers": "",  # config root
     "scripts": "scripts",
-    "elevenlabs_custom_tts": "custom_components/elevenlabs_custom_tts",
-    "extended_openai_conversation": "custom_components/extended_openai_conversation",
 }
 
 # Subdirectories that contain code files (always overwritten on update)
 CODE_SUBDIRS = {
     "pyscript", "packages",
     "blueprints_automation", "blueprints_script",
-    "elevenlabs_custom_tts", "extended_openai_conversation",
 }
 
 # Subdirectories that are never overwritten on update
@@ -368,11 +365,13 @@ def get_files_for_groups(selected_groups: list[str]) -> dict[str, list[str]]:
         "scripts": SCRIPT_FILES,  # Always all scripts
     }
 
-    # Patched ElevenLabs TTS — installed with Voice Pipeline
-    if "voice" in active:
-        result["elevenlabs_custom_tts"] = ELEVENLABS_TTS_FILES
-
-    # Patched Extended OpenAI Conversation — always installed (core dependency)
-    result["extended_openai_conversation"] = EOC_FILES
-
     return result
+
+
+# Zipped patched components — extracted by installer, not in get_files_for_groups()
+# to avoid hassfest scanning bundled .py files as part of our integration.
+COMPONENT_ZIPS = {
+    # (zip filename, dest subdir, feature gate or None for always)
+    "extended_openai_conversation.zip": ("custom_components/extended_openai_conversation", None),
+    "elevenlabs_custom_tts.zip": ("custom_components/elevenlabs_custom_tts", "voice"),
+}
