@@ -8,6 +8,12 @@
 *.swo
 *~
 
+# Databases & runtime state (personal data, auto-generated)
+memory.db
+budget_state.json
+model_pricing.json
+pipeline_tts_backup.json
+
 # Temporary files
 *.tmp
 *.bak
