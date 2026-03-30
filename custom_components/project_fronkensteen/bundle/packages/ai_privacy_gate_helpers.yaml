@@ -1,0 +1,191 @@
+# =============================================================================
+# AI Privacy Gate — Per-Feature Override Helpers (33 entities)
+# =============================================================================
+# Optional: Per-feature privacy gate overrides.
+# Master toggle (ai_privacy_gate_mode) stays in helpers_input_select.yaml.
+# Provides: 33 input_select entities (ai_privacy_gate_*)
+# Dependencies: ai_privacy_gate package (template sensors)
+# =============================================================================
+
+input_select:
+  # ── Per-Feature Overrides ──
+  # T1 — Intimate (Miquel)
+  ai_privacy_gate_wake_up_guard:
+    name: "Privacy Override — Wake-Up Guard"
+    options: &privacy_override_options
+      - auto
+      - force_suppress
+      - force_allow
+      - "off"
+    initial: auto
+    icon: mdi:alarm
+  ai_privacy_gate_calendar_alarm:
+    name: "Privacy Override — Calendar Alarm"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:calendar-clock
+  ai_privacy_gate_escalating_wakeup:
+    name: "Privacy Override — Escalating Wake-Up"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:alarm-plus
+  ai_privacy_gate_bedtime_routine:
+    name: "Privacy Override — Bedtime Routine"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:weather-night
+  ai_privacy_gate_bedtime_routine_plus:
+    name: "Privacy Override — Bedtime Routine Plus"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:weather-night-partly-cloudy
+  ai_privacy_gate_bedtime_last_call:
+    name: "Privacy Override — Bedtime Last Call"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:bell-sleep
+
+  # T2 — Personal (Miquel)
+  ai_privacy_gate_email_follow_me:
+    name: "Privacy Override — Email Follow-Me"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:email-fast
+  ai_privacy_gate_notification_follow_me:
+    name: "Privacy Override — Notification Follow-Me"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:bell-ring
+  ai_privacy_gate_proactive_briefing:
+    name: "Privacy Override — Proactive Briefing"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:newspaper
+  ai_privacy_gate_proactive_unified:
+    name: "Privacy Override — Proactive Unified"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:bullhorn
+  ai_privacy_gate_phone_charge_reminder:
+    name: "Privacy Override — Phone Charge Reminder"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:battery-charging
+  ai_privacy_gate_bedtime_escalation:
+    name: "Privacy Override — Bedtime Escalation"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:bed-double
+  ai_privacy_gate_bedtime_winddown:
+    name: "Privacy Override — Bedtime Wind-Down"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:moon-waning-crescent
+  ai_privacy_gate_calendar_pre_event:
+    name: "Privacy Override — Calendar Pre-Event"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:calendar-alert
+  ai_privacy_gate_llm_alarm:
+    name: "Privacy Override — LLM Alarm"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:robot
+  ai_privacy_gate_voice_handoff:
+    name: "Privacy Override — Voice Handoff"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:swap-horizontal
+  ai_privacy_gate_email_priority_filter:
+    name: "Privacy Override — Email Priority Filter"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:email-filter
+
+  # T3 — Ambient (Miquel)
+  ai_privacy_gate_meal_detection:
+    name: "Privacy Override — Meal Detection"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:food
+  ai_privacy_gate_sleep_detection:
+    name: "Privacy Override — Sleep Detection"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:sleep
+  ai_privacy_gate_memory_todo_mirror:
+    name: "Privacy Override — Memory Todo Mirror"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:format-list-checks
+  ai_privacy_gate_proactive_llm_sensors:
+    name: "Privacy Override — Proactive LLM Sensors"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:creation
+  ai_privacy_gate_interaction_summarizer:
+    name: "Privacy Override — Interaction Summarizer"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:text-box-check
+
+  # New — Off-by-default features
+  ai_privacy_gate_dispatcher_profile:
+    name: "Privacy Override — Dispatcher Profile"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:account-cog
+  ai_privacy_gate_sleep_lights:
+    name: "Privacy Override — Sleep Lights"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:lightbulb-night
+  ai_privacy_gate_media_tracking:
+    name: "Privacy Override — Media Tracking"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:multimedia
+  ai_privacy_gate_refcount_watchdog:
+    name: "Privacy Override — Refcount Watchdog"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:eye-check
+  ai_privacy_gate_coming_home:
+    name: "Privacy Override — Coming Home"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:home-account
+
+  # C6 — Predictive Light/Music (off-by-default)
+  ai_privacy_gate_circadian_lighting:
+    name: "Privacy Override — Circadian Lighting"
+    options: *privacy_override_options
+    initial: "off"
+    icon: mdi:sun-clock
+  ai_privacy_gate_scene_preference:
+    name: "Privacy Override — Scene Preference"
+    options: *privacy_override_options
+    initial: "off"
+    icon: mdi:lightbulb-auto
+  ai_privacy_gate_ambient_music:
+    name: "Privacy Override — Ambient Music"
+    options: *privacy_override_options
+    initial: "off"
+    icon: mdi:music-note
+
+  # User Interview / On-Demand / Therapy
+  ai_privacy_gate_user_interview:
+    name: "Privacy Override — User Interview"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:account-voice
+  ai_privacy_gate_alexa_on_demand_briefing:
+    name: "Privacy Override — Alexa On-Demand Briefing"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:microphone-message
+  ai_privacy_gate_therapy_session:
+    name: "Privacy Override — Therapy Session"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:brain

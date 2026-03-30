@@ -1,0 +1,23 @@
+# ======================================================================
+# AI Agent Dispatcher — DC-7 of Voice Context Architecture (Task 11)
+# ======================================================================
+# Status: Active
+# Deployed: 2026-03-01 | Updated: 2026-03-11 (dispatcher_profile blueprint)
+#
+# Pyscript sensor: sensor.ai_dispatcher_status  (pyscript/agent_dispatcher.py)
+#   States: ok, error, idle
+#   Key attributes: agent, persona, verbosity, reason, tts_engine, elapsed_ms
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_dispatcher_enabled
+#   - helpers_input_select.yaml:  ai_dispatcher_mode, ai_dispatcher_era_{morning,afternoon,evening,late_night}
+#   - helpers_input_text.yaml:    ai_dispatcher_fixed_agent, ai_dispatcher_agent_pool
+#   - helpers_input_number.yaml:  ai_dispatcher_cache_ttl
+#   - helpers_input_button.yaml:  ai_dispatcher_apply_config
+#
+# Dependencies:
+#   - Blueprints: Nearly all voice blueprints (notification_follow_me, email_follow_me,
+#       reactive_banter, bedtime_winddown, proactive_briefing, voice_handoff,
+#       dispatcher_profile, calendar_alarm, coming_home, etc.)
+#   - Other packages: ai_privacy_gate.yaml
+# ======================================================================

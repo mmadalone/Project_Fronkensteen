@@ -1,0 +1,111 @@
+# =============================================================================
+# AI Email Priority Filter — Task 18b of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Gmail / Email — Detailed"
+#
+# Filters incoming IMAP emails and promotes only priority messages to L2 memory.
+# High-volume inbox filtering: known contacts + keyword matches get through.
+# Everything else is filtered out — never promoted.
+#
+# Provides:
+#   input_boolean.ai_email_promotion_enabled — kill switch (default ON)
+#   input_text.ai_email_known_contacts — comma-separated trusted senders/domains
+#   input_text.ai_email_priority_keywords — comma-separated custom keywords
+#   sensor.ai_email_last_priority — last priority email subject (state.set)
+#   sensor.ai_email_priority_count — unread priority email count
+#   automation.ai_email_priority_filter — IMAP trigger → pyscript filter
+#   sensor.ai_email_promotion_status — created by pyscript (last op status)
+#   sensor.ai_email_priority_count — template mirror of input_number for dashboard
+#
+# Services (pyscript):
+#   pyscript.email_promote_process — process incoming email through filter
+#   pyscript.email_clear_count — reset counter ("I've read my emails")
+#
+# Test mode:
+#   When ai_test_mode=ON, pyscript logs filter decisions but does NOT write
+#   to L2 or announce via TTS.
+#
+# Privacy:
+#   - Email data is ALWAYS user-scoped (scope: "user", never "household")
+#   - L2 keys include ":miquel:" for per-user enforcement
+#   - Suppressed entirely when identity confidence < 70%
+#   - Guest mode: email completely invisible
+#
+# Dependencies:
+#   pyscript/email_promote.py
+#   pyscript/notification_dedup.py (Task 14 — dedup_announce for urgent TTS)
+#   pyscript/memory.py (L2 memory)
+#   packages/ai_test_harness.yaml (ai_test_mode toggle)
+#   packages/ai_identity.yaml (identity confidence sensors)
+#   IMAP integration — entry_id: 01KJDGKRNXQVVSPH5NT7V5P87E
+#
+# Deployed: 2026-03-02
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_select: moved to helpers_input_select.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# ── AUTOMATIONS ──────────────────────────────────────────────────────────────
+# Automation block removed — now a blueprint instance in automations.yaml:
+#   id: ai_email_priority_filter → madalone/email_priority_filter.yaml
+
+# ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
+
+# Template sensor mirror removed — sensor.ai_email_priority_count now owned by
+# pyscript state.set() (Session 3 migration). Dashboard reads sensor directly.
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Email Priority Filter"
+# cards:
+#   # ── Controls ──
+#   - type: entities
+#     title: "Email Filter"
+#     entities:
+#       - entity: input_boolean.ai_email_promotion_enabled
+#         name: "Filter Active"
+#       - entity: input_text.ai_email_known_contacts
+#         name: "Known Contacts"
+#       - entity: input_text.ai_email_priority_keywords
+#         name: "Custom Keywords"
+#
+#   # ── Status ──
+#   - type: entities
+#     title: "Priority Emails"
+#     entities:
+#       - entity: sensor.ai_email_priority_count
+#         name: "Unread Priority"
+#       - entity: sensor.ai_email_last_priority
+#         name: "Last Priority"
+#       - entity: sensor.ai_email_promotion_status
+#         name: "Filter Status"
+#
+#   # ── Test Mode ──
+#   - type: entities
+#     title: "Testing"
+#     entities:
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#       - entity: sensor.identity_confidence_miquel
+#         name: "Identity Confidence"
+#
+#   # ── Manual Actions ──
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Clear Count"
+#         icon: mdi:email-check-outline
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.email_clear_count
+#         icon_height: 40px
+# =============================================================================

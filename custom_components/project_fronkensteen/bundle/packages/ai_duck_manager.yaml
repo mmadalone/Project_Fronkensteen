@@ -1,0 +1,34 @@
+# ======================================================================
+# AI Duck Manager — Unified Volume Ducking Engine
+# ======================================================================
+# Status: Active
+# Central duck/restore engine for satellite wake words, TTS queue, and external.
+#
+# Pyscript sensor: sensor.ai_duck_manager_status  (pyscript/duck_manager.py)
+#   States: ok, error, idle
+#   Key attributes: last_duck_source, last_duck_detail, last_duck_duration_s,
+#       last_duck_time, last_duck_sessions
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_ducking_flag, ai_duck_manager_enabled,
+#       ai_duck_guard_enabled, ai_duck_allow_manual_override
+#   - entity_config.yaml:         duck.group, duck.announcement_players,
+#       duck.satellites, vsync_zones
+#   - helpers_input_select.yaml:  ai_duck_behavior
+#   - helpers_input_number.yaml:  ai_duck_watchdog_timeout, ai_duck_pre_delay_ms,
+#       ai_duck_default_volume, ai_duck_volume, ai_duck_announce_volume,
+#       ai_duck_restore_delay, ai_duck_restore_timeout, ai_duck_post_buffer
+#
+# Also reuses shared helpers from ai_tts_queue.yaml:
+#   input_number.ai_tts_duck_volume / ai_tts_announcement_volume
+#   input_select.ai_tts_restore_mode
+#   input_number.ai_tts_restore_fixed_delay / ai_tts_restore_timeout
+#   input_text.ai_tts_restore_satellites
+#
+# Dependencies:
+#   - Blueprints: notification_follow_me, email_follow_me, speaker_volume_sync,
+#       proactive_briefing, proactive_bedtime_escalation, bedtime_routine,
+#       bedtime_routine_plus, wake-up-guard, escalating_wakeup_guard,
+#       llm_alarm, alexa_presence_radio
+#   - Other packages: ai_tts_queue.yaml (shared ducking helpers)
+# ======================================================================

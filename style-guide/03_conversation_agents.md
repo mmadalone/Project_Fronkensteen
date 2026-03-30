@@ -426,8 +426,8 @@ These are **complementary, not competing** tool sources. A single conversation a
 Agent entity IDs follow the pattern: `conversation.<persona>_<variant>`
 
 Two variants exist per persona:
-- **standard** — all non-bedtime interactions. Tools: execute_service(s), memory_tool, web_search, pause_media, shut_up, stop_radio
-- **bedtime** — sleep transition, audiobook, countdown. Tools: execute_service(s), memory_tool, web_search, audiobook, countdown, skip
+- **standard** — all non-bedtime interactions. Tools: execute_service(s), memory_tool, web_search, play_media, pause_media, shut_up, stop_radio
+- **bedtime** — sleep transition, audiobook, countdown. Tools: execute_service(s), memory_tool, web_search, play_media, audiobook, countdown, skip
 
 **Current agents (21 total = 5 personas × 4 variants + 1 Therapy):**
 
@@ -439,8 +439,8 @@ Two variants exist per persona:
 | Kramer | `conversation.kramer_standard` | `conversation.kramer_bedtime` | `conversation.kramer_music_compose` | `conversation.kramer_music_transfer` |
 
 **Why four variants?** Each variant has a genuinely different tool set that justifies a separate conversation agent:
-- **Standard:** Full general-purpose tool set (execute_services, web_search, memory, handoff, escalation, focus guard, etc.)
-- **Bedtime:** Sleep-specific tools (audiobook, countdown, skip) + safety concerns (user is falling asleep)
+- **Standard:** Full general-purpose tool set (execute_services, web_search, memory, handoff, escalation, focus guard, play_media, etc.)
+- **Bedtime:** Sleep-specific tools (audiobook, countdown, skip, play_media) + safety concerns (user is falling asleep)
 - **Music Compose:** Composition tools (compose_music, music_library) + per-persona musical identity. Reached via `handoff_agent` with `variant: "music compose"`.
 - **Music Transfer:** Library management tools (music_library, web_search, execute_services) + per-persona library context. Reached via `handoff_agent` with `variant: "music transfer"`.
 - **Therapy** (Portuondo only): Memory-focused tools (memory_tool, memory_related, save_user_preference). Reactive-only handoff — no proactive routing during sessions.
@@ -452,6 +452,8 @@ All other context differences (time of day, presence, media state, scenario) are
 **Variant discovery:** The dispatcher auto-discovers variants from HA pipeline display names. Any pipeline named `"<Persona> - <Variant>"` auto-registers. No hardcoded allowlist — adding a new variant type is just creating a pipeline in the HA UI.
 
 Each agent's system prompt is configured in the Extended OpenAI Conversation integration UI. The agent is assigned to an Assist Pipeline (Settings → Voice Assistants), which handles wake word → STT → agent → TTS routing.
+
+**Media playback routing (Decision #93):** Voice media requests ("play X") are intercepted by `automation.llm_automation_for_music_assistant_voice_requests` (conversation trigger) BEFORE reaching the conversation agent. The MA automation uses a purpose-built LLM for media type classification and metadata extraction, then routes to `script.voice_play_bedtime_audiobook` (audiobooks) or `script.voice_play_media` (everything else). These scripts handle playback + volume + duck management + volume-sync equilibrium. Agents also have `play_media` and `voice_play_bedtime_audiobook` function specs for non-voice-triggered requests (e.g., continuous conversation follow-ups).
 
 **Invalid — don't do this:**
 - ~~`Rick - Coming Home`~~ — "Coming Home" is a scenario, not a different tool set. Inject via `extra_system_prompt`.

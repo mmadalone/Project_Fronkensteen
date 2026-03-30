@@ -1,0 +1,105 @@
+# voice_set_bedtime_countdown v1.1.0
+blueprint:
+  name: "Voice — Set bedtime countdown"
+  description: >
+    ![Header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/voice_set_bedtime_countdown-header.jpeg)
+
+
+    LLM tool wrapper: sets the bedtime countdown duration on an input_number
+    helper. Designed as a voice-agent tool script — the conversation agent
+    calls this during bedtime negotiation to adjust how many minutes remain
+    before the lamp turns off.
+
+
+    Instantiate once per bedtime blueprint instance, then register as an
+    LLM tool on the relevant conversation agent.
+  domain: script
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_set_bedtime_countdown.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    section_config:
+      name: "① Configuration"
+      icon: mdi:timer-cog
+      collapsed: true
+      input:
+        countdown_helper:
+          name: Countdown helper
+          description: >
+            The input_number entity that stores the bedtime countdown
+            duration. Must match the helper configured in the bedtime
+            routine blueprint.
+          default: ""
+          selector:
+            entity:
+              domain: input_number
+
+        min_minutes:
+          name: Minimum minutes
+          description: >
+            Floor for negotiation — the agent cannot set fewer than this.
+          default: 1
+          selector:
+            number:
+              min: 1
+              max: 10
+              unit_of_measurement: minutes
+
+        max_minutes:
+          name: Maximum minutes
+          description: >
+            Ceiling for negotiation — the agent cannot set more than this.
+            Prevents the user from sweet-talking the LLM into a 3-hour
+            countdown.
+          default: 15
+          selector:
+            number:
+              min: 5
+              max: 60
+              unit_of_measurement: minutes
+
+fields:
+  minutes:
+    name: Minutes
+    description: >
+      Countdown duration in minutes. Clamped to the configured min/max
+      bounds — values outside the range are silently adjusted.
+    required: true
+    selector:
+      number:
+        min: 1
+        max: 60
+        unit_of_measurement: minutes
+
+mode: single
+
+sequence:
+  - alias: "Resolve inputs and clamp requested minutes"
+    variables:
+      _helper: !input countdown_helper
+      _min: !input min_minutes
+      _max: !input max_minutes
+      _requested: "{{ minutes | int(1) }}"
+      _clamped: "{{ [_min, [_requested, _max] | min] | max }}"
+      _was_clamped: "{{ _requested != _clamped }}"
+
+  - alias: "Set countdown helper to clamped value"
+    # continue_on_error intentionally omitted — failure here must surface
+    # to the conversation agent rather than silently succeed with no effect.
+    action: input_number.set_value
+    target:
+      entity_id: "{{ _helper }}"
+    data:
+      value: "{{ _clamped }}"
+
+  - alias: "Return confirmation to the conversation agent"
+    stop: >-
+      {% if _was_clamped %}
+        Countdown set to {{ _clamped }} minutes (requested {{ _requested }},
+        adjusted to stay within {{ _min }}–{{ _max }} range).
+      {% else %}
+        Countdown set to {{ _clamped }} minutes.
+      {% endif %}
+    response_variable: tool_response

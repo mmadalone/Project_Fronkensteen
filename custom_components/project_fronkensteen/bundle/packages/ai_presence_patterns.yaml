@@ -1,0 +1,138 @@
+# =============================================================================
+# AI Presence Patterns Package — Task 15 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Presence-Based Pattern
+#   Recognition & Predictions" and "Prediction Engine Build Path"
+# Provides:
+#   input_boolean.ai_presence_patterns_enabled — kill switch (ON = active)
+#   input_number.ai_presence_pattern_lookback_days — recorder query window
+#   input_number.ai_presence_pattern_min_samples — minimum transitions for validity
+#   sensor.ai_predicted_next_zone_raw — JSON from pyscript (prediction data)
+#   sensor.ai_predicted_next_zone — human-readable "bed (67%)" or "unknown"
+#   sensor.ai_presence_pattern_status — created by pyscript (last op result)
+#
+# Services (pyscript):
+#   pyscript.presence_extract_transitions — extract from recorder, build tables
+#   pyscript.presence_predict_next — predict next zone from frequency table
+#   pyscript.presence_rebuild_patterns — full rebuild (delete + extract + store)
+#
+# State trigger (pyscript):
+#   FP2 binary sensors → incremental frequency table update on zone transitions
+#
+# Time trigger (pyscript):
+#   Daily rebuild at 04:00 AM
+#
+# Dependencies:
+#   pyscript/presence_patterns.py
+#   pyscript/memory.py (L2 memory)
+#   packages/ai_test_harness.yaml (test mode toggle)
+#
+# Deployed: 2026-03-02
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# ── TEMPLATE SENSORS ─────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      - name: "AI Predicted Next Zone"
+        unique_id: ai_predicted_next_zone
+        icon: mdi:map-marker-right
+        state: >-
+          {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
+          {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+            {%- set data = raw | from_json -%}
+            {{ data.zone | default('unknown') }} ({{ data.probability | default(0) }}%)
+          {%- else -%}
+            unknown
+          {%- endif -%}
+        attributes:
+          zone: >-
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).zone | default('unknown') }}
+            {%- else -%}
+              unknown
+            {%- endif -%}
+          probability: >-
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).probability | default(0) }}
+            {%- else -%}
+              0
+            {%- endif -%}
+          confidence: >-
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).confidence | default('unknown') }}
+            {%- else -%}
+              unknown
+            {%- endif -%}
+          sample_count: >-
+            {%- set raw = states('sensor.ai_predicted_next_zone_raw') -%}
+            {%- if raw not in ['', 'unknown', 'unavailable', 'None'] and '{' in raw -%}
+              {{ (raw | from_json).sample_count | default(0) }}
+            {%- else -%}
+              0
+            {%- endif -%}
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Presence Patterns"
+# cards:
+#   # ── Controls ──
+#   - type: entities
+#     title: "Pattern Settings"
+#     entities:
+#       - entity: input_boolean.ai_presence_patterns_enabled
+#         name: "Patterns Enabled"
+#       - entity: input_number.ai_presence_pattern_lookback_days
+#         name: "Lookback Days"
+#       - entity: input_number.ai_presence_pattern_min_samples
+#         name: "Min Samples"
+#
+#   # ── Prediction readout ──
+#   - type: entities
+#     title: "Current Prediction"
+#     entities:
+#       - entity: sensor.ai_predicted_next_zone
+#         name: "Predicted Next Zone"
+#       - entity: sensor.ai_predicted_next_zone_raw
+#         name: "Raw JSON"
+#
+#   # ── Status ──
+#   - type: entities
+#     title: "Engine Status"
+#     entities:
+#       - entity: sensor.ai_presence_pattern_status
+#         name: "Pattern Status"
+#       - entity: input_boolean.ai_test_mode
+#         name: "Test Mode"
+#
+#   # ── Manual trigger buttons ──
+#   - type: horizontal-stack
+#     cards:
+#       - type: button
+#         name: "Extract"
+#         icon: mdi:database-search
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.presence_extract_transitions
+#         icon_height: 40px
+#       - type: button
+#         name: "Rebuild"
+#         icon: mdi:database-refresh
+#         tap_action:
+#           action: perform-action
+#           perform_action: pyscript.presence_rebuild_patterns
+#         icon_height: 40px
+# =============================================================================

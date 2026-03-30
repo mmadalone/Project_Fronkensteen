@@ -1,0 +1,136 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pyscript Entity Configuration — TEMPLATE
+# ═══════════════════════════════════════════════════════════════════════════════
+# Central config for hardware-tied entity IDs used across pyscript modules.
+# Copy this file to /config/pyscript/entity_config.yaml and replace all
+# placeholder values with YOUR entity IDs.
+#
+# Changes take effect on pyscript reload (no code edits needed).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# FP2 zone map: binary_sensor entity → zone name
+# Used by: presence_identity, presence_patterns, predictive_schedule,
+#          routine_fingerprint, sleep_config, focus_guard
+# Replace with your room presence sensor entity IDs.
+# If you have fewer zones, remove the ones you don't have.
+fp2_zones:
+  binary_sensor.YOUR_PRESENCE_SENSOR_ZONE1: zone1
+  binary_sensor.YOUR_PRESENCE_SENSOR_ZONE2: zone2
+  # binary_sensor.YOUR_PRESENCE_SENSOR_ZONE3: zone3
+  # Add more zones as needed
+
+# Satellite → zone map
+# Used by: presence_identity (voice interaction → room inference)
+# Map each voice satellite to the zone it's physically in.
+satellite_zones:
+  assist_satellite.YOUR_SATELLITE_1: zone1
+  # assist_satellite.YOUR_SATELLITE_2: zone2
+
+# Agent persona → zone map
+# Used by: presence_identity
+# Which AI persona is "based" in which zone (cosmetic, affects identity context).
+agent_zones:
+  rick: zone1
+  quark: zone2
+
+# Calendar entities
+# Used by: calendar_promote, proactive_briefing, predictive_schedule
+# Set to your calendar entity IDs. Use "" for calendars you don't have.
+calendars:
+  main: calendar.YOUR_MAIN_CALENDAR
+  holidays: ""
+  birthdays: ""
+
+# Music Assistant media players
+# Used by: music_taste
+# List your Music Assistant player entities. Remove section if not using MA.
+music_players:
+  - media_player.YOUR_MA_PLAYER_1
+  # - media_player.YOUR_MA_PLAYER_2
+
+# SpotifyPlus entity
+# Used by: music_taste (listening history extraction)
+# Set to your SpotifyPlus media_player entity, or "" if not using Spotify.
+spotifyplus_entity: ""
+
+# IMAP sensor
+# Used by: email_promote
+# Set to your email sensor entity, or "" if not using email features.
+imap_sensor: ""
+
+# Scene Learner — zone-to-light mapping
+# Used by: scene_learner
+# Map each zone to the light entities in that zone.
+scene_learner_lights:
+  zone1:
+    - light.YOUR_ZONE1_LIGHT
+  zone2:
+    - light.YOUR_ZONE2_LIGHT
+  # Add more zones as needed
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-person config overlay
+# ═══════════════════════════════════════════════════════════════════════════════
+# Keys MUST match your person.* entity slugs exactly.
+# Only non-discoverable config goes here — name, state, trackers are read
+# from HA person.* entities at runtime.
+# Used by: shared_utils.discover_persons()
+#
+# Duplicate the block for each household member. Use "" for unavailable services.
+persons:
+  {{PERSON_SLUG}}:
+    calendar: calendar.YOUR_CALENDAR
+    notify_service: notify.mobile_app_YOUR_PHONE
+    spotify: ""
+    imap_sensor: ""
+  # second_person:
+  #   calendar: ""
+  #   notify_service: notify.mobile_app_THEIR_PHONE
+  #   spotify: ""
+  #   imap_sensor: ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# System Health — config for system_health.py
+# ═══════════════════════════════════════════════════════════════════════════════
+# No changes needed. These are fixed paths checked by the health monitor.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VSynced Speaker Groups — volume buddy mapping for duck_manager
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-zone player/alexa lists. The duck manager lowers media volume during TTS.
+# "players" = main speakers. "alexa" = Alexa devices in the same zone (optional).
+# Alexa devices report volume unreliably, so their buddy (first non-Alexa player
+# in the same zone) is used for volume snapshot/restore.
+#
+# Match zones to fp2_zones above. Use empty lists for zones without speakers.
+vsync_zones:
+  zone1:
+    players:
+      - {{DEFAULT_SPEAKER}}
+    alexa: []
+  zone2:
+    players:
+      - {{DEFAULT_SPEAKER}}
+    alexa: []
+  # Add more zones as needed
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Duck Manager — group, announcement, and satellite configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# group: ALL media players that should be ducked during TTS announcements.
+# announcement_players: Speakers used for TTS output (Voice PE media players).
+# satellites: Voice satellite entities for mic state monitoring.
+duck:
+  group:
+    - media_player.YOUR_SPEAKER_1
+    - media_player.YOUR_SPEAKER_2
+  announcement_players:
+    - media_player.YOUR_VOICE_PE_MEDIA_PLAYER_1
+  satellites:
+    - assist_satellite.YOUR_SATELLITE_1
+
+system_health:
+  json_configs:
+    - /config/pyscript/tts_speaker_config.json
+    - /config/pyscript/voice_mood_profile_map.json
+    - /config/pyscript/model_pricing.json

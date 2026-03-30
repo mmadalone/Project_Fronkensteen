@@ -1,0 +1,20 @@
+# ======================================================================
+# AI Music Taste Extraction — I-34
+# ======================================================================
+# Status: Active
+# Kill switch for music taste logging + profile aggregation.
+#
+# Pyscript sensor: sensor.ai_music_taste_status  (pyscript/music_taste.py)
+#   States: ok, idle
+#   Key attributes: genre_summary, top_artists, top_tracks, total_plays,
+#       has_spotify, last_updated
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_music_taste_enabled
+#   - helpers_input_button.yaml:  ai_music_taste_rebuild
+#
+# Dependencies:
+#   - Blueprints: music_taste_rebuild.yaml
+#   - Context: ai_context_hot.yaml (genre_summary injection into L1)
+#   - Pyscript: music_composer.py (taste-aware generation)
+# ======================================================================

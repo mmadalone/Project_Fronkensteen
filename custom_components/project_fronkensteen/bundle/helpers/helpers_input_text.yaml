@@ -1,0 +1,449 @@
+# Orphan voice_spotify_last_search removed 2026-03-14
+########################################
+# System Setup — Primary User
+########################################
+
+ai_primary_user:
+  name: "AI Primary User"
+  icon: mdi:account
+  max: 50
+
+# ai_dynamic_media_id removed — orphaned dead code, deleted Session 7
+
+########################################
+# Goodnight Negotiator — last state
+########################################
+
+# ai_gn_last_opening_line removed — dead helper, deleted Session 8
+# ai_gn_last_reply removed — dead helper, deleted Session 8
+
+########################################
+# Quark Goodnight / Bedtime routine helpers
+########################################
+
+# ai_quark_goodnight_pre_line removed — dead helper, deleted Session 8
+# ai_quark_gn_post removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_question removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_devices_no removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_question removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_ir_no removed — dead helper, deleted Session 8
+# ai_quark_gn_music_intro_question removed — dead helper, deleted Session 8
+# ai_quark_gn_music_yes removed — dead helper, deleted Session 8
+# ai_quark_gn_music_no removed — dead helper, deleted Session 8
+# ai_quark_gn_music_secondary_question removed — dead helper, deleted Session 8
+
+# Orphan notification_follow_me_loop_owner removed 2026-03-14 — superseded by I-45b refcount
+# Orphan notification_duck_snapshot removed 2026-03-14 — superseded by duck_manager
+# Orphan notification_satellite_volume_snapshot removed 2026-03-14 — superseded by duck_manager
+
+# ai_voice_session_pending removed — migrated to sensor (state.set, Session 7)
+# ai_music_feedback_context removed — migrated to sensor (state.set, Session 7)
+
+########################################
+# Voice Handoff (I-24 / I-45)
+########################################
+
+# ai_handoff_pending removed — migrated to sensor (state.set, Session 7)
+
+ai_handoff_persona_aliases:
+  name: AI Handoff - Persona Aliases
+  icon: mdi:account
+  max: 255
+  mode: text
+
+########################################
+# Notification Follow-Me
+########################################
+
+ai_notification_follow_me_bypass_log:
+  name: "Notification Follow-Me - Bypass Owner Log"
+  icon: mdi:text-box-outline
+  max: 255
+  mode: text
+
+ai_notification_follow_me_ledger:
+  name: Notification Follow-Me Ledger
+  icon: mdi:format-list-bulleted
+  max: 255
+  mode: text
+
+# Orphan notification_follow_me_duck_snapshot, _rick, _quark removed 2026-03-20 — superseded by duck_manager
+
+ai_notification_last_announced_sender_name_rick:
+  name: Notification Last Announced Sender Name - Rick
+  icon: mdi:account-alert
+  max: 255
+  mode: text
+
+ai_notification_follow_me_reminder_loop_owner:
+  name: Notification Follow-me - Reminder loop owner
+  icon: mdi:archive-arrow-down
+  max: 255
+  mode: text
+
+########################################
+# Email Follow-Me
+########################################
+
+ai_email_last_announce_sender:
+  name: Email Last Announce Sender
+  icon: mdi:account-arrow-right
+  max: 255
+  mode: text
+
+
+ai_email_follow_me_dedup_uids:
+  name: Email Follow-Me Dedup UIDs
+  icon: mdi:email-check-outline
+  max: 255
+  mode: text
+
+ai_email_follow_me_last_subject:
+  name: Email Follow-Me Last Subject
+  icon: mdi:email-outline
+  max: 255
+  mode: text
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Pattern Prediction
+# ═══════════════════════════════════════════════════════════════════
+
+# I-54: ai_away_prediction_raw removed — replaced by pyscript sensor.ai_away_prediction
+# (state.set with attributes, no 255-char limit, L2 persistence)
+
+# I-40a G12: ai_away_prediction_accuracy removed — migrated to sensor.ai_away_prediction_accuracy (state.set)
+
+# ai_calendar_last_sync, ai_calendar_today_summary, ai_calendar_tomorrow_summary
+# removed — migrated to sensor.ai_calendar_* (state.set, Session 2)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Hot Context (Layer 1)
+# ═══════════════════════════════════════════════════════════════════
+
+# ── STATIC USER PROFILE ──
+# Moved to packages/ai_per_user_helpers.yaml (household-specific).
+# Helpers: ai_context_user_name, ai_context_user_name_spoken,
+# ai_context_user_languages, ai_context_household, ai_context_pets.
+
+# I-27: Work calendar keywords for auto-detection
+ai_work_calendar_keywords:
+  name: "AI Context - Work Calendar Keywords"
+  initial: "standup,sprint,meeting,client,1:1,work,office,scrum,daily"
+  max: 255
+  icon: mdi:briefcase-search
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dispatcher_fixed_agent:
+  name: "AI Dispatcher - Fixed Agent"
+  max: 20
+  icon: mdi:account-lock
+ai_dispatcher_agent_pool:
+  name: "AI Dispatcher - Agent Pool"
+  max: 255
+  icon: mdi:account-group
+ai_keyword_add:
+  name: "Keyword to Add"
+  max: 50
+  icon: mdi:tag-plus
+ai_keyword_remove:
+  name: "Keyword to Remove"
+  max: 50
+  icon: mdi:tag-minus
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+
+# Comma-separated trusted senders and domains.
+# Full emails: "mom@gmail.com, boss@work.com"
+# Domains: "amazon.com, paypal.com" (matches any sender from that domain)
+# Domain suffix: "amazon.com" also matches "email.amazon.com"
+ai_email_known_contacts:
+  name: "AI Email Known Contacts"
+  initial: ""
+  max: 255
+  icon: mdi:account-group
+
+# Comma-separated custom priority keywords (checked against subject).
+# Added to the built-in list: shipping, delivery, appointment, urgent,
+# invoice, confirmation, password reset, security alert, payment, receipt.
+ai_email_priority_keywords:
+  name: "AI Email Priority Keywords"
+  initial: ""
+  max: 255
+  icon: mdi:tag-text
+
+# Comma-separated senders/domains to BLOCK in blacklist mode.
+# Same format as known contacts: "spam@example.com, newsletter.com"
+# Seeded from existing email_follow_me blueprint blocked list.
+ai_email_blocked_senders:
+  name: "AI Email Blocked Senders"
+  initial: "bingo@patreon.com, no-reply@revolut.com"
+  max: 255
+  icon: mdi:account-cancel
+
+# Comma-separated keywords to BLOCK in blacklist mode.
+# If any keyword appears in the subject, email is filtered out.
+# Seeded from existing email_follow_me blueprint keyword_list.
+ai_email_blocked_keywords:
+  name: "AI Email Blocked Keywords"
+  initial: "continua con la configuración de tu cuenta, vacantes nuevas que coinciden"
+  max: 255
+  icon: mdi:tag-off
+
+# ai_email_last_priority removed — migrated to sensor (state.set, Session 7)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search & Memory
+# ═══════════════════════════════════════════════════════════════════
+
+# ha_text_ai sensor entity used for LLM task calls (chat completions).
+# Set to the entity_id of your preferred ha_text_ai instance.
+ai_task_instance:
+  name: "AI Task - ha_text_ai Instance"
+  initial: "sensor.ha_text_ai_deepseek_chat"
+  icon: mdi:robot-outline
+  max: 255
+
+# OpenAI API key for direct embedding calls (not routed through ha_text_ai).
+# Mode: password — value hidden in UI.
+ai_embedding_api_url:
+  name: "AI Embedding - API URL"
+  initial: "https://openrouter.ai/api/v1"
+  icon: mdi:api
+  max: 255
+
+ai_embedding_api_key:
+  name: "AI Embedding - API Key"
+  initial: !secret openrouter_api_key
+  mode: password
+  icon: mdi:key-variant
+  max: 255
+
+# Embedding model name. text-embedding-3-small is cheapest and sufficient.
+ai_embedding_model:
+  name: "AI Embedding - Model"
+  initial: "text-embedding-3-small"
+  icon: mdi:cube-outline
+  max: 100
+
+# ── Auto-archive (I-42 Phase 2) ──
+# Space-separated list of tags that protect entries from archiving.
+ai_memory_archive_protection_tags:
+  name: "AI Memory - Archive Protection Tags"
+  initial: "important remember pinned permanent"
+  icon: mdi:shield-lock
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Agent Escalation System
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_escalation_last_outcome removed — migrated to sensor (state.set, Session 4)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — LLM/TTS/STT Budget & Fallback
+# ═══════════════════════════════════════════════════════════════════
+
+ai_budget_fallback_agent:
+  name: "AI Budget - Fallback Conversation Agent"
+  initial: "homeassistant"
+  icon: mdi:robot-off-outline
+  max: 255
+
+# ai_budget_saved_pipelines removed — migrated to sensor (state.set, Session 4)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_patterns — Presence Pattern Recognition
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_predicted_next_zone_raw removed — migrated to sensor (state.set, Session 7)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_predictive_schedule — Predictive Scheduling
+# ═══════════════════════════════════════════════════════════════════
+
+# I-28: Per-day-of-week wake time overrides (JSON)
+# Format: {"thursday":"09:30","sunday":"10:00"}
+# Overrides weekday/weekend defaults for specific days.
+ai_schedule_day_overrides:
+  name: "AI Schedule - Day Overrides (JSON)"
+  initial: "{}"
+  max: 255
+  icon: mdi:calendar-week
+
+
+# Mock calendar event for test mode. Only used when ai_test_mode is ON.
+# Formats accepted:
+#   "Team standup at 09:00"    — summary + time
+#   "09:00"                    — time only
+#   {"summary":"Standup","hour":9,"minute":0}  — JSON
+ai_test_calendar_event:
+  name: "AI Test - Calendar Event Override"
+  initial: ""
+  max: 255
+  icon: mdi:calendar-clock
+
+# ai_project_last_sync, ai_active_projects_summary, ai_project_hot_context_line
+# removed — migrated to sensor.ai_project_* (state.set, Session 2)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Proactive Briefing
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_last_briefing_summary removed — migrated to sensor (state.set, Session 7)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_routine_tracker — Routine Fingerprinting
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_routine_stage removed — migrated to sensor (state.set, Session 7)
+# ai_routine_deviation removed — migrated to sensor (state.set, Session 7)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_self_awareness — Agent Self-Awareness
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_last_satellite removed — migrated to sensor (state.set, Session 4)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_test_harness — Testing & Simulation
+# ═══════════════════════════════════════════════════════════════════
+
+# Identity override. Only active when ai_test_mode is ON.
+# Valid values: any person slug from entity_config.yaml, "guest", or "" (empty = use real identity).
+# Allows testing another user's automations without their phone/presence.
+ai_test_identity:
+  name: "AI Test - Identity Override"
+  initial: ""
+  max: 20
+  icon: mdi:account-switch
+
+# Routine stage override. Only active when ai_test_mode is ON.
+# Valid values: "morning", "bedtime", "work", "evening", "" (empty = real stage).
+# For future prediction engine testing.
+ai_test_routine_stage:
+  name: "AI Test - Routine Stage Override"
+  initial: ""
+  max: 30
+  icon: mdi:clock-fast
+
+# Memory browser search query. Used by the AI dashboard Memory view.
+# User types a search term, presses Search -> pyscript.memory_browse runs.
+ai_memory_search_query:
+  name: "AI Memory Search Query"
+  initial: ""
+  max: 200
+  icon: mdi:database-search
+
+# ── Memory Editor Helpers (Dashboard V2.1) ──
+ai_memory_edit_key:
+  name: "Memory Edit - Key"
+  initial: ""
+  max: 200
+  icon: mdi:key-variant
+ai_memory_edit_value:
+  name: "Memory Edit - Value"
+  initial: ""
+  max: 255
+  icon: mdi:text-box-outline
+ai_memory_edit_tags:
+  name: "Memory Edit - Tags"
+  initial: ""
+  max: 200
+  icon: mdi:tag-multiple
+ai_memory_edit_scope:
+  name: "Memory Edit - Scope"
+  initial: "household"
+  max: 50
+  icon: mdi:account-group
+
+ai_memory_archive_search_query:
+  name: "Memory Archive Search Query"
+  icon: mdi:archive-search
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue Manager
+# ═══════════════════════════════════════════════════════════════════
+
+ai_default_speaker:
+  name: AI Default Speaker
+  max: 100
+  icon: mdi:speaker
+
+# Zone scan priority (CSV). When multiple FP2 zones detect presence,
+# the first zone in this list wins. Edit to match your preferred areas.
+ai_tts_zone_priority:
+  name: AI TTS Zone Priority
+  max: 255
+  icon: mdi:sort-numeric-ascending
+
+# Satellite entity IDs to monitor during dynamic volume restore (CSV).
+ai_tts_restore_satellites:
+  name: "TTS Restore Monitor Satellites"
+  max: 255
+  icon: mdi:satellite-uplink
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_user_interview — User Preference Interview
+# ═══════════════════════════════════════════════════════════════════
+
+# ai_interview_progress removed — migrated to sensor (state.set, Session 4)
+
+# ai_weather_tomorrow_summary removed — migrated to sensor.ai_weather_tomorrow_summary (state.set, Session 2)
+
+ai_notification_follow_me_last_post_time:
+  name: "Notification Follow-Me Last Post Time"
+  icon: mdi:clock-digital
+  max: 35
+  initial: "0"
+
+########################################
+# Voice Mood Modulation — v3 Audio Tags
+########################################
+
+# ai_voice_mood_rick_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_quark_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_kramer_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_deadpool_tags removed — migrated to sensor (state.set, Session 8)
+# ai_voice_mood_doctor_portuondo_tags removed — migrated to sensor (state.set, Session 8)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — Default TTS Voice
+# ═══════════════════════════════════════════════════════════════════
+ai_default_tts_voice:
+  name: "AI Default TTS Voice"
+  icon: mdi:account-voice
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Urgent Keywords
+# ═══════════════════════════════════════════════════════════════════
+ai_email_urgent_keywords:
+  name: "AI Email Urgent Keywords"
+  icon: mdi:email-alert
+  max: 255
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Bypass Mode Fallback
+# ═══════════════════════════════════════════════════════════════════
+ai_dispatcher_fallback_pipeline:
+  name: "Dispatcher Fallback Pipeline"
+  icon: mdi:pipe-wrench
+  max: 255
+  initial: "homeassistant"
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_system_recovery — Pending Category (reload survival)
+# ═══════════════════════════════════════════════════════════════════
+# ai_recovery_pending_category removed — migrated to sensor (state.set, Session 4)

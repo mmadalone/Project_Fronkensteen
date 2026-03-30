@@ -1,0 +1,54 @@
+# ===================================================================
+# AI Therapy Session Framework
+# ===================================================================
+# Status: Active
+# Deployed: 2026-03-27
+# Persona-agnostic therapy session management (individual + couple).
+# Engine: pyscript/therapy_session.py
+# Blueprint: blueprints/automation/madalone/therapy_session.yaml
+#
+# ── Pyscript Sensor ──
+# sensor.ai_therapy_status (pyscript/therapy_session.py)
+#   States: idle, active
+#   Attributes:
+#     session_number  (int)    — running session counter
+#     session_type    (str)    — "individual" or "couple"
+#     therapist       (str)    — persona slug (e.g., "doctor_portuondo")
+#     active_speaker  (str)    — last identified speaker in couple mode
+#     turn_history    (list)   — rolling buffer of {s: speaker, c: content} dicts
+#     session_start   (str)    — ISO timestamp of session start
+#     couple_users    (str)    — comma-separated slugs (couple mode only)
+#     resumed         (bool)   — true if session was recovered from checkpoint
+#
+# ── Pyscript Services ──
+# pyscript.therapy_session_start    — initialize session, load history from L2
+# pyscript.therapy_session_end      — generate summary, save to L2, cleanup
+# pyscript.therapy_save_turn        — log a conversation turn (couple tracking)
+# pyscript.therapy_session_report   — generate .md report file
+# pyscript.therapy_session_status   — read-only status query
+#
+# ── Helpers (consolidated into helpers_input_*.yaml) ──
+# helpers_input_boolean.yaml:
+#   ai_therapy_mode          — session ON/OFF toggle
+#   ai_therapy_enabled       — kill switch
+# helpers_input_datetime.yaml:
+#   ai_therapy_session_start — current session start timestamp
+#   ai_therapy_last_session  — last completed session timestamp
+# helpers_input_select.yaml:
+#   ai_privacy_gate_therapy_session — per-feature privacy gate
+#
+# ── Dependencies ──
+# pyscript/memory.py           — L2 session storage (QS-5 owner isolation)
+# pyscript/modules/shared_utils.py — resolve_memory_owner, discover_persons
+# pyscript/tts_queue.py        — TTS playback
+# pyscript/agent_dispatcher.py — TTS voice resolution (optional)
+# blueprints/automation/madalone/therapy_session.yaml — lifecycle automation
+# blueprints/automation/madalone/voice_handoff.yaml   — variant routing
+#
+# ── Memory Keys ──
+# therapy:session_count:{user}      — running counter (scope: user)
+# therapy:session_count:couple      — running couple counter (scope: couple)
+# therapy:session:{user}:{ts}       — session summary (scope: user/couple)
+# therapy:note:{user}:{ts}          — therapist clinical notes (scope: user/couple)
+# therapy:active_session:{user}     — checkpoint for recovery (scope: session, 1d expiry)
+# ===================================================================

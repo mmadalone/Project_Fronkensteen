@@ -1,0 +1,237 @@
+blueprint:
+  name: "Music — Weekly Composition Refresh"
+  description: >
+    Scheduled weekly regeneration of dynamic music compositions
+    (wake-up melodies, bedtime wind-downs). Runs at a configurable
+    day/time. Budget-gated — skips generation if daily budget is
+    below the configured threshold.
+  domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/music_weekly_refresh.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    schedule:
+      name: "① Schedule"
+      description: "When to regenerate dynamic compositions."
+      icon: mdi:calendar-clock
+      collapsed: false
+      input:
+        refresh_time:
+          name: Refresh time
+          description: >
+            Time of day to run the refresh (recommend early morning).
+          default: "03:00:00"
+          selector:
+            time: {}
+    generation:
+      name: "② Generation"
+      description: "What to regenerate and how."
+      icon: mdi:music-box
+      collapsed: false
+      input:
+        wake_melody_enabled:
+          name: Refresh wake-up melodies
+          description: >
+            Generate new wake-up melodies for the coming week.
+            Uses seed-based reproducibility (same melody all week).
+          default: true
+          selector:
+            boolean: {}
+        wake_melody_agents:
+          name: Agents for wake melodies
+          description: >
+            Which agents to generate wake melodies for.
+            Leave empty for all agents.
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - rick
+                - quark
+                - deadpool
+                - kramer
+                - portuondo
+        bedtime_pregenerate:
+          name: Pre-generate bedtime wind-downs
+          description: >
+            Generate bedtime compositions in advance (saves latency at bedtime).
+            If disabled, bedtime music generates on-demand when triggered.
+          default: false
+          selector:
+            boolean: {}
+        bedtime_agents:
+          name: Agents for bedtime music
+          description: >
+            Which agents to pre-generate bedtime compositions for.
+            Leave empty for all agents.
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - rick
+                - quark
+                - deadpool
+                - kramer
+                - portuondo
+        generation_source:
+          name: Generation source
+          description: >
+            auto = try ElevenLabs API first, fall back to FluidSynth.
+            elevenlabs = API only (high quality, costs credits).
+            fluidsynth = local only (instant, free, MIDI quality).
+          default: auto
+          selector:
+            select:
+              options:
+                - label: "Auto (API first, local fallback)"
+                  value: auto
+                - label: "ElevenLabs API only"
+                  value: elevenlabs
+                - label: "FluidSynth local only"
+                  value: fluidsynth
+    infrastructure:
+      name: "③ Infrastructure"
+      description: "Budget gates and kill switch."
+      icon: mdi:cog
+      collapsed: true
+      input:
+        kill_switch:
+          name: Music composer kill switch
+          default: input_boolean.ai_music_composer_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        budget_gate_pct:
+          name: Budget gate (% remaining)
+          description: >
+            Skip API generation if daily budget remaining is below this %.
+            FluidSynth fallback still runs (free).
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 10
+              unit_of_measurement: "%"
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_wake_enabled: !input wake_melody_enabled
+  v_wake_agents: !input wake_melody_agents
+  v_bedtime_enabled: !input bedtime_pregenerate
+  v_bedtime_agents: !input bedtime_agents
+  v_source: !input generation_source
+  v_kill_switch: !input kill_switch
+  v_budget_gate: !input budget_gate_pct
+  v_all_agents:
+    - rick
+    - quark
+    - deadpool
+    - kramer
+    - portuondo
+  # Weekly seed: reproducible within the same week
+  v_week_seed: >-
+    {{ (now().isocalendar()[0] * 100 + now().isocalendar()[1]) | int }}
+
+triggers:
+  - trigger: time
+    at: !input refresh_time
+    # Runs every day but only generates on Monday (configurable via condition)
+
+conditions:
+  - condition: template
+    value_template: "{{ is_state(v_kill_switch, 'on') }}"
+  - condition: template
+    value_template: "{{ now().weekday() == 0 }}"
+
+actions:
+  # ── Check budget ──
+  - alias: "Read budget remaining"
+    variables:
+      _budget_remaining: >-
+        {{ states('sensor.ai_llm_budget_remaining') | int(100) }}
+      _api_allowed: >-
+        {{ _budget_remaining >= (v_budget_gate | int(60)) }}
+      _effective_agents_wake: >-
+        {{ v_wake_agents if v_wake_agents | length > 0 else v_all_agents }}
+      _effective_agents_bedtime: >-
+        {{ v_bedtime_agents if v_bedtime_agents | length > 0 else v_all_agents }}
+
+  # ── Wake-up melodies ──
+  - alias: "Generate wake-up melodies (if enabled)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_wake_enabled | bool(false) }}"
+        sequence:
+          - repeat:
+              for_each: "{{ _effective_agents_wake }}"
+              sequence:
+                - choose:
+                    # API path
+                    - conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ v_source in ['auto', 'elevenlabs'] and _api_allowed | bool(false) }}
+                      sequence:
+                        - action: pyscript.music_compose
+                          data:
+                            agent: "{{ repeat.item }}"
+                            content_type: wake_melody
+                            seed: "{{ v_week_seed }}"
+                            staging: false
+                          continue_on_error: true
+                  # FluidSynth fallback / explicit local
+                  default:
+                    - action: pyscript.music_compose_local
+                      data:
+                        agent: "{{ repeat.item }}"
+                        content_type: wake_melody
+                        duration_s: 45
+                      continue_on_error: true
+
+  # ── Bedtime wind-downs (pre-generation) ──
+  - alias: "Pre-generate bedtime compositions (if enabled)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_bedtime_enabled | bool(false) }}"
+        sequence:
+          - repeat:
+              for_each: "{{ _effective_agents_bedtime }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >-
+                            {{ v_source in ['auto', 'elevenlabs'] and _api_allowed | bool(false) }}
+                      sequence:
+                        - action: pyscript.music_compose
+                          data:
+                            agent: "{{ repeat.item }}"
+                            content_type: bedtime
+                            seed: "{{ v_week_seed }}"
+                            staging: false
+                          continue_on_error: true
+                  default:
+                    - action: pyscript.music_compose_local
+                      data:
+                        agent: "{{ repeat.item }}"
+                        content_type: bedtime
+                        duration_s: 180
+                      continue_on_error: true
+
+  - alias: "Log refresh completion"
+    action: logbook.log
+    data:
+      name: "Music Composer"
+      entity_id: "{{ v_kill_switch }}"
+      message: >-
+        Weekly refresh complete — Wake melodies: {{ v_wake_enabled | bool(false) }},
+        Bedtime: {{ v_bedtime_enabled | bool(false) }},
+        Source: {{ v_source }}, Budget OK: {{ _api_allowed | bool(false) }}

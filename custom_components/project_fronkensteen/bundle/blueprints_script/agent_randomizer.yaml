@@ -1,0 +1,406 @@
+blueprint:
+  name: Agent Randomizer
+  author: madalone
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/agent_randomizer-header.jpeg)
+
+    # Agent Randomizer
+
+    Script blueprint that returns a random Voice Assistant (Assist Pipeline)
+    from a configurable pool. Each slot carries a pipeline ID and optional
+    display name / aliases. Empty slots are filtered out automatically.
+
+    Supports a dispatcher mode that bypasses randomization entirely and
+    delegates persona selection to the AI dispatcher.
+
+    Fill any combination of slots — there is no required "primary" slot.
+    The script picks randomly from whichever slots are populated, resolves
+    the pipeline via the dispatcher, and returns the full voice configuration.
+
+    **Calling convention:** Invoke with `action: script.<your_instance_id>`
+    and `response_variable`. Do NOT use `script.turn_on` — that is
+    fire-and-forget and will not return the response.
+
+    ```yaml
+    - alias: "Script — agent randomizer"
+      action: script.agent_randomizer
+      response_variable: randomizer
+    - alias: "Process LLM conversation"
+      action: conversation.process
+      data:
+        agent_id: "{{ randomizer.agent }}"
+        text: "Your prompt here"
+      response_variable: llm_response
+    - alias: "Speak TTS message"
+      action: pyscript.tts_queue_speak
+      response_variable: _tts_result
+      continue_on_error: true
+      data:
+        text: "{{ llm_response.response.speech.plain.speech }}"
+        voice: "{{ randomizer.tts_engine }}"
+        target_mode: explicit
+        target: media_player.kitchen_speaker
+        announce: true
+        priority: 3
+    ```
+
+    ### Returns
+
+    | Key                    | Value                                      |
+    |------------------------|--------------------------------------------|
+    | `result.agent`         | Conversation agent entity from pipeline    |
+    | `result.tts_engine`    | TTS engine from pipeline                   |
+    | `result.tts_voice`     | TTS voice from pipeline                    |
+    | `result.persona`       | Persona name from pipeline                 |
+    | `result.pipeline_name` | Selected pipeline name                     |
+    | `result.name`          | Display name of the selected agent         |
+    | `result.roster`        | Full list of all populated pairs (for direct-address detection) |
+
+    ### Changelog
+
+    - **v2.0 (2026-03-03):** Pipeline migration — replaced conversation_agent
+      selectors with assist_pipeline; removed TTS entity inputs (TTS now
+      resolved from pipeline); added dispatcher toggle; pipeline resolution
+      via pyscript.agent_dispatch; whisper after selection
+
+    - **v1.2 (2026-02-27):** Alias support — name inputs accept comma-separated
+      aliases (first = canonical display name, rest = detection-only);
+      roster entries carry aliases for fuzzy direct-address matching
+
+    - **v1.1 (2026-02-27):** Added display name per pair + roster return
+
+    - **v1.0 (2026-02-27):** Initial version — 10 conversation agent/TTS
+      pair slots, structured response via stop + response_variable
+
+  domain: script
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/agent_randomizer.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ── Section 0: Dispatcher ─────────────────────────────────────
+    dispatcher_settings:
+      name: "⓪ Dispatcher"
+      icon: mdi:robot
+      description: >
+        When the dispatcher is enabled it selects the persona dynamically,
+        bypassing the randomization pool entirely.
+      collapsed: false
+      input:
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (bypassing randomization). When disabled, a random Voice Assistant
+            from the pool below is selected and resolved.
+          default: true
+          selector:
+            boolean:
+
+    # ── Section 1: Voice Assistant Pairs 1–5 ──────────────────────
+    pool_1_to_5:
+      name: "① Voice Assistant Pairs 1–5"
+      icon: mdi:account-group
+      description: >
+        Voice Assistant (Assist Pipeline) slots. Fill any slots you need —
+        empty slots are excluded from the pool automatically. Only used
+        when dispatcher is disabled.
+      collapsed: false
+      input:
+        agent_1:
+          name: "Voice Assistant 1"
+          description: "Leave empty to exclude from pool."
+          default: "Rick"
+          selector:
+            text:
+        name_1:
+          name: "Display Name / Aliases 1"
+          description: >-
+            Comma-separated names and nicknames (e.g. "Rick, Rickeee, Ricky").
+            First value is the canonical display name used in prompts.
+            Remaining values are detection-only aliases.
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_2:
+          name: "Voice Assistant 2"
+          description: "Leave empty to exclude from pool."
+          default: "Quark"
+          selector:
+            text:
+        name_2:
+          name: "Display Name / Aliases 2"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_3:
+          name: "Voice Assistant 3"
+          description: "Leave empty to exclude from pool."
+          default: "Deadpool"
+          selector:
+            text:
+        name_3:
+          name: "Display Name / Aliases 3"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_4:
+          name: "Voice Assistant 4"
+          description: "Leave empty to exclude from pool."
+          default: "Kramer"
+          selector:
+            text:
+        name_4:
+          name: "Display Name / Aliases 4"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_5:
+          name: "Voice Assistant 5"
+          description: "Leave empty to exclude from pool."
+          default: ""
+          selector:
+            text:
+        name_5:
+          name: "Display Name / Aliases 5"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+    # ── Section 2: Voice Assistant Pairs 6–10 ─────────────────────
+    pool_6_to_10:
+      name: "② Voice Assistant Pairs 6–10"
+      icon: mdi:account-multiple-plus
+      description: >
+        Extended pool for large Voice Assistant rosters. Leave
+        pipeline empty to exclude that slot. Only used when dispatcher
+        is disabled.
+      collapsed: true
+      input:
+        agent_6:
+          name: "Voice Assistant 6"
+          description: "Leave empty to exclude from pool."
+          default: "Rick - Bedtime"
+          selector:
+            text:
+        name_6:
+          name: "Display Name / Aliases 6"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_7:
+          name: "Voice Assistant 7"
+          description: "Leave empty to exclude from pool."
+          default: ""
+          selector:
+            text:
+        name_7:
+          name: "Display Name / Aliases 7"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_8:
+          name: "Voice Assistant 8"
+          description: "Leave empty to exclude from pool."
+          default: ""
+          selector:
+            text:
+        name_8:
+          name: "Display Name / Aliases 8"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_9:
+          name: "Voice Assistant 9"
+          description: "Leave empty to exclude from pool."
+          default: ""
+          selector:
+            text:
+        name_9:
+          name: "Display Name / Aliases 9"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+        agent_10:
+          name: "Voice Assistant 10"
+          description: "Leave empty to exclude from pool."
+          default: ""
+          selector:
+            text:
+        name_10:
+          name: "Display Name / Aliases 10"
+          description: "Comma-separated: first = display name, rest = aliases."
+          default: ""
+          selector:
+            text:
+              multiline: false
+
+    # ─────────────────────────────────────────────────────────────
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+sequence:
+  - alias: "Set use dispatcher,  pipelines,  names"
+    variables:
+      use_dispatcher: !input use_dispatcher
+      v_dispatcher_enabled: !input dispatcher_enabled
+      _pipelines:
+        - !input agent_1
+        - !input agent_2
+        - !input agent_3
+        - !input agent_4
+        - !input agent_5
+        - !input agent_6
+        - !input agent_7
+        - !input agent_8
+        - !input agent_9
+        - !input agent_10
+      _names:
+        - !input name_1
+        - !input name_2
+        - !input name_3
+        - !input name_4
+        - !input name_5
+        - !input name_6
+        - !input name_7
+        - !input name_8
+        - !input name_9
+        - !input name_10
+
+  # ── Dispatcher path — bypass randomization entirely ─────────────
+  - alias: "Choose path — dispatcher or random pool"
+    choose:
+      - alias: "Dispatcher path — delegate persona selection to AI dispatcher"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Call AI dispatcher for persona selection"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "proactive_randomizer"
+              intent_text: "randomizer dispatch"
+            continue_on_error: true
+
+          - alias: "Set dispatch agent and 6 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+              dispatch_pipeline_name: "{{ (dispatch | default({})).get('pipeline_name', '') }}"
+              _pairs: >-
+                {%- set ns = namespace(result=[]) -%}
+                {%- for i in range(10) -%}
+                  {%- if _pipelines[i] != '' -%}
+                    {%- set raw = _names[i] | default('') | string -%}
+                    {%- set canonical = (raw.split(',')[0] | trim) if raw | length > 0 else '' -%}
+                    {%- set ns.result = ns.result + [{'pipeline_name': _pipelines[i], 'name': canonical, 'aliases': raw}] -%}
+                  {%- endif -%}
+                {%- endfor -%}
+                {{ ns.result }}
+              result:
+                agent: "{{ dispatch_agent }}"
+                tts_engine: "{{ dispatch_voice }}"
+                tts_voice: "{{ dispatch_tts_voice }}"
+                persona: "{{ dispatch_persona }}"
+                pipeline_name: "{{ dispatch_pipeline_name }}"
+                name: "{{ dispatch_persona | title }}"
+                roster: "{{ _pairs }}"
+
+          - alias: "Whisper — update self-awareness"
+            action: pyscript.agent_whisper
+            data:
+              agent_name: "{{ dispatch_persona }}"
+              user_query: "Randomizer selected agent via dispatcher"
+              source: "automation"
+            continue_on_error: true
+
+          - alias: "Stop: "
+            stop: ""
+            response_variable: result
+
+    # ── Random pool path — pick from populated pipeline slots ──────
+    default:
+      - alias: "Build pool from populated pipeline slots"
+        variables:
+          _pairs: >-
+            {%- set ns = namespace(result=[]) -%}
+            {%- for i in range(10) -%}
+              {%- if _pipelines[i] != '' -%}
+                {%- set raw = _names[i] | default('') | string -%}
+                {%- set canonical = (raw.split(',')[0] | trim) if raw | length > 0 else '' -%}
+                {%- set ns.result = ns.result + [{'pipeline_name': _pipelines[i], 'name': canonical, 'aliases': raw}] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.result }}
+          _picked: >-
+            {%- if _pairs | length > 0 -%}
+              {{ _pairs | random }}
+            {%- else -%}
+              {{ {'pipeline_name': '', 'name': ''} }}
+            {%- endif -%}
+
+      - alias: "Resolve selected pipeline via dispatcher"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ _picked.pipeline_name }}"
+        continue_on_error: true
+
+      - alias: "Set dispatch agent and 4 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', '') }}"
+          result:
+            agent: "{{ dispatch_agent }}"
+            tts_engine: "{{ dispatch_voice }}"
+            tts_voice: "{{ dispatch_tts_voice }}"
+            persona: "{{ dispatch_persona }}"
+            pipeline_name: "{{ _picked.pipeline_name }}"
+            name: "{{ _picked.name if _picked.name else dispatch_persona | title }}"
+            roster: "{{ _pairs }}"
+
+      - alias: "Whisper — update self-awareness"
+        action: pyscript.agent_whisper
+        data:
+          agent_name: "{{ dispatch_persona }}"
+          user_query: "Randomizer selected agent for dispatch"
+          source: "automation"
+        continue_on_error: true
+
+      - alias: "Stop: "
+        stop: ""
+        response_variable: result

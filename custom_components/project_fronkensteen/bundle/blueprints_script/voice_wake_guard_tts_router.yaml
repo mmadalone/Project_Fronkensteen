@@ -1,0 +1,81 @@
+blueprint:
+  name: "Voice – Wake Guard TTS Router (helper script)"
+  description: |
+    ## Version 1.0
+
+    HELPER SCRIPT: Routes TTS between ElevenLabs Custom (with voice_profile)
+    and standard tts.speak. Called by the wake-up-guard blueprint to avoid
+    duplicating TTS logic across pass 1 and pass 2.
+
+    The ElevenLabs Custom entity ID is configurable — change it if you use
+    a different custom TTS integration that supports voice_profile options.
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_wake_guard_tts_router.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    core:
+      name: "① Configuration"
+      icon: mdi:account-voice
+      collapsed: false
+      input:
+        elevenlabs_entity:
+          name: "ElevenLabs Custom TTS entity"
+          description: |
+            The TTS entity that triggers the voice_profile code path.
+            Change this if your custom TTS integration has a different entity ID.
+          default: "tts.elevenlabs_custom_tts"
+          selector:
+            entity:
+              domain: tts
+
+fields:
+  tts_engine:
+    name: TTS entity
+    description: TTS entity ID (e.g. tts.google_en or tts.elevenlabs_custom_tts)
+    required: true
+    selector:
+      entity:
+        domain: tts
+  tts_output_player:
+    name: Media player
+    description: Speaker entity where TTS audio plays
+    required: true
+    selector:
+      entity:
+        domain: media_player
+  message:
+    name: Message text
+    description: The wake-up message to speak
+    required: true
+    selector:
+      text:
+        multiline: true
+  tts_voice_profile:
+    name: ElevenLabs voice profile
+    description: Only used when tts_engine matches the ElevenLabs entity
+    default: ""
+    selector:
+      text: {}
+
+mode: parallel
+max: 5
+
+sequence:
+  - alias: "TTS via queue (announce mode)"
+    action: pyscript.tts_queue_speak
+    data:
+      text: "{{ message }}"
+      voice: "{{ tts_engine }}"
+      voice_id: "{{ tts_voice_profile | default('', true) }}"
+      target_mode: explicit
+      target: "{{ tts_output_player }}"
+      announce: true
+      priority: 1
+      metadata:
+        source: wake_guard
+    response_variable: _tts_result
+    continue_on_error: true

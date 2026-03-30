@@ -1,0 +1,150 @@
+# =============================================================================
+# AI Focus Guard Package — Task 20 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Anti-ADHD Focus Guards"
+#
+# Provides anti-ADHD nudges: time checks, meal reminders, calendar warnings,
+# social nudges, break suggestions, and bedtime approach alerts. Each nudge
+# type tracks its own escalation level independently.
+#
+# Provides:
+#   input_boolean.ai_focus_mode           — voice-activated DND (suppresses non-calendar nudges)
+#   input_boolean.ai_focus_guard_enabled — kill switch (default ON)
+#   input_datetime.ai_last_meal_time      — user marks meals via voice/button
+#   input_datetime.ai_focus_guard_snooze_until — snooze expiry timestamp
+#   input_number.ai_focus_guard_threshold_hours — hours before first nudge (default 2)
+#   input_number.ai_focus_mode_max_hours  — focus mode auto-expiry (default 2)
+#   sensor.workshop_hours_today        — history_stats: FP2 workshop ON-time today
+#   sensor.ai_focus_guard_status       — created by pyscript (last op status)
+#
+# Services (pyscript):
+#   pyscript.focus_guard_evaluate — on-demand evaluation of all nudge conditions
+#   pyscript.focus_guard_mark_meal — mark meal time (optional meal_time param)
+#   pyscript.focus_guard_snooze — snooze nudges for N minutes
+#
+# Nudge types & escalation:
+#   Time check:      workshop > threshold hours → P4 → P3 → P2
+#   Meal reminder:   last meal > 4h, not sleeping → P4 → P3 → P2
+#   Calendar warning: appointment < 60/30/15 min → P3 → P2 → P1
+#   Social nudge:    partner home > 30min, user in solo zone → P4 → P3
+#   Break suggestion: same zone > 2h, no zone change → P4 only
+#   Bedtime approach: within 1h of bedtime → P3 → P2 → P1
+#
+# Focus mode rules:
+#   focus_mode ON → suppress ALL non-calendar nudges
+#   Calendar warnings ALWAYS bypass focus mode
+#   Auto-expires after focus_mode_max_hours
+#
+# Dependencies:
+#   pyscript/focus_guard.py
+#   pyscript/tts_queue.py (tts_queue_speak — nudge delivery)
+#   pyscript/notification_dedup.py (dedup_check, dedup_register)
+#   pyscript/memory.py (L2 snooze pattern logging)
+#   packages/ai_context_hot.yaml (wake/bed times, presence)
+#   packages/ai_identity.yaml (identity confidence, occupancy)
+#   packages/ai_llm_budget.yaml (budget gate for agent-personality nudges)
+#   packages/ai_test_harness.yaml (test mode toggle)
+#
+# Deployed: 2026-03-03
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# ── SENSORS ─────────────────────────────────────────────────────────────────
+
+sensor:
+  # Workshop hours today — HA-native history_stats, immune to FP2 flapping.
+  # Sums total ON-time from recorder data (no custom accumulator needed).
+  - platform: history_stats
+    name: "Workshop Hours Today"
+    entity_id: binary_sensor.fp2_presence_sensor_workshop
+    state: "on"
+    type: time
+    start: "{{ today_at('00:00') }}"
+    end: "{{ now() }}"
+
+# ── AUTOMATIONS ──────────────────────────────────────────────────────────────
+
+automation:
+  # Midnight reset: turn off focus mode for new day.
+  - id: ai_focus_guard_midnight_reset
+    alias: "AI Focus Guard - Midnight Reset"
+    description: >-
+      Reset daily focus guard state at midnight. Turns off focus mode if
+      still active. Workshop hours auto-reset via history_stats sensor.
+    mode: single
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ai_focus_mode
+
+  # Focus mode auto-expiry: when focus mode has been on for max_hours,
+  # turn it off automatically. Uses template trigger with duration.
+  - id: ai_focus_mode_auto_expire
+    alias: "AI Focus Guard - Focus Mode Auto-Expire"
+    description: >-
+      Auto-expire focus mode after configured max hours to prevent
+      indefinite DND from forgotten "focus mode on" commands.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.ai_focus_mode
+        to: "on"
+        for:
+          hours: >-
+            {{ states('input_number.ai_focus_mode_max_hours') | float(2) | int }}
+          minutes: >-
+            {{ ((states('input_number.ai_focus_mode_max_hours') | float(2) % 1) * 60) | int }}
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ai_focus_mode
+
+# =============================================================================
+# DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
+# =============================================================================
+# type: vertical-stack
+# title: "AI Focus Guards"
+# cards:
+#   - type: entities
+#     title: "Focus Guard"
+#     entities:
+#       - entity: input_boolean.ai_focus_guard_enabled
+#         name: "Focus Guard Active"
+#       - entity: input_boolean.ai_focus_mode
+#         name: "Focus Mode (DND)"
+#       - entity: input_number.workshop_hours_today
+#         name: "Workshop Hours Today"
+#       - entity: input_datetime.ai_last_meal_time
+#         name: "Last Meal"
+#       - entity: input_number.ai_focus_guard_threshold_hours
+#         name: "Threshold Hours"
+#       - entity: input_datetime.ai_focus_guard_snooze_until
+#         name: "Snooze Until"
+#       - entity: sensor.ai_focus_guard_status
+#         name: "Guard Status"
+#   - type: entities
+#     title: "Nudge Type Toggles"
+#     entities:
+#       - entity: input_boolean.ai_focus_time_check_enabled
+#         name: "Time Check"
+#       - entity: input_boolean.ai_focus_meal_reminder_enabled
+#         name: "Meal Reminder"
+#       - entity: input_boolean.ai_focus_calendar_warn_enabled
+#         name: "Calendar Warning"
+#       - entity: input_boolean.ai_focus_social_nudge_enabled
+#         name: "Social Nudge"
+#       - entity: input_boolean.ai_focus_break_suggest_enabled
+#         name: "Break Suggestion"
+#       - entity: input_boolean.ai_focus_bedtime_approach_enabled
+#         name: "Bedtime Approach"
+#       - entity: input_boolean.ai_focus_meal_ask_eaten
+#         name: "Ask If Eaten (Mic)"
+# =============================================================================

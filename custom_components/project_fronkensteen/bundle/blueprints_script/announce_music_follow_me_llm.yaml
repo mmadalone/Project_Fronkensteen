@@ -1,0 +1,856 @@
+blueprint:
+  name: Announce Music Follow Me (TTS, LLM)
+  author: madalone
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/announce_music_follow_me_llm-header.jpeg)
+
+    # Announce Music Follow Me (TTS, LLM)
+
+    Script blueprint that announces via TTS where the music was moved for a
+    "music follow me" automation. Supports static messages, random message
+    pools, and LLM-generated context-aware announcements with optional
+    ElevenLabs voice customization.
+
+    ### Recent changes
+
+    - **v9.2 (2026-03-20):** No blueprint changes — LLM call counter gap
+      fixed at budget system level. ai_llm_call_counter automation in
+      ai_llm_budget.yaml replaced hardcoded conversation entity trigger
+      list with dynamic state_changed event + domain filter. All current
+      and future conversation agents are now auto-tracked.
+
+    - **v9.1 (2026-03-20):** Banter delay — configurable pause (default
+      5 s) before banter speaks, preventing banter from preempting the
+      announcement on the same speaker. Banter TTS priority lowered
+      from 3 to 5 (below announcement priority 4) as belt-and-suspenders.
+
+    - **v9 (2026-03-20):** Budget Floor (%) slider gates LLM-generated
+      messages — falls back to static/random when daily budget drops
+      below threshold. Reactive Banter — after the announcement, a
+      different agent probabilistically chimes in with a brief
+      in-character reaction via conversation.process +
+      tool-suppression prefix. Both features off by default (zero
+      behavioral change on upgrade).
+
+    - **v8 (2026-03-18):** Dynamic stinger timing — stinger resolved in
+      blueprint but played via tts_queue chime_path with duration-aware
+      wait (no hardcoded delay). music_compose_get now exposes duration_ms
+      from JSON sidecar metadata. stinger_delay_after deprecated (kept for
+      backwards compat). Net savings ~3 s on the announce path vs v7.
+
+    - **v7 (2026-03-18):** Latency optimization — moved post-LLM whisper
+      from mid-flow (blocking stinger + TTS by ~3.7 s) to end-of-script
+      merged with the final whisper; reduced stinger_delay_after default
+      from 3 s to 1 s (TTS synthesis provides natural buffer). Net savings
+      ~5 s on the announce path.
+
+    - **v6 (2026-02-24):** Audit pass — trimmed whitespace in LLM prompt
+      Jinja (switched to {%- -%} tags), removed redundant | string filters
+      from ElevenLabs conditions, clarified tts_entity silent-exit design
+      in description, added LLM timeout caveat to use_llm_fun_messages
+      description
+
+    - **v5 (2026-02-24):** Fixed Jinja whitespace contamination in
+      ctx_player, time_of_day, and all tts_message branches — switched to
+      whitespace-controlled tags ({%- -%}) so entity IDs and template
+      outputs render without leading/trailing spaces; LLM path now
+      correctly receives playback context
+
+    - **v4 (2026-02-24):** Waterfall ctx_player resolution — prefers source
+      then target based on who has active media_title; radio detection now
+      uses media_content_type (channel/radio/tvshow) with string-match
+      fallback only when content_type is empty; removed invalid top-level
+      icon key
+
+    - **v3 (2026-02-18):** Bumped min_version to 2024.10.0; added default to tts_entity
+      and collapsed properties on all sections; fixed time_of_day whitespace;
+      added continue_on_error to TTS speak actions
+
+    - **v2 (2026-02-15):** Fixed voice_profile crash on non-ElevenLabs engines; migrated
+      to action: syntax; added collapsible sections, aliases, and descriptions
+
+    - **v1 (2026-02-14):** Initial version
+
+  domain: script
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/announce_music_follow_me_llm.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    voice_assistant_settings:
+      name: "① Voice Assistant"
+      icon: mdi:account-voice
+      description: Voice Assistant and dispatcher settings.
+      collapsed: false
+      input:
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+    message_strategy:
+      name: "② Message Strategy"
+      icon: mdi:message-text
+      collapsed: true
+      description: >
+        Choose between static, random, or LLM-generated announcement messages.
+      input:
+        use_random_messages:
+          name: Use random fun messages
+          description: >
+            When enabled, picks a random message from the message pool instead
+            of always using the default message.
+          default: true
+          selector:
+            boolean: {}
+
+        use_llm_fun_messages:
+          name: Use LLM for fun messages
+          description: >
+            When enabled (and random messages is also on), uses a conversation
+            agent to generate context-aware announcements instead of picking
+            from the static pool. Falls back to the default message if the
+            LLM call fails. Note: if the LLM hangs, the script blocks until
+            HA's default timeout — there is no per-action timeout override.
+          default: false
+          selector:
+            boolean: {}
+
+        custom_random_messages:
+          name: Random messages
+          description: >
+            Pool of announcement templates for random mode. Use {player_name}
+            as a placeholder for the target speaker's friendly name.
+          default:
+            - "Moving the music to {player_name}."
+            - "Music transferred to {player_name}."
+            - "Playback moved to {player_name}."
+          selector:
+            object: {}
+
+        default_message:
+          name: Default message
+          description: >
+            Fallback message template used when random mode is off or when the
+            LLM fails. Use {player_name} as a placeholder.
+          default: "Moving the music to {player_name}."
+          selector:
+            text:
+              multiline: true
+
+    llm_settings:
+      name: "③ LLM Configuration"
+      icon: mdi:robot
+      collapsed: true
+      description: >
+        Settings for LLM-generated announcements. Only used when both random
+        messages and LLM fun messages are enabled.
+      input:
+        use_playback_context:
+          name: Include playback context in LLM prompt
+          description: >
+            When enabled, tells the LLM what's currently playing (track name,
+            artist, or radio station) so it can make context-aware comments.
+          default: true
+          selector:
+            boolean: {}
+
+        llm_prompt_template:
+          name: LLM prompt template
+          description: >
+            System prompt sent to the conversation agent. Use {player_name},
+            {current_time}, and {time_of_day} as placeholders. Keep it short
+            — the LLM should produce a single sentence.
+          default: >
+            You are a casual smart home assistant.
+            Say the music moved to "{player_name}" and briefly comment on it.
+            Time: {current_time}, {time_of_day}.
+          selector:
+            text:
+              multiline: true
+
+        llm_agent_id:
+          name: Voice Assistant
+          description: >
+            The Voice Assistant (Assist Pipeline) used when the dispatcher is
+            disabled. The pipeline bundles conversation agent, TTS engine,
+            and TTS voice together.
+          default: "Rick"
+          selector:
+            text:
+
+        budget_floor:
+          name: Budget Floor (%)
+          description: >
+            Skip LLM-generated messages when the daily LLM budget drops
+            below this percentage. Falls back to static/random messages.
+            Set to 0 to disable the budget gate (v8 behavior).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+    # ─────────────────────────────────────────────────────────────
+    composed_stinger:
+      name: "④ Composed Stinger"
+      icon: mdi:music-note
+      collapsed: true
+      description: "Play an agent's composed stinger before the follow-me announcement."
+      input:
+        enable_stinger:
+          name: Enable agent stinger
+          description: >
+            When enabled, plays a short composed stinger (2-3s) from the
+            music library before the TTS announcement. Gives the follow-me
+            event a unique agent audio identity.
+          default: false
+          selector:
+            boolean: {}
+
+        stinger_agent:
+          name: Stinger agent
+          description: >
+            Which agent's stinger to use. Empty = use dispatched agent.
+            (e.g. rick, quark, deadpool, kramer, portuondo)
+          default: ""
+          selector:
+            text:
+
+        compose_stinger_if_missing:
+          name: Compose if missing
+          description: >
+            Generate a stinger via FluidSynth if not in the library.
+          default: true
+          selector:
+            boolean: {}
+
+        stinger_library_id_override:
+          name: Tune override (library ID)
+          description: >
+            Play a specific composition by library ID, bypassing auto-resolution.
+            Browse IDs via Developer Tools → pyscript.music_library_list.
+            Leave empty for automatic selection based on agent + content type.
+          default: ""
+          selector:
+            text: {}
+
+        stinger_volume:
+          name: Music volume
+          description: >
+            Volume for composed tune playback (0.0–1.0). 0 = keep current volume.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        stinger_delay_after:
+          name: "⚠ Deprecated — Pause after tune (seconds)"
+          description: >
+            DEPRECATED in v8: Stinger now plays via tts_queue chime_path with
+            duration-aware timing. This input is ignored but kept for backwards
+            compatibility with existing script instances.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              unit_of_measurement: "s"
+
+        stinger_fallback_media_url:
+          name: Fallback audio URL
+          description: >
+            Static audio URL to play if the library is empty and compose is off.
+            Leave empty to skip music silently.
+          default: ""
+          selector:
+            text: {}
+
+    # ─────────────────────────────────────────────────────────────
+    reactive_banter:
+      name: "⑤ Reactive Banter"
+      icon: mdi:message-reply-text
+      collapsed: true
+      description: >
+        After the follow-me announcement, another agent may chime in with
+        a brief, in-character reaction. Tool-suppression prefix
+        prevents re-entry. Gated by probability and budget floor.
+      input:
+        enable_banter:
+          name: Enable reactive banter
+          description: >
+            When enabled, a different agent may react to the music
+            announcement with a brief in-character comment.
+          default: false
+          selector:
+            boolean: {}
+
+        banter_probability:
+          name: Banter Probability (%)
+          description: >
+            Chance of banter after each announcement. 20% is a good
+            starting point.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        banter_agent_pool:
+          name: Agent Pool
+          description: >
+            Comma-separated pipeline display names eligible for banter.
+            The announcing agent is automatically excluded.
+          default: "Rick, Quark, Deadpool, Kramer, Doctor Portuondo"
+          selector:
+            text:
+              multiline: true
+
+        banter_prompt:
+          name: Banter Prompt
+          description: >
+            Prompt sent to Agent B. Placeholders: {agent_a}, {excerpt},
+            {track}, {artist}, {max_words}. Tool-suppression prefix
+            is automatically prepended.
+          default: >
+            {agent_a} just announced: '{excerpt}'.
+            Give ONE brief, witty, in-character reaction. Under {max_words} words.
+          selector:
+            text:
+              multiline: true
+
+        banter_max_words:
+          name: Max Words
+          description: Maximum word count for the banter reaction.
+          default: 25
+          selector:
+            number:
+              min: 5
+              max: 100
+              step: 5
+
+        banter_delay:
+          name: Banter Delay (seconds)
+          description: >
+            Seconds to wait after the announcement before banter speaks.
+            Ensures the announcement finishes playing before Agent B
+            reacts. Increase for longer announcements.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 1
+              unit_of_measurement: "s"
+
+    # ─────────────────────────────────────────────────────────────
+    infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        llm_budget_entity:
+          name: "LLM budget remaining entity"
+          description: "Sensor showing remaining LLM budget percentage. Used to gate LLM-generated messages and banter when budget is low."
+          default: sensor.ai_llm_budget_remaining
+          selector:
+            entity:
+              domain: sensor
+
+mode: queued
+max_exceeded: silent
+
+fields:
+  target_player:
+    name: Target player
+    description: The media player where music is being moved to.
+    required: true
+    selector:
+      entity:
+        domain: media_player
+
+  source_player:
+    name: Source player
+    description: >
+      The media player where music was playing before the move.
+      Used to read current track info for LLM context. Falls back
+      to target_player if not provided.
+    required: false
+    selector:
+      entity:
+        domain: media_player
+
+  tts_output_player:
+    name: TTS output player (optional)
+    description: >
+      Override where the TTS announcement plays. If not provided,
+      the announcement plays on the target player.
+    required: false
+    selector:
+      entity:
+        domain: media_player
+
+variables:
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_pipeline_name: !input llm_agent_id
+  random_mode: !input use_random_messages
+  use_llm: !input use_llm_fun_messages
+  use_context: !input use_playback_context
+  prompt_tpl: !input llm_prompt_template
+  default_msg_tpl: !input default_message
+  custom_msgs: !input custom_random_messages
+  budget_floor: !input budget_floor
+  v_enable_banter: !input enable_banter
+  v_banter_probability: !input banter_probability
+  v_banter_agent_pool: !input banter_agent_pool
+  v_banter_prompt: !input banter_prompt
+  v_banter_max_words: !input banter_max_words
+  v_banter_delay: !input banter_delay
+  v_llm_budget_entity: !input llm_budget_entity
+
+sequence:
+  # ── Infrastructure: Agent selection — dispatcher > manual ──────────────
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for music announcement"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: "proactive_music"
+              intent_text: "music follow me announcement"
+              skip_continuity: true
+            continue_on_error: true
+
+          - alias: "Set dispatch agent and 3 more variables"
+            variables:
+              dispatch_agent: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve pipeline for manual agent selection"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set dispatch agent and 3 more variables"
+        variables:
+          dispatch_agent: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ── Resolve Music Transfer variant for persona-aware LLM announcements ──
+  - alias: "Resolve Music Transfer variant for LLM agent"
+    action: pyscript.dispatcher_resolve_engine
+    response_variable: music_transfer_resolve
+    data:
+      pipeline_name: "{{ dispatch_persona }} - music transfer"
+    continue_on_error: true
+  - alias: "Select Music Transfer agent (fallback to Standard)"
+    variables:
+      llm_agent: >-
+        {% if music_transfer_resolve is defined and (music_transfer_resolve | default({})).get('engine', '') | length > 0 %}
+          {{ (music_transfer_resolve | default({})).get('engine', '') }}
+        {% else %}
+          {{ dispatch_agent }}
+        {% endif %}
+
+  - alias: "Resolve player names, playback context, and time of day"
+    variables:
+      player_name: "{{ state_attr(target_player, 'friendly_name') | default(target_player) }}"
+      ctx_player: >-
+        {%- set src = source_player if source_player is defined and source_player else '' -%}
+        {%- if src and state_attr(src, 'media_title') -%}
+          {{ src }}
+        {%- elif state_attr(target_player, 'media_title') -%}
+          {{ target_player }}
+        {%- elif src -%}
+          {{ src }}
+        {%- else -%}
+          {{ target_player }}
+        {%- endif -%}
+      media_title: "{{ state_attr(ctx_player, 'media_title') | default('', true) }}"
+      media_artist: "{{ state_attr(ctx_player, 'media_artist') | default('', true) }}"
+      media_content_type: "{{ state_attr(ctx_player, 'media_content_type') | default('', true) | lower }}"
+      current_time: "{{ now().strftime('%H:%M') }}"
+      time_of_day: >-
+        {%- set h = now().hour -%}
+        {{ 'late night' if h < 6
+           else 'morning' if h < 12
+           else 'afternoon' if h < 18
+           else 'evening' }}
+
+  - alias: "Decide announcement message — LLM, random pool, or default"
+    choose:
+      - alias: "LLM path — generate context-aware message via conversation agent"
+        conditions:
+          - condition: template
+            value_template: >-
+              {%- set floor = budget_floor | int(0) -%}
+              {%- set budget_ok = (floor == 0
+                    or states(v_llm_budget_entity) | int(100) >= floor) -%}
+              {{ random_mode and use_llm and budget_ok }}
+        sequence:
+          - alias: "Call conversation agent for a fun announcement (non-critical)"
+            action: conversation.process
+            data:
+              agent_id: "{{ llm_agent }}"
+              text: >-
+                [MUSIC ANNOUNCE — do NOT call handoff_agent, execute_service,
+                agent_interaction_log, end_conversation, music_library, or
+                any other tools except web_search. Respond with ONLY the
+                spoken announcement text.]
+                {{
+                  prompt_tpl
+                  | replace('{player_name}', player_name)
+                  | replace('{current_time}', current_time)
+                  | replace('{time_of_day}', time_of_day)
+                }}
+                {%- if use_context and media_title %}
+                {%- set is_radio = media_content_type in ['channel', 'radio', 'tvshow']
+                   or (media_content_type == '' and ('radio' in media_title | lower or 'radio' in media_artist | lower)) %}
+                {%- if is_radio %}
+                currently tuned to the radio station "{{ media_title }}"{% if media_artist %} ({{ media_artist }}){% endif %}. this is a live radio stream, not a song or track.
+                {%- else %}
+                currently playing the track "{{ media_title }}"{% if media_artist %} by {{ media_artist }}{% endif %}.
+                {%- endif %}
+                {%- endif %}
+            response_variable: llm_response
+            continue_on_error: true
+
+          - alias: "Extract LLM response text — fall back to default on failure"
+            variables:
+              _raw_llm_text: >-
+                {%- set r = llm_response | default({}) -%}
+                {%- set resp = r.response | default({}) -%}
+                {%- if resp.speech is defined
+                      and resp.speech.plain is defined
+                      and resp.speech.plain.speech is defined -%}
+                  {{ resp.speech.plain.speech | trim }}
+                {%- elif resp.text is defined -%}
+                  {{ resp.text | trim }}
+                {%- else -%}
+                  {{ default_msg_tpl | replace('{player_name}', player_name) }}
+                {%- endif -%}
+
+          - alias: "Sanitize LLM response — catch tool/function definition leakage"
+            variables:
+              tts_message: >-
+                {%- set _msg = _raw_llm_text | default('') | string | trim -%}
+                {%- if _msg | length == 0 -%}
+                  {{ default_msg_tpl | replace('{player_name}', player_name) }}
+                {%- elif _msg | regex_search('(?i)("type"\s*:\s*"function"|"name"\s*:\s*"|handoff_agent|escalate_action|web_search|tool_call|"parameters"\s*:\s*\{|def\s+\w+\(|async\s+def\s+|\{\s*"function"|function\s*\(|\bschema\b.*\bproperties\b)') -%}
+                  {{ default_msg_tpl | replace('{player_name}', player_name) }}
+                {%- else -%}
+                  {{ _msg }}
+                {%- endif -%}
+
+
+      - alias: "Static random path — pick from message pool"
+        conditions:
+          - condition: template
+            value_template: "{{ random_mode and not use_llm }}"
+        sequence:
+          - alias: "Pick a random message and substitute player name"
+            variables:
+              tts_message: >-
+                {%- if custom_msgs -%}
+                  {{ custom_msgs | random
+                     | replace('{player_name}', player_name) }}
+                {%- else -%}
+                  {{ default_msg_tpl | replace('{player_name}', player_name) }}
+                {%- endif -%}
+
+    default:
+      - alias: "Default path — use the static default message"
+        variables:
+          tts_message: >-
+            {{ default_msg_tpl | replace('{player_name}', player_name) }}
+
+  - alias: "Resolve TTS output target — override or target player"
+    variables:
+      tts_target_player: >-
+        {{ tts_output_player if tts_output_player is defined and tts_output_player else target_player }}
+      v_enable_stinger: !input enable_stinger
+      v_stinger_agent: !input stinger_agent
+      v_compose_stinger_if_missing: !input compose_stinger_if_missing
+      v_stinger_library_id: !input stinger_library_id_override
+      v_stinger_volume: !input stinger_volume
+      v_stinger_delay_after: !input stinger_delay_after
+      v_stinger_fallback_url: !input stinger_fallback_media_url
+
+  # ── Resolve stinger (no playback — passed to tts_queue as chime) ──
+  - alias: "Resolve agent stinger for chime_path"
+    variables:
+      stinger_resolved_url: ""
+      stinger_resolved_duration_ms: 0
+
+  - alias: "Resolve stinger URL and duration"
+    if:
+      - condition: template
+        value_template: "{{ v_enable_stinger }}"
+    then:
+      - alias: "Tier 1 — Library ID override"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | length > 0 }}"
+            sequence:
+              - action: pyscript.music_compose_get
+                response_variable: stinger_override
+                data:
+                  library_id: "{{ v_stinger_library_id }}"
+                continue_on_error: true
+              - variables:
+                  stinger_resolved_url: >-
+                    {%- set fp = (stinger_override | default({})).get('file_path', '') -%}
+                    {{ fp | replace('/config/www/', '/local/') if fp else '' }}
+                  stinger_resolved_duration_ms: >-
+                    {{ (stinger_override | default({})).get('duration_ms', 0) | int }}
+
+          - conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | length == 0 }}"
+            sequence:
+              - alias: "Tier 2 — Look up agent stinger in library"
+                action: pyscript.music_compose_get
+                response_variable: stinger_lookup
+                data:
+                  agent: "{{ v_stinger_agent if v_stinger_agent else dispatch_persona | default('rick') }}"
+                  content_type: "stinger"
+                continue_on_error: true
+
+              - alias: "Resolve found stinger or compose if missing"
+                choose:
+                  - alias: "Stinger found"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (stinger_lookup | default({})).get('status', '') in ['ok', 'staging'] }}
+                    sequence:
+                      - variables:
+                          stinger_resolved_url: >-
+                            {%- set fp = (stinger_lookup | default({})).get('file_path', '') -%}
+                            {{ fp | replace('/config/www/', '/local/') if fp else '' }}
+                          stinger_resolved_duration_ms: >-
+                            {{ (stinger_lookup | default({})).get('duration_ms', 0) | int }}
+
+                  - alias: "Stinger not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (stinger_lookup | default({})).get('status', '') == 'not_found'
+                             and v_compose_stinger_if_missing }}
+                    sequence:
+                      - action: pyscript.music_compose_local
+                        response_variable: local_stinger
+                        data:
+                          agent: "{{ v_stinger_agent if v_stinger_agent else dispatch_persona | default('rick') }}"
+                          content_type: "stinger"
+                          duration_s: 3.0
+                        continue_on_error: true
+                      - if:
+                          - condition: template
+                            value_template: >-
+                              {{ (local_stinger | default({})).get('status', '') == 'ok' }}
+                        then:
+                          - variables:
+                              stinger_resolved_url: >-
+                                {%- set fp = (local_stinger | default({})).get('file_path', '') -%}
+                                {{ fp | replace('/config/www/', '/local/') if fp else '' }}
+                              stinger_resolved_duration_ms: >-
+                                {{ (local_stinger | default({})).get('duration_ms', 0) | int }}
+
+        default:
+          - alias: "Tier 3 — Fallback static audio URL"
+            if:
+              - condition: template
+                value_template: "{{ v_stinger_fallback_url | length > 0 }}"
+            then:
+              - variables:
+                  stinger_resolved_url: "{{ v_stinger_fallback_url }}"
+                  stinger_resolved_duration_ms: 3000
+
+  - alias: "Speak announcement via TTS queue (stinger as chime)"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts
+    continue_on_error: true
+    data:
+      text: "{{ tts_message }}"
+      voice: "{{ dispatch_voice }}"
+      voice_id: "{{ dispatch_tts_voice }}"
+      priority: 4
+      target_mode: explicit
+      target: "{{ tts_target_player }}"
+      announce: true
+      chime_path: "{{ stinger_resolved_url | default('') }}"
+      chime_duration_ms: "{{ stinger_resolved_duration_ms | default(0) | int }}"
+      volume_level: "{{ v_stinger_volume | float(0) }}"
+
+  # ── Reactive Banter — probabilistic Agent B reaction ──────────────
+  - alias: "Banter — gate check (enable + probability + budget)"
+    if:
+      - condition: template
+        value_template: >-
+          {%- set floor = budget_floor | int(0) -%}
+          {%- set budget_ok = (floor == 0
+                or states(v_llm_budget_entity) | int(100) >= floor) -%}
+          {%- set dice = range(100) | random -%}
+          {{ v_enable_banter and budget_ok
+             and dice | int < v_banter_probability | int }}
+    then:
+      - alias: "Banter — build filtered agent pool"
+        variables:
+          banter_pool: >-
+            {%- set ns = namespace(items=[]) -%}
+            {%- for p in v_banter_agent_pool.split(',') -%}
+              {%- set persona = p.split(' - ')[0] | trim | lower
+                    | replace(' ', '_') -%}
+              {%- if persona != (dispatch_persona | default('')
+                    | lower | replace(' ', '_')) -%}
+                {%- set ns.items = ns.items + [p | trim] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.items }}
+
+      - alias: "Banter — pick agent, generate, speak"
+        if:
+          - condition: template
+            value_template: "{{ banter_pool | length > 0 }}"
+        then:
+          - variables:
+              banter_agent_name: "{{ banter_pool | random }}"
+
+          - alias: "Banter — resolve Agent B engine"
+            action: pyscript.dispatcher_resolve_engine
+            response_variable: banter_resolve
+            data:
+              pipeline_name: "{{ banter_agent_name }}"
+            continue_on_error: true
+
+          - alias: "Banter — generate via conversation.process"
+            if:
+              - condition: template
+                value_template: >-
+                  {{ (banter_resolve | default({}))
+                     .get('engine', '') | length > 0 }}
+            then:
+              - variables:
+                  banter_engine: >-
+                    {{ banter_resolve.get('engine', '') }}
+                  banter_tts: >-
+                    {{ banter_resolve.get('tts_engine', '') }}
+                  banter_tts_voice: >-
+                    {{ banter_resolve.get('tts_voice', '') }}
+
+              - action: conversation.process
+                response_variable: banter_llm
+                data:
+                  agent_id: "{{ banter_engine }}"
+                  text: >-
+                    [BANTER — do NOT call handoff_agent, execute_service,
+                    escalate_action, or any other tools. Respond with a
+                    brief in-character reaction only. Use the user's name
+                    from your context — never say "the user".]
+                    {{ v_banter_prompt
+                       | replace('{agent_a}',
+                           dispatch_persona | default('')
+                           | replace('_', ' ') | title)
+                       | replace('{excerpt}',
+                           (tts_message | default(''))[:150])
+                       | replace('{track}',
+                           media_title | default(''))
+                       | replace('{artist}',
+                           media_artist | default(''))
+                       | replace('{max_words}',
+                           v_banter_max_words | string) }}
+                continue_on_error: true
+
+              - alias: "Banter — extract response text"
+                variables:
+                  _raw_banter: >-
+                    {%- set r = banter_llm | default({}) -%}
+                    {%- set resp = r.get('response', {}) -%}
+                    {%- if resp.speech is defined
+                          and resp.speech.plain is defined
+                          and resp.speech.plain.speech is defined -%}
+                      {{ resp.speech.plain.speech | trim }}
+                    {%- elif resp.text is defined -%}
+                      {{ resp.text | trim }}
+                    {%- else -%}
+                      {{ '' }}
+                    {%- endif -%}
+
+              - alias: "Banter — sanitize (leakage filter)"
+                variables:
+                  banter_text: >-
+                    {%- set _msg = _raw_banter | default('')
+                          | string | trim -%}
+                    {%- if _msg | length == 0 -%}
+                      {{ '' }}
+                    {%- elif _msg | regex_search('(?i)("type"\s*:\s*"function"|"name"\s*:\s*"|handoff_agent|escalate_action|web_search|tool_call|"parameters"\s*:\s*\{|def\s+\w+\(|async\s+def\s+|\{\s*"function"|function\s*\(|\bschema\b.*\bproperties\b)') -%}
+                      {{ '' }}
+                    {%- else -%}
+                      {{ _msg }}
+                    {%- endif -%}
+
+              - alias: "Banter — wait for announcement to finish"
+                delay:
+                  seconds: "{{ v_banter_delay | int(5) }}"
+
+              - alias: "Banter — speak via TTS queue"
+                if:
+                  - condition: template
+                    value_template: "{{ banter_text | length > 0 }}"
+                then:
+                  - action: pyscript.tts_queue_speak
+                    response_variable: _tts_banter
+                    continue_on_error: true
+                    data:
+                      text: "{{ banter_text }}"
+                      voice: "{{ banter_tts }}"
+                      voice_id: "{{ banter_tts_voice | default('') }}"
+                      priority: 5
+                      target_mode: explicit
+                      target: "{{ tts_target_player }}"
+                      announce: true
+
+  - alias: "Whisper — update self-awareness"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ dispatch_persona }}"
+      user_query: "music follow me announcement"
+      agent_response: "{{ (tts_message | default(''))[:200] }}"
+      source: "automation"
+    continue_on_error: true

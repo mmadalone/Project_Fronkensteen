@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Project Fronkensteen v{version}",
+        "description": "Five AI personas run your house. This installer will copy all required files to your Home Assistant configuration.\n\n**Prerequisites:**\n- Pyscript integration installed and configured\n- At least one LLM API key (OpenAI or OpenRouter)\n- At least one media_player speaker entity\n\nClick Submit to continue.",
+        "data": {}
+      },
+      "features": {
+        "title": "Feature Selection",
+        "description": "Select which feature groups to install. Core infrastructure is always included. You can change this later via Reconfigure.",
+        "data": {
+          "voice": "Voice Pipeline (agent routing, handoff, whisper, TTS, ducking)",
+          "bedtime": "Bedtime & Sleep (routines, detection, wake-up, wind-down, schedule)",
+          "notifications": "Notifications & Email (follow-me, priority filter, briefings)",
+          "music": "Music & Media (composer, taste, follow-me, Sonarr/Radarr)",
+          "budget": "Budget & Cost Tracking (LLM/TTS/STT limits, alerts, fallback)",
+          "presence": "Presence & Identity (room inference, patterns, privacy gate)",
+          "memory": "Memory & Embedding (semantic search, auto-archive, embeddings)",
+          "creative": "Creative & Social (banter, debates, therapy, interviews, escalation)"
+        }
+      },
+      "household": {
+        "title": "Household Setup",
+        "description": "Configure your primary user. Additional household members can be added later via the per-user helpers package.",
+        "data": {
+          "person_slug": "Person slug (must match your person.* entity, e.g. 'miquel')",
+          "display_name": "Display name (e.g. 'Miquel')",
+          "tts_pronunciation": "TTS pronunciation (how your name should be spoken, e.g. 'Mee-kel')",
+          "preferred_language": "Preferred language",
+          "household_members": "Household members (e.g. 'Miquel, Jessica (partner)')",
+          "pets": "Pets (e.g. 'Luna the cat' or 'none')"
+        }
+      },
+      "speakers": {
+        "title": "Speaker Setup",
+        "description": "Configure your default speaker for TTS output. Additional speakers and zone mappings can be configured in tts_speaker_config.json after installation.",
+        "data": {
+          "default_speaker": "Default speaker",
+          "tts_provider": "Primary TTS provider"
+        }
+      },
+      "confirm": {
+        "title": "Ready to Install",
+        "description": "**Features:** {features}\n**Primary user:** {person}\n**Default speaker:** {speaker}\n\nClick Submit to install files to your Home Assistant configuration. A restart will be required after installation.",
+        "data": {}
+      },
+      "reconfigure": {
+        "title": "Reconfigure Project Fronkensteen",
+        "description": "Choose what to change.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "reconfigure_features": {
+        "title": "Feature Selection",
+        "description": "Toggle feature groups on or off. Newly enabled groups will be installed. Disabling a group does NOT remove its files.",
+        "data": {
+          "voice": "Voice Pipeline",
+          "bedtime": "Bedtime & Sleep",
+          "notifications": "Notifications & Email",
+          "music": "Music & Media",
+          "budget": "Budget & Cost Tracking",
+          "presence": "Presence & Identity",
+          "memory": "Memory & Embedding",
+          "creative": "Creative & Social"
+        }
+      },
+      "reconfigure_reinstall": {
+        "title": "Reinstall Files",
+        "description": "{warning}\n\nClick Submit to proceed.",
+        "data": {}
+      }
+    },
+    "error": {
+      "pyscript_not_installed": "Pyscript integration is not installed. Install it via HACS first, then retry."
+    },
+    "abort": {
+      "already_configured": "Project Fronkensteen is already installed.",
+      "no_action": "No action selected.",
+      "reconfigure_successful": "Configuration updated successfully. Restart Home Assistant to apply changes."
+    }
+  }
+}

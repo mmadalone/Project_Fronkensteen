@@ -1,0 +1,949 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Reactive Banter — Agent Post-Response Commentary (Pattern 1)
+# ═══════════════════════════════════════════════════════════════════════════════
+# After Agent A responds to the user, Agent B probabilistically chimes in with
+# a brief in-character reaction. Foundation for Pattern 4 (Theatrical Mode).
+#
+# Trigger: ai_conversation_response_ready event fired from conversation_sensor.py
+#          after each LLM response. Per-satellite instances.
+#
+# Safety: Uses conversation.process with tool-suppression prefix.
+#         Banter whisper logged with source: "automation" to prevent re-trigger.
+#
+# Requires:
+#   - pyscript/conversation_sensor.py (fires ai_conversation_response_ready event)
+#   - pyscript/agent_dispatcher.py (dispatcher_resolve_engine)
+#   - pyscript/tts_queue.py (tts_queue_speak)
+#   - input_datetime.ai_banter_last_reaction (cooldown tracking)
+#
+# v2.2.0: 2026-03-23 — Gate 6 satellite idle check, Step 6h pre-TTS guard, direct-address prompt
+# v2.1.0: 2026-03-20 — event-driven triggers, Step 0 eliminated
+# v2.0.0: 2026-03-20 — conversation.process + flexible agent pool
+# v1.0.0: 2026-03-20 — initial deployment (llm_task_call)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+blueprint:
+  name: Reactive Banter — Agent Post-Response Commentary
+  description: >-
+    Pattern 1 of inter-agent communication. After Agent A responds to the user,
+    another agent probabilistically chimes in with a brief, in-character reaction
+    via TTS. Uses conversation.process for full agent personality + hot context.
+    Tool-suppression prefix prevents re-entry. Per-satellite instances.
+    Foundation for Pattern 4 (Theatrical Mode).
+  domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/reactive_banter.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ── ① Control ──────────────────────────────────────────────────────────
+    control:
+      name: "① Control"
+      icon: mdi:message-reply-text
+      description: Enable toggle and satellite selection.
+      collapsed: false
+      input:
+        enable_toggle:
+          name: Enable Toggle
+          description: Per-instance kill switch for reactive banter.
+          selector:
+            entity:
+              domain: input_boolean
+
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        enable_notification_banter:
+          name: Enable Notification Banter
+          description: >-
+            Independent toggle for banter after notification/email deliveries.
+            Voice banter uses the main Enable Toggle above. Both can be
+            controlled independently.
+          default: true
+          selector:
+            boolean:
+
+        satellite:
+          name: Voice Satellite
+          description: Which satellite this instance serves. Banter only fires for interactions on this satellite.
+          selector:
+            entity:
+              domain: assist_satellite
+
+        satellite_speaker:
+          name: Satellite Speaker
+          description: >-
+            Media player entity for the satellite's ESP speaker. Used to
+            detect when Agent A's TTS finishes playing. This is the ESP
+            media player (e.g., media_player.ha_voice_pe_workshop_rick_esp),
+            NOT the Sonos/external speaker.
+          selector:
+            entity:
+              domain: media_player
+
+    # ── ② Gating ──────────────────────────────────────────────────────────
+    gating:
+      name: "② Gating"
+      icon: mdi:dice-multiple
+      description: Probability, cooldown, and budget gates.
+      collapsed: true
+      input:
+        banter_probability:
+          name: Banter Probability (%)
+          description: >-
+            Chance of banter after each user interaction. 0 = never, 100 = always.
+            20% is a good starting point — frequent enough to be entertaining,
+            rare enough not to annoy.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        cooldown_minutes:
+          name: Cooldown (minutes)
+          description: >-
+            Minimum time between banter reactions. Prevents rapid-fire commentary
+            during active conversation sessions.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 240
+              step: 5
+              unit_of_measurement: min
+
+        budget_floor:
+          name: Budget Floor (%)
+          description: >-
+            Skip banter when LLM budget remaining drops below this percentage.
+            Banter is Luxury tier — first to be cut when budget is tight.
+            Set to 0 to disable the budget gate.
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+    # ── ③ Agent Pool ──────────────────────────────────────────────────────
+    agent_pool:
+      name: "③ Agent Pool"
+      icon: mdi:account-group
+      description: >-
+        Pipeline names of agents eligible to deliver banter. Agent A (the one
+        who just responded) is automatically excluded.
+      collapsed: true
+      input:
+        agent_pool_list:
+          name: Agent Pool
+          description: >-
+            Comma-separated pipeline display names eligible for banter.
+            Agent A (who just responded) is automatically excluded.
+            Use exact pipeline names from HA (e.g., Rick, Quark, Deadpool).
+          default: "Rick, Quark, Deadpool, Kramer, Doctor Portuondo"
+          selector:
+            text:
+              multiline: true
+
+    # ── ④ Delivery ────────────────────────────────────────────────────────
+    delivery:
+      name: "④ Delivery"
+      icon: mdi:bullhorn
+      description: TTS speaker, voice map override, and priority.
+      collapsed: true
+      input:
+        tts_speaker:
+          name: TTS Speaker
+          description: >-
+            Media player to deliver banter through. Only used when
+            TTS Target Mode is set to "explicit".
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tts_target_mode:
+          name: TTS Target Mode
+          description: >-
+            Speaker targeting mode for banter delivery.
+            "presence" routes to the nearest occupied speaker via FP2 zones.
+            "explicit" always plays on the TTS Speaker selected above.
+          default: "presence"
+          selector:
+            select:
+              options:
+                - presence
+                - explicit
+
+
+
+        tts_output_volume:
+          name: TTS Output Volume (optional)
+          description: >-
+            Volume level (0.0–1.0) to set on the target speaker before
+            TTS. The speaker's original volume is saved beforehand and
+            restored after playback. Set to 0 to disable — the speaker
+            plays at whatever volume it is already at.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        tts_restore_delay:
+          name: TTS Volume Restore Delay (seconds)
+          description: >-
+            Seconds to wait after TTS delivery before restoring the
+            speaker's original volume. Only applies when TTS output
+            volume is set above 0.
+          default: 8
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+
+        tts_playback_buffer:
+          name: Playback Buffer (seconds)
+          description: >-
+            Extra seconds to wait after the satellite reports idle before
+            banter speaks. Compensates for the gap between satellite idle
+            and speaker finishing audio playback.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 10
+              step: 1
+
+    # ── ⑤ Stinger ────────────────────────────────────────────────────────
+    stinger:
+      name: "⑤ Stinger"
+      icon: mdi:music-note
+      description: Optional chime/stinger before banter TTS.
+      collapsed: true
+      input:
+        enable_pre_tts_stinger:
+          name: Enable Pre-TTS Stinger
+          description: >-
+            When enabled, resolves a chime/stinger and plays it before
+            the banter TTS line.
+          default: false
+          selector:
+            boolean:
+
+        stinger_library_id_override:
+          name: Stinger Library ID Override
+          description: >-
+            Explicit music library ID. When set, skips auto-resolve
+            and compose — builds path directly.
+          default: ""
+          selector:
+            text:
+
+        compose_stinger_if_missing:
+          name: Compose If Not In Library
+          description: >-
+            When auto-resolve finds no matching chime, compose one
+            locally via FluidSynth. When off, uses fallback URL.
+          default: true
+          selector:
+            boolean:
+
+        stinger_fallback_media_url:
+          name: Stinger Fallback Media URL
+          description: >-
+            URL or path to a fallback chime file when library lookup
+            and compose both fail. Empty = no chime on failure.
+          default: ""
+          selector:
+            text:
+
+    # ── ⑥ Infrastructure ────────────────────────────────────────────────
+    infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      description: Cooldown helper and bypass scripts.
+      collapsed: true
+      input:
+        cooldown_helper:
+          name: Cooldown Helper
+          description: >-
+            input_datetime entity used to track last banter time.
+            Default: input_datetime.ai_banter_last_reaction
+          default: input_datetime.ai_banter_last_reaction
+          selector:
+            entity:
+              domain: input_datetime
+
+        bypass_claim_script:
+          name: Refcount Claim Script
+          description: >-
+            Script that registers a bypass claim (turns off follow-me
+            and ducking during banter). Create from the Refcount
+            Bypass — Claim blueprint.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount Release Script
+          description: >-
+            Script that releases the bypass claim after banter.
+            Create from the Refcount Bypass — Release blueprint.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+        theatrical_mode_entity:
+          name: "Theatrical mode active entity"
+          description: "Boolean tracking whether theatrical mode is currently running."
+          default: sensor.ai_theatrical_mode_active
+          selector:
+            entity:
+
+        last_satellite_entity:
+          name: "Last satellite entity"
+          description: "Helper that stores the last-active satellite entity_id."
+          default: sensor.ai_last_satellite
+          selector:
+            entity:
+              domain: input_text
+
+        ducking_flag_entity:
+          name: "Ducking flag entity"
+          description: "Boolean tracking active volume ducking state."
+          default: sensor.ai_ducking_flag
+          selector:
+            entity:
+
+    # ── ⑦ Prompt ─────────────────────────────────────────────────────────
+    prompt:
+      name: "⑦ Prompt"
+      icon: mdi:script-text
+      description: Banter prompt template and word limit.
+      collapsed: true
+      input:
+        banter_prompt:
+          name: Banter Prompt
+          description: >-
+            Creative instruction sent to Agent B. Use placeholders:
+            {agent_a} = responding agent's name, {topic} = interaction topic,
+            {excerpt} = Agent A's truncated response, {mood} = user mood,
+            {max_words} = word limit. The safety prefix (tool suppression)
+            is automatically prepended — do not include it here.
+          default: >-
+            {agent_a} just told the user: '{excerpt}'.
+            Respond in your natural language and style, directed AT the user.
+            If your character speaks a language other than English, respond in that language.
+            Under {max_words} words.
+          selector:
+            text:
+              multiline: true
+
+        max_words:
+          name: Max Words
+          description: Maximum word count for the banter reaction.
+          default: 25
+          selector:
+            number:
+              min: 5
+              max: 100
+              step: 5
+
+    # ── ⑧ Theatrical Escalation ────────────────────────────────────────
+    escalation:
+      name: "⑧ Theatrical Escalation"
+      icon: mdi:trending-up
+      description: >-
+        When enabled, a banter reaction can probabilistically
+        escalate into a full multi-turn theatrical exchange
+        (Pattern 4). Fires an ai_theatrical_request event.
+      collapsed: true
+      input:
+        enable_theatrical_escalation:
+          name: Enable Theatrical Escalation
+          description: >-
+            When enabled, after a successful banter reaction,
+            a probability roll determines if the exchange
+            escalates into a full theatrical debate.
+          default: false
+          selector:
+            boolean:
+
+        escalation_probability:
+          name: Escalation Probability (%)
+          description: >-
+            Chance that a banter reaction escalates into
+            theatrical mode. Only applies when escalation
+            is enabled above. 10% is conservative.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        escalation_budget_floor:
+          name: Escalation Budget Floor (%)
+          description: >-
+            Additional budget floor gate for escalation.
+            Set to 0 to use the theatrical blueprint's own
+            budget floor only.
+          default: 70
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+    # ── ⑨ User Preferences ──────────────────────────────────────────────
+    user_preferences:
+      name: "⑨ User Preferences"
+      icon: mdi:account-cog
+      description: User preference injection for banter prompts.
+      collapsed: true
+      input:
+        enable_user_preferences:
+          name: "Enable user preference injection"
+          description: "Inject user humor, off-limits, and pet peeve preferences into banter prompts."
+          default: true
+          selector:
+            boolean:
+
+    # ── ⑩ Notification Threshold ─────────────────────────────────────
+    notification_threshold:
+      name: "⑩ Notification Threshold"
+      icon: mdi:bell-cancel
+      description: "Gate TTS against the active user's notification threshold preference."
+      collapsed: true
+      input:
+        enable_notify_threshold:
+          name: "Enable notification threshold"
+          description: >
+            Gate TTS announcements against the active user's notification threshold
+            preference (input_text.ai_context_user_notify_threshold_{user}).
+            Values: "everything" (default), "important" (priority 0-2 only),
+            "urgent" (priority 0-1 only), "critical" (priority 0 only), "off" (no TTS).
+          default: false
+          selector:
+            boolean:
+        tts_priority:
+          name: "TTS priority level"
+          description: >-
+            Queue priority for banter (0=emergency, 4=low). Default 2 keeps
+            banter above ambient but below alerts.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  # Voice — fired from conversation_sensor.py after LLM response captured.
+  # All conversation entities auto-discovered (no hardcoded list).
+  - trigger: event
+    event_type: ai_conversation_response_ready
+    id: voice
+  # Notifications — from notification_follow_me + email_promote.
+  # Triggers after TTS playback completes (not when queued) to prevent
+  # banter from talking over the notification on a different speaker.
+  - trigger: event
+    event_type: tts_queue_item_completed
+    event_data:
+      completed: true
+    id: notification
+
+variables:
+  # ── Inputs ──
+  enable_toggle_entity: !input enable_toggle
+  master_gate_entity: !input notification_master_gate
+  satellite_entity: !input satellite
+  satellite_speaker_entity: !input satellite_speaker
+  notification_banter_enabled: !input enable_notification_banter
+  banter_probability: !input banter_probability
+  cooldown_minutes: !input cooldown_minutes
+  budget_floor: !input budget_floor
+  agent_pool_raw: !input agent_pool_list
+  tts_speaker_entity: !input tts_speaker
+  tts_target_mode_val: !input tts_target_mode
+  tts_priority_val: !input tts_priority
+  cooldown_helper: !input cooldown_helper
+  banter_prompt_raw: !input banter_prompt
+  max_words_val: !input max_words
+  tts_output_vol: !input tts_output_volume
+  restore_delay: !input tts_restore_delay
+  playback_buffer: !input tts_playback_buffer
+  v_enable_stinger: !input enable_pre_tts_stinger
+  v_stinger_library_id: !input stinger_library_id_override
+  v_compose_if_missing: !input compose_stinger_if_missing
+  v_stinger_fallback_url: !input stinger_fallback_media_url
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+  enable_theatrical_escalation: !input enable_theatrical_escalation
+  escalation_probability: !input escalation_probability
+  escalation_budget_floor: !input escalation_budget_floor
+  enable_user_prefs: !input enable_user_preferences
+  enable_threshold: !input enable_notify_threshold
+  _last_satellite: !input last_satellite_entity
+  _ducking_flag: !input ducking_flag_entity
+  _theatrical_mode_active: !input theatrical_mode_entity
+  # TTS voice resolved dynamically via pyscript.dispatcher_resolve_engine
+  # ── User preference context for banter shaping ──
+  _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
+    {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+    {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
+  _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) }}"
+  _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) }}"
+  _user_pet_peeves: "{{ states('input_text.ai_context_user_pet_peeves_' ~ _resolved_user) | default('', true) }}"
+
+conditions:
+  # ── Gate 0: Notification master gate ──
+  - alias: "Gate 0 — Notification master gate"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+  # ── Gate 1: Enable toggle (voice = master toggle, notification = own knob) ──
+  - alias: "Gate 1 — Enable toggle"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'notification' %}
+        {{ notification_banter_enabled | bool(true) }}
+      {% else %}
+        {{ states(enable_toggle_entity) == 'on' }}
+      {% endif %}
+
+  # ── Gate 2: Satellite match (voice only — notifications skip) ──
+  - alias: "Gate 2 — Satellite match"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'notification' %}
+        true
+      {% else %}
+        {{ states(_last_satellite) == satellite_entity }}
+      {% endif %}
+
+  # ── Gate 3: Trigger sanity ──
+  - alias: "Gate 3 — Trigger sanity"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'notification' %}
+        {{ trigger.event.data.agent_name is defined
+           and trigger.event.data.message is defined }}
+      {% else %}
+        {{ trigger.event.data.agent_name is defined
+           and trigger.event.data.response_text is defined }}
+      {% endif %}
+
+  # ── Gate 4: Budget floor (Luxury tier) ──
+  - alias: "Gate 4 — Budget floor"
+    condition: template
+    value_template: >-
+      {% set floor = budget_floor | int(60) %}
+      {% if floor == 0 %}true
+      {% else %}
+        {{ states('sensor.ai_llm_budget_remaining') | int(100) >= floor }}
+      {% endif %}
+
+  # ── Gate 5: Cooldown ──
+  - alias: "Gate 5 — Cooldown"
+    condition: template
+    value_template: >-
+      {% set last = states(cooldown_helper) %}
+      {% if last in ['unknown', 'unavailable', ''] %}
+        true
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last | as_datetime)) > (cooldown_minutes | int(30) * 60) }}
+      {% endif %}
+
+  # ── Gate 6: Not during theatrical exchange ──
+  - alias: "Gate 6 — Theatrical mode not active"
+    condition: state
+    entity_id: !input theatrical_mode_entity
+    state: "off"
+
+  # ── Gate 7: Satellite not in active voice session ──
+  - alias: "Gate 7 — Satellite idle check"
+    condition: template
+    value_template: >-
+      {% if trigger.id == 'notification' %}
+        true
+      {% else %}
+        {{ states(satellite_entity) not in ['listening', 'responding'] }}
+      {% endif %}
+
+  # ── Gate 8: Notification threshold ──
+  - alias: "Gate — notification threshold"
+    condition: template
+    value_template: >-
+      {% if not (enable_threshold | bool(false)) %}
+        true
+      {% else %}
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
+        {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+        {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
+        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% else %}{% set _u = _primary %}{% endif %}
+        {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
+        {% set prio = tts_priority_val | int(2) %}
+        {% if threshold in ['unknown', 'unavailable', '', 'none', 'everything'] %}
+          true
+        {% elif threshold in ['important', 'priority only'] %}
+          {{ prio <= 2 }}
+        {% elif threshold in ['urgent only', 'urgent'] %}
+          {{ prio <= 1 }}
+        {% elif threshold in ['critical only', 'critical'] %}
+          {{ prio == 0 }}
+        {% elif threshold == 'off' %}
+          false
+        {% else %}
+          true
+        {% endif %}
+      {% endif %}
+
+action:
+  # ── Step 1: Resolve event data + parse pool ──
+  - alias: "Step 1 — Resolve variables from trigger"
+    variables:
+      agent_a: >-
+        {% if trigger.id == 'notification' %}
+          {{ trigger.event.data.agent_name | lower | replace(' ', '_') }}
+        {% else %}
+          {{ trigger.event.data.agent_short | default('unknown') }}
+        {% endif %}
+      agent_a_display: "{{ agent_a | replace('_', ' ') | title }}"
+      agent_a_response: >-
+        {% if trigger.id == 'notification' %}
+          {{ trigger.event.data.message | default('') }}
+        {% else %}
+          {{ trigger.event.data.response_text | default('') }}
+        {% endif %}
+      topic: >-
+        {% if trigger.id == 'notification' %}
+          {{ trigger.event.data.topic | default('notification') | replace('_', ' ') }}
+        {% else %}
+          {{ trigger.event.data.topic | default('general') | replace('_', ' ') }}
+        {% endif %}
+      mood: "neutral"
+      is_notification: "{{ trigger.id == 'notification' }}"
+      raw_pool: >-
+        {{ agent_pool_raw.split(',') | map('trim') | reject('eq', '') | list }}
+
+  # ── Step 2: Probability roll ──
+  - alias: "Step 2 — Probability roll"
+    variables:
+      dice_roll: "{{ range(100) | random }}"
+      is_hit: "{{ dice_roll | int < banter_probability | int }}"
+  - alias: "Step 2b — Gate: probability miss"
+    if:
+      - condition: template
+        value_template: "{{ not is_hit }}"
+    then:
+      - stop: "Banter chance missed (rolled {{ dice_roll }}, needed < {{ banter_probability }})"
+
+  # ── Step 3: Build filtered pool (exclude Agent A via persona normalization) ──
+  - alias: "Step 3 — Filter pool"
+    variables:
+      filtered_pool: >-
+        {% set ns = namespace(items=[]) %}
+        {% for p in raw_pool %}
+          {% set persona = p.split(' - ')[0] | trim | lower | replace(' ', '_') %}
+          {% if persona != agent_a %}
+            {% set ns.items = ns.items + [p] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.items }}
+  - alias: "Step 3b — Gate: empty pool"
+    if:
+      - condition: template
+        value_template: "{{ filtered_pool | length == 0 }}"
+    then:
+      - stop: "No banter agents available (Agent A '{{ agent_a }}' is the only option)"
+
+  # ── Step 4: Random-select Agent B ──
+  - alias: "Step 4 — Select Agent B"
+    variables:
+      agent_b: "{{ filtered_pool | random }}"
+
+  # ── Step 4b: Resolve Agent B engine via dispatcher ──
+  - alias: "Step 4b — Resolve Agent B engine"
+    action: pyscript.dispatcher_resolve_engine
+    response_variable: agent_b_resolve
+    continue_on_error: true
+    data:
+      pipeline_name: "{{ agent_b }}"
+
+  - alias: "Step 4c — Extract engine + TTS + voice ID"
+    variables:
+      agent_b_engine: >-
+        {{ (agent_b_resolve | default({})).get('engine', '') }}
+      agent_b_tts_engine: >-
+        {{ (agent_b_resolve | default({})).get('tts_engine', '') }}
+      agent_b_tts_voice: >-
+        {{ (agent_b_resolve | default({})).get('tts_voice', '') }}
+
+  - alias: "Step 4d — Guard: engine resolution"
+    if:
+      - condition: template
+        value_template: "{{ agent_b_engine | length == 0 }}"
+    then:
+      - stop: "Could not resolve engine for {{ agent_b }}"
+
+  # ── Step 5: Build banter prompt (safety prefix + user template) ──
+  - alias: "Step 5 — Render banter prompt"
+    variables:
+      rendered_prompt: >-
+        [BANTER — do NOT call handoff_agent, execute_service, escalate_action,
+        or any other tools. Respond with a brief in-character reaction only.
+        Use the user's name from your context — never say "the user".]
+        {{ banter_prompt_raw
+           | replace('{agent_a}', agent_a_display)
+           | replace('{topic}', topic)
+           | replace('{excerpt}', agent_a_response)
+           | replace('{mood}', mood)
+           | replace('{max_words}', max_words_val | string) }}
+        {% if enable_user_prefs | bool(true) %}
+        {% if _user_off_limits not in ['unknown', 'unavailable', '', 'None'] %}
+        NEVER mention or joke about: {{ _user_off_limits }}.
+        {% endif %}
+        {% if _user_humor not in ['unknown', 'unavailable', '', 'None'] %}
+        User humor preference: {{ _user_humor }}.
+        {% endif %}
+        {% if _user_pet_peeves not in ['unknown', 'unavailable', '', 'None'] %}
+        Avoid triggering these pet peeves: {{ _user_pet_peeves }}.
+        {% endif %}
+        {% endif %}
+
+  # ── Step 5a: Claim follow-me bypass BEFORE conversation.process ──
+  # Prevents notification_follow_me from intercepting banter's
+  # conversation.process call while banter is active.
+  - alias: "Step 5a — Claim follow-me bypass"
+    action: "{{ v_bypass_claim }}"
+    continue_on_error: true
+    data:
+      owner: "{{ this.entity_id }}"
+
+  # ── Step 5b: Call Agent B via conversation.process ──
+  - alias: "Step 5b — Call Agent B via conversation.process"
+    action: conversation.process
+    response_variable: agent_b_response
+    continue_on_error: true
+    data:
+      agent_id: "{{ agent_b_engine }}"
+      text: "{{ rendered_prompt }}"
+
+  # ── Step 6: Extract speech from response ──
+  - alias: "Step 6 — Extract banter text"
+    variables:
+      banter_text: >-
+        {% if agent_b_response is defined and agent_b_response is mapping %}
+          {{ agent_b_response.get('response', {})
+             .get('speech', {}).get('plain', {}).get('speech', '') | trim }}
+        {% else %}
+          {{ '' }}
+        {% endif %}
+  - alias: "Step 6b — Gate: empty response"
+    if:
+      - condition: template
+        value_template: "{{ banter_text | length == 0 }}"
+    then:
+      - stop: "conversation.process returned empty banter for {{ agent_b }}"
+
+  # ── Step 6c: Wait for Agent A to finish speaking (voice only) ──
+  # Two-phase wait on satellite ESP media player (proven mic timing pattern):
+  #   Phase 1: Wait for speaker to START playing (leave idle/off state)
+  #   Phase 2: Wait for speaker to FINISH playing (return to idle)
+  # Without Phase 1, the wait passes immediately if checked before TTS starts.
+  # Notifications skip (TTS already delivered before event fired).
+  - alias: "Step 6c — Wait for speaker to start playing (Phase 1)"
+    if:
+      - condition: template
+        value_template: "{{ not is_notification }}"
+    then:
+      - wait_template: "{{ states(satellite_speaker_entity) not in ['idle', 'standby', 'off', 'unavailable'] }}"
+        timeout: "00:00:15"
+        continue_on_timeout: true
+      - alias: "Step 6c2 — Wait for speaker to finish playing (Phase 2)"
+        wait_template: "{{ states(satellite_speaker_entity) in ['idle', 'standby', 'off'] }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
+      - delay:
+          seconds: "{{ playback_buffer | int(1) }}"
+
+  # ── Step 6e: Resolve pre-TTS stinger ──
+  - alias: "Step 6e — Init chime path"
+    variables:
+      v_chime_path: ""
+  - alias: "Step 6f — Chime resolution (when stinger enabled)"
+    if:
+      - condition: template
+        value_template: "{{ v_enable_stinger | bool(false) }}"
+    then:
+      - choose:
+          - alias: "Tier 1 — Explicit library ID"
+            conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | default('') | length > 0 }}"
+            sequence:
+              - variables:
+                  v_chime_path: "/local/music_cache/production/{{ v_stinger_library_id }}.mp3"
+          - alias: "Tier 2 — Auto-resolve / compose"
+            conditions:
+              - condition: template
+                value_template: "{{ v_stinger_library_id | default('') | length == 0 }}"
+            sequence:
+              - action: pyscript.music_compose_get
+                response_variable: _chime_lookup
+                data:
+                  agent: "{{ agent_b.split(' - ')[0] | trim | lower }}"
+                  content_type: "chime"
+                continue_on_error: true
+              - choose:
+                  - alias: "Library hit"
+                    conditions:
+                      - condition: template
+                        value_template: "{{ (_chime_lookup | default({})).get('status', '') == 'ok' }}"
+                    sequence:
+                      - variables:
+                          v_chime_path: "{{ (_chime_lookup.get('file_path', '') | replace('/config/www/', '/local/')) }}"
+                  - alias: "Not found — compose locally"
+                    conditions:
+                      - condition: template
+                        value_template: >-
+                          {{ (_chime_lookup | default({})).get('status', '') == 'not_found'
+                             and v_compose_if_missing | bool(true) }}
+                    sequence:
+                      - action: pyscript.music_compose_local
+                        response_variable: _local
+                        data:
+                          agent: "{{ agent_b.split(' - ')[0] | trim | lower }}"
+                          content_type: "chime"
+                          duration_s: 2.0
+                        continue_on_error: true
+                      - if: "{{ (_local | default({})).get('status', '') == 'ok' }}"
+                        then:
+                          - variables:
+                              v_chime_path: "{{ (_local.get('file_path', '') | replace('/config/www/', '/local/')) }}"
+                default:
+                  - if: "{{ v_stinger_fallback_url | default('') | length > 0 }}"
+                    then:
+                      - variables:
+                          v_chime_path: "{{ v_stinger_fallback_url }}"
+
+  # ── Step 6g: Wait for ducking to clear (prevents banter over ducked audio) ──
+  - alias: "Step 6g — Wait for ducking to settle"
+    if:
+      - condition: template
+        value_template: "{{ states(_ducking_flag) == 'on' }}"
+    then:
+      - wait_template: "{{ states(_ducking_flag) == 'off' }}"
+        timeout: "00:00:10"
+        continue_on_timeout: true
+  - alias: "Step 6g2 — Settle delay for volume propagation"
+    if:
+      - condition: template
+        value_template: "{{ is_notification }}"
+    then:
+      - delay:
+          seconds: 1
+
+  # ── Step 6h: Final satellite guard before TTS ──
+  - alias: "Step 6h — Satellite still idle"
+    if:
+      - condition: template
+        value_template: >-
+          {{ not is_notification
+             and states(satellite_entity) in ['listening', 'responding'] }}
+    then:
+      - stop: "Satellite is in voice session — suppressing banter"
+
+  # ── Step 7: TTS via tts_queue_speak in Agent B's voice ──
+  - alias: "Step 7 — Speak banter"
+    action: pyscript.tts_queue_speak
+    response_variable: _tts_banter
+    continue_on_error: true
+    data:
+      text: "{{ banter_text }}"
+      voice: "{{ agent_b_tts_engine }}"
+      priority: "{{ tts_priority_val | int(2) }}"
+      target_mode: "{{ tts_target_mode_val }}"
+      target: "{{ tts_speaker_entity if tts_target_mode_val == 'explicit' else '' }}"
+      announce: true
+      duck: false
+      volume_level: "{{ tts_output_vol | float(0) if tts_output_vol | float(0) > 0 else none }}"
+      restore_volume: "{{ tts_output_vol | float(0) > 0 }}"
+      volume_restore_delay: "{{ restore_delay | int(8) }}"
+      chime_path: "{{ v_chime_path | default('') }}"
+      voice_id: "{{ agent_b_tts_voice | default('') }}"
+
+  # ── Step 7b: Release follow-me bypass ──
+  - alias: "Step 7b — Release follow-me bypass"
+    action: "{{ v_bypass_release }}"
+    continue_on_error: true
+    data:
+      owner: "{{ this.entity_id }}"
+
+  # ── Step 8: Update cooldown helper ──
+  - alias: "Step 8 — Update cooldown"
+    action: input_datetime.set_datetime
+    target:
+      entity_id: "{{ cooldown_helper }}"
+    data:
+      datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # ── Step 9: Whisper — log banter (source: automation prevents re-trigger) ──
+  - alias: "Step 9 — Log banter via whisper"
+    action: pyscript.agent_whisper
+    continue_on_error: true
+    data:
+      agent_name: "{{ agent_b | lower }}"
+      user_query: "banter reaction to {{ agent_a }}'s response about {{ topic }}"
+      agent_response: "{{ banter_text }}"
+      source: "automation"
+
+  # ── Step 10: Theatrical escalation check ──
+  - alias: "Step 10 — Theatrical escalation"
+    if:
+      - condition: template
+        value_template: >-
+          {{ enable_theatrical_escalation | default(false)
+             and is_state('input_boolean.ai_theatrical_mode_enabled', 'on')
+             and is_state(_theatrical_mode_active, 'off')
+             and (states('sensor.ai_llm_budget_remaining') | float(100))
+                >= (escalation_budget_floor | float(70))
+             and (range(100) | random) < (escalation_probability | int(10)) }}
+    then:
+      - event: ai_theatrical_request
+        event_data:
+          topic: "{{ trigger.event.data.get('topic', 'the conversation') }}"
+          initial_context: >-
+            {{ trigger.event.data.get('agent', 'Agent') }}: {{ trigger.event.data.get('response', '')[:200] }}
+            {{ agent_b }}: {{ banter_text[:200] }}
+          source: "banter_escalation"
+          opener_persona: "{{ agent_b }}"

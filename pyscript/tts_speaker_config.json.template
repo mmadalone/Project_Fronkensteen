@@ -1,0 +1,9 @@
+{
+  "_comment": "TTS Speaker Config — TEMPLATE. Replace speaker entity IDs with yours. Add more zones as needed.",
+  "zone_speaker_map": {
+    "zone1": ["{{DEFAULT_SPEAKER}}"]
+  },
+  "speaker_options": {
+    "{{DEFAULT_SPEAKER}}": { "ducking": "hardware" }
+  }
+}

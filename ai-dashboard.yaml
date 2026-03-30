@@ -18,6 +18,8 @@ views:
       state_color: true
       columns: 4
       entities:
+      - entity: sensor.ai_system_health
+        name: System
       - entity: sensor.ai_dispatcher_status
         name: Dispatch
       - entity: sensor.ai_tts_queue_status
@@ -46,6 +48,73 @@ views:
         name: Conv Sensor
       - entity: sensor.ai_music_taste_status
         name: Music Taste
+      - entity: sensor.ai_system_recovery_status
+        name: Recovery
+      - entity: sensor.ai_toggle_audit_status
+        name: Audit
+    - type: conditional
+      conditions:
+        - condition: state
+          entity: sensor.ai_system_recovery_status
+          state_not: idle
+      card:
+        type: markdown
+        title: Recovery Engine
+        content: >-
+          **State:** {{ states('sensor.ai_system_recovery_status') }}
+
+
+          **Active:** {{ state_attr('sensor.ai_system_recovery_status', 'active_recoveries') | default([]) | join(', ') or 'none' }}
+
+
+          **Circuit broken:** {{ state_attr('sensor.ai_system_recovery_status', 'circuit_broken') | default([]) | join(', ') or 'none' }}
+
+
+          **Attempts (1h):** {{ state_attr('sensor.ai_system_recovery_status', 'total_attempts_1h') | default(0) }}
+    - type: conditional
+      conditions:
+        - condition: state
+          entity: sensor.ai_system_health
+          state_not: healthy
+      card:
+        type: markdown
+        title: System Health Detail
+        content: >-
+          **State:** {{ states('sensor.ai_system_health') }}
+          | **Score:** {{ state_attr('sensor.ai_system_health', 'score') | default(0) }}
+
+
+          | Category | Grade |
+
+          |----------|-------|
+
+          | Sensors | {{ state_attr('sensor.ai_system_health', 'status_sensors_grade') | default('?') }} |
+
+          | Services | {{ state_attr('sensor.ai_system_health', 'services_grade') | default('?') }} |
+
+          | Helpers | {{ state_attr('sensor.ai_system_health', 'helpers_grade') | default('?') }} |
+
+          | Pipelines | {{ state_attr('sensor.ai_system_health', 'pipeline_entities_grade') | default('?') }} |
+
+          | Memory DB | {{ state_attr('sensor.ai_system_health', 'memory_db_grade') | default('?') }} |
+
+          | JSON Configs | {{ state_attr('sensor.ai_system_health', 'json_configs_grade') | default('?') }} |
+
+          | TTS Queue | {{ state_attr('sensor.ai_system_health', 'tts_queue_grade') | default('?') }} |
+
+
+          {% if state_attr('sensor.ai_system_health', 'status_sensors_missing') | default(none) is not none %}
+          **Missing sensors:** {{ state_attr('sensor.ai_system_health', 'status_sensors_missing') | join(', ') }}
+          {% endif %}
+          {% if state_attr('sensor.ai_system_health', 'services_potentially_missing') | default(none) is not none %}
+          **Missing services:** {{ state_attr('sensor.ai_system_health', 'services_potentially_missing') | join(', ') }}
+          {% endif %}
+          {% if state_attr('sensor.ai_system_health', 'helpers_missing') | default(none) is not none %}
+          **Missing helpers:** {{ state_attr('sensor.ai_system_health', 'helpers_missing') | join(', ') }}
+          {% endif %}
+          {% if state_attr('sensor.ai_system_health', 'pipeline_entities_missing') | default(none) is not none %}
+          **Missing pipelines:** {{ state_attr('sensor.ai_system_health', 'pipeline_entities_missing') | join(', ') }}
+          {% endif %}
   - type: vertical-stack
     cards:
     - type: markdown
@@ -67,11 +136,11 @@ views:
     - type: entities
       title: Daily Counters
       entities:
-      - entity: input_number.ai_llm_calls_today
+      - entity: sensor.ai_llm_calls_today
         name: LLM Calls Today
       - entity: input_number.ai_llm_daily_limit
         name: LLM Daily Limit
-      - entity: sensor.ai_dedup_blocked_today
+      - entity: sensor.ai_dedup_blocked_count
         name: Dedup Blocked Today
       - entity: sensor.ai_email_priority_count
         name: Priority Emails
@@ -89,11 +158,11 @@ views:
       entities:
       - entity: input_button.ai_budget_manual_reset
         name: Reset Budget Now
-      - entity: input_number.ai_llm_tokens_today
+      - entity: sensor.ai_llm_tokens_today
         name: LLM Tokens Today
-      - entity: input_number.ai_tts_chars_today
+      - entity: sensor.ai_tts_chars_today
         name: TTS Characters Today
-      - entity: input_number.ai_stt_calls_today
+      - entity: sensor.ai_stt_calls_today
         name: STT Calls Today
       - entity: sensor.ai_total_daily_cost
         name: Total Daily Cost
@@ -226,6 +295,72 @@ views:
 
         {% endfor %}
         {% endif %}
+    - type: markdown
+      title: Cost Reconciliation
+      content: |
+        {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
+        {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
+        {% set actual = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+        {% set div = state_attr('sensor.ai_total_daily_cost', 'divergence_pct') | float(0) %}
+        {% set color = 'green' if div < 20 else ('orange' if div < 50 else 'red') %}
+        **Mode:** {{ source | upper }}
+
+        | | Estimated | Actual (OR) |
+        |:---|---:|---:|
+        | Daily Cost | €{{ estimated | round(2) }} | €{{ actual | round(2) }} |
+
+        **Divergence:** <font color="{{ color }}">{{ div | round(1) }}%</font>
+
+        {% if source == 'hybrid' %}*Gate uses MAX(est, actual) = €{{ [estimated, actual] | max | round(2) }}*{% endif %}
+    - type: markdown
+      title: Per-Model Cost Breakdown
+      content: >-
+        {% set bd = state_attr('sensor.ai_budget_breakdown', 'breakdown') %}
+        {% if bd is not mapping %}
+        *Waiting for data...*
+        {% else %}
+        {% set ns = namespace(rows=[]) %}
+        {% for svc in ['llm', 'handoff'] %}
+        {% for agent, data in (bd.get(svc, {}) or {}).items() %}
+        {% if data.get('model') and data.get('model_cost_eur', 0) > 0 %}
+        {% set ns.rows = ns.rows + [data.get('model', '?') ~ ' | '
+           ~ data.get('calls', 0) ~ ' | '
+           ~ (data.get('input_tokens', 0) + data.get('output_tokens', 0)) ~ ' | €'
+           ~ data.get('model_cost_eur', 0) | round(4)] %}
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+        {% if ns.rows | length > 0 %}
+        Model | Calls | Tokens | Cost
+
+        :--- | ---: | ---: | ---:
+
+        {% for row in ns.rows %}
+        {{ row }}
+
+        {% endfor %}
+        **Total model cost:** €{{ states('sensor.ai_model_cost_today') | float(0) | round(4) }}
+        {% else %}
+        *No per-model cost data yet. Costs are tracked when model + token data is available.*
+        {% endif %}
+        {% endif %}
+    - type: entities
+      title: Monthly Projection
+      entities:
+      - entity: sensor.ai_budget_daily_average
+        name: Daily Average (€)
+      - entity: sensor.ai_budget_monthly_projection
+        name: Month Projection (€)
+      - entity: sensor.ai_model_pricing_status
+        name: Pricing Status
+    - type: history-graph
+      title: Cost Trend (7 days)
+      hours_to_show: 168
+      entities:
+      - entity: sensor.ai_total_daily_cost
+        name: Estimated
+      - entity: sensor.openrouter_daily_usage
+        name: Actual (OR)
   - type: vertical-stack
     cards:
     - type: markdown
@@ -238,12 +373,14 @@ views:
     - type: entities
       title: Active Agent
       entities:
-      - entity: input_text.ai_last_agent_name
+      - entity: sensor.ai_last_interaction
         name: Last Agent
       - entity: input_select.ai_dispatcher_mode
         name: Dispatch Mode
-      - entity: input_text.ai_last_interaction_topic
+      - entity: sensor.ai_last_interaction
         name: Last Topic
+        type: attribute
+        attribute: topic
       - entity: input_datetime.ai_last_interaction_time
         name: Last Interaction
       - entity: input_button.ai_dispatcher_apply_config
@@ -270,7 +407,7 @@ views:
       # ── Presence Inference ──
       - entity: binary_sensor.ai_solo_single_zone
         name: Solo Single Zone
-      - entity: input_boolean.ai_sustained_solo_zone
+      - entity: sensor.ai_sustained_solo_zone
         name: Sustained Solo Zone
       - entity: binary_sensor.ai_wifi_stale_condition_jessica
         name: WiFi Stale Condition (Jessica)
@@ -286,11 +423,11 @@ views:
         name: Guest Mode
       - type: divider
       # ── House Mode ──
-      - entity: input_boolean.ai_bedtime_active
+      - entity: sensor.ai_bedtime_active
         name: Bedtime Active
       - entity: input_boolean.ai_bedtime_global_lock
         name: Bedtime Lock
-      - entity: input_boolean.ai_winddown_active
+      - entity: sensor.ai_winddown_active
         name: Wind-Down Active
       - entity: input_boolean.ai_wake_up_snooze
         name: Wake-Up Snooze
@@ -319,9 +456,9 @@ views:
       entities:
       - entity: sensor.ai_tts_queue_status
         name: Queue Status
-      - entity: input_number.ai_tts_calls_today
+      - entity: sensor.ai_tts_calls_today
         name: TTS Calls Today
-      - entity: input_number.ai_tts_cache_hits_today
+      - entity: sensor.ai_tts_cache_hits_today
         name: Cache Hits Today
       - entity: sensor.ai_tts_cache_hit_rate
         name: Cache Hit Rate
@@ -346,12 +483,10 @@ views:
     - type: entities
       title: Voice Handoff
       entities:
-      - entity: input_boolean.ai_voice_handoff_enabled
-        name: Handoff Enabled
-      - entity: input_select.ai_handoff_restore_mode
-        name: Restore Mode
-      - entity: input_number.ai_handoff_restore_seconds
-        name: Restore After (sec)
+      - entity: sensor.ai_handoff_processing
+        name: Handoff In Progress
+      - entity: input_select.ai_expertise_routing_mode
+        name: Expertise Routing
       - type: button
         name: Restore Now
         icon: mdi:restore
@@ -359,10 +494,6 @@ views:
         tap_action:
           action: perform-action
           perform_action: pyscript.voice_handoff_restore_now
-      - entity: input_boolean.ai_handoff_processing
-        name: Handoff In Progress
-      - entity: input_select.ai_expertise_routing_mode
-        name: Expertise Routing
   - type: vertical-stack
     cards:
     - type: markdown
@@ -381,7 +512,7 @@ views:
         name: State
       - entity: binary_sensor.madaringer_is_charging
         name: Charging
-      - entity: input_boolean.ai_phone_call_active
+      - entity: sensor.ai_phone_call_active
         name: On Call
   - type: vertical-stack
     cards:
@@ -393,7 +524,7 @@ views:
     - type: entities
       title: Sleep
       entities:
-      - entity: input_boolean.ai_sleep_detected
+      - entity: sensor.ai_sleep_detected
         name: Sleep Detected
       - entity: input_datetime.ai_sleep_start
         name: Last Sleep Start
@@ -436,7 +567,7 @@ views:
       entities:
       - entity: sensor.ai_duck_manager_status
         name: Status
-      - entity: input_boolean.ai_ducking_flag
+      - entity: sensor.ai_ducking_flag
         name: Ducking Active
     - type: markdown
       content: '**Last duck:** {{ state_attr(''sensor.ai_duck_manager_status'', ''last_duck_source'')
@@ -454,7 +585,7 @@ views:
 
         {% endif %}
 
-        **Last topic:** {{ states(''input_text.ai_last_interaction_topic'') | default(''none'')
+        **Last topic:** {{ state_attr(''sensor.ai_last_interaction'', ''topic'') | default(''none'')
         }}'
   - type: vertical-stack
     cards:
@@ -467,7 +598,7 @@ views:
         tracks daily progression (morning → work → evening → bedtime).'
     - type: markdown
       title: Schedule & Routine
-      content: '{% set stage = states(''input_text.ai_routine_stage'') %}
+      content: '{% set stage = states(''sensor.ai_routine_stage'') %}
 
         {% set pp = states(''sensor.ai_presence_pattern_status'') %}
 
@@ -499,14 +630,14 @@ views:
 
         | Routine ETA | {{ states(''sensor.ai_routine_eta'') }} |
 
-        | Deviation | {{ states(''input_text.ai_routine_deviation'') }} |
+        | Deviation | {{ states(''sensor.ai_routine_deviation'') }} |
 
         | Schedule Confidence | {{ states(''sensor.ai_schedule_confidence'') }} |
 
         | Predicted Next Zone | {{ states(''sensor.ai_predicted_next_zone'') }} |
 
-        | Bedtime Recommendation | {{ states(''input_text.ai_bedtime_recommendation'')
-        }} |'
+        | Bedtime Recommendation | {{ state_attr(''sensor.ai_predictive_schedule_status'',
+        ''bedtime_recommendation'') | default(''none'') }} |'
     - type: horizontal-stack
       cards:
       - type: button
@@ -540,15 +671,15 @@ views:
     - type: entities
       title: Calendar & Briefing
       entities:
-      - entity: input_text.ai_calendar_today_summary
+      - entity: sensor.ai_calendar_today_summary
         name: Today's Calendar
-      - entity: input_text.ai_calendar_tomorrow_summary
+      - entity: sensor.ai_calendar_tomorrow_summary
         name: Tomorrow's Calendar
-      - entity: input_boolean.ai_calendar_stale
+      - entity: sensor.ai_calendar_stale
         name: Calendar Stale
-      - entity: input_boolean.ai_briefing_delivered_morning
+      - entity: sensor.ai_briefing_delivered_morning
         name: Morning Briefing Delivered
-      - entity: input_text.ai_email_last_priority
+      - entity: sensor.ai_email_last_priority
         name: Last Priority Email
   - type: vertical-stack
     cards:
@@ -561,22 +692,28 @@ views:
       entities:
       - entity: input_boolean.ai_media_tracking_enabled
         name: Media Tracking
-      - entity: input_boolean.ai_media_data_stale
+      - entity: sensor.ai_media_data_stale
         name: Data Stale
-      - entity: input_text.ai_media_upcoming_summary
+      - entity: sensor.ai_media_upcoming
         name: Upcoming Summary
-      - entity: input_text.ai_media_upcoming_sonarr
+      - entity: sensor.ai_media_upcoming
         name: Upcoming (Sonarr)
-      - entity: input_text.ai_media_upcoming_radarr
+        type: attribute
+        attribute: sonarr
+      - entity: sensor.ai_media_upcoming
         name: Upcoming (Radarr)
-      - entity: input_text.ai_media_recent_downloads
+        type: attribute
+        attribute: radarr
+      - entity: sensor.ai_media_upcoming
         name: Recent Downloads
+        type: attribute
+        attribute: recent_downloads
     - type: entities
       title: Music Composer
       entities:
       - entity: input_boolean.ai_music_composer_enabled
         name: Composer Enabled
-      - entity: input_number.ai_music_generations_today
+      - entity: sensor.ai_music_generations_today
         name: Generations Today
       - entity: input_number.ai_music_daily_generation_limit
         name: Daily Limit
@@ -595,6 +732,15 @@ views:
       title: Kill Switches
       show_header_toggle: false
       entities:
+      - entity: input_boolean.ai_notifications_master_enabled
+        name: Notifications Master Gate
+        icon: mdi:bell-check
+      - entity: input_boolean.ai_therapy_mode
+        name: Therapy Mode
+        icon: mdi:brain
+      - entity: input_boolean.ai_therapy_enabled
+        name: Therapy Enabled
+        icon: mdi:brain
       - entity: input_boolean.ai_tts_queue_active
         name: TTS Queue
       - entity: input_boolean.ai_dispatcher_enabled
@@ -643,9 +789,9 @@ views:
         name: Reactive Banter
       - entity: input_boolean.ai_interview_mode
         name: User Interview
-      - entity: input_boolean.notification_follow_me
+      - entity: input_boolean.ai_notification_follow_me
         name: Notification Follow-Me
-      - entity: input_boolean.ai_continuous_conversation_active
+      - entity: sensor.ai_continuous_conversation_active
         name: Continuous Conversation
       - entity: input_boolean.ai_memory_auto_archive
         name: Memory Auto-Archive
@@ -789,7 +935,7 @@ views:
         name: Daily Call Limit
       - entity: input_number.ai_llm_daily_budget
         name: Budget Scale (%)
-      - entity: input_number.ai_llm_calls_today
+      - entity: sensor.ai_llm_calls_today
         name: Calls Today
       - entity: input_number.ai_budget_personality_threshold
         name: Personality Threshold (%)
@@ -805,6 +951,23 @@ views:
         name: Budget Alert Threshold (%)
       - entity: input_number.ai_budget_threshold_high
         name: Budget Critical Threshold (%)
+    - type: entities
+      title: "Cost Source & Pricing (C5)"
+      entities:
+      - entity: input_select.ai_budget_cost_source
+        name: Budget Cost Source
+      - entity: input_button.ai_budget_refresh_pricing
+        name: Refresh Model Pricing
+      - entity: sensor.ai_model_pricing_status
+        name: Pricing Status
+      - entity: input_number.ai_elevenlabs_monthly_cost
+        name: ElevenLabs Plan Cost ($)
+      - entity: sensor.ai_tts_cost_per_1k_chars_derived
+        name: TTS Cost / 1K (derived)
+      - entity: input_number.ai_serper_plan_cost
+        name: Serper Plan Cost ($)
+      - entity: input_number.ai_serper_plan_credits
+        name: Serper Plan Credits
   - type: vertical-stack
     cards:
     - type: markdown
@@ -821,13 +984,13 @@ views:
         name: Enabled
       - entity: input_number.ai_project_hot_context_limit
         name: Hot Context Limit
-      - entity: input_boolean.ai_project_data_stale
+      - entity: sensor.ai_project_data_stale
         name: Data Stale
-      - entity: input_text.ai_project_last_sync
+      - entity: sensor.ai_project_last_sync
         name: Last Sync
-      - entity: input_text.ai_project_hot_context_line
+      - entity: sensor.ai_project_hot_context_line
         name: Hot Context Line
-      - entity: input_text.ai_active_projects_summary
+      - entity: sensor.ai_active_projects_summary
         name: Active Summary
     - type: horizontal-stack
       cards:
@@ -925,7 +1088,7 @@ views:
       entities:
       - entity: input_boolean.ai_duck_manager_enabled
         name: Engine Enabled
-      - entity: input_boolean.ai_ducking_flag
+      - entity: sensor.ai_ducking_flag
         name: Ducking Active
       - entity: sensor.ai_duck_manager_status
         name: Engine Status
@@ -941,12 +1104,6 @@ views:
         name: Dynamic Timeout (s)
       - entity: input_text.ai_tts_restore_satellites
         name: Monitor Satellites
-      - entity: input_text.ai_duck_group
-        name: Duck Group (CSV)
-      - entity: input_text.ai_duck_announcement_players
-        name: Announcement Players (CSV)
-      - entity: input_text.ai_duck_satellites
-        name: Duck Satellites (CSV)
       - entity: input_number.ai_duck_watchdog_timeout
         name: Watchdog Timeout (s)
       - entity: input_select.ai_duck_behavior
@@ -997,9 +1154,9 @@ views:
     - type: entities
       title: Sleep Schedule (Household)
       entities:
-      - entity: input_datetime.ai_context_wake_time_weekday
+      - entity: input_datetime.ai_context_wake_time_weekday_miquel
         name: Wake (Weekday)
-      - entity: input_datetime.ai_context_wake_time_weekend
+      - entity: input_datetime.ai_context_wake_time_weekend_miquel
         name: Wake (Weekend)
       - entity: input_datetime.ai_context_bed_time
         name: Bedtime Target
@@ -1007,7 +1164,7 @@ views:
         name: Target Sleep
       - entity: input_number.ai_morning_prep_buffer
         name: Morning Prep Buffer
-      - entity: input_boolean.ai_context_work_day
+      - entity: sensor.ai_context_work_day
         name: Work Day (auto)
       - entity: input_boolean.ai_work_day_manual_override
         name: Work Day Manual Override (I-27)
@@ -1031,25 +1188,6 @@ views:
         in a zone, TTS routes to that zone''s speaker. **Zone Priority** controls
 
         which zone wins when multiple zones detect presence simultaneously.'
-    - type: entities
-      title: Zone → Speaker
-      entities:
-      - entity: input_select.ai_tts_speaker_workshop
-        name: Workshop
-      - entity: input_select.ai_tts_speaker_living_room
-        name: Living Room
-      - entity: input_select.ai_tts_speaker_main_room
-        name: Main Room
-      - entity: input_select.ai_tts_speaker_kitchen
-        name: Kitchen
-      - entity: input_select.ai_tts_speaker_bed
-        name: Bed
-      - entity: input_select.ai_tts_speaker_lobby
-        name: Lobby
-      - entity: input_select.ai_tts_speaker_bathroom
-        name: Bathroom
-      - entity: input_select.ai_tts_speaker_shower
-        name: Shower
     - type: entities
       title: General
       entities:
@@ -1105,7 +1243,7 @@ views:
         name: Kill Switch
       - entity: sensor.ai_proactive_briefing_status
         name: Status
-      - entity: input_text.ai_last_briefing_summary
+      - entity: sensor.ai_last_briefing_summary
         name: Last Summary
   - type: vertical-stack
     cards:
@@ -1182,7 +1320,7 @@ views:
     - type: entities
       title: Phone Call
       entities:
-      - entity: input_boolean.ai_phone_call_active
+      - entity: sensor.ai_phone_call_active
         name: Call Active
       - entity: input_boolean.ai_phone_call_defer_tts
         name: Defer TTS During Calls
@@ -1369,6 +1507,8 @@ views:
         name: Update Interval (min)
       - entity: input_number.ai_away_ordinal_min_samples
         name: Ordinal Min Samples
+      - entity: input_number.ai_away_min_entropy_samples
+        name: Min Entropy Samples (G13)
     - type: entities
       title: Current Prediction
       entities:
@@ -1376,7 +1516,7 @@ views:
         name: Return Prediction
       - entity: sensor.ai_away_duration
         name: Away Duration
-      - entity: input_text.ai_away_prediction_accuracy
+      - entity: sensor.ai_away_prediction_accuracy
         name: Prediction Accuracy
     - type: horizontal-stack
       cards:
@@ -1411,7 +1551,7 @@ views:
         name: Global Probability (%)
       - entity: input_number.ai_escalation_cooldown_minutes
         name: Cooldown (min)
-      - entity: input_text.ai_escalation_last_outcome
+      - entity: sensor.ai_escalation_last_outcome
         name: Last Outcome
       - entity: input_datetime.ai_escalation_last_followthrough
         name: Last Followthrough
@@ -1500,26 +1640,6 @@ views:
   - type: vertical-stack
     cards:
     - type: markdown
-      content: '### Bedtime Negotiator Timing
-
-        Good-night dialog timing. Debounce prevents re-triggers after recent
-        runs. Cooldown sets the minimum interval between bedtime sessions.
-
-        Good-night state (gn_* helpers) is managed automatically by the blueprint.'
-    - type: entities
-      title: Bedtime Timing
-      entities:
-      - entity: input_number.bedtime_debounce_seconds
-        name: Debounce (sec)
-      - entity: input_number.bedtime_cooldown_minutes
-        name: Cooldown (min)
-      - entity: input_number.bedtime_reply_timeout_seconds
-        name: Reply Timeout (sec)
-      - entity: input_number.bedtime_max_attempts
-        name: Max Attempts
-  - type: vertical-stack
-    cards:
-    - type: markdown
       content: '### Wind-Down System
 
         Context-aware bedtime detection and escalation. Kill switch controls
@@ -1530,9 +1650,9 @@ views:
       entities:
       - entity: input_boolean.ai_winddown_enabled
         name: Enabled
-      - entity: input_boolean.ai_winddown_active
+      - entity: sensor.ai_winddown_active
         name: Active (in-progress)
-      - entity: input_number.ai_winddown_stage
+      - entity: sensor.ai_winddown_stage
         name: Escalation Stage
       - entity: input_select.ai_winddown_last_scenario
         name: Last Scenario
@@ -1554,28 +1674,6 @@ views:
         name: Promote TTL (min)
       - entity: input_number.ai_calendar_failure_threshold
         name: Failure Threshold
-  - type: vertical-stack
-    cards:
-    - type: markdown
-      content: '### Entity Configuration
-
-        Entity references used by pyscript modules and blueprints. Change
-        these if you rename integrations or add new calendar/media entities.'
-    - type: entities
-      title: Entity References
-      entities:
-      - entity: input_text.ai_imap_sensor_entity
-        name: IMAP Sensor
-      - entity: input_text.ai_calendar_main
-        name: Main Calendar
-      - entity: input_text.ai_calendar_holidays
-        name: Holidays Calendar
-      - entity: input_text.ai_calendar_birthdays
-        name: Birthdays Calendar
-      - entity: input_text.ai_spotifyplus_entity
-        name: SpotifyPlus Entity
-      - entity: input_text.ai_music_players
-        name: Music Players (CSV)
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1602,8 +1700,31 @@ views:
       entities:
       - entity: input_boolean.ai_interview_mode
         name: Interview Mode
-      - entity: input_text.ai_interview_progress
+      - entity: sensor.ai_interview_progress
         name: Interview Progress
+      - entity: input_select.ai_privacy_gate_user_interview
+        name: Privacy Override
+      - entity: sensor.ai_llm_budget_remaining
+        name: Budget Remaining
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Import Interview File
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.user_interview_import
+          data:
+            file: interview_miquel.yaml
+        icon: mdi:file-import
+      - type: button
+        name: View Exchange Log
+        tap_action:
+          action: perform-action
+          perform_action: pyscript.user_interview_exchanges
+          data:
+            user: miquel
+            limit: 20
+        icon: mdi:text-box-search
   - type: vertical-stack
     cards:
     - type: markdown
@@ -1614,7 +1735,7 @@ views:
     - type: entities
       title: Continuous Conversation
       entities:
-      - entity: input_boolean.ai_continuous_conversation_active
+      - entity: sensor.ai_continuous_conversation_active
         name: Continuous Conversation
   - type: vertical-stack
     cards:
@@ -1666,6 +1787,52 @@ views:
         | Volume Sync (per-room) | Volume Sync - [Room] |
 
         | Privacy Gate (per-tier) | AI Privacy Gate - [Person] [Tier] |'
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: '### Theatrical Mode (Pattern 4)'
+    - type: entities
+      title: Theatrical Mode Controls
+      entities:
+      - entity: input_boolean.ai_theatrical_mode_enabled
+        name: Enabled
+      - entity: sensor.ai_theatrical_mode_active
+        name: Active Session
+      - entity: input_number.ai_theatrical_turn_limit
+        name: Turn Limit
+      - entity: input_number.ai_theatrical_max_words
+        name: Max Words
+      - entity: input_number.ai_theatrical_budget_floor
+        name: Budget Floor
+      - entity: input_select.ai_theatrical_interrupt_mode
+        name: Interrupt Mode
+      - entity: input_select.ai_theatrical_context_mode
+        name: Context Mode
+      - entity: input_select.ai_theatrical_turn_order
+        name: Turn Order
+      - entity: input_datetime.ai_theatrical_last_exchange
+        name: Last Exchange
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: sensor.ai_theatrical_mode_active
+        state: 'on'
+      card:
+        type: entities
+        title: Active Exchange
+        entities:
+        - entity: sensor.ai_theatrical_status
+          name: Status
+    - type: button
+      name: Test Debate
+      icon: mdi:drama-masks
+      tap_action:
+        action: perform-action
+        perform_action: pyscript.theatrical_mode_start
+        data:
+          topic: "Should pineapple go on pizza?"
+          source: automation
+      show_state: false
 - title: User Profiles
   path: profiles
   icon: mdi:account-group
@@ -1939,11 +2106,11 @@ views:
       {%- set j_stale = is_state('input_boolean.ai_wifi_stale_jessica', 'on') -%}
       {%- set m_gps = is_state('device_tracker.madoppo', 'home') -%}
       {%- set solo = is_state('binary_sensor.ai_solo_single_zone', 'on') -%}
-      {%- set sust = is_state('input_boolean.ai_sustained_solo_zone', 'on') -%}
-      {%- set w1 = states('input_number.ai_wifi_score_primary') | int(40) -%}
-      {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(30) -%}
-      {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(20) -%}
-      {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(10) -%}
+      {%- set sust = is_state('sensor.ai_sustained_solo_zone', 'on') -%}
+      {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
+      {%- set w2 = states('input_number.ai_wifi_score_secondary') | int(50) -%}
+      {%- set w3 = states('input_number.ai_wifi_score_tertiary') | int(15) -%}
+      {%- set w4 = states('input_number.ai_wifi_score_quaternary') | int(5) -%}
 
       Signal | Miquel | Jessica | Weight
 
@@ -2088,10 +2255,65 @@ views:
         name: Current Prediction
       - entity: sensor.ai_away_duration
         name: Away Duration
-      - entity: input_text.ai_away_prediction_accuracy
+      - entity: sensor.ai_away_prediction_accuracy
         name: Prediction Accuracy
       - entity: sensor.ai_away_pattern_status
         name: Engine Status
+    - type: markdown
+      content: '### G13 Entropy Scoring
+
+        Phase 1 observes entropy + predictability on predictions.
+
+        Phase 1.5 logs per-arrival entropy+MAE to L2 and runs weekly
+
+        correlation analysis (Pearson r). Dashboard shows live tier breakdown.'
+    - type: entities
+      title: Entropy Settings
+      entities:
+      - entity: input_number.ai_away_min_entropy_samples
+        name: Min Entropy Samples
+      - entity: input_boolean.ai_entropy_correlation_enabled
+        name: Correlation Logger
+      - entity: input_number.ai_entropy_tier_low
+        name: Low Tier Threshold
+      - entity: input_number.ai_entropy_tier_high
+        name: High Tier Threshold
+    - type: entities
+      title: Correlation Result
+      entities:
+      - entity: sensor.ai_entropy_correlation
+        name: Correlation Direction
+    - type: markdown
+      title: Tier Breakdown
+      content: >-
+        {% set s = state_attr('sensor.ai_entropy_correlation', 'tiers') %}
+        {% if s %}
+        {% set low = s.get('low', {}) %}
+        {% set med = s.get('medium', {}) %}
+        {% set high = s.get('high', {}) %}
+        | Tier | Count | Mean MAE | Predictability |
+
+        |------|------:|---------:|---------------:|
+
+        | Low | {{ low.get('count', 0) }} | {{ low.get('mean_mae', 0) }} min | {{ low.get('mean_predictability', 0) }} |
+
+        | Medium | {{ med.get('count', 0) }} | {{ med.get('mean_mae', 0) }} min | {{ med.get('mean_predictability', 0) }} |
+
+        | High | {{ high.get('count', 0) }} | {{ high.get('mean_mae', 0) }} min | {{ high.get('mean_predictability', 0) }} |
+
+
+        **Pearson r:** {{ state_attr('sensor.ai_entropy_correlation', 'pearson_r') | default('N/A') }}
+        · **Entries:** {{ state_attr('sensor.ai_entropy_correlation', 'total_entries') | default(0) }}
+        {% else %}
+        *Awaiting data — correlation will appear after arrivals are logged.*
+        {% endif %}
+    - type: button
+      name: Run Correlation Report
+      icon: mdi:chart-scatter-plot
+      tap_action:
+        action: perform-action
+        perform_action: pyscript.entropy_correlation_report
+      icon_height: 40px
 - title: Debug
   path: debug
   icon: mdi:bug
@@ -2110,7 +2332,7 @@ views:
       {%- set icons = {
         'Time': '🕐', 'User': '👤', 'Household': '🏠', 'Presence': '📡',
         'Occupancy': '🚪', 'Media': '🎵', 'Music taste': '🎶',
-        'Sonarr': '📺', 'Radarr': '🎬',
+        'TV': '📺', 'Movies': '🎬',
         'House mode': '🏡', 'Expertise routing': '🧭',
         'Weather': '🌤', "Tomorrow's weather": '🌤', 'Tomorrow weather': '🌤',
         'Next alarm': '⏰', 'Schedule': '📅', 'Projects': '📋', 'Focus': '🎯',
@@ -2131,9 +2353,12 @@ views:
 
       · {{ clean }}
       {%- endif -%}
-      {%- elif line.startswith('Recent') %}
+      {%- elif line.startswith('Recent summaries') %}
 
-      📝 **Recent:**
+      📝 **Recent summaries:**
+      {%- elif line.startswith('Recent moods') %}
+
+      😊 **Recent moods:**
       {%- else -%}
       {%- set parts = line.split(': ', 1) -%}
       {%- if parts | length > 1 -%}
@@ -2159,7 +2384,7 @@ views:
         Most recent briefing text (before LLM reformulation).'
     - type: markdown
       title: Last Briefing
-      content: '{{ states(''input_text.ai_last_briefing_summary'') }}'
+      content: '{{ states(''sensor.ai_last_briefing_summary'') }}'
   - type: vertical-stack
     cards:
     - type: markdown
@@ -2225,6 +2450,8 @@ views:
       entities:
       - entity: input_boolean.ai_test_mode
         name: Test Mode
+      - entity: input_boolean.ai_tts_test_mode
+        name: TTS Test Session (HA Cloud)
       - entity: input_text.ai_test_identity
         name: Identity Override
       - entity: input_text.ai_test_routine_stage
@@ -2267,7 +2494,7 @@ views:
         name: Occupancy Mode
       - entity: sensor.ai_llm_budget_remaining
         name: LLM Budget
-      - entity: input_number.ai_llm_calls_today
+      - entity: sensor.ai_llm_calls_today
         name: LLM Calls Today
       - entity: sensor.ai_dispatcher_status
         name: Dispatcher Status
@@ -2299,17 +2526,21 @@ views:
     - type: entities
       title: Schedule Internals
       entities:
-      - entity: input_text.ai_schedule_sources_raw
+      - entity: sensor.ai_predictive_schedule_status
         name: Sources (Raw JSON)
-      - entity: input_text.ai_predicted_next_zone_raw
+        type: attribute
+        attribute: schedule_sources_raw
+      - entity: sensor.ai_predicted_next_zone_raw
         name: Next Zone (Raw JSON)
-      - entity: input_text.ai_routine_eta_raw
+      - entity: sensor.ai_routine_tracker_status
         name: ETA (Raw JSON)
+        type: attribute
+        attribute: eta_raw
       - entity: input_datetime.ai_predicted_routine_start
         name: Predicted Routine Start
-      - entity: input_boolean.ai_bedtime_predicted
+      - entity: sensor.ai_bedtime_predicted
         name: Bedtime Predicted
-      - entity: input_boolean.ai_sustained_solo_zone
+      - entity: sensor.ai_sustained_solo_zone
         name: Sustained Solo Zone
       - entity: binary_sensor.ai_solo_single_zone
         name: Solo Single Zone
@@ -2366,7 +2597,7 @@ views:
           name: Nightly Batch Time
         - entity: input_number.ai_embedding_batch_size
           name: Batch Size
-        - entity: input_boolean.ai_embedding_reindex_needed
+        - entity: sensor.ai_embedding_reindex_needed
           name: Reindex Needed
     - type: entities
       title: LLM Task Instance

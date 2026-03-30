@@ -1,0 +1,214 @@
+# =============================================================================
+# Conversation Summarizer (v1.0.0)
+# =============================================================================
+# Scheduled job that compresses raw conversation responses into per-agent
+# summaries using a cheap LLM call. Part of conversation_sensor.py L2
+# history pipeline.
+#
+# Calls pyscript.summarize_conversations, which:
+#   - Searches L2 for unsummarized conversation response entries
+#   - Groups by agent persona
+#   - Compresses each group via LLM into a 2-3 sentence summary
+#   - Stores summary with configurable long TTL
+#   - Tags/deletes source entries per retention mode
+#
+# Summaries auto-embed on the next embedding_batch run.
+# Cost: ~$0.001/run at gpt-4o-mini. Budget-gated at standard tier.
+# =============================================================================
+
+blueprint:
+  name: "AI - Conversation Summarizer"
+  description: >-
+    Scheduled batch summarization of raw conversation responses stored in L2
+    memory by conversation_sensor.py.  Groups entries by agent, compresses via
+    LLM, and stores summaries back in L2 with configurable retention.
+  domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/conversation_summarizer.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① Schedule & Control
+    # ===========================================================================
+    schedule_control:
+      name: "① Schedule & Control"
+      icon: mdi:clock-check-outline
+      description: When the batch runs and how to disable it.
+      collapsed: false
+      input:
+        batch_time:
+          name: Batch Time
+          description: >-
+            Time entity that controls when the batch runs.
+            Recommendation: 03:00 (30 min before embedding batch at 03:30).
+          default:
+            entity_id: input_datetime.ai_conversation_summarizer_batch_time
+          selector:
+            entity:
+              domain: input_datetime
+
+        kill_switch:
+          name: Kill Switch
+          description: >-
+            Boolean that enables/disables conversation summarization.
+            ON = summarization active.
+          default:
+            entity_id: input_boolean.ai_conversation_sensor_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ② Summarization Tuning
+    # ===========================================================================
+    tuning:
+      name: "② Summarization Tuning"
+      icon: mdi:tune-variant
+      description: Controls how conversations are selected, batched, and retained.
+      collapsed: true
+      input:
+        lookback_hours:
+          name: Lookback Hours
+          description: >-
+            Only summarize conversations older than this many hours.
+            Default: 36.
+          default: 36
+          selector:
+            number:
+              min: 1
+              max: 168
+              step: 1
+              mode: slider
+
+        min_conversations:
+          name: Min Conversations per Agent
+          description: >-
+            Skip agents with fewer unsummarized conversations than this.
+            Prevents wasting an LLM call on a single sentence.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 20
+              step: 1
+              mode: box
+
+        max_conversations:
+          name: Max Conversations per Batch
+          description: >-
+            Total cap on conversations processed per run.
+            Budget safeguard — limits LLM calls per batch.
+          default: 50
+          selector:
+            number:
+              min: 10
+              max: 200
+              step: 10
+              mode: slider
+
+        retention_mode:
+          name: Retention Mode
+          description: >-
+            How to handle source entries after summarizing.
+            summary_and_tag: tag as summarized, let TTL expire.
+            summary_and_delete: delete sources immediately.
+            summary_only: create summary, leave sources untouched.
+          default: "summary_and_tag"
+          selector:
+            select:
+              options:
+                - label: "Summarize & Tag (let TTL expire)"
+                  value: "summary_and_tag"
+                - label: "Summarize & Delete (remove sources)"
+                  value: "summary_and_delete"
+                - label: "Summary Only (leave sources)"
+                  value: "summary_only"
+
+        summary_expiry_days:
+          name: Summary Expiry (days)
+          description: >-
+            How long summary entries persist in L2 memory.
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 365
+              step: 1
+              mode: box
+
+    # ===========================================================================
+    # ③ Infrastructure
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog-outline
+      description: LLM instance and budget controls.
+      collapsed: true
+      input:
+        llm_instance:
+          name: LLM Instance
+          description: >-
+            Which ha_text_ai sensor to use for LLM compression calls.
+          default:
+            entity_id: sensor.ha_text_ai
+          selector:
+            entity:
+              domain: sensor
+
+        budget_floor:
+          name: "Budget Floor (%)"
+          description: >-
+            Skip summarization when remaining LLM budget drops below this
+            percentage. 0 = always run regardless of budget.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+              mode: slider
+
+variables:
+  kill_switch: !input kill_switch
+
+triggers:
+  - trigger: time
+    at: !input batch_time
+
+conditions:
+  - alias: "Kill switch must be on (enabled)"
+    condition: template
+    value_template: >-
+      {{ states(kill_switch) == 'on' }}
+
+actions:
+  - alias: "Run conversation summarization batch"
+    continue_on_error: true
+    action: pyscript.summarize_conversations
+    response_variable: result
+    data:
+      lookback_hours: !input lookback_hours
+      min_conversations: !input min_conversations
+      max_conversations: !input max_conversations
+      retention_mode: !input retention_mode
+      summary_expiry_days: !input summary_expiry_days
+      llm_instance: !input llm_instance
+      budget_floor: !input budget_floor
+
+  - alias: "Log summarization result"
+    action: system_log.write
+    data:
+      message: >-
+        Conversation summarizer: summaries={{ result.summaries_created | default(0) }},
+        processed={{ result.entries_processed | default(0) }},
+        skipped={{ result.entries_skipped | default(0) }},
+        llm_calls={{ result.llm_calls | default(0) }},
+        tokens={{ result.total_tokens | default(0) }},
+        agents={{ result.agents_summarized | default([]) | join(', ') }}
+      level: info
+      logger: conversation_sensor.summarizer
+
+mode: single

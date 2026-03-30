@@ -1,0 +1,22 @@
+# ======================================================================
+# AI Scene Preference Learner — C6 Layer 3
+# ======================================================================
+# Status: Active
+# Deployed: 2026-03-23
+#
+# Pyscript sensor: sensor.ai_scene_learner_status  (pyscript/scene_learner.py)
+#   States: ok, idle, learning
+#   Key attributes: zones_configured, total_lights, last_record,
+#       last_recorded_zones
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_scene_learner_enabled
+#   - helpers_input_number.yaml:  ai_scene_learner_min_observations
+#
+# Dependencies:
+#   - Pyscript: scene_learner.py (preference recording + retrieval)
+#   - Blueprints: scene_preference_apply.yaml (applies on zone entry)
+#   - Blueprints: circadian_lighting.yaml (fires suppress events)
+#   - Config: entity_config.yaml → scene_learner_lights
+#   - Memory: L2 (memory.py) for preference storage
+# ======================================================================

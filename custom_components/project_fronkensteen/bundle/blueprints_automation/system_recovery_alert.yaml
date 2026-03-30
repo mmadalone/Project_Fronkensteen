@@ -1,0 +1,415 @@
+blueprint:
+  name: "AI System Recovery Alert (v2.0.0)"
+  author: madalone
+  description: >-
+    # AI System Recovery Alert
+
+
+    Fires when the self-healing recovery engine exhausts its retry budget
+    for a health category. Sends a persistent notification, optionally
+    pushes to a mobile device, and optionally announces via TTS using the
+    full voice stack (dispatcher, presence routing, follow-me bypass).
+
+
+    One instance is usually sufficient, but you can create multiple instances
+    with different category filters or notification targets.
+
+
+    ### Recent changes
+
+    - **v2.0.0:** Full voice stack for TTS — dispatcher toggle, agent
+      selector, presence routing, follow-me bypass, speaker/volume options,
+      LLM prompt for announcement text. Follows notification_follow_me and
+      email_follow_me blueprint patterns.
+
+    - **v1.0.0:** Initial release (persistent notification + mobile push only).
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/system_recovery_alert.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CORE
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:bell-alert
+      collapsed: false
+      description: "Core notification and TTS settings."
+      input:
+        notify_target:
+          name: "Mobile Notification Service"
+          description: >
+            Mobile push target (e.g. notify.mobile_app_phone).
+            Leave empty to skip mobile push.
+          default: ""
+          selector:
+            text:
+
+        enable_tts:
+          name: "Enable TTS Announcement"
+          description: >
+            Announce recovery failure via TTS using the full voice
+            pipeline (dispatcher, presence routing, follow-me bypass).
+          default: false
+          selector:
+            boolean:
+
+        conversation_agent:
+          name: "Voice Assistant"
+          description: >-
+            The Assist Pipeline (Voice Assistant) used for the alert
+            announcement. The pipeline bundles the conversation agent,
+            TTS engine, and TTS voice. When the dispatcher is enabled,
+            this selection is overridden automatically.
+          default: Rick
+          selector:
+            text:
+
+        alert_prompt:
+          name: "LLM announcement prompt"
+          description: >-
+            Instructions for how the AI should announce the recovery
+            failure. The blueprint appends the category, attempt count,
+            and grade as structured context. Keep this focused on tone
+            and brevity — data injection is automatic.
+          default: >-
+            A system recovery attempt has failed. Announce this briefly
+            and clearly as a system alert. Keep it to one or two sentences.
+            State which subsystem failed and that manual attention is needed.
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ② PRESENCE ROUTING
+    # ===========================================================================
+    presence_routing:
+      name: "② Presence routing"
+      icon: mdi:account-search
+      description: >-
+        Presence sensors and their paired voice satellites. Lists must be
+        the same length — sensor at position N maps to satellite at position N.
+      collapsed: true
+      input:
+        presence_sensors:
+          name: "Presence sensors (priority order)"
+          description: >-
+            Binary sensors indicating room occupancy. Order matters —
+            first occupied zone wins.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+
+        target_satellites:
+          name: "Target satellites (paired with presence sensors)"
+          description: >-
+            Media players to announce on, in the same order as presence
+            sensors. Satellite at index N is used when sensor N is active.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+    # ===========================================================================
+    # ③ FILTERING
+    # ===========================================================================
+    filtering:
+      name: "③ Filtering"
+      icon: mdi:filter
+      collapsed: true
+      description: "Filter which health categories trigger this alert."
+      input:
+        category_filter:
+          name: "Category Filter"
+          description: >
+            Comma-separated list of categories to alert on.
+            Leave empty to alert on ALL categories.
+            Options: status_sensors, services, memory_db, tts_queue,
+            pipeline_entities, json_configs, helpers
+          default: ""
+          selector:
+            text:
+
+    # ===========================================================================
+    # ④ TTS CONFIGURATION
+    # ===========================================================================
+    tts_config:
+      name: "④ TTS configuration"
+      icon: mdi:microphone-message
+      description: "Text-to-speech engine settings for voice delivery."
+      collapsed: true
+      input:
+        tts_announce:
+          name: "Use announce mode for TTS"
+          description: >-
+            Ducks current audio, plays announcement, resumes.
+            Supported by ESPHome Voice PE, Sonos, Google Cast.
+          default: false
+          selector:
+            boolean: {}
+
+        tts_output_volume:
+          name: "TTS output volume (optional)"
+          description: >-
+            Fixed volume (0.0–1.0) before announcement. Original volume
+            restored after playback. Set to 0 to disable.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ===========================================================================
+    # ⑤ AGENT SELECTION
+    # ===========================================================================
+    agent_selection:
+      name: "⑤ Agent selection"
+      icon: mdi:head-cog
+      description: >-
+        Agent selection priority: (1) dispatcher enabled + Use Dispatcher ON
+        → dispatcher handles agent + voice. (2) dispatcher OFF → Voice
+        Assistant from ① is used directly.
+      collapsed: true
+      input:
+        use_dispatcher:
+          name: "Use Dispatcher"
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above).
+          default: true
+          selector:
+            boolean:
+
+        bypass_follow_me:
+          name: "Bypass Notification Follow-Me"
+          description: >
+            Temporarily pause notification follow-me during TTS to
+            prevent notifications from interrupting.
+          default: true
+          selector:
+            boolean: {}
+
+        bypass_claim_script:
+          name: "Refcount claim script"
+          description: >
+            Script entity that registers a bypass claim.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: "Refcount release script"
+          description: >
+            Script entity that releases a bypass claim.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ⑥ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "⑥ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+variables:
+  # ── Inputs ──
+  enable_tts: !input enable_tts
+  conversation_agent: !input conversation_agent
+  alert_prompt: !input alert_prompt
+  presence_list: !input presence_sensors
+  satellite_list: !input target_satellites
+  category_filter: !input category_filter
+  notify_target: !input notify_target
+  tts_announce_mode: !input tts_announce
+  tts_output_vol: !input tts_output_volume
+  use_dispatcher: !input use_dispatcher
+  v_dispatcher_enabled: !input dispatcher_enabled
+  v_bypass_follow_me: !input bypass_follow_me
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+
+  # ── Event data ──
+  evt_category: "{{ trigger.event.data.category | default('unknown') }}"
+  evt_attempts: "{{ trigger.event.data.attempts | default('?') }}"
+  evt_grade: "{{ trigger.event.data.grade | default('?') }}"
+
+  # ── Presence resolution ──
+  target_satellite: >-
+    {%- set ns = namespace(sat='') -%}
+    {%- for sensor in presence_list -%}
+      {%- if ns.sat == '' and is_state(sensor, 'on') -%}
+        {%- if loop.index0 < satellite_list | length -%}
+          {%- set ns.sat = satellite_list[loop.index0] -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ ns.sat }}
+  has_satellite: "{{ target_satellite | default('') | length > 0 }}"
+
+  # ── Dispatcher resolution ──
+  use_dispatch: >-
+    {{ enable_tts and use_dispatcher
+       and is_state(v_dispatcher_enabled, 'on') }}
+
+triggers:
+  - trigger: event
+    event_type: ai_recovery_exhausted
+    id: exhausted
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set filt = (category_filter | default('', true)).strip() %}
+      {% if filt == '' %}
+        true
+      {% else %}
+        {% set cats = filt.split(',') | map('trim') | list %}
+        {{ evt_category in cats }}
+      {% endif %}
+
+mode: queued
+max: 5
+
+actions:
+  # ── 1. Persistent Notification (always) ──
+  - alias: "1 · Persistent notification"
+    action: persistent_notification.create
+    data:
+      title: "AI Recovery Failed: {{ evt_category }}"
+      message: >-
+        Recovery for **{{ evt_category }}** exhausted after
+        {{ evt_attempts }} attempts. Grade: {{ evt_grade }}.
+        Manual intervention required.
+      notification_id: "ai_recovery_alert_{{ evt_category }}"
+
+  # ── 2. Mobile Push (optional) ──
+  - alias: "2 · Mobile push"
+    if:
+      - condition: template
+        value_template: "{{ (notify_target | default('')).strip() != '' }}"
+    then:
+      - action: "{{ notify_target }}"
+        data:
+          title: "AI Recovery Failed"
+          message: >-
+            {{ evt_category }} recovery exhausted
+            ({{ evt_attempts }} attempts). Grade: {{ evt_grade }}.
+
+  # ── 3. TTS Announcement (optional — full voice stack) ──
+  - alias: "3 · TTS announcement"
+    if:
+      - condition: template
+        value_template: "{{ enable_tts and has_satellite }}"
+    then:
+      # ── 3a. Dispatcher resolution ──
+      - alias: "3a · Resolve agent via dispatcher"
+        if:
+          - condition: template
+            value_template: "{{ use_dispatch }}"
+        then:
+          - action: pyscript.agent_dispatch
+            response_variable: dispatch_result
+            continue_on_error: true
+            data:
+              intent_text: "system recovery alert"
+              source_satellite: "{{ target_satellite }}"
+          - variables:
+              dispatch_persona: "{{ (dispatch_result | default({})).get('persona', '') }}"
+              dispatch_voice: "{{ (dispatch_result | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch_result | default({})).get('tts_voice', '') }}"
+        else:
+          - variables:
+              dispatch_persona: ""
+              dispatch_voice: ""
+              dispatch_tts_voice: ""
+
+      # ── 3b. Claim follow-me bypass ──
+      - alias: "3b · Claim follow-me bypass"
+        if:
+          - condition: template
+            value_template: "{{ v_bypass_follow_me }}"
+        then:
+          - action: "{{ v_bypass_claim }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+      # ── 3c. LLM announcement via conversation.process ──
+      - alias: "3c · Generate announcement via LLM"
+        action: conversation.process
+        response_variable: llm_response
+        continue_on_error: true
+        data:
+          agent_id: >-
+            {% if use_dispatch and dispatch_persona | default('') != '' %}
+              {{ dispatch_persona }}
+            {% else %}
+              {{ conversation_agent }}
+            {% endif %}
+          text: >-
+            {{ alert_prompt }}
+
+            --- SYSTEM ALERT DATA ---
+            Category: {{ evt_category }}
+            Attempts: {{ evt_attempts }}
+            Grade: {{ evt_grade }}
+            Time: {{ now().strftime('%H:%M') }}
+
+      - variables:
+          _announcement: >-
+            {% set resp = (llm_response | default({})).get('response', {}) %}
+            {% set speech = resp.get('speech', {}).get('plain', {}).get('speech', '') %}
+            {% if speech | length > 0 %}
+              {{ speech }}
+            {% else %}
+              System alert: {{ evt_category }} recovery failed after {{ evt_attempts }} attempts.
+            {% endif %}
+
+      # ── 3d. TTS delivery via queue ──
+      - alias: "3d · Speak via TTS queue"
+        action: pyscript.tts_queue_speak
+        continue_on_error: true
+        data:
+          text: "{{ _announcement }}"
+          voice: "{{ dispatch_voice if dispatch_voice else '' }}"
+          voice_id: "{{ dispatch_tts_voice if dispatch_tts_voice else '' }}"
+          target_mode: explicit
+          target: "{{ target_satellite }}"
+          volume_level: "{{ tts_output_vol | float(0) }}"
+          announce: "{{ tts_announce_mode | bool(false) }}"
+          priority: 1
+          metadata:
+            agent_name: "{{ dispatch_persona | default('system') }}"
+            message: "{{ _announcement[:200] }}"
+            topic: "system_alert"
+            source: "system_recovery_alert"
+
+      # ── 3e. Release follow-me bypass ──
+      - alias: "3e · Release follow-me bypass"
+        if:
+          - condition: template
+            value_template: "{{ v_bypass_follow_me }}"
+        then:
+          - action: "{{ v_bypass_release }}"
+            continue_on_error: true

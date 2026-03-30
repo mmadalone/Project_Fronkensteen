@@ -1,0 +1,13 @@
+{
+  "domain": "project_fronkensteen",
+  "name": "Project Fronkensteen",
+  "codeowners": ["@mmadalone"],
+  "config_flow": true,
+  "documentation": "https://github.com/mmadalone/Project_Fronkensteen",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/mmadalone/Project_Fronkensteen/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}

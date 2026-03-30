@@ -29,9 +29,9 @@ wifi:
 micro_wake_word:
   models:
     - id: hey_rick
-      model: http://homeassistant.local:8123/local/microwake/hey_rick.json
+      model: hey_rick.json
     - id: yo_rick
-      model: http://homeassistant.local:8123/local/microwake/yo_rick.json
+      model: yo_rick.json
 
 globals:
   - id: dup_wake_retries
@@ -72,6 +72,9 @@ voice_assistant:
         event: esphome.voice_tts_done
         data:
           satellite: ${name}
+
+debug:
+  update_interval: 5s
 
 sensor:
   - platform: debug

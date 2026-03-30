@@ -1,0 +1,223 @@
+blueprint:
+  name: "Routine stage actions"
+  author: madalone
+  description: >
+    # Routine Stage Actions
+
+    Triggers actions at specific points within a recognized routine. Consumes
+    `sensor.ai_routine_stage` from `routine_fingerprint.py`.
+
+    ### Signal format
+
+    `ai_routine_stage` value: `evening_weekday_living_room_bed:step_3_of_4`
+    or `none` when no routine is active.
+
+    ### Trigger modes
+
+    - **Step:** Fire at a specific step number (e.g., step 3)
+    - **Progress:** Fire when the routine is at least N% complete (e.g., 75%)
+
+    ### Example instances
+
+    - "Evening Routine 75% — Sleep Sounds" — start white noise when evening routine is ≥75% done
+    - "Morning Routine Step 2 — Coffee" — turn on coffee maker at step 2
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/routine_stage_actions.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      description: >
+        Kill switch, trigger mode, and filtering.
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch.
+          selector:
+            entity:
+              domain: input_boolean
+
+        trigger_mode:
+          name: Trigger mode
+          description: >
+            How to determine when to fire.
+          default: "progress"
+          selector:
+            select:
+              options:
+                - label: "At specific step"
+                  value: "step"
+                - label: "At progress threshold"
+                  value: "progress"
+
+        target_step:
+          name: Target step (step mode)
+          description: >
+            Fire when the routine reaches this step number.
+            Only used in "step" mode. 0 = disabled.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 20
+
+        progress_threshold:
+          name: Progress threshold (progress mode)
+          description: >
+            Fire when the routine is at least this fraction complete (0.0–1.0).
+            Only used in "progress" mode.
+          default: 0.75
+          selector:
+            number:
+              min: 0.1
+              max: 1.0
+              step: 0.05
+
+        fingerprint_filter:
+          name: Fingerprint filter
+          description: >
+            Comma-separated fingerprint IDs to watch. Leave empty to watch
+            any routine. Only the fingerprint prefix is matched (before the colon).
+          default: ""
+          selector:
+            text: {}
+
+        once_per_routine:
+          name: Once per routine
+          description: >
+            Only fire once per routine instance. Resets when routine stage
+            returns to "none".
+          default: true
+          selector:
+            boolean: {}
+
+        routine_stage_entity:
+          name: Routine stage entity
+          description: >
+            The sensor that receives the current routine stage
+            signal from routine_fingerprint.py.
+          default: sensor.ai_routine_stage
+          selector:
+            entity:
+              domain: sensor
+
+    # ===========================================================================
+    # ② ACTIONS
+    # ===========================================================================
+    actions:
+      name: "② Actions"
+      icon: mdi:cog-play
+      collapsed: false
+      description: >
+        Actions to run when the routine reaches the target stage.
+      input:
+        stage_actions:
+          name: Stage actions
+          description: >
+            Actions to run at the target routine stage.
+          default: []
+          selector:
+            action: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable_toggle
+  v_mode: !input trigger_mode
+  v_target_step: !input target_step
+  v_progress: !input progress_threshold
+  v_fp_filter: !input fingerprint_filter
+  v_once: !input once_per_routine
+  _routine_stage: !input routine_stage_entity
+
+triggers:
+  - trigger: state
+    entity_id: !input routine_stage_entity
+
+conditions:
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Not "none" (no routine active) ──
+  - condition: template
+    value_template: >-
+      {% set stage = states(_routine_stage) %}
+      {{ stage not in ['none', '', 'unknown', 'unavailable'] }}
+
+  # ── Parse step/total from stage value ──
+  - condition: template
+    value_template: >-
+      {% set stage = states(_routine_stage) %}
+      {% set parts = stage.split(':') %}
+      {% if parts | length < 2 %}
+        false
+      {% else %}
+        {% set fp_id = parts[0] %}
+        {% set step_part = parts[1] %}
+
+        {# Fingerprint filter #}
+        {% if v_fp_filter | trim != '' %}
+          {% set allowed = v_fp_filter.split(',') | map('trim') | list %}
+          {% if fp_id not in allowed %}
+            {{ false }}
+          {% endif %}
+        {% endif %}
+
+        {# Parse step_N_of_M #}
+        {% set step_match = step_part | regex_findall('step_(\\d+)_of_(\\d+)') %}
+        {% if step_match | length == 0 %}
+          false
+        {% else %}
+          {% set step = step_match[0][0] | int %}
+          {% set total = step_match[0][1] | int %}
+
+          {% if v_mode == 'step' %}
+            {{ step == v_target_step | int and v_target_step | int > 0 }}
+          {% elif v_mode == 'progress' %}
+            {% if total == 0 %}
+              false
+            {% else %}
+              {{ (step / total) >= v_progress | float }}
+            {% endif %}
+          {% else %}
+            false
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
+  # ── Once-per-routine guard ──
+  - condition: template
+    value_template: >-
+      {% if not v_once %}
+        true
+      {% else %}
+        {% set last = this.attributes.last_triggered | default(None) %}
+        {% if last is none %}
+          true
+        {% else %}
+          {# Check if routine_stage went to "none" since last trigger #}
+          {% set last_ts = as_timestamp(last, 0) %}
+          {# Simple approach: if last_triggered was before current routine started,
+             allow. Otherwise block. Use stage change timestamp as proxy. #}
+          {% set stage_changed = state_attr(_routine_stage, 'last_changed') | default(None) %}
+          {% if stage_changed is none %}
+            true
+          {% else %}
+            {{ as_timestamp(stage_changed, 0) > last_ts }}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+
+actions:
+  - !input stage_actions

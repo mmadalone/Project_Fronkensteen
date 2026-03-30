@@ -1,0 +1,677 @@
+# Orphan playback state flags (7) removed 2026-03-14 — superseded by duck_manager
+
+
+########################################
+# Ducking / music control
+########################################
+
+ai_music_follow_me:
+  name: music_follow_me
+  icon: mdi:speaker
+  initial: true
+
+# ai_ducking_flag removed — migrated to sensor (state.set, Session 8)
+
+########################################
+# Wake-up controls
+########################################
+
+ai_wake_up_snooze:
+  name: Wake-up snooze
+  icon: mdi:bed-clock
+  initial: false
+
+ai_wake_up_stop:
+  name: Wake-up stop
+  icon: mdi:account-clock
+  initial: false
+
+
+########################################
+# Bedtime negotiator (Global state + toggles)
+########################################
+
+# ai_bedtime_active removed — migrated to sensor (state.set, Session 8)
+
+ai_bedtime_global_lock:
+  name: Bedtime negotiator global lock
+  icon: mdi:lock
+  initial: false
+
+# ai_gn_bedtime_lock removed — migrated to sensor (state.set, Session 5)
+
+
+ai_voice_handoff_enabled:
+  name: "AI Voice Handoff - Enabled"
+  icon: mdi:account-switch
+  initial: true
+
+ai_voice_pin_enabled:
+  name: "AI voice PIN enabled"
+  icon: mdi:shield-lock
+  initial: false
+
+ai_notification_follow_me:
+  name: Notification follow-me enabled
+  icon: mdi:message-bulleted
+  initial: true
+
+# ai_handoff_processing removed — migrated to sensor (state.set, Session 8)
+
+# ai_continuous_conversation_active removed — migrated to sensor (state.set, Session 8)
+
+ai_contact_history_enabled:
+  name: AI Contact History Enabled
+  icon: mdi:message-text-clock
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_banter — Reactive Banter (Pattern 1)
+# ═══════════════════════════════════════════════════════════════════
+ai_reactive_banter_enabled:
+  name: "AI Reactive Banter - Enabled"
+  icon: mdi:message-reply-text
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_auto_off — Auto-Off System
+# ═══════════════════════════════════════════════════════════════════
+ai_auto_off_enabled:
+  name: "AI Auto-Off - Master"
+  icon: mdi:power-plug-off
+
+ai_auto_off_lights_enabled:
+  name: "AI Auto-Off - Lights"
+  icon: mdi:lightbulb-off-outline
+
+ai_auto_off_media_enabled:
+  name: "AI Auto-Off - Media"
+  icon: mdi:speaker-off
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Patterns
+# ═══════════════════════════════════════════════════════════════════
+ai_away_patterns_enabled:
+  name: "AI Away Patterns - Enabled"
+  icon: mdi:map-marker-question
+
+ai_entropy_correlation_enabled:
+  name: "AI Entropy Correlation - Enabled"
+  icon: mdi:chart-scatter-plot
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_calendar_promotion — Calendar Promotion
+# ═══════════════════════════════════════════════════════════════════
+# Kill switch. When OFF, scheduled promotions are skipped.
+# Agents can still call calendar_promote_now(force=true) to bypass.
+ai_calendar_promotion_enabled:
+  name: "AI Calendar Promotion Enabled"
+  icon: mdi:calendar-sync
+
+# Set when Google Calendar API fails. Agents check this flag and adjust
+# language: "I think you have..." instead of "You have...".
+# Cleared automatically when next sync succeeds.
+# ai_calendar_stale removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Hot Context
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_work_day removed — migrated to sensor (state.set, Session 7)
+ai_context_guests_present:
+  name: "AI Context - Guests Present"
+  initial: false
+  icon: mdi:account-group
+
+# I-27: Manual override — when ON, user's toggle wins over auto-detection
+ai_work_day_manual_override:
+  name: "AI Context - Work Day Manual Override"
+  initial: false
+  icon: mdi:hand-back-left
+
+# ai_context_work_day_tomorrow removed — migrated to sensor (state.set, Session 7)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+ai_dispatcher_enabled:
+  name: "AI Dispatcher - Enabled"
+  icon: mdi:head-cog
+ai_keyword_manual:
+  name: "Mark as Manual (sticky)"
+  initial: true
+  icon: mdi:pin
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Duck Manager
+# ═══════════════════════════════════════════════════════════════════
+ai_duck_manager_enabled:
+  name: AI Duck Manager Enabled
+  icon: mdi:volume-vibrate
+  initial: true
+# Duck Guard: let blueprints update snapshot during ducking
+ai_duck_guard_enabled:
+  name: "Duck Guard for Blueprints"
+  icon: mdi:shield-half-full
+  initial: true
+# I-22: Allow manual volume override during ducking
+ai_duck_allow_manual_override:
+  name: "Duck Allow Manual Volume Override"
+  icon: mdi:tune-vertical-variant
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+# Kill switch. When OFF, email priority filter is disabled.
+ai_email_master_toggle:
+  name: "AI Email Follow-Me — Master Toggle"
+  icon: mdi:email-sync
+  initial: true
+
+ai_email_promotion_enabled:
+  name: "AI Email Promotion Enabled"
+  icon: mdi:email-check
+
+# Gap 2: Email stale flag (mirrors ai_calendar_stale pattern).
+# Set ON when IMAP sensor is unavailable or hasn't changed in N minutes.
+# ai_email_stale removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_entity_history — Entity History Query (Gap 3)
+# ═══════════════════════════════════════════════════════════════════
+ai_entity_history_enabled:
+  name: "AI Entity History - Enabled"
+  initial: true
+  icon: mdi:history
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search & Memory Lifecycle
+# ═══════════════════════════════════════════════════════════════════
+# When ON, the next batch run drops mem_vec and re-embeds all records.
+# Flipped ON automatically when dimensions change. Flipped OFF after reindex completes.
+# ai_embedding_reindex_needed removed — migrated to sensor (state.set, Session 5)
+
+# ── Auto-archive (I-42 Phase 2) ──────────────────────────────────
+# Master toggle for memory auto-archiving.
+ai_memory_auto_archive:
+  name: "AI Memory - Auto Archive"
+  initial: true
+  icon: mdi:archive-check
+
+# ── Search-time enrichment (auto-relationships Option A) ────────
+# Append graph-connected entries to memory search results.
+ai_memory_search_enrich:
+  name: "AI Memory - Search Enrichment"
+  initial: true
+  icon: mdi:graph-outline
+
+# ── Semantic autolink (vec0 content_match) ──────────────────────
+# Nightly creation of content_match edges via vec0 KNN similarity.
+# OFF by default — opt-in since it has embedding cost implications.
+ai_memory_semantic_autolink:
+  name: "AI Memory - Semantic Autolink"
+  initial: false
+  icon: mdi:vector-link
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Escalation Follow-Through
+# ═══════════════════════════════════════════════════════════════════
+ai_escalation_enabled:
+  name: "AI Escalation Follow-Through"
+  initial: true
+  icon: mdi:dice-5
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_focus_guard — Focus Guard & Anti-ADHD Nudges
+# ═══════════════════════════════════════════════════════════════════
+# Voice-activated DND. When ON, suppresses all non-calendar nudges.
+# Can be set by voice: "I need to focus" / "Focus mode on"
+# Auto-expires after ai_focus_mode_max_hours via pyscript cron.
+ai_focus_mode:
+  name: "Focus Mode"
+  icon: mdi:head-lightbulb
+
+# Kill switch. When OFF, all focus guard evaluation is skipped.
+# TTS nudges stop, workshop accumulator still runs (data collection).
+ai_focus_guard_enabled:
+  name: "AI Focus Guard - Enabled"
+  icon: mdi:shield-account
+
+# Per-nudge-type toggles: disable individual nudge types without killing
+# the entire focus guard. All default ON — turn off what you don't need.
+ai_focus_time_check_enabled:
+  name: "Focus Guard - Time Check"
+  icon: mdi:timer-alert-outline
+
+ai_focus_meal_reminder_enabled:
+  name: "Focus Guard - Meal Reminder"
+  icon: mdi:food-apple-outline
+
+# When ON, meal reminder TTS is followed by opening the satellite mic
+# so the user can respond ("I ate at 14:00" or "I just ate").
+ai_focus_meal_ask_eaten:
+  name: "Focus Guard - Ask If Eaten"
+  icon: mdi:microphone-message
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_identity — Identity Confidence
+# ═══════════════════════════════════════════════════════════════════
+ai_guest_mode:
+  name: "Guest Mode"
+  initial: false
+  icon: mdi:account-question
+
+# ai_sustained_solo_zone removed — migrated to sensor (state.set, Session 8)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — Budget Fallback
+# ═══════════════════════════════════════════════════════════════════
+ai_budget_fallback_active:
+  name: "AI Budget - Fallback Active"
+  icon: mdi:shield-alert
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_media_tracking — Radarr/Sonarr Integration
+# ═══════════════════════════════════════════════════════════════════
+ai_media_tracking_enabled:
+  name: "AI media tracking enabled"
+  icon: mdi:filmstrip
+# ai_media_data_stale removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_music_composer — Music Composition Engine (I-10)
+# ═══════════════════════════════════════════════════════════════════
+ai_music_composer_enabled:
+  name: "AI Music Composer - Enabled"
+  icon: mdi:music-box
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_music_taste — Music Taste Extraction
+# ═══════════════════════════════════════════════════════════════════
+ai_music_taste_enabled:
+  name: "AI Music Taste - Enabled"
+  icon: mdi:music-note-eighth
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_notification_dedup — Notification Deduplication
+# ═══════════════════════════════════════════════════════════════════
+ai_dedup_enabled:
+  name: AI Dedup Enabled
+  icon: mdi:content-duplicate
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_phone_call_detection — Phone Call Detection
+# ═══════════════════════════════════════════════════════════════════
+# ai_phone_call_active removed — migrated to sensor (state.set, Session 8)
+
+ai_phone_call_defer_tts:
+  name: "AI Phone Call - Defer TTS During Calls"
+  icon: mdi:volume-off
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_identity — Per-Person Room Inference
+# ═══════════════════════════════════════════════════════════════════
+ai_presence_identity_enabled:
+  name: "AI - Presence Identity Enabled"
+  icon: mdi:account-search
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_presence_patterns — Presence Patterns
+# ═══════════════════════════════════════════════════════════════════
+# Kill switch. When OFF:
+#   - State trigger ignores zone changes (no incremental updates)
+#   - Daily cron skips rebuild
+#   - Services still callable manually (for debugging)
+ai_presence_patterns_enabled:
+  name: "AI Presence Patterns - Enabled"
+  icon: mdi:map-marker-path
+
+
+# ── FP2 Zone Toggles (Dashboard Config) ────────────────────────────
+# When OFF, the zone is excluded from presence pattern extraction,
+# routine fingerprinting, and predictive scheduling pipelines.
+ai_fp2_zone_workshop_enabled:
+  name: "FP2 Zone: Workshop"
+  icon: mdi:hammer-wrench
+ai_fp2_zone_living_room_enabled:
+  name: "FP2 Zone: Living Room"
+  icon: mdi:sofa
+ai_fp2_zone_main_room_enabled:
+  name: "FP2 Zone: Main Room"
+  icon: mdi:floor-plan
+ai_fp2_zone_kitchen_enabled:
+  name: "FP2 Zone: Kitchen"
+  icon: mdi:stove
+ai_fp2_zone_bed_enabled:
+  name: "FP2 Zone: Bed"
+  icon: mdi:bed
+ai_fp2_zone_lobby_enabled:
+  name: "FP2 Zone: Lobby"
+  icon: mdi:door
+ai_fp2_zone_bathroom_enabled:
+  name: "FP2 Zone: Bathroom"
+  icon: mdi:shower-head
+ai_fp2_zone_shower_enabled:
+  name: "FP2 Zone: Shower"
+  icon: mdi:water
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_privacy_gate — Privacy Gate
+# ═══════════════════════════════════════════════════════════════════
+ai_privacy_gate_enabled:
+  name: "AI Privacy Gate — Kill Switch"
+  initial: true
+  icon: mdi:shield-account
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Proactive Briefing
+# ═══════════════════════════════════════════════════════════════════
+# Master kill switch. When OFF, all briefing instances won't fire.
+# On-demand (pyscript.proactive_briefing_now) still works regardless.
+ai_proactive_briefing_enabled:
+  name: "AI Proactive Briefing - Enabled"
+  icon: mdi:weather-sunset-up
+
+# ai_briefing_delivered_morning removed — migrated to sensor (state.set, Session 6)
+# ai_briefing_delivered_afternoon removed — migrated to sensor (state.set, Session 6)
+# ai_briefing_delivered_evening removed — migrated to sensor (state.set, Session 6)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_project_tracking — Project Tracking
+# ═══════════════════════════════════════════════════════════════════
+ai_project_tracking_enabled:
+  name: "AI Project Tracking Enabled"
+  icon: mdi:clipboard-check-multiple
+# ai_project_data_stale removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_routine_tracker — Routine Tracker
+# ═══════════════════════════════════════════════════════════════════
+# Kill switch. When OFF:
+#   - State trigger ignores zone changes (no position tracking)
+#   - Daily cron skips fingerprint refresh
+#   - Services still callable manually (for debugging)
+ai_routine_tracking_enabled:
+  name: "AI Routine Tracking - Enabled"
+  icon: mdi:route-clock
+
+# Bedtime prediction flag. Set ON when the position tracker detects a
+# bed-ending routine fingerprint. Arms bedtime automations to respond
+# instantly when bed presence actually fires (shaves 3-5s response time).
+# Reset to OFF on: routine completion, deviation, or 2-hour timeout.
+# ai_bedtime_predicted removed — migrated to sensor (state.set, Session 7)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep Detection
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detected removed — migrated to sensor (state.set, Session 8)
+
+ai_sleep_detection_enabled:
+  name: "AI Sleep Detection - Enabled"
+  icon: mdi:bed-clock
+
+ai_sleep_false_positive_flag:
+  name: "AI Sleep - False Positive"
+  initial: false
+  icon: mdi:alert-circle-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_test_harness — Test Harness
+# ═══════════════════════════════════════════════════════════════════
+# Global test flag. When ON:
+#   - Blueprints use mock data instead of real sensors
+#   - TTS routes to log-only sink (no speaker output)
+#   - Identity overrides become active (if populated)
+# Default OFF — must never activate accidentally in production.
+ai_test_mode:
+  name: "AI Test Mode"
+  initial: false
+  icon: mdi:flask-outline
+
+# TTS test session: swap ElevenLabs → HA Cloud to save credits.
+# Unlike ai_test_mode (which skips LLM+TTS entirely), this runs the
+# full pipeline but uses free HA Cloud TTS instead of ElevenLabs.
+ai_tts_test_mode:
+  name: "AI TTS Test Session — Use HA Cloud"
+  initial: false
+  icon: mdi:flask-round-bottom
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue
+# ═══════════════════════════════════════════════════════════════════
+ai_tts_queue_active:
+  name: AI TTS Queue Active
+  icon: mdi:volume-high
+
+ai_tts_volume_restore:
+  name: AI TTS Volume Restore
+  icon: mdi:volume-variant-off
+
+ai_tts_strip_stage_directions:
+  name: "Strip stage directions from TTS"
+  icon: mdi:drama-masks
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_user_interview — User Interview
+# ═══════════════════════════════════════════════════════════════════
+ai_interview_mode:
+  name: "AI Interview Mode"
+  initial: false
+  icon: mdi:clipboard-account
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_whisper — Agent Whisper Network (moved from ai_whisper.yaml, C3)
+# ═══════════════════════════════════════════════════════════════════
+ai_whisper_enabled:
+  name: "AI Whisper - Enabled"
+  initial: true
+  icon: mdi:ear-hearing
+
+ai_whisper_mood_detection:
+  name: "AI Whisper - Mood Detection"
+  initial: true
+  icon: mdi:emoticon-outline
+
+ai_conversation_sensor_enabled:
+  name: AI Conversation Sensor Enabled
+  icon: mdi:message-text-clock
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# ai_scene_learner — Scene Preference Learning (C6)
+# ═══════════════════════════════════════════════════════════════════
+ai_scene_learner_enabled:
+  name: "AI Scene Learner - Enabled"
+  icon: mdi:lightbulb-auto
+
+ai_circadian_workshop_enabled:
+  name: "AI Circadian Workshop Enabled"
+  initial: true
+  icon: mdi:sun-clock
+
+ai_circadian_living_room_enabled:
+  name: "AI Circadian Living Room Enabled"
+  initial: true
+  icon: mdi:sun-clock
+
+ai_pre_light_enabled:
+  name: "AI Pre-Light Enabled"
+  initial: true
+  icon: mdi:lightbulb-flash
+
+ai_ambient_music_enabled:
+  name: "AI Ambient Music Enabled"
+  initial: false
+  icon: mdi:music-note
+
+ai_winddown_enabled:
+  name: "AI Wind-Down - Enabled"
+  initial: true
+  icon: mdi:weather-night
+
+# ai_winddown_active removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_mode_enabled:
+  name: "AI Theatrical Mode - Enabled"
+  icon: mdi:drama-masks
+  initial: true
+
+# ai_theatrical_mode_active removed — migrated to sensor (state.set, Session 8)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Voice Mood Modulation — Global kill switch
+# ═══════════════════════════════════════════════════════════════════════════
+ai_voice_mood_enabled:
+  name: "AI Voice Mood Modulation - Enabled"
+  icon: mdi:waveform
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_auto_on — Auto-On System (zone toggles)
+# ═══════════════════════════════════════════════════════════════════
+ai_auto_on_workshop:
+  name: "AI Auto-On — Workshop"
+  initial: true
+  icon: mdi:lightbulb-auto
+
+ai_auto_on_living_room:
+  name: "AI Auto-On — Living Room"
+  initial: true
+  icon: mdi:lightbulb-auto
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_proactive_briefing — Evening Manual Trigger
+# ═══════════════════════════════════════════════════════════════════
+ai_briefing_evening_manual_trigger:
+  name: "AI Briefing — Evening Manual Trigger"
+  initial: false
+  icon: mdi:bell-ring
+
+# ═══════════════════════════════════════════════════════════════════
+# Wake-up System (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_wake_up_guard_stop:
+  name: "Wake Up Guard — STOP"
+  icon: mdi:alarm
+
+# ═══════════════════════════════════════════════════════════════════
+# Bedtime System (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_bedtime_now_manual_trigger:
+  name: "Bedtime NOW — Manual Trigger"
+  icon: mdi:weather-night
+
+ai_bedtime_now_rick:
+  name: "Bedtime NOW — Rick"
+  icon: mdi:sleep
+
+ai_bedtime_now_quark:
+  name: "Bedtime NOW — Quark"
+  icon: mdi:bed
+
+# ═══════════════════════════════════════════════════════════════════
+# Proactive Bedtime Escalation (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_proactive_bedtime_escalation_killswitch:
+  name: "Proactive Bedtime Escalation — Kill Switch — Rick"
+  icon: mdi:stop-circle-outline
+
+# ai_bedtime_active_mutex_proactive_bedtime_escalation removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+# ai_notification_follow_me_reminder_loop_active removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# Memory & Embedding (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_sqlite_vec_recompile_i_2a_kill_switch:
+  name: "sqlite-vec Recompile (I-2a) — Kill Switch"
+  icon: mdi:database-search
+
+ai_embedding_batch_kill_switch:
+  name: "Embedding Batch — Kill Switch"
+  icon: mdi:ember
+
+# ═══════════════════════════════════════════════════════════════════
+# Interaction Summarizer (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_interaction_summarizer_kill_switch:
+  name: "Interaction Summarizer — Kill Switch"
+  icon: mdi:summit
+
+# ═══════════════════════════════════════════════════════════════════
+# Briefing / Email — Alexa (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_alexa_briefing:
+  name: "Alexa Briefing"
+  icon: mdi:underwear-outline
+
+ai_alexa_mail_status:
+  name: "Alexa Mail Status"
+  icon: mdi:email
+
+# ═══════════════════════════════════════════════════════════════════
+# Memory To-do List (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_memory_to_do_list_mirror_kill_switch:
+  name: "Memory To-do List Mirror — Kill Switch"
+  icon: mdi:checkbox-marked-circle-auto-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Master Gate
+# ═══════════════════════════════════════════════════════════════════
+ai_notifications_master_enabled:
+  name: "AI Notifications — Master Enabled"
+  icon: mdi:bell-check
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Therapy Session (QS-5)
+# ═══════════════════════════════════════════════════════════════════
+ai_therapy_mode:
+  name: "AI Therapy Mode"
+  icon: mdi:brain
+
+ai_therapy_enabled:
+  name: "AI Therapy Enabled"
+  icon: mdi:brain
+
+# ═══════════════════════════════════════════════════════════════════
+# Toggle Audit Trail
+# ═══════════════════════════════════════════════════════════════════
+ai_toggle_audit_enabled:
+  name: "AI Toggle Audit - Enabled"
+  icon: mdi:clipboard-check-outline
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Dispatcher Bypass Mode (set by pyscript on cache failure)
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher_bypass_mode removed — migrated to sensor (state.set, Session 5)
+
+# ═══════════════════════════════════════════════════════════════════
+# System Recovery Engine
+# ═══════════════════════════════════════════════════════════════════
+ai_system_recovery_enabled:
+  name: "AI System Recovery Engine"
+  icon: mdi:wrench-cog
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Contact History (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_contact_history_summarizer_kill_switch:
+  name: "Contact History Summarizer — Kill Switch"
+  icon: mdi:book-open-blank-variant

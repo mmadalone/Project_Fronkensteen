@@ -1,0 +1,22 @@
+# =============================================================================
+# Counter Helpers
+# =============================================================================
+# HA-native atomic counters — increment/decrement/reset with minimum floor.
+# Single-threaded asyncio = effectively atomic. No JSON parsing needed.
+# =============================================================================
+
+########################################
+# Notification Follow-Me — Bypass Refcount (I-45b v2)
+########################################
+# Replaces the fragile JSON owner list (BRP-WATCHDOG-001).
+# Incremented on claim, decremented on release.
+# First claim (0→1) turns OFF follow-me. Last release (1→0) restores ON.
+# Watchdog resets to 0 if counter > 0 and stale (last_changed > TTL).
+
+ai_notification_follow_me_bypass_refcount:
+  name: Follow-Me Bypass Refcount
+  icon: mdi:counter
+  initial: 0
+  restore: true
+  minimum: 0
+  step: 1

@@ -1,0 +1,15 @@
+check_installation:
+  name: Check Installation
+  description: Verify all expected files exist and are up to date. Returns a health report with missing, outdated, and ok file counts.
+
+repair_installation:
+  name: Repair Installation
+  description: Re-copy missing or outdated code files from the bundle. Never touches user configuration files (entity_config, speaker config, helpers).
+
+get_status:
+  name: Get Status
+  description: Return the installed version, selected feature groups, and configuration state.
+
+check_helpers:
+  name: Check Helpers
+  description: Analyze helper files for new entries that can be merged. Returns a list of new helper keys per file.

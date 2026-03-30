@@ -1,0 +1,1085 @@
+# =============================================================================
+# AI LLM Budget Package — DC-2 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "DC-2: LLM Cost Control"
+# Provides:
+#   input_number.ai_llm_daily_budget    — manual budget allocation (100 = 100%)
+#   sensor.ai_llm_calls_today     — running call counter (reset at midnight)
+#   input_number.ai_llm_daily_limit     — configurable max calls per day
+#   sensor.ai_llm_budget_remaining      — computed % remaining (0–100)
+#   script.ai_llm_budget_check          — gate check → {allowed, budget_remaining, ...}
+#   script.ai_llm_budget_increment      — call counter increment (supports cost param)
+#   automation.ai_llm_budget_midnight_reset — logs to L2 + resets counter at 00:00
+#
+# Budget gate thresholds (enforced by callers, not this package):
+#   Essential (wake-up, direct voice, bedtime)  — always allowed
+#   Standard  (proactive, notifications)        — allowed if budget > 30%
+#   Luxury    (banter, deliberation, argument)  — allowed if budget > 60%
+#
+# L1 integration (ai_context_hot.yaml — added separately):
+#   "LLM budget: {budget_remaining}% ({calls_today}/{daily_limit} calls)"
+#
+# Dependencies: pyscript.memory_set (optional — midnight log degrades gracefully)
+# Deployed: 2026-03-01
+# =============================================================================
+
+# ── ELEVENLABS API SENSOR ──────────────────────────────────────────────────
+
+rest:
+  - resource: https://api.elevenlabs.io/v1/user/subscription
+    headers:
+      xi-api-key: !secret elevenlabs_api_key
+    scan_interval: 3600
+    sensor:
+      - name: "ElevenLabs Subscription"
+        unique_id: elevenlabs_subscription
+        value_template: >-
+          {{ value_json.character_limit - value_json.character_count }}
+        unit_of_measurement: "chars"
+        icon: mdi:account-voice
+        state_class: measurement
+        json_attributes:
+          - character_count
+          - character_limit
+          - tier
+          - next_character_count_reset_unix
+
+  # I-32: USD→EUR exchange rate (Frankfurter API — free, no key, no limits)
+  - resource: https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR
+    scan_interval: 86400
+    sensor:
+      - name: "USD EUR Exchange Rate"
+        unique_id: usd_eur_exchange_rate
+        value_template: >-
+          {{ value_json.rates.EUR | float(0.92) }}
+        icon: mdi:currency-eur
+        json_attributes:
+          - base
+          - date
+
+  # I-32: OpenRouter Credits (actual API spend across all providers)
+  # C5: Reduced from 3600s → 1800s for tighter budget gate reconciliation
+  - resource: https://openrouter.ai/api/v1/credits
+    headers:
+      Authorization: !secret openrouter_api_header
+    scan_interval: 1800
+    sensor:
+      - name: "OpenRouter Credits"
+        unique_id: openrouter_credits
+        value_template: >-
+          {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+          {% set usage = value_json.data.total_usage | float(0) %}
+          {{ (usage * rate) | round(2) }}
+        unit_of_measurement: "€"
+        icon: mdi:router-wireless
+        state_class: measurement
+        json_attributes_path: "$.data"
+        json_attributes:
+          - total_credits
+          - total_usage
+
+  # Serper Web Search API — remaining credits (decrements on use)
+  - resource: https://google.serper.dev/account
+    headers:
+      X-API-KEY: !secret serper_api_key
+    scan_interval: 3600
+    sensor:
+      - name: "Serper Account"
+        unique_id: serper_account
+        value_template: >-
+          {{ value_json.balance | int(0) }}
+        unit_of_measurement: "credits"
+        icon: mdi:web
+        state_class: measurement
+        json_attributes:
+          - rateLimit
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_button: ai_budget_manual_reset lives in helpers_input_button.yaml
+# (top-level input_button: !include in configuration.yaml overrides packages)
+
+# ── I-46: FALLBACK HELPERS ─────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+# ── TEMPLATE SENSOR ──────────────────────────────────────────────────────────
+# sensor.ai_llm_budget_remaining
+#   .state                   = budget % remaining (0–100, clamped)
+#   .attributes.calls_today  = int
+#   .attributes.daily_limit  = int
+#   .attributes.budget_pct   = int (same as state, for structured access)
+#
+# Math edge cases:
+#   0 calls, limit 100   → (100-0)/100*100   = 100%
+#   100 calls, limit 100 → (100-100)/100*100 = 0%
+#   150 calls, limit 100 → (100-150)/100*100 = -50% → clamped to 0%
+#   limit = 0            → max(limit,1) = 1  → safe division
+
+template:
+  - sensor:
+      - name: "AI LLM Budget Remaining"
+        unique_id: ai_llm_budget_remaining
+        icon: mdi:battery-charging
+        unit_of_measurement: "%"
+        state_class: measurement
+        state: >-
+          {% set calls = states('sensor.ai_llm_calls_today') | int(0) %}
+          {% set call_limit = [states('input_number.ai_llm_daily_limit') | int(100), 1] | max %}
+          {% set tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
+          {% set token_limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
+          {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
+          {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
+          {% set actual_eur = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+          {% set cost = estimated if source == 'estimated'
+             else (actual_eur if source == 'actual'
+             else [estimated, actual_eur] | max) %}
+          {% set cost_limit = [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max %}
+          {% set calls_pct = [[((call_limit - calls) / call_limit * 100) | round(0) | int, 0] | max, 100] | min %}
+          {% set tokens_pct = [[((token_limit - tokens) / token_limit * 100) | round(0) | int, 0] | max, 100] | min %}
+          {% set cost_pct = [[((cost_limit - cost) / cost_limit * 100) | round(0) | int, 0] | max, 100] | min %}
+          {{ [calls_pct, tokens_pct, cost_pct] | min }}
+        attributes:
+          calls_pct: >-
+            {% set calls = states('sensor.ai_llm_calls_today') | int(0) %}
+            {% set limit = [states('input_number.ai_llm_daily_limit') | int(100), 1] | max %}
+            {{ [[((limit - calls) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          tokens_pct: >-
+            {% set tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
+            {% set limit = [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max %}
+            {{ [[((limit - tokens) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          cost_pct: >-
+            {% set source = states('input_select.ai_budget_cost_source') | default('hybrid') %}
+            {% set estimated = states('sensor.ai_total_daily_cost') | float(0) %}
+            {% set actual_eur = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+            {% set cost = estimated if source == 'estimated'
+               else (actual_eur if source == 'actual'
+               else [estimated, actual_eur] | max) %}
+            {% set limit = [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max %}
+            {{ [[((limit - cost) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          limiting_metric: >-
+            {% set calls_pct = state_attr('sensor.ai_llm_budget_remaining', 'calls_pct') | int(100) %}
+            {% set tokens_pct = state_attr('sensor.ai_llm_budget_remaining', 'tokens_pct') | int(100) %}
+            {% set cost_pct = state_attr('sensor.ai_llm_budget_remaining', 'cost_pct') | int(100) %}
+            {% if cost_pct <= tokens_pct and cost_pct <= calls_pct %}cost
+            {% elif tokens_pct <= calls_pct %}tokens
+            {% else %}calls{% endif %}
+          cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
+
+      # I-33: TTS budget remaining (mirrors LLM pattern)
+      - name: "AI TTS Budget Remaining"
+        unique_id: ai_tts_budget_remaining
+        icon: mdi:message-text-clock-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        state: >-
+          {% set calls = states('sensor.ai_tts_calls_today') | int(0) %}
+          {% set limit = [states('input_number.ai_tts_daily_limit') | int(500), 1] | max %}
+          {{ [[((limit - calls) / limit * 100) | round(0) | int, 0] | max, 100] | min }}
+
+      # I-33: Aggregated daily cost — computed live from counters × pricing helpers
+      - name: "AI Total Daily Cost"
+        unique_id: ai_total_daily_cost
+        icon: >-
+          {% set c = states('input_select.ai_budget_currency') %}
+          {{ 'mdi:currency-eur' if c == '€' else ('mdi:currency-gbp' if c == '£' else 'mdi:currency-usd') }}
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {% set llm_tokens = states('sensor.ai_llm_tokens_today') | int(0) %}
+          {% set tts_chars = states('sensor.ai_tts_chars_today') | int(0) %}
+          {% set stt_calls = states('sensor.ai_stt_calls_today') | int(0) %}
+          {% set serper = states('sensor.serper_daily_usage') | int(0) %}
+          {% set music_gens = states('sensor.ai_music_generations_today') | int(0) %}
+          {% set llm_rate = states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01) %}
+          {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
+          {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
+          {% set stt_rate = states('input_number.ai_cost_per_stt_call') | float(0.02) %}
+          {% set serper_rate = states('sensor.ai_cost_per_serper_credit') | float(0) %}
+          {% set music_rate = states('input_number.ai_cost_per_music_generation') | float(0.02) %}
+          {% set model_cost = states('sensor.ai_model_cost_today') | float(0) %}
+          {% set flat_llm_cost = llm_tokens / 1000 * llm_rate %}
+          {% set llm_component = [model_cost, flat_llm_cost] | max %}
+          {% set total = llm_component
+                       + (tts_chars / 1000 * tts_rate)
+                       + (stt_calls * stt_rate)
+                       + (serper * serper_rate)
+                       + (music_gens * music_rate) %}
+          {{ total | round(2) }}
+        attributes:
+          llm_cost: >-
+            {% set model_cost = states('sensor.ai_model_cost_today') | float(0) %}
+            {% set flat_cost = (states('sensor.ai_llm_tokens_today') | int(0) / 1000
+                * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) %}
+            {{ [model_cost, flat_cost] | max | round(4) }}
+          llm_model_cost: >-
+            {{ states('sensor.ai_model_cost_today') | float(0) | round(4) }}
+          llm_flat_cost: >-
+            {{ (states('sensor.ai_llm_tokens_today') | int(0) / 1000
+                * states('input_number.ai_cost_per_1k_llm_tokens') | float(0.01)) | round(4) }}
+          tts_cost: >-
+            {% set tts_derived = states('sensor.ai_tts_cost_per_1k_chars_derived') | float(0) %}
+            {% set tts_rate = tts_derived if tts_derived > 0 else states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) %}
+            {{ (states('sensor.ai_tts_chars_today') | int(0) / 1000 * tts_rate) | round(4) }}
+          stt_cost: >-
+            {{ (states('sensor.ai_stt_calls_today') | int(0)
+                * states('input_number.ai_cost_per_stt_call') | float(0.02)) | round(4) }}
+          serper_cost: >-
+            {{ (states('sensor.serper_daily_usage') | int(0)
+                * states('sensor.ai_cost_per_serper_credit') | float(0)) | round(4) }}
+          music_cost: >-
+            {{ (states('sensor.ai_music_generations_today') | int(0)
+                * states('input_number.ai_cost_per_music_generation') | float(0.02)) | round(4) }}
+          cost_limit: >-
+            {{ states('input_number.ai_budget_daily_cost_limit') | float(5) }}
+          cost_pct: >-
+            {% set cost = this.state | float(0) %}
+            {% set limit = [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max %}
+            {{ [[(cost / limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          currency: >-
+            {{ states('input_select.ai_budget_currency') | default('€') }}
+          cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
+          openrouter_actual_eur: >-
+            {{ state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) }}
+          divergence_pct: >-
+            {% set estimated = this.state | float(0) %}
+            {% set actual = state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) %}
+            {% set denom = [estimated, actual, 0.01] | max %}
+            {{ (((estimated - actual) | abs / denom) * 100) | round(1) }}
+
+      # I-33 Phase 2: ElevenLabs credits remaining (API or manual cap)
+      - name: "ElevenLabs Credits Remaining"
+        unique_id: elevenlabs_credits_remaining
+        icon: mdi:account-voice
+        unit_of_measurement: "chars"
+        state_class: measurement
+        state: >-
+          {% set api_remaining = states('sensor.elevenlabs_subscription') | int(0) %}
+          {% set manual_cap = states('input_number.ai_elevenlabs_credit_cap') | int(0) %}
+          {{ manual_cap if manual_cap > 0 else api_remaining }}
+        attributes:
+          api_remaining: >-
+            {{ states('sensor.elevenlabs_subscription') | int(0) }}
+          api_used: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) }}
+          api_limit: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(0) }}
+          manual_cap: >-
+            {{ states('input_number.ai_elevenlabs_credit_cap') | int(0) }}
+          tier: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'tier') | default('unknown') }}
+          reset_timestamp: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'next_character_count_reset_unix') | default(0) }}
+          pct_remaining: >-
+            {% set limit = state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(1) %}
+            {% set used = state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) %}
+            {{ [[(100 - (used / [limit, 1] | max * 100)) | round(0) | int, 0] | max, 100] | min }}
+
+      # ElevenLabs daily usage (delta from midnight snapshot)
+      - name: "ElevenLabs Daily Usage"
+        unique_id: elevenlabs_daily_usage
+        icon: mdi:account-voice
+        unit_of_measurement: "chars"
+        state_class: measurement
+        state: >-
+          {% set used = state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) %}
+          {% set midnight = states('sensor.ai_elevenlabs_chars_midnight') | int(0) %}
+          {{ [used - midnight, 0] | max }}
+        attributes:
+          chars_used_today: >-
+            {% set used = state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) %}
+            {% set midnight = states('sensor.ai_elevenlabs_chars_midnight') | int(0) %}
+            {{ [used - midnight, 0] | max }}
+          cycle_total_used: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) }}
+          cycle_limit: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(0) }}
+
+      # Serper daily usage (delta from midnight snapshot — credits go DOWN)
+      - name: "Serper Daily Usage"
+        unique_id: serper_daily_usage
+        icon: mdi:web
+        unit_of_measurement: "credits"
+        state_class: measurement
+        state: >-
+          {% set remaining = states('sensor.serper_account') | int(0) %}
+          {% set midnight = states('sensor.ai_serper_credits_midnight') | int(0) %}
+          {{ [midnight - remaining, 0] | max }}
+        attributes:
+          credits_used_today: >-
+            {% set remaining = states('sensor.serper_account') | int(0) %}
+            {% set midnight = states('sensor.ai_serper_credits_midnight') | int(0) %}
+            {{ [midnight - remaining, 0] | max }}
+          credits_remaining: >-
+            {{ states('sensor.serper_account') | int(0) }}
+
+      # C5: Serper cost per credit — uses configurable plan helpers (S8 fix)
+      - name: "AI Cost per Serper Credit"
+        unique_id: ai_cost_per_serper_credit
+        icon: mdi:web
+        unit_of_measurement: "€"
+        state: >-
+          {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+          {% set plan_cost = states('input_number.ai_serper_plan_cost') | float(50) %}
+          {% set plan_credits = [states('input_number.ai_serper_plan_credits') | int(50000), 1] | max %}
+          {{ (plan_cost / plan_credits * rate) | round(6) }}
+        attributes:
+          plan_cost_usd: >-
+            {{ states('input_number.ai_serper_plan_cost') | float(50) }}
+          plan_credits: >-
+            {{ states('input_number.ai_serper_plan_credits') | int(50000) }}
+
+      # C5: Derived TTS cost per 1K chars from ElevenLabs plan (semi-dynamic)
+      - name: "AI TTS Cost per 1K Chars (Derived)"
+        unique_id: ai_tts_cost_per_1k_chars_derived
+        icon: mdi:account-voice
+        unit_of_measurement: "€"
+        state: >-
+          {% set monthly = states('input_number.ai_elevenlabs_monthly_cost') | float(22) %}
+          {% set char_limit = state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(100000) %}
+          {% set char_limit = [char_limit, 1] | max %}
+          {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+          {{ ((monthly / char_limit) * 1000 * rate) | round(4) }}
+        attributes:
+          monthly_cost_usd: >-
+            {{ states('input_number.ai_elevenlabs_monthly_cost') | float(22) }}
+          character_limit: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_limit') | int(100000) }}
+          tier: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'tier') | default('unknown') }}
+          fallback_rate: >-
+            {{ states('input_number.ai_cost_per_1k_tts_chars') | float(0.30) }}
+
+      # C5: Model pricing health status — owned by pyscript state.set()
+      # (no template definition needed; pyscript creates and updates this sensor)
+
+      # C5: Budget daily average (7-day rolling from budget_history via rolling sensor)
+      - name: "AI Budget Daily Average"
+        unique_id: ai_budget_daily_average
+        icon: mdi:chart-line
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {{ state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) }}
+
+      # C5: Monthly cost projection from daily average
+      - name: "AI Budget Monthly Projection"
+        unique_id: ai_budget_monthly_projection
+        icon: mdi:calendar-arrow-right
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {% set avg = state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) %}
+          {% set days_in_month = (now().replace(month=now().month % 12 + 1, day=1) - timedelta(days=1)).day
+             if now().month < 12 else 31 %}
+          {% set days_remaining = days_in_month - now().day + 1 %}
+          {% set spent_so_far = states('sensor.ai_openrouter_rolling_usage') | float(0)
+             - (state_attr('sensor.ai_openrouter_rolling_usage', 'today_eur') | float(0)) %}
+          {{ (state_attr('sensor.ai_openrouter_rolling_usage', 'today_eur') | float(0)
+              + (avg * (days_remaining - 1))) | round(2) }}
+        attributes:
+          daily_average: >-
+            {{ state_attr('sensor.ai_openrouter_rolling_usage', 'daily_average_eur') | float(0) }}
+          days_remaining: >-
+            {% set days_in_month = (now().replace(month=now().month % 12 + 1, day=1) - timedelta(days=1)).day
+               if now().month < 12 else 31 %}
+            {{ days_in_month - now().day + 1 }}
+
+      # I-32: OpenRouter daily usage (delta from midnight snapshot)
+      - name: "OpenRouter Daily Usage"
+        unique_id: openrouter_daily_usage
+        icon: mdi:router-wireless
+        unit_of_measurement: "€"
+        state_class: measurement
+        state: >-
+          {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+          {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
+          {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
+          {% set delta = [total - midnight, 0] | max %}
+          {{ (delta * rate) | round(2) }}
+        attributes:
+          daily_usage_eur: >-
+            {% set rate = states('sensor.usd_eur_exchange_rate') | float(0.92) %}
+            {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
+            {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
+            {% set delta = [total - midnight, 0] | max %}
+            {{ (delta * rate) | round(2) }}
+          daily_usage_usd: >-
+            {% set total = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
+            {% set midnight = states('sensor.ai_openrouter_usage_midnight') | float(0) %}
+            {{ [total - midnight, 0] | max | round(4) }}
+          total_usage_usd: >-
+            {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(0) | round(2) }}
+          credits_remaining_usd: >-
+            {% set total = state_attr('sensor.openrouter_credits', 'total_credits') | float(0) %}
+            {% set used = state_attr('sensor.openrouter_credits', 'total_usage') | float(0) %}
+            {{ (total - used) | round(2) }}
+          exchange_rate: >-
+            {{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}
+          local_llm_estimate_eur: >-
+            {% set total = states('sensor.ai_total_daily_cost') | float(0) %}
+            {% set tts = state_attr('sensor.ai_total_daily_cost', 'tts_cost') | float(0) %}
+            {{ (total - tts) | round(2) }}
+
+      # I-46: Budget fallback status sensor
+      - name: "AI Budget Fallback Status"
+        unique_id: ai_budget_fallback_status
+        icon: >-
+          {% if is_state('input_boolean.ai_budget_fallback_active', 'on') %}
+            mdi:shield-alert
+          {% else %}
+            mdi:shield-check
+          {% endif %}
+        state: >-
+          {% if is_state('input_boolean.ai_budget_fallback_active', 'off') %}normal
+          {% else %}fallback_active{% endif %}
+        attributes:
+          fallback_active: >-
+            {{ is_state('input_boolean.ai_budget_fallback_active', 'on') }}
+          fallback_agent: >-
+            {{ states('input_text.ai_budget_fallback_agent') }}
+          saved_pipelines: >-
+            {{ states('sensor.ai_budget_saved_pipelines') }}
+
+# ── SCRIPTS ──────────────────────────────────────────────────────────────────
+
+script:
+  # ── BUDGET GATE CHECK ────────────────────────────────────────────────────
+  # Returns: {allowed, budget_remaining, calls_today, daily_limit, priority_tier}
+  #
+  # Blueprint usage:
+  #   - action: script.ai_llm_budget_check
+  #     response_variable: budget
+  #     data:
+  #       priority_tier: "standard"
+  #   - condition: "{{ budget.allowed }}"
+  ai_llm_budget_check:
+    alias: "AI - LLM Budget Check"
+    description: >-
+      Check if an LLM call is allowed based on priority tier and remaining budget.
+      Essential: always allowed. Standard: budget > 30%. Luxury: budget > 60%.
+    icon: mdi:shield-check
+    mode: parallel
+    max: 10
+    fields:
+      priority_tier:
+        description: "Priority: essential (always), standard (>30%), luxury (>60%)"
+        required: true
+        example: "standard"
+        selector:
+          select:
+            options:
+              - essential
+              - standard
+              - luxury
+    sequence:
+      # I-33: Multi-metric budget check — ALL limits interact (min wins)
+      # C5: Cost uses hybrid/actual/estimated per ai_budget_cost_source
+      - variables:
+          _calls: >-
+            {{ states('sensor.ai_llm_calls_today') | int(0) }}
+          _call_limit: >-
+            {{ [states('input_number.ai_llm_daily_limit') | int(100), 1] | max }}
+          _tokens: >-
+            {{ states('sensor.ai_llm_tokens_today') | int(0) }}
+          _token_limit: >-
+            {{ [states('input_number.ai_llm_daily_token_limit') | int(100000), 1] | max }}
+          _cost_source: >-
+            {{ states('input_select.ai_budget_cost_source') | default('hybrid') }}
+          _estimated_cost: >-
+            {{ states('sensor.ai_total_daily_cost') | float(0) }}
+          _actual_cost: >-
+            {{ state_attr('sensor.openrouter_daily_usage', 'daily_usage_eur') | float(0) }}
+          _cost: >-
+            {% if _cost_source == 'estimated' %}{{ _estimated_cost }}
+            {% elif _cost_source == 'actual' %}{{ _actual_cost }}
+            {% else %}{{ [_estimated_cost | float, _actual_cost | float] | max }}{% endif %}
+          _cost_limit: >-
+            {{ [states('input_number.ai_budget_daily_cost_limit') | float(5), 0.01] | max }}
+      - variables:
+          _calls_pct: >-
+            {{ [[((_call_limit - _calls) / _call_limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          _tokens_pct: >-
+            {{ [[((_token_limit - _tokens) / _token_limit * 100) | round(0) | int, 0] | max, 100] | min }}
+          _cost_pct: >-
+            {{ [[((_cost_limit - _cost) / _cost_limit * 100) | round(0) | int, 0] | max, 100] | min }}
+      - variables:
+          _budget: >-
+            {{ [_calls_pct | int, _tokens_pct | int, _cost_pct | int] | min }}
+          _limiting_metric: >-
+            {% if _cost_pct | int <= _tokens_pct | int and _cost_pct | int <= _calls_pct | int %}
+              cost
+            {% elif _tokens_pct | int <= _calls_pct | int %}
+              tokens
+            {% else %}
+              calls
+            {% endif %}
+          _threshold: >-
+            {% set low = states('input_number.ai_budget_threshold_low') | int(30) %}
+            {% set high = states('input_number.ai_budget_threshold_high') | int(60) %}
+            {{ 0 if priority_tier == 'essential' else (low if priority_tier == 'standard' else high) }}
+      - variables:
+          result:
+            allowed: >-
+              {{ priority_tier == 'essential' or _budget > _threshold }}
+            budget_remaining: "{{ _budget }}"
+            limiting_metric: "{{ _limiting_metric }}"
+            calls_pct: "{{ _calls_pct }}"
+            tokens_pct: "{{ _tokens_pct }}"
+            cost_pct: "{{ _cost_pct }}"
+            calls_today: "{{ _calls }}"
+            daily_limit: "{{ _call_limit }}"
+            tokens_today: "{{ _tokens }}"
+            cost_today: "{{ _cost }}"
+            priority_tier: "{{ priority_tier }}"
+      - stop: "Budget check complete"
+        response_variable: result
+
+  # ── CALL COUNTER INCREMENT ──────────────────────────────────────────────
+  # Call AFTER each LLM interaction. Supports optional cost parameter.
+  #
+  # Blueprint usage:
+  #   - action: script.ai_llm_budget_increment            # standard (cost=1)
+  #   - action: script.ai_llm_budget_increment            # deliberation
+  #     data: { cost: 4 }
+  ai_llm_budget_increment:
+    alias: "AI - LLM Budget Increment"
+    description: >-
+      Increment the daily LLM call counter. Call after each LLM interaction.
+      Optional cost param for multi-call patterns (e.g. deliberation = 4).
+    icon: mdi:plus-circle
+    mode: queued
+    max: 20
+    fields:
+      cost:
+        description: "Number of calls to add (default 1)"
+        required: false
+        default: 1
+        example: "1"
+        selector:
+          number:
+            min: 1
+            max: 50
+    sequence:
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_llm_calls_today
+          value: >-
+            {{ [(states('sensor.ai_llm_calls_today') | int(0)
+                 + (cost | default(1) | int)), 999] | min }}
+          icon: mdi:counter
+          friendly_name: AI LLM Calls Today
+
+  # ── BUDGET RESET (callable from midnight automation + manual button) ──────
+  # Logs yesterday's totals to L2, resets all counters, snapshots OpenRouter,
+  # resets per-agent breakdown, and deactivates fallback mode.
+  ai_budget_reset:
+    alias: "AI - Budget Reset"
+    description: >-
+      Full budget reset: L2 log, zero counters, snapshot OpenRouter, clear
+      per-agent breakdown, deactivate fallback. Called by midnight automation
+      and manual reset button.
+    icon: mdi:refresh-circle
+    mode: single
+    sequence:
+      # ── Step 1: Log totals to L2 (best-effort) ──
+      - alias: "Log daily totals to L2 memory"
+        continue_on_error: true
+        action: pyscript.memory_set
+        response_variable: _result
+        data:
+          key: >-
+            budget_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
+          value: >-
+            llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
+            llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
+            tts_calls={{ states('sensor.ai_tts_calls_today') | int(0) }},
+            tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
+            stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
+            music_gens={{ states('sensor.ai_music_generations_today') | int(0) }},
+            cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
+            openrouter_usage=${{
+              (state_attr('sensor.openrouter_credits', 'total_usage') | float(0)
+               - states('sensor.ai_openrouter_usage_midnight') | float(0)) | round(4) }},
+            serper_credits={{ states('sensor.serper_daily_usage') | int(0) }}
+          scope: "system"
+          tags: "budget,daily,llm,tts,stt,serper"
+      # ── Step 1b: Record daily usage to budget_history (for rolling sensor) ──
+      - alias: "Record daily usage to budget_history"
+        continue_on_error: true
+        action: pyscript.budget_history_record
+        response_variable: _hist
+        data:
+          date: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+          usage_usd: >-
+            {{ (state_attr('sensor.openrouter_credits', 'total_usage') | float(0)
+                - states('sensor.ai_openrouter_usage_midnight') | float(0)) | round(4) }}
+          exchange_rate: "{{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}"
+          llm_calls: "{{ states('sensor.ai_llm_calls_today') | int(0) }}"
+          llm_tokens: "{{ states('sensor.ai_llm_tokens_today') | int(0) }}"
+          tts_chars: "{{ states('sensor.ai_tts_chars_today') | int(0) }}"
+          stt_calls: "{{ states('sensor.ai_stt_calls_today') | int(0) }}"
+          serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
+          model_cost_eur: "{{ states('sensor.ai_model_cost_today') | float(0) }}"
+          model_breakdown: >-
+            {% set bd = state_attr('sensor.ai_budget_breakdown', 'breakdown') %}
+            {% if bd is mapping %}
+              {% set ns = namespace(models={}) %}
+              {% for svc in ['llm', 'handoff'] %}
+                {% for agent, data in (bd.get(svc, {}) or {}).items() %}
+                  {% if data.get('model') %}
+                    {% set m = data.get('model') %}
+                    {% set prev = ns.models.get(m, {'calls': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_eur': 0}) %}
+                    {% set ns.models = dict(ns.models, **{m: {
+                       'calls': prev.calls + data.get('calls', 0),
+                       'input_tokens': prev.input_tokens + data.get('input_tokens', 0),
+                       'output_tokens': prev.output_tokens + data.get('output_tokens', 0),
+                       'cost_eur': (prev.cost_eur + data.get('model_cost_eur', 0)) | round(4)
+                    }}) %}
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+              {{ ns.models | tojson }}
+            {% else %}{}{% endif %}
+          music_generations: "{{ states('sensor.ai_music_generations_today') | int(0) }}"
+      # ── Step 2: Reset all counters (via bridge service — sensors) ──
+      - alias: "Reset LLM calls counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_llm_calls_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI LLM Calls Today
+      - alias: "Reset LLM tokens counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_llm_tokens_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI LLM Tokens Today
+      - alias: "Reset TTS chars counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_tts_chars_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI TTS Characters Today
+      - alias: "Reset STT calls counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_stt_calls_today
+          value: "0"
+          icon: mdi:counter
+          friendly_name: AI STT Calls Today
+      - alias: "Reset model cost counter"
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_model_cost_today
+          value: "0"
+          icon: mdi:currency-eur
+          friendly_name: AI Model Cost Today
+      # ── Step 3: Snapshot OpenRouter usage for next day's delta ──
+      - alias: "Snapshot OpenRouter cumulative usage"
+        continue_on_error: true
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_openrouter_usage_midnight
+          value: >-
+            {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(0) }}
+          icon: mdi:router-wireless
+          friendly_name: AI OpenRouter Usage Midnight
+      # ── Step 3b: Snapshot ElevenLabs cumulative usage ──
+      - alias: "Snapshot ElevenLabs cumulative usage"
+        continue_on_error: true
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_elevenlabs_chars_midnight
+          value: >-
+            {{ state_attr('sensor.elevenlabs_subscription', 'character_count') | int(0) }}
+          icon: mdi:account-voice
+          friendly_name: AI ElevenLabs Chars Midnight
+      # ── Step 3c: Snapshot Serper remaining credits ──
+      - alias: "Snapshot Serper remaining credits"
+        continue_on_error: true
+        action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_serper_credits_midnight
+          value: >-
+            {{ states('sensor.serper_account') | int(0) }}
+          icon: mdi:web
+          friendly_name: AI Serper Credits Midnight
+      # ── Step 4: Reset per-agent breakdown ──
+      - alias: "Reset per-agent budget breakdown"
+        continue_on_error: true
+        action: pyscript.budget_track_call
+        data:
+          service_type: "llm"
+          agent: "_reset"
+          reset: true
+      # ── Step 5: Deactivate budget fallback if active ──
+      - alias: "Deactivate budget fallback"
+        if:
+          - condition: state
+            entity_id: input_boolean.ai_budget_fallback_active
+            state: "on"
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.ai_budget_fallback_active
+      # ── Step 6: Record reset date (startup catch-up detection) ──
+      - alias: "Record reset date for startup detection"
+        action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.ai_budget_last_reset
+        data:
+          date: "{{ now().strftime('%Y-%m-%d') }}"
+      # ── Step 7: Save budget state to JSON (fresh midnight baselines) ──
+      - alias: "Save budget state to JSON"
+        continue_on_error: true
+        action: pyscript.save_budget_state
+
+# ── AUTOMATIONS ──────────────────────────────────────────────────────────────
+
+automation:
+  # ── BUDGET RESET (midnight + manual + startup catch-up) ───────────────────
+  - id: ai_budget_reset_trigger
+    alias: "AI Budget - Reset (Midnight + Manual + Startup)"
+    description: >-
+      Daily midnight reset, dashboard button, and startup catch-up share the
+      same reset script.  Startup trigger fires only if the midnight reset was
+      missed (e.g. HA was restarting at 00:00).
+    mode: single
+    triggers:
+      - trigger: time
+        at: "00:00:00"
+        id: midnight
+      - trigger: state
+        entity_id: input_button.ai_budget_manual_reset
+        id: manual
+      - trigger: homeassistant
+        event: start
+        id: startup
+    conditions:
+      - condition: template
+        value_template: >-
+          {% if trigger.id == 'startup' %}
+            {% set last = states('input_datetime.ai_budget_last_reset') %}
+            {{ last in ['unknown', 'unavailable', '']
+               or last < now().strftime('%Y-%m-%d') }}
+          {% else %}
+            true
+          {% endif %}
+    actions:
+      - choose:
+          # ── Startup: two-phase reset ──────────────────────────────────
+          # Phase 1 (immediate): log yesterday, zero counters, unblock gate.
+          # Phase 2 (delayed):   wait for REST sensors, then snapshot.
+          - conditions:
+              - condition: trigger
+                id: startup
+            sequence:
+              # Phase 1a: Log yesterday's data while counters still hold it
+              - alias: "Log daily totals to L2 memory"
+                continue_on_error: true
+                action: pyscript.memory_set
+                response_variable: _result
+                data:
+                  key: >-
+                    budget_daily:{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}
+                  value: >-
+                    llm_calls={{ states('sensor.ai_llm_calls_today') | int(0) }},
+                    llm_tokens={{ states('sensor.ai_llm_tokens_today') | int(0) }},
+                    tts_calls={{ states('sensor.ai_tts_calls_today') | int(0) }},
+                    tts_chars={{ states('sensor.ai_tts_chars_today') | int(0) }},
+                    stt_calls={{ states('sensor.ai_stt_calls_today') | int(0) }},
+                    music_gens={{ states('sensor.ai_music_generations_today') | int(0) }},
+                    cost=${{ states('sensor.ai_total_daily_cost') | float(0) | round(2) }},
+                    serper_credits={{ states('sensor.serper_daily_usage') | int(0) }},
+                    source=startup_catchup
+                  scope: "system"
+                  tags: "budget,daily,llm,tts,stt,serper"
+              - alias: "Record daily usage to budget_history"
+                continue_on_error: true
+                action: pyscript.budget_history_record
+                response_variable: _hist
+                data:
+                  date: "{{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+                  usage_usd: "0"
+                  exchange_rate: "{{ states('sensor.usd_eur_exchange_rate') | float(0.92) }}"
+                  llm_calls: "{{ states('sensor.ai_llm_calls_today') | int(0) }}"
+                  llm_tokens: "{{ states('sensor.ai_llm_tokens_today') | int(0) }}"
+                  tts_chars: "{{ states('sensor.ai_tts_chars_today') | int(0) }}"
+                  stt_calls: "{{ states('sensor.ai_stt_calls_today') | int(0) }}"
+                  serper_credits: "{{ states('sensor.serper_daily_usage') | int(0) }}"
+                  model_cost_eur: "{{ states('sensor.ai_model_cost_today') | float(0) }}"
+                  model_breakdown: "{}"
+                  music_generations: "{{ states('sensor.ai_music_generations_today') | int(0) }}"
+              # Phase 1b: Zero all counters — budget gate unblocks immediately
+              - alias: "Reset LLM calls"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_llm_calls_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI LLM Calls Today
+              - alias: "Reset LLM tokens"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_llm_tokens_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI LLM Tokens Today
+              - alias: "Reset TTS chars"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_tts_chars_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI TTS Characters Today
+              - alias: "Reset STT calls"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_stt_calls_today
+                  value: "0"
+                  icon: mdi:counter
+                  friendly_name: AI STT Calls Today
+              - alias: "Reset model cost"
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_model_cost_today
+                  value: "0"
+                  icon: mdi:currency-eur
+                  friendly_name: AI Model Cost Today
+              - alias: "Reset per-agent budget breakdown"
+                continue_on_error: true
+                action: pyscript.budget_track_call
+                data:
+                  service_type: "llm"
+                  agent: "_reset"
+                  reset: true
+              - alias: "Deactivate budget fallback"
+                if:
+                  - condition: state
+                    entity_id: input_boolean.ai_budget_fallback_active
+                    state: "on"
+                then:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: input_boolean.ai_budget_fallback_active
+              - alias: "Record reset date for startup detection"
+                action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.ai_budget_last_reset
+                data:
+                  date: "{{ now().strftime('%Y-%m-%d') }}"
+              # Phase 2: Wait for REST sensors, then snapshot for today's delta
+              - alias: "Wait for OpenRouter REST sensor to load"
+                wait_template: >-
+                  {{ states('sensor.openrouter_credits') not in ['unknown', 'unavailable'] }}
+                timeout:
+                  minutes: 3
+                continue_on_timeout: true
+              - alias: "Snapshot OpenRouter cumulative usage"
+                continue_on_error: true
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_openrouter_usage_midnight
+                  value: >-
+                    {{ state_attr('sensor.openrouter_credits', 'total_usage') | float(
+                       states('sensor.ai_openrouter_usage_midnight') | float(0)) }}
+                  icon: mdi:router-wireless
+                  friendly_name: AI OpenRouter Usage Midnight
+              - alias: "Snapshot ElevenLabs cumulative usage"
+                continue_on_error: true
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_elevenlabs_chars_midnight
+                  value: >-
+                    {{ state_attr('sensor.elevenlabs_subscription', 'character_count')
+                       | int(states('sensor.ai_elevenlabs_chars_midnight') | int(0)) }}
+                  icon: mdi:account-voice
+                  friendly_name: AI ElevenLabs Chars Midnight
+              - alias: "Snapshot Serper remaining credits"
+                continue_on_error: true
+                action: pyscript.set_sensor_value
+                data:
+                  entity_id: sensor.ai_serper_credits_midnight
+                  value: >-
+                    {{ states('sensor.serper_account')
+                       | int(states('sensor.ai_serper_credits_midnight') | int(0)) }}
+                  icon: mdi:web
+                  friendly_name: AI Serper Credits Midnight
+              - alias: "Save budget state to JSON (fresh midnight baselines)"
+                continue_on_error: true
+                action: pyscript.save_budget_state
+        # ── Midnight / Manual: run the full reset script ──────────────
+        default:
+          - action: script.ai_budget_reset
+
+  # ── LLM CALL COUNTER (pipeline + direct conversation.process) ────────────
+  - id: ai_llm_call_counter
+    alias: "AI LLM Call Counter"
+    description: >-
+      Increment LLM + STT call counters on Assist pipeline runs AND direct
+      conversation.process calls. Pipeline trigger tracks both LLM + STT;
+      state_changed event trigger dynamically catches ALL conversation.*
+      entity changes (no hardcoded entity list). I-33 Phase 2: per-agent breakdown.
+    mode: queued
+    max: 20
+    triggers:
+      - trigger: event
+        event_type: assist_pipeline/run/end
+        id: pipeline
+      - trigger: event
+        event_type: state_changed
+        id: conversation
+    conditions:
+      - condition: template
+        value_template: >-
+          {% if trigger.id == 'pipeline' %}
+            {{ trigger.event.data.get('pipeline', {}).get('conversation_engine') not in [none, '', 'homeassistant'] }}
+          {% else %}
+            {% set eid = trigger.event.data.get('entity_id', '') %}
+            {{ eid.startswith('conversation.')
+               and eid != 'conversation.home_assistant' }}
+          {% endif %}
+    actions:
+      # Extract agent name from either trigger type
+      - variables:
+          _engine: >-
+            {% if trigger.id == 'pipeline' %}
+              {{ trigger.event.data.get('pipeline', {}).get('conversation_engine', '') }}
+            {% else %}
+              {{ trigger.event.data.get('entity_id', '') }}
+            {% endif %}
+          _agent: >-
+            {{ _engine | regex_replace('^conversation\\.', '') | regex_replace('_(standard|bedtime|extended|music).*$', '') | regex_replace('_\\d+$', '') }}
+      # ── Pipeline-only: STT tracking ──
+      - if:
+          - condition: trigger
+            id: pipeline
+        then:
+          - action: pyscript.set_sensor_value
+            data:
+              entity_id: sensor.ai_stt_calls_today
+              value: >-
+                {{ [(states('sensor.ai_stt_calls_today') | int(0) + 1), 99999] | min }}
+              icon: mdi:counter
+              friendly_name: AI STT Calls Today
+          - alias: "Track per-agent STT call"
+            continue_on_error: true
+            action: pyscript.budget_track_call
+            data:
+              service_type: "stt"
+              agent: "{{ _agent }}"
+      # ── Common: LLM tracking (both triggers) ──
+      - action: script.ai_llm_budget_increment
+      - alias: "Track per-agent LLM call"
+        continue_on_error: true
+        action: pyscript.budget_track_call
+        data:
+          service_type: "llm"
+          agent: "{{ _agent }}"
+
+  # ── I-46: BUDGET FALLBACK MANAGER (exhaustion + recovery) ────────────────
+  - id: ai_budget_fallback_manager
+    alias: "AI Budget - Fallback Manager"
+    description: >-
+      Activates fallback mode on budget/credit exhaustion (I-46).
+      Dismisses notification on recovery. Per-satellite pipeline switching
+      handled by budget_fallback.yaml blueprint instances.
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.ai_llm_budget_remaining
+        below: 1
+        id: budget_exhausted
+      - trigger: template
+        value_template: >-
+          {% set remaining = states('sensor.elevenlabs_credits_remaining') | int(999999) %}
+          {% set floor = states('input_number.ai_elevenlabs_credit_floor') | int(5000) %}
+          {{ remaining <= floor and remaining > 0 }}
+        id: credits_exhausted
+      - trigger: state
+        entity_id: input_boolean.ai_budget_fallback_active
+        to: "off"
+        id: recovery
+    actions:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.id in ['budget_exhausted', 'credits_exhausted'] }}"
+            sequence:
+              # Gate: don't re-trigger if already active
+              - condition: state
+                entity_id: input_boolean.ai_budget_fallback_active
+                state: "off"
+              - variables:
+                  _reason: >-
+                    {% if trigger.id == 'budget_exhausted' %}
+                      {% set metric = state_attr('sensor.ai_llm_budget_remaining', 'limiting_metric') | default('unknown') %}
+                      Budget exhausted (limiting metric: {{ metric }})
+                    {% else %}
+                      ElevenLabs credits below floor ({{ states('sensor.elevenlabs_credits_remaining') }} chars)
+                    {% endif %}
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.ai_budget_fallback_active
+              - action: persistent_notification.create
+                data:
+                  title: "AI Budget Exhausted"
+                  message: >-
+                    {{ _reason }}. Fallback mode active — using {{ states('input_text.ai_budget_fallback_agent') }}
+                    + HA Cloud TTS. Auto-restores at midnight.
+                  notification_id: ai_budget_exhausted
+              - alias: "TTS announcement via HA Cloud"
+                continue_on_error: true
+                action: pyscript.tts_queue_speak
+                response_variable: _tts
+                data:
+                  text: >-
+                    Attention. {{ _reason }}. Switching to basic mode until midnight.
+                  voice: "tts.home_assistant_cloud"
+                  priority: 1
+                  target_mode: "presence"
+              - alias: "Log to L2"
+                continue_on_error: true
+                action: pyscript.memory_set
+                response_variable: _mem
+                data:
+                  key: "budget_fallback:{{ now().strftime('%Y-%m-%d') }}"
+                  value: "{{ _reason }} — activated {{ now().strftime('%H:%M') }}"
+                  scope: "system"
+                  tags: "budget,fallback"
+        default:
+          # recovery trigger
+          - action: persistent_notification.dismiss
+            data:
+              notification_id: ai_budget_exhausted
+
+  # ── T24-3a: REST SENSOR RECOVERY ──────────────────────────────────────────
+  - id: ai_rest_sensor_recovery
+    alias: "AI Budget - REST Sensor Recovery"
+    description: >-
+      When ElevenLabs, OpenRouter, or exchange-rate REST sensors go unavailable,
+      wait 5 minutes then force a refresh. Prevents stale data for full
+      scan_interval (1h/24h) after transient API failures.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id:
+          - sensor.elevenlabs_subscription
+          - sensor.openrouter_credits
+          - sensor.usd_eur_exchange_rate
+          - sensor.serper_account
+        to: "unavailable"
+    actions:
+      - delay: "00:05:00"
+      - action: homeassistant.update_entity
+        continue_on_error: true
+        target:
+          entity_id: "{{ trigger.entity_id }}"

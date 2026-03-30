@@ -92,7 +92,7 @@ The system knows who just entered the room with the certainty of a man who never
 
 ### Therapy Mode
 
-Escuchame bien: this one practices with fire. Say "I need to talk to someone" and any agent hands off to Doctor Portuondo's dedicated therapy variant — a psychoanalysis conversation mode running on a separate LLM (Claude Opus 4.6 via Anthropic, distinct from the Llama 4 Maverick used by all other agents). Four entry points: voice handoff ("pass me to Portuondo for therapy"), toggle activation, natural language detection from any agent, and scheduled sessions. The `therapy_session.yaml` blueprint manages the full session lifecycle: 2-layer notification suppression (master gate silences 6 notification blueprints + per-toggle suppression), continuous conversation loop with LLM-driven session management, `save_therapy_turn` / `therapy_report` tools, session timing, and memory integration. Privacy-gated at T1 (intimate tier). The session engine (`therapy_session.py`) tracks session state, generates post-session reports, and stores therapy notes in L2 memory with owner-scoped isolation.
+Escuchame bien: this one practices with fire. Say "I need to talk to someone" and any agent hands off to Doctor Portuondo's dedicated therapy variant — a psychoanalysis conversation mode running on a separate LLM (Claude Opus 4.6 via Anthropic, distinct from the Llama 4 Maverick used by all other agents). Four entry points: voice handoff ("pass me to Portuondo for therapy"), toggle activation, natural language detection from any agent, and scheduled sessions. The `therapy_session.yaml` blueprint manages the full session lifecycle: 2-layer notification suppression (master gate silences 6 notification blueprints + per-toggle suppression), continuous conversation loop with LLM-driven session management, `save_therapy_turn` / `therapy_report` tools, session timing, and memory integration. Privacy-gated at T1 (intimate tier). The session engine (`therapy_session.py`) tracks session state, generates post-session reports, and stores therapy notes in L2 memory with owner-scoped isolation. *(Deployed but untested as of 2026-03-30 — live voice testing blocked until ElevenLabs subscription renews.)*
 
 ### System Health & Self-Healing
 
@@ -198,7 +198,7 @@ Four deployed patterns for agent-to-agent interaction:
 - **Voice Mood Modulation** — Time-of-day voice shaping via ElevenLabs v3. Per-agent stability slider (the one VoiceSettings param v3 respects) + audio tag prefixes (`[slurring]`, `[whispers]`, `[excited]`, etc.) injected into non-agent TTS text (notifications, announcements, briefings). Agent conversation responses already inject their own tags via system prompts — the mood system fills the gap for non-agent TTS routed through the queue. Five time blocks per character, tunable via blueprint instances.
 - **Voice Session Manager** — Mic lifecycle management: continuous listening mode, audio device discovery, session timeouts, pending queue.
 - **Confirmation Dialog** — PIN-protected voice actions for critical commands.
-- **Therapy Mode** — Portuondo-exclusive psychoanalysis variant on Claude Opus 4.6. Session lifecycle management, 2-layer notification suppression, continuous conversation, therapy report generation, memory-integrated session notes. 4 entry points: voice handoff, toggle, natural language, scheduled.
+- **Therapy Mode** — Portuondo-exclusive psychoanalysis variant on Claude Opus 4.6. Session lifecycle management, 2-layer notification suppression, continuous conversation, therapy report generation, memory-integrated session notes. 4 entry points: voice handoff, toggle, natural language, scheduled. *(Deployed but untested as of 2026-03-30 — live voice testing blocked until ElevenLabs subscription renews.)*
 
 ### Notifications & Announcements
 - **Email Follow-Me** — Priority email routing with sender classification, LLM subject/body summarization, UID-based dedup, and calendar-aware suppression during meetings.
@@ -232,7 +232,7 @@ Four deployed patterns for agent-to-agent interaction:
 ### Memory & Learning
 - **Routine Fingerprinting** — Greedy Markov chains from zone transition sequences. Stage tracking, ETA calculation, deviation detection with automated actions.
 - **Scene Learner** — Learns lighting and scene preferences from user behavior. Per-zone, per-context scene storage. *(Built, not yet tested.)*
-- **User Interview** — 9-category preference elicitation (identity, household, work, schedule, health, environment, media, communication, privacy). Pre-seeds from existing memory. Preferences consumed by 14 blueprints/modules for LLM prompt shaping (humor, off-limits, verbosity), sleep budget calculation (hours until wake with weekday/weekend/alt-day routing), and schedule-aware alarm/routine trigger overrides. Day-name normalization on ingest (Spanish → English).
+- **User Interview** — 9-category preference elicitation (identity, household, work, schedule, health, environment, media, communication, privacy). Pre-seeds from existing memory. Preferences consumed by 14 blueprints/modules for LLM prompt shaping (humor, off-limits, verbosity), sleep budget calculation (hours until wake with weekday/weekend/alt-day routing), and schedule-aware alarm/routine trigger overrides. Day-name normalization on ingest (Spanish → English). *(Deployed but untested as of 2026-03-30 — live voice testing blocked until ElevenLabs subscription renews.)*
 - **Contact History** — Per-contact message logging with LLM-powered batch compression.
 - **Interaction Summarizer** — Nightly batch compresses whisper logs via cheap LLM into digests. 3 retention modes. ~$0.001/run.
 
@@ -273,13 +273,42 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 
 ## On the Roadmap
 
-- ~~**Therapy mode**~~ — **Deployed.** See Feature Highlights above.
+- ~~**Therapy mode**~~ — **Deployed, untested.** Live voice testing blocked until ElevenLabs subscription renews (early April 2026). See Feature Highlights above.
 - **Deliberation mode** — Multi-agent internal consensus. Multiple agents respond internally, a synthesis agent presents the unified answer or the disagreement. (Pattern 2 — not yet built.)
 - **Header images** — 66 of 112 blueprints are missing Gemini-generated header images for the GitHub description field.
 
 ---
 
+## Installation
+
+### Quick Start (HACS)
+
+1. Add this repository as a [HACS custom repository](https://hacs.xyz/docs/faq/custom_repositories/) (category: Integration)
+2. Install **Project Fronkensteen** from HACS
+3. Restart Home Assistant
+4. Go to Settings > Integrations > Add Integration > Project Fronkensteen
+5. Follow the 5-step setup wizard (feature selection, household config, speaker setup)
+6. Restart Home Assistant again
+
+The installer copies all pyscript modules, packages, blueprints, helpers, and the patched ElevenLabs TTS to the correct locations. It only installs files for the feature groups you select.
+
+### Manual Install
+
+See [INSTALL.md](INSTALL.md) for the full 13-step manual installation guide. Read [PREREQUISITES.md](PREREQUISITES.md) first for required HACS components, API keys, and hardware.
+
+### Documentation
+
+- [PREREQUISITES.md](PREREQUISITES.md) — Required components, API accounts, hardware
+- [INSTALL.md](INSTALL.md) — Step-by-step manual installation (13 steps)
+- [ARCHITECTURE.md](ARCHITECTURE.md) — How the 37 modules, 77 blueprints, and 43 packages connect
+- [helpers/helpers_setup_guide.md](helpers/helpers_setup_guide.md) — Helper configuration quick-start
+- [helpers/helpers_reference.md](helpers/helpers_reference.md) — Full reference for all 423 helpers
+
+---
+
 ## The Setup
+
+> This section describes the author's hardware. See [PREREQUISITES.md](PREREQUISITES.md) for minimum requirements.
 
 **Hardware:**
 - Raspberry Pi 5 (8GB RAM, 2TB NVMe SSD) running Home Assistant OS

@@ -1,0 +1,86 @@
+# =============================================================================
+# AI Promoter Health — Gap 5: Unified promotion pipeline health monitor
+# =============================================================================
+# Aggregates status from all 4 promoters (calendar, email, media, projects)
+# into a single sensor for dashboard display and alerting.
+#
+# State: "healthy" / "degraded" / "failing"
+# Attributes: per-promoter stale flags, status sensors, sync timestamps
+# =============================================================================
+
+template:
+  - sensor:
+      - name: "AI Promoter Health"
+        unique_id: ai_promoter_health
+        icon: >-
+          {% if this.state == 'failing' %}
+            mdi:heart-broken
+          {% elif this.state == 'degraded' %}
+            mdi:heart-half-full
+          {% else %}
+            mdi:heart-pulse
+          {% endif %}
+        state: >-
+          {%- set stale_flags = [
+            is_state('sensor.ai_calendar_stale', 'on'),
+            is_state('sensor.ai_email_stale', 'on'),
+            is_state('sensor.ai_media_data_stale', 'on'),
+            is_state('sensor.ai_project_data_stale', 'on')
+          ] -%}
+          {%- set stale_count = stale_flags | select('true') | list | length -%}
+          {%- if stale_count >= 3 -%}
+            failing
+          {%- elif stale_count >= 1 -%}
+            degraded
+          {%- else -%}
+            healthy
+          {%- endif -%}
+        attributes:
+          calendar_stale: "{{ is_state('sensor.ai_calendar_stale', 'on') }}"
+          calendar_last_sync: "{{ states('sensor.ai_calendar_last_sync') | default('unknown', true) }}"
+          email_stale: "{{ is_state('sensor.ai_email_stale', 'on') }}"
+          media_stale: "{{ is_state('sensor.ai_media_data_stale', 'on') }}"
+          project_stale: "{{ is_state('sensor.ai_project_data_stale', 'on') }}"
+          project_last_sync: "{{ states('sensor.ai_project_last_sync') | default('unknown', true) }}"
+          stale_count: >-
+            {{ [
+              is_state('sensor.ai_calendar_stale', 'on'),
+              is_state('sensor.ai_email_stale', 'on'),
+              is_state('sensor.ai_media_data_stale', 'on'),
+              is_state('sensor.ai_project_data_stale', 'on')
+            ] | select('true') | list | length }}
+
+automation:
+  - alias: "AI Promoter Health — Failing Alert"
+    id: ai_promoter_health_failing_alert
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_promoter_health
+        to: "failing"
+        for:
+          minutes: 10
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "AI Pipeline Health: Failing"
+          message: >-
+            {{ state_attr('sensor.ai_promoter_health', 'stale_count') }} promoter(s) stale.
+            Calendar: {{ 'STALE' if state_attr('sensor.ai_promoter_health', 'calendar_stale') == 'True' else 'OK' }}.
+            Email: {{ 'STALE' if state_attr('sensor.ai_promoter_health', 'email_stale') == 'True' else 'OK' }}.
+            Media: {{ 'STALE' if state_attr('sensor.ai_promoter_health', 'media_stale') == 'True' else 'OK' }}.
+            Projects: {{ 'STALE' if state_attr('sensor.ai_promoter_health', 'project_stale') == 'True' else 'OK' }}.
+          notification_id: ai_promoter_health_failing
+
+  - alias: "AI Promoter Health — Recovery"
+    id: ai_promoter_health_recovery
+    triggers:
+      - trigger: state
+        entity_id: sensor.ai_promoter_health
+        from: "failing"
+        to:
+          - "healthy"
+          - "degraded"
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: ai_promoter_health_failing

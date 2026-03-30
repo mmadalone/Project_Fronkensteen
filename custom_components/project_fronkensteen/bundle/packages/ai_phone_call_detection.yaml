@@ -1,0 +1,76 @@
+# =============================================================================
+# AI Phone Call Detection — I-30 of P2 Integration
+# =============================================================================
+# Detects active phone calls via companion app sensor and defers TTS.
+# When call ends, fires tts_queue_flush_deferred to play deferred items.
+#
+# Provides:
+#   sensor.ai_phone_call_active             — auto-set by automation (Session 8 migration)
+#   input_boolean.ai_phone_call_defer_tts   — defer TTS during calls
+#   automation.ai_phone_call_start          — detect call start
+#   automation.ai_phone_call_end            — detect call end + flush
+#
+# Sensors: sensor.madaringer_phone_state (idle / ringing / offhook)
+# Dependencies: pyscript/tts_queue.py (deferred queue + flush event)
+#               pyscript/state_bridge.py (set_sensor_value service)
+# Deployed: 2026-03-04 | Updated: 2026-03-29 (Session 8 — boolean→sensor migration)
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean.ai_phone_call_active removed — migrated to sensor (state.set, Session 8)
+
+# ── AUTOMATIONS ──────────────────────────────────────────────────────────────
+
+automation:
+  # ── CALL START ──────────────────────────────────────────────────────────
+  - id: ai_phone_call_start
+    alias: "AI - Phone Call Start"
+    description: "Set phone call active when ringing or offhook"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.madaringer_phone_state
+        to: "ringing"
+      - trigger: state
+        entity_id: sensor.madaringer_phone_state
+        to: "offhook"
+    conditions:
+      - condition: state
+        entity_id: sensor.ai_phone_call_active
+        state: "off"
+    actions:
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_phone_call_active
+          value: "on"
+          icon: "mdi:phone-in-talk"
+          friendly_name: "AI Phone Call Active"
+
+  # ── CALL END ────────────────────────────────────────────────────────────
+  - id: ai_phone_call_end
+    alias: "AI - Phone Call End"
+    description: "Clear phone call active on idle, flush deferred TTS"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.madaringer_phone_state
+        from:
+          - "ringing"
+          - "offhook"
+        to: "idle"
+    conditions:
+      - condition: state
+        entity_id: sensor.ai_phone_call_active
+        state: "on"
+    actions:
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_phone_call_active
+          value: "off"
+          icon: "mdi:phone-in-talk"
+          friendly_name: "AI Phone Call Active"
+      # Flush deferred TTS items
+      - delay: "00:00:02"
+      - continue_on_error: true
+        action: pyscript.tts_queue_flush_deferred

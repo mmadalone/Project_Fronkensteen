@@ -1,0 +1,314 @@
+blueprint:
+  name: "Bedtime advisory actions"
+  author: madalone
+  description: >
+    # Bedtime Advisory Actions
+
+    Fires when `predictive_schedule.py` detects the user is ≤15 minutes from
+    their target routine start time. Consumes the `ai_bedtime_advisory` event.
+
+    ### Relationship to other blueprints
+
+    - **This blueprint:** Gentle pre-advisory (≤15 min before target)
+    - **proactive_bedtime_escalation.yaml:** Handles **overdue** (past target, escalating nags)
+
+    ### Use cases
+
+    - Dim lights and start a wind-down playlist
+    - Set thermostat to sleep mode
+    - Speak a gentle TTS reminder
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_advisory_actions.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      description: >
+        Kill switch and confidence gating.
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch.
+          selector:
+            entity:
+              domain: input_boolean
+
+        min_confidence:
+          name: Minimum confidence
+          description: >
+            Only fire if the bedtime prediction confidence is at least this level.
+          default: "medium"
+          selector:
+            select:
+              options:
+                - label: "Low"
+                  value: "low"
+                - label: "Medium"
+                  value: "medium"
+                - label: "High"
+                  value: "high"
+
+        suppress_if_routine_active:
+          name: Suppress if routine active
+          description: >
+            Don't fire if `ai_routine_stage` indicates a routine is already
+            in progress (not "none").
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ② ACTIONS
+    # ===========================================================================
+    actions:
+      name: "② Actions"
+      icon: mdi:cog-play
+      collapsed: false
+      description: >
+        Actions and optional TTS announcement.
+      input:
+        advisory_actions:
+          name: Advisory actions
+          description: >
+            Actions to run (e.g., dim lights, start wind-down playlist,
+            set thermostat to sleep mode).
+          default: []
+          selector:
+            action: {}
+
+        tts_speaker:
+          name: TTS speaker (optional)
+          description: >
+            Media player for TTS announcements.
+          default: {}
+          selector:
+            entity:
+              domain: media_player
+
+        tts_mode:
+          name: TTS mode
+          description: >
+            How to generate the TTS message.
+          default: "static"
+          selector:
+            select:
+              options:
+                - label: "Static text"
+                  value: "static"
+                - label: "LLM-generated"
+                  value: "llm"
+
+        tts_message:
+          name: TTS message (static mode)
+          description: >
+            Static TTS message. Only used in "static" mode.
+          default: "Time to start winding down."
+          selector:
+            text:
+              multiline: true
+
+        llm_prompt:
+          name: LLM prompt (llm mode)
+          description: >
+            Prompt for LLM-generated TTS message. Use `{recommendation}` as a
+            placeholder for the bedtime advisor's recommendation text.
+            Only used in "llm" mode.
+          default: >
+            Generate a brief, gentle bedtime reminder based on this recommendation:
+            {recommendation}. Keep it under 30 words, casual and friendly.
+          selector:
+            text:
+              multiline: true
+
+        llm_agent:
+          name: LLM agent (llm mode)
+          description: >
+            Conversation agent entity to use for LLM-generated messages.
+            Only used in "llm" mode.
+          default: {}
+          selector:
+            entity:
+              domain: conversation
+
+        enable_user_preferences:
+          name: "Enable user preference injection"
+          description: "Inject user preferences and sleep budget into advisory prompts."
+          default: true
+          selector:
+            boolean:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable_toggle
+  v_min_conf: !input min_confidence
+  v_suppress_routine: !input suppress_if_routine_active
+  v_tts_speaker: !input tts_speaker
+  v_tts_mode: !input tts_mode
+  v_tts_message: !input tts_message
+  v_llm_prompt: !input llm_prompt
+  v_llm_agent: !input llm_agent
+  enable_user_prefs: !input enable_user_preferences
+  v_confidence_map:
+    low: 1
+    medium: 2
+    high: 3
+
+  # ── User preference context (Preference Consumption B3) ──
+  _resolved_user: >-
+    {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
+    {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+    {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% else %}{{ _primary }}{% endif %}
+  _user_prefs_block: >-
+    {% set ns = namespace(lines=[]) %}
+    {% set humor = states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) %}
+    {% set off_limits = states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) %}
+    {% set verbosity = states('input_text.ai_context_user_verbosity_' ~ _resolved_user) | default('', true) %}
+    {% set morning_night = states('input_text.ai_context_user_morning_or_night_' ~ _resolved_user) | default('', true) %}
+    {% if off_limits not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['NEVER mention: ' ~ off_limits ~ '.'] %}
+    {% endif %}
+    {% if humor not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Humor preference: ' ~ humor ~ '.'] %}
+    {% endif %}
+    {% if verbosity not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['Verbosity: ' ~ verbosity ~ '.'] %}
+    {% endif %}
+    {% if morning_night not in ['unknown','unavailable','','None'] %}
+      {% set ns.lines = ns.lines + ['User is a ' ~ morning_night ~ '.'] %}
+    {% endif %}
+    {{ ns.lines | join(' ') if ns.lines else '' }}
+  _sleep_budget: >-
+    {% set tomorrow = (now() + timedelta(days=1)).strftime('%a')[:3] | lower %}
+    {% set alt_days_raw = states('input_text.ai_context_wake_time_alt_days_' ~ _resolved_user) | default('', true) %}
+    {% set alt_days = alt_days_raw.lower().split(',') | map('trim') | list if alt_days_raw not in ['unknown','unavailable','','None'] else [] %}
+    {% set is_weekend = tomorrow in ['sat','sun'] %}
+    {% set is_alt = tomorrow in alt_days %}
+    {% if is_alt %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_alt_weekday_' ~ _resolved_user) %}
+    {% elif is_weekend %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekend_' ~ _resolved_user) %}
+    {% else %}
+      {% set wake_raw = states('input_datetime.ai_context_wake_time_weekday_' ~ _resolved_user) %}
+    {% endif %}
+    {% if wake_raw not in ['unknown','unavailable','','None','00:00:00'] %}
+      {% set wake_today = today_at(wake_raw) %}
+      {% set wake_ts = wake_today if wake_today > now() else wake_today + timedelta(days=1) %}
+      {% set hours = ((wake_ts - now()).total_seconds() / 3600) | round(1) %}
+      {{ hours }}h until wake ({{ wake_raw[:5] }} tomorrow)
+    {% else %}
+    {% endif %}
+
+triggers:
+  - trigger: event
+    event_type: ai_bedtime_advisory
+
+conditions:
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Confidence gate ──
+  - condition: template
+    value_template: >-
+      {% set conf = trigger.event.data.confidence | default('low') %}
+      {% set conf_level = v_confidence_map.get(conf, 0) %}
+      {% set min_level = v_confidence_map.get(v_min_conf, 2) %}
+      {{ conf_level >= min_level }}
+
+  # ── Routine suppression ──
+  - condition: template
+    value_template: >-
+      {% if not v_suppress_routine %}
+        true
+      {% else %}
+        {% set stage = states('sensor.ai_routine_stage') | default('none') %}
+        {{ stage in ['none', '', 'unknown', 'unavailable'] }}
+      {% endif %}
+
+actions:
+  # ── Dispatcher: resolve TTS voice ──
+  - alias: "Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "bedtime_advisory"
+      intent_text: "bedtime advisory announcement"
+      skip_continuity: true
+
+  - alias: "Set recommendation, minutes until"
+    variables:
+      recommendation: "{{ trigger.event.data.recommendation | default('') }}"
+      minutes_until: "{{ trigger.event.data.minutes_until | default(15) }}"
+      _voice: "{{ (_dispatch | default({})).get('tts_engine', 'tts.home_assistant_cloud') }}"
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
+
+  # ── TTS announcement ──
+  - alias: "TTS announcement"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_tts_mode == 'static' and v_tts_message | trim != '' }}"
+        sequence:
+          - alias: "Speak static bedtime advisory message"
+            action: pyscript.tts_queue_speak
+            response_variable: _tts_result
+            continue_on_error: true
+            data:
+              text: "{{ v_tts_message }}"
+              voice: "{{ _voice }}"
+              voice_id: "{{ _voice_id }}"
+              target_mode: explicit
+              target: "{{ v_tts_speaker }}"
+              announce: true
+              priority: 3
+
+      - conditions:
+          - condition: template
+            value_template: "{{ v_tts_mode == 'llm' and v_llm_agent != '' }}"
+        sequence:
+          - alias: "Generate bedtime advisory message via LLM"
+            action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ v_llm_agent }}"
+              text: >-
+                [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+                {{ v_llm_prompt | replace('{recommendation}', recommendation) }}
+                {% if enable_user_prefs | bool(true) %}
+                {% if _user_prefs_block | trim | length > 0 %}
+                User context: {{ _user_prefs_block }}
+                {% endif %}
+                {% if _sleep_budget | trim | length > 0 %}
+                Sleep: {{ _sleep_budget }}
+                {% endif %}
+                {% endif %}
+            response_variable: llm_response
+          - alias: "Speak LLM-generated bedtime advisory message"
+            action: pyscript.tts_queue_speak
+            response_variable: _tts_result
+            continue_on_error: true
+            data:
+              text: "{{ (llm_response | default({})).get('response', {}).get('speech', {}).get('plain', {}).get('speech', v_tts_message) }}"
+              voice: "{{ _voice }}"
+              voice_id: "{{ _voice_id }}"
+              target_mode: explicit
+              target: "{{ v_tts_speaker }}"
+              announce: true
+              priority: 3
+
+  # ── Advisory actions ──
+  - !input advisory_actions

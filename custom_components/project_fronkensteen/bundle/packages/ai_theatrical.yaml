@@ -1,0 +1,52 @@
+# =============================================================================
+# AI Theatrical Mode Package — Pattern 4 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "C12 Theatrical Mode"
+#
+# Provides:
+#   sensor.ai_theatrical_config
+#     .state = current interrupt mode
+#     .attributes: turn_limit, max_words, budget_floor, context_mode,
+#                  turn_order, enabled, active
+#
+# Pyscript-owned (NOT defined here — Decision #78):
+#   sensor.ai_theatrical_status
+#     .state = idle / active / completed / killed / budget_exhausted / ...
+#     .attributes: topic, participants, turn, total_turns, source,
+#                  last_speaker, started_at, duration_s
+#     Managed by: pyscript/theatrical_mode.py via state.set()
+#
+# Dependencies:
+#   - pyscript/theatrical_mode.py (orchestration engine)
+#   - blueprints/automation/madalone/theatrical_mode.yaml (entry point)
+#   - packages/ai_llm_budget.yaml (budget gate)
+#   - helpers_input_boolean.yaml (ai_theatrical_mode_enabled/active)
+#   - helpers_input_number.yaml (ai_theatrical_turn_limit/max_words/budget_floor)
+#   - helpers_input_select.yaml (ai_theatrical_interrupt_mode/context_mode/turn_order)
+#   - helpers_input_datetime.yaml (ai_theatrical_last_exchange)
+#
+# Deployed: 2026-03-23
+# =============================================================================
+
+template:
+  - sensor:
+      - name: "AI Theatrical Config"
+        unique_id: ai_theatrical_config
+        icon: mdi:drama-masks
+        state: >-
+          {{ states('input_select.ai_theatrical_interrupt_mode') }}
+        attributes:
+          turn_limit: >-
+            {{ states('input_number.ai_theatrical_turn_limit') | int(6) }}
+          max_words: >-
+            {{ states('input_number.ai_theatrical_max_words') | int(40) }}
+          budget_floor: >-
+            {{ states('input_number.ai_theatrical_budget_floor') | int(70) }}
+          context_mode: >-
+            {{ states('input_select.ai_theatrical_context_mode') }}
+          turn_order: >-
+            {{ states('input_select.ai_theatrical_turn_order') }}
+          enabled: >-
+            {{ is_state('input_boolean.ai_theatrical_mode_enabled', 'on') }}
+          active: >-
+            {{ is_state('sensor.ai_theatrical_mode_active', 'on') }}

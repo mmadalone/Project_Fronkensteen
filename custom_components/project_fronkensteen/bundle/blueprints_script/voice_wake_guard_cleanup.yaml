@@ -1,0 +1,152 @@
+blueprint:
+  name: "Voice – Wake Guard Cleanup (helper script)"
+  description: |
+    ## Version 1.0
+
+    HELPER SCRIPT: Reusable stop/cleanup sequence for the wake-up-guard
+    blueprint. Stops TTS playback, optionally announces via Assist Satellite,
+    waits for audio drain, restores volume, and resets snooze/stop toggles.
+
+    Called from stop, second-snooze, and post-snooze-stop paths in the
+    wake-up-guard blueprint.
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/voice_wake_guard_cleanup.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① INFRASTRUCTURE
+    # =========================================================================
+    infrastructure:
+      name: "① Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the duck guard system."
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          description: "Boolean indicating audio ducking is active."
+          default: sensor.ai_ducking_flag
+          selector:
+            entity:
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          description: "Boolean that enables the duck guard system."
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+fields:
+  tts_output_player:
+    name: TTS media player
+    description: Speaker to stop and restore volume on
+    required: true
+    selector:
+      entity:
+        domain: media_player
+  assist_satellite_entity:
+    name: Assist Satellite entity
+    description: Optional satellite for voice confirmation. Empty string to skip.
+    default: ""
+    selector:
+      text: {}
+  satellite_message:
+    name: Satellite announcement text
+    description: Message for the satellite to speak
+    default: "ok, stopping the wake-up alarm."
+    selector:
+      text: {}
+  tts_volume_after:
+    name: Volume to restore
+    description: Volume level to set after cleanup
+    default: 0.4
+    selector:
+      number:
+        min: 0
+        max: 1
+        step: 0.01
+  stop_restore_delay:
+    name: Delay before volume restore (seconds)
+    description: Seconds to wait for audio buffer drain before restoring volume
+    default: 1
+    selector:
+      number:
+        min: 0
+        max: 30
+  snooze_toggle:
+    name: Snooze toggle
+    description: input_boolean for snooze flag
+    required: true
+    selector:
+      entity:
+        domain: input_boolean
+  stop_toggle:
+    name: Stop toggle
+    description: input_boolean for stop flag
+    required: true
+    selector:
+      entity:
+        domain: input_boolean
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_ducking_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+
+sequence:
+  - alias: "1) Stop TTS playback"
+    action: media_player.media_stop
+    target:
+      entity_id: "{{ tts_output_player }}"
+
+  - alias: "2) Optional satellite confirmation"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (assist_satellite_entity | default('')) | length > 0 }}"
+        sequence:
+          - alias: "Satellite announcement"
+            action: assist_satellite.announce
+            target:
+              entity_id: "{{ assist_satellite_entity }}"
+            data:
+              message: "{{ satellite_message | default('ok, stopping the wake-up alarm.') }}"
+    default: []
+
+  - alias: "3) Wait for audio buffer drain"
+    delay:
+      seconds: "{{ stop_restore_delay | int(1) }}"
+
+  - alias: "4) Restore speaker volume"
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ tts_output_player }}"
+    data:
+      volume_level: "{{ tts_volume_after | float(0.4) }}"
+  - alias: "Update duck snapshot after volume restore"
+    if:
+      - condition: template
+        value_template: >-
+          {{ is_state(v_duck_guard, 'on')
+             and is_state(v_ducking_flag, 'on') }}
+    then:
+      - alias: "Sync duck snapshot with restored volume"
+        action: pyscript.duck_manager_update_snapshot
+        data:
+          entity_id: "{{ tts_output_player }}"
+          volume_level: "{{ tts_volume_after | float(0.4) }}"
+        continue_on_error: true
+
+  - alias: "5) Reset snooze/stop toggles"
+    action: input_boolean.turn_off
+    target:
+      entity_id:
+        - "{{ snooze_toggle }}"
+        - "{{ stop_toggle }}"
+    continue_on_error: true

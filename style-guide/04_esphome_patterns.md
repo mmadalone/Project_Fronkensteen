@@ -219,9 +219,9 @@ When adding custom micro_wake_word models (e.g., persona-specific wake words), f
 micro_wake_word:
   models:
     - id: hey_rick
-      model: http://homeassistant.local:8123/local/microwake/hey_rick.json
+      model: hey_rick.json
     - id: hey_quark
-      model: http://homeassistant.local:8123/local/microwake/hey_quark.json
+      model: hey_quark.json
   vad:                      # Voice Activity Detection — reduces false wake word triggers from non-speech sounds
 ```
 
@@ -235,15 +235,20 @@ ESPHome supports three formats for wake word model references:
 # 2. GitHub URL — for community/official models hosted on GitHub
 - model: github://esphome/micro-wake-word-models/models/v2/okay_nabu.json
 
-# 3. HTTP URL — for custom/self-trained models served from your HA instance
+# 3. Local file — for custom/self-trained models in /config/esphome/ (PREFERRED for custom models)
+- model: hey_rick.json
+
+# 4. HTTP URL — for custom models served from HA (AVOID — see warning below)
 - model: http://homeassistant.local:8123/local/microwake/hey_rick.json
 ```
 
-Use shorthand or GitHub format for official models. Use HTTP URLs only for custom/self-trained models hosted locally.
+Use shorthand or GitHub format for official models. **Use local file paths for custom/self-trained models** — place the `.json` manifest and `.tflite` model files in `/config/esphome/`.
+
+> ⚠️ **Avoid HTTP URLs for custom wake word models (Decision 2026-03-30).** Loading models via `http://homeassistant.local:8123/local/...` creates a boot dependency on HA being reachable. If HA restarts while the ESP is also rebooting (or reconnecting after a crash), model loading fails and can trigger null pointer faults (`LoadProhibited`). HTTP loading also adds transient memory pressure from the HTTP client stack. Copy model files from `/config/www/microwake/` to `/config/esphome/` and reference them as bare filenames (e.g., `model: hey_rick.json`).
 
 **Rules:**
 - Every custom model MUST have a descriptive `id` matching the wake phrase: `hey_rick`, `hey_quark`, etc.
-- Model files are served from HA's `/config/www/microwake/` directory (accessible via `http://homeassistant.local:8123/local/microwake/`).
+- Model files live in `/config/esphome/` (local reference) or `/config/www/microwake/` (HTTP reference). **Prefer local** — see warning above.
 - Keep wake word assignments **per-room/persona** — the Workshop satellite gets Rick's wake words, the Living Room gets Quark's. Don't dump every wake word on every device.
 - If adding wake words to a package-based device, you're extending the package's model list (see §6.3).
 - The `micro_wake_word` component requires a `microphone` source configuration (mandatory since ESPHome 2025.5.0). Package-based devices like Voice PE already include this — only relevant if building a custom voice satellite from scratch.
@@ -254,9 +259,9 @@ Use shorthand or GitHub format for official models. Use HTTP URLs only for custo
 micro_wake_word:
   models:
     - id: hey_rick
-      model: http://homeassistant.local:8123/local/microwake/hey_rick.json
+      model: hey_rick.json
     - id: hey_quark
-      model: http://homeassistant.local:8123/local/microwake/hey_quark.json
+      model: hey_quark.json
   vad:                      # Recommended — reduces false positives from ambient noise
 ```
 
@@ -450,6 +455,18 @@ When managing multiple devices of the same type (e.g., multiple Voice PE satelli
 - Device-specific extensions (different wake words per room)
 
 **Pattern:** When creating a new device of the same type, copy an existing config and change only the substitutions and device-specific sections. This makes it trivial to diff configs and spot unintentional drift.
+
+**WiFi settings for Voice PE satellites:** All Voice PE configs SHOULD include these WiFi tuning options for consistent behavior:
+
+```yaml
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: light    # Reduces WiFi latency at minor power cost — important for voice responsiveness
+  fast_connect: true        # Skips AP scan, connects directly — faster reconnection after crashes/reboots
+```
+
+`power_save_mode: light` is the recommended balance for always-on voice devices — it reduces latency vs the default `NONE`/automatic mode while keeping power consumption reasonable. `fast_connect: true` requires a stable SSID but significantly reduces reconnection time after reboots. Both settings must be consistent across all satellites to avoid one device recovering faster than another after an HA restart.
 
 ### 6.11 ESPHome and HA automation interaction
 ESPHome devices expose entities to HA (sensors, switches, buttons, etc.). When building automations that interact with ESPHome devices:

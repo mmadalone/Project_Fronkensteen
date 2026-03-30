@@ -454,12 +454,32 @@ Common causes:
 - Device ran out of memory (heap) — check heap free sensor. Below 20KB is trouble.
 - mDNS not working — some routers/VLANs block mDNS. Use a static IP in the ESPHome wifi config.
 
+**"ESP device keeps crashing / rebooting"**
+
+Diagnosis:
+1. Check HA core logs for crash reports: `ha core logs | grep -i "esphome.*crash"`. Look for `*** CRASH DETECTED ON PREVIOUS BOOT ***` — this is the ESP reporting what happened on its last boot.
+2. Identify the fault type from the log:
+   - **`LoadProhibited`** — null pointer dereference or invalid memory read. Most common ESP32 crash. Often caused by accessing freed memory, stack overflow, or firmware bugs.
+   - **`StoreProhibited`** — invalid memory write. Similar causes to LoadProhibited.
+   - **`InstrFetchProhibited`** — code execution from invalid address. Usually stack corruption or buffer overflow.
+3. Check heap trend: monitor `sensor.ha_voice_XX_heap_free` over time. A steady decline indicates a memory leak. Below 20KB is danger zone.
+4. Check for recurring `sendspin.ws_server` errors: `ha core logs | grep sendspin`. The error `"No connection found for sockfd XX"` at regular intervals (~56 min) indicates the ESP-IDF httpd websocket keepalive race condition — a stale connection cycling. Not a crash itself but can contribute to memory pressure over time.
+5. Check for `[W][micro_wake_word:356]: Wake word detection is already running` — benign warning after reboot when HA sends a start command but the device already auto-started.
+
+Common causes:
+- **Firmware regression** — ESPHome 2026.3.0 had a `web_server` stack overflow (esphome#14991) that crashed devices every 60-90s. Check your ESPHome version via `update.ha_voice_XX_firmware`.
+- **Custom wake word HTTP loading** — if models reference `http://homeassistant.local:8123/...`, the ESP depends on HA being reachable at boot. During HA restarts, model loading can fail and trigger null pointer faults. **Fix:** use local model files (§6.5).
+- **Sendspin websocket memory leak** — Voice PE firmware's Sendspin web server can leak memory through stale websocket connections. Fixed in Voice PE firmware 26.3.0 (esphome/home-assistant-voice-pe#562).
+- **Simultaneous HA + ESP restart** — if HA restarts while the ESP is reconnecting, both devices can enter a race condition. `fast_connect: true` in WiFi config (§6.10) reduces reconnection time.
+
+Recovery: If crashes are persistent, get the backtrace from the crash log and use `addr2line` against the firmware ELF to identify the crashing function. The crash log includes the command: `addr2line -pfiaC -e firmware.elf <addresses>`. The ELF file is in `.esphome/build/<device>/.pioenvs/<device>/firmware.elf`.
+
 **"Wake word not triggering"**
 
 Diagnosis:
 1. Check the Voice PE satellite's state in HA — is it `idle` (listening) or `unavailable`?
 2. Check the ESPHome logs (ESPHome dashboard → Logs) for microphone activity. You should see wake word processing logs.
-3. Is the custom model file accessible? Try navigating to the model URL in a browser: `http://homeassistant.local:8123/local/microwake/hey_rick.json`
+3. Is the custom model file accessible? For local files, verify the `.json` and `.tflite` files exist in `/config/esphome/`. For HTTP models (not recommended — see §6.5), try navigating to the URL in a browser.
 4. Is the microphone physically working? Check if the on-device voice activity detection (VAD) is triggering.
 
 **"OTA update fails"**

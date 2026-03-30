@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync bundle
+        run: bash scripts/sync_bundle.sh
+
+      - name: Verify bundle
+        run: |
+          BUNDLE="custom_components/project_fronkensteen/bundle"
+          echo "Pyscript: $(ls $BUNDLE/pyscript/*.py 2>/dev/null | wc -l) modules"
+          echo "Packages: $(ls $BUNDLE/packages/*.yaml 2>/dev/null | wc -l)"
+          echo "Auto blueprints: $(ls $BUNDLE/blueprints_automation/*.yaml 2>/dev/null | wc -l)"
+          echo "Script blueprints: $(ls $BUNDLE/blueprints_script/*.yaml 2>/dev/null | wc -l)"
+          echo "Helpers: $(ls $BUNDLE/helpers/*.yaml 2>/dev/null | wc -l)"
+          TOTAL=$(find $BUNDLE -type f | wc -l)
+          echo "Total: $TOTAL files"
+          if [ "$TOTAL" -lt 100 ]; then
+            echo "ERROR: Bundle has fewer than 100 files — sync may have failed"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

@@ -1,0 +1,40 @@
+# =============================================================================
+# AI Sleep Detection — I-17 of P2 Integration
+# =============================================================================
+# Detects sleep state from FP2 presence with configurable sensor, window,
+# minimum duration, and occupant count gate (cat mitigation).
+#
+# Provides:
+#   sensor.ai_sleep_detected                      — current sleep state (Session 8 migration)
+#   input_boolean.ai_sleep_detection_enabled      — kill switch
+#   input_datetime.ai_sleep_start                 — sleep start time
+#   input_datetime.ai_sleep_end                   — sleep end time
+#   input_number.ai_sleep_min_duration            — min minutes for detection
+#   input_boolean.ai_sleep_false_positive_flag    — manual FP override
+#   input_datetime.ai_sleep_window_start          — detection window start
+#   input_datetime.ai_sleep_window_end            — detection window end
+#   input_select.ai_sleep_detection_sensor        — configurable presence sensor
+#   automation.ai_sleep_detect_start              — presence → sleep
+#   automation.ai_sleep_detect_end                — presence off → wake
+#   automation.ai_sleep_false_positive            — FP override handler
+#
+# Sensors: configurable via input_select.ai_sleep_detection_sensor
+# Dependencies: pyscript/presence_patterns.py (sleep_detect_log service)
+#               pyscript/sleep_config.py (picker population)
+# Deployed: 2026-03-04
+# =============================================================================
+
+# ── INPUT HELPERS ────────────────────────────────────────────────────────────
+
+# input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
+
+# input_datetime: moved to helpers_input_datetime.yaml (C3 consolidation)
+
+# input_number: moved to helpers_input_number.yaml (C6 consolidation)
+
+# input_select: moved to helpers_input_select.yaml (C3 consolidation)
+
+# ── AUTOMATIONS ──────────────────────────────────────────────────────────────
+# Automation blocks removed — now a single blueprint instance in automations.yaml:
+#   id: ai_sleep_detection → madalone/sleep_detection.yaml
+# (combines sleep_start, sleep_end, and false_positive into one lifecycle blueprint)

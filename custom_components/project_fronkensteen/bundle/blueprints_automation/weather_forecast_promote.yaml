@@ -1,0 +1,236 @@
+blueprint:
+  name: "Weather — Tomorrow Forecast Promote"
+  description: >
+    Reads weather sensor states (AEMET, Met.no, etc.), sends all data to an
+    LLM for a natural-language summary, and stores the result in an
+    input_text helper for hot context injection. The integration updates
+    sensors on its own — this blueprint just reads and summarizes.
+  domain: automation
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/weather_forecast_promote.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    # ===========================================================================
+    # ① Data Sources
+    # ===========================================================================
+    data_sources:
+      name: "① Data Sources"
+      icon: mdi:weather-partly-cloudy
+      description: Weather sensors and entities to read forecast data from.
+      collapsed: false
+      input:
+        weather_sensors:
+          name: Weather Sensors
+          description: >
+            Select all weather sensor entities to include (AEMET hourly forecasts,
+            temperature, wind, precipitation, etc.). Their friendly names and
+            current states are sent to the LLM for summarization.
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        weather_entity:
+          name: Weather Entity (optional)
+          description: >
+            Optional weather domain entity. If selected, its state and attributes
+            (temperature, humidity, condition, wind) are included alongside the
+            sensors above.
+          default: {}
+          selector:
+            entity:
+              domain: weather
+
+    # ===========================================================================
+    # ② Configuration
+    # ===========================================================================
+    configuration:
+      name: "② Configuration"
+      icon: mdi:tune-variant
+      description: Summary length, refresh schedule, LLM prompt, and startup behavior.
+      collapsed: true
+      input:
+        summary_max_chars:
+          name: Summary Max Characters
+          description: "Maximum characters for the forecast summary."
+          default: 120
+          selector:
+            number:
+              min: 40
+              max: 255
+              step: 10
+              mode: slider
+        refresh_interval:
+          name: Refresh Interval (hours)
+          description: "How often to refresh the summary (time_pattern divisor)."
+          default: "/6"
+          selector:
+            select:
+              options:
+                - label: "Every hour"
+                  value: "/1"
+                - label: "Every 2 hours"
+                  value: "/2"
+                - label: "Every 6 hours"
+                  value: "/6"
+                - label: "Every 12 hours"
+                  value: "/12"
+        llm_prompt:
+          name: LLM Prompt
+          description: >
+            Custom prompt for the weather summary LLM call. Use {data} for the
+            raw weather data and {max_chars} for the character limit.
+          default: >-
+            Summarize this weather data into a natural, concise forecast
+            in {max_chars} characters or fewer. No sensor IDs, no technical
+            jargon, no character counts. Reply with ONLY the forecast text,
+            nothing else.
+
+            Data: {data}
+          selector:
+            text:
+              multiline: true
+        run_on_start:
+          name: Run on HA start
+          description: >
+            Refresh the weather summary automatically when Home Assistant starts.
+          default: true
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ③ Infrastructure
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog-outline
+      description: LLM instance, rebuild trigger, and storage helper.
+      collapsed: true
+      input:
+        llm_instance:
+          name: LLM Instance
+          description: >
+            ha_text_ai sensor for natural language summarization.
+          default: sensor.ha_text_ai_deepseek_chat
+          selector:
+            entity:
+              domain: sensor
+        rebuild_button:
+          name: Rebuild Button
+          description: "Manual rebuild trigger."
+          default: input_button.ai_weather_forecast_rebuild
+          selector:
+            entity:
+              domain: input_button
+        summary_helper:
+          name: Summary Sensor
+          description: "Sensor entity to store the forecast summary (via bridge service)."
+          default: sensor.ai_weather_tomorrow_summary
+          selector:
+            entity:
+
+mode: single
+
+variables:
+  v_run_on_start: !input run_on_start
+
+triggers:
+  - trigger: time_pattern
+    hours: !input refresh_interval
+    minutes: "15"
+    id: scheduled
+  - trigger: state
+    entity_id: !input rebuild_button
+    id: manual
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'ha_start' or v_run_on_start }}
+
+actions:
+  # 1. Gather raw data from all selected sensors + optional weather entity
+  - alias: "Set summary max chars and 5 more variables"
+    variables:
+      _summary_max_chars: !input summary_max_chars
+      _sensor_ids: !input weather_sensors
+      _weather_id: !input weather_entity
+      _sensor_data: >-
+        {% set ns = namespace(lines=[]) %}
+        {% for eid in _sensor_ids %}
+          {% set s = states(eid) %}
+          {% if s not in ['unavailable', 'unknown', 'none', ''] %}
+            {% set fname = state_attr(eid, 'friendly_name') | default(eid, true) %}
+            {% set unit = state_attr(eid, 'unit_of_measurement') | default('', true) %}
+            {% set ns.lines = ns.lines + [fname ~ ': ' ~ s ~ unit] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.lines | join('; ') }}
+      _weather_data: >-
+        {% if _weather_id not in ['', none, 'none', '{}'] %}
+          {% set ws = states(_weather_id) %}
+          {% if ws not in ['unavailable', 'unknown'] %}
+            {% set wt = state_attr(_weather_id, 'temperature') | default('?', true) %}
+            {% set wh = state_attr(_weather_id, 'humidity') | default('?', true) %}
+            {% set ww = state_attr(_weather_id, 'wind_speed') | default('?', true) %}
+            {% set wa = state_attr(_weather_id, 'attribution') | default('', true) %}
+            {{ state_attr(_weather_id, 'friendly_name') | default('Weather', true) }}: {{ ws | title }}, {{ wt }}°C, humidity {{ wh }}%, wind {{ ww }} km/h
+          {% endif %}
+        {% endif %}
+      _raw_data: >-
+        {% set parts = [] %}
+        {% if _weather_data | trim | length > 0 %}
+          {% set parts = parts + [_weather_data | trim] %}
+        {% endif %}
+        {% if _sensor_data | trim | length > 0 %}
+          {% set parts = parts + [_sensor_data | trim] %}
+        {% endif %}
+        {{ parts | join('. ') }}
+
+  # 2. Send to LLM for summarization
+  - alias: "2. Send to LLM for summarization"
+    if:
+      - condition: template
+        value_template: "{{ _raw_data | trim | length > 5 }}"
+    then:
+      - alias: "Set llm prompt template, llm prompt"
+        variables:
+          _llm_prompt_template: !input llm_prompt
+          _llm_prompt: >-
+            {{ _llm_prompt_template | replace('{max_chars}', _summary_max_chars | string) | replace('{data}', _raw_data) }}
+      - alias: "Summarize raw forecast via LLM"
+        action: pyscript.llm_task_call
+        data:
+          prompt: "{{ _llm_prompt }}"
+          max_tokens: 80
+          temperature: 0.3
+        response_variable: _llm_result
+        continue_on_error: true
+      - alias: "Set llm text, llm clean, final"
+        variables:
+          _llm_text: "{{ _llm_result.response_text | default('', true) }}"
+          _llm_clean: >-
+            {{ _llm_text | regex_replace('\n.*', '') | trim | regex_replace('\s*\(\d+ characters?\)\s*$', '') | replace('"', '') | replace("'", '') | trim }}
+          _final: >-
+            {% if _llm_clean | length > 5 %}
+              {{ _llm_clean[:_summary_max_chars] }}
+            {% else %}
+              {{ _raw_data[:_summary_max_chars] }}
+            {% endif %}
+    else:
+      - alias: "Set final"
+        variables:
+          _final: "No weather data available."
+
+  # 3. Store result
+  - alias: "Store weather summary in L1 sensor"
+    action: pyscript.set_sensor_value
+    data:
+      entity_id: !input summary_helper
+      value: "{{ _final | trim }}"
+      icon: "mdi:weather-partly-snowy-rainy"
+      friendly_name: "AI Weather Tomorrow Summary"

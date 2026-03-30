@@ -1,0 +1,836 @@
+blueprint:
+  name: "Bedtime Routine – Core sequence (script)"
+  author: madalone
+  description: '# Bedtime Routine – Core sequence
+
+    Complete bedtime shutdown sequence as a reusable script blueprint. Handles
+    TV shutdown (CEC/script/IR stack), lights, media playback (audiobook via
+    Music Assistant or Kodi), countdown timer, bathroom guard with timeout,
+    settling-in and goodnight TTS via LLM, and memory integration.
+
+    Called by bedtime_winddown.yaml or the unified nagger bedtime question.
+    Also works standalone from Developer Tools → Services.
+
+    ### Recent changes
+
+    - **v1:** Initial version — preset media, fixed countdown, full device stack'
+  domain: script
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/bedtime_routine_core.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① DEVICES
+    # =========================================================================
+    devices:
+      name: "① Devices"
+      icon: mdi:television
+      collapsed: false
+      input:
+        tv_entity:
+          name: "TV media player (CEC/software)"
+          description: >
+            Media player for TV shutdown via CEC or software turn-off.
+            Leave empty to skip.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        tv_off_script:
+          name: "TV power-off script (optional)"
+          description: "Script for TV shutdown. Tried after CEC fails."
+          default: ""
+          selector:
+            entity:
+              domain: script
+
+        tv_ir_remote:
+          name: "TV IR remote (optional)"
+          description: "Remote entity for IR-based TV power off. Tried last."
+          default: ""
+          selector:
+            entity:
+              domain: remote
+
+        tv_ir_command:
+          name: "TV IR command"
+          description: "Command to send (e.g., Power)."
+          default: ""
+          selector:
+            text: {}
+
+        tv_ir_device:
+          name: "TV IR device name"
+          description: "Device identifier for the IR command."
+          default: ""
+          selector:
+            text: {}
+
+        lights_off_target:
+          name: "Lights/switches to turn off"
+          description: "Everything to shut off at start (except holdback lamp)."
+          selector:
+            target:
+              entity:
+                domain:
+                  - light
+                  - switch
+
+        living_room_lamp:
+          name: "Holdback lamp"
+          description: "Stays on during routine; turns off after bathroom guard."
+          default: ""
+          selector:
+            entity:
+              domain:
+                - light
+                - switch
+
+        media_players_stop:
+          name: "Additional media players to stop"
+          description: "Speakers/players to stop at the start."
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+        reset_switches:
+          name: "Speaker reset switches (optional)"
+          description: "Power-cycle these before TTS. Leave empty to skip."
+          default: []
+          selector:
+            entity:
+              domain: switch
+              multiple: true
+
+        reset_switch_delay:
+          name: "Reset switch delay"
+          description: "Delay between power-cycle on and off."
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 2
+          selector:
+            duration: {}
+
+    # =========================================================================
+    # ② MEDIA PLAYBACK
+    # =========================================================================
+    media_playback:
+      name: "② Media Playback"
+      icon: mdi:book-open-page-variant
+      collapsed: true
+      input:
+        media_target:
+          name: "Media mode"
+          description: "What to play at bedtime."
+          default: "none"
+          selector:
+            select:
+              options:
+                - label: "Audiobook (Music Assistant)"
+                  value: "audiobook"
+                - label: "Kodi playback"
+                  value: "kodi"
+                - label: "None"
+                  value: "none"
+
+        audiobook_player:
+          name: "Audiobook player (Music Assistant)"
+          description: "MA media player for audiobook playback."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        audiobook_preset_uri:
+          name: "Audiobook preset URI"
+          description: "Music Assistant media ID for the audiobook."
+          default: ""
+          selector:
+            text: {}
+
+        audiobook_volume:
+          name: "Audiobook volume"
+          default: 0.25
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        audiobook_media_type:
+          name: "Audiobook media type"
+          description: "Music Assistant content type."
+          default: "audiobook"
+          selector:
+            select:
+              options:
+                - auto
+                - audiobook
+                - album
+                - playlist
+                - track
+
+        kodi_entity:
+          name: "Kodi media player"
+          description: "Kodi entity for bedtime content."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        kodi_preset_content:
+          name: "Kodi preset content"
+          description: "Content ID (path, URI, or PVR channel)."
+          default: ""
+          selector:
+            text: {}
+
+        kodi_content_type:
+          name: "Kodi content type"
+          default: "CHANNEL"
+          selector:
+            select:
+              options:
+                - DIRECTORY
+                - video
+                - CHANNEL
+                - music
+
+        kodi_volume:
+          name: "Kodi volume"
+          default: 0.15
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+        skip_tv_off:
+          name: "Skip TV off (for Kodi mode)"
+          description: "Keep TV on when using Kodi playback."
+          default: false
+          selector:
+            boolean: {}
+
+    # =========================================================================
+    # ③ COUNTDOWN & BATHROOM
+    # =========================================================================
+    countdown_bathroom:
+      name: "③ Countdown & Bathroom"
+      icon: mdi:timer-sand
+      collapsed: true
+      input:
+        default_countdown_minutes:
+          name: "Default countdown (minutes)"
+          description: "Wait before bathroom guard and lamp off."
+          default: 4
+          selector:
+            number:
+              min: 1
+              max: 30
+              step: 1
+              mode: slider
+
+        countdown_helper:
+          name: "Countdown override helper (optional)"
+          description: "input_number whose value overrides the default."
+          default: ""
+          selector:
+            entity:
+              domain: input_number
+
+        bathroom_sensor:
+          name: "Bathroom presence sensor"
+          description: "Binary sensor for bathroom occupancy. Empty = skip guard."
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+
+        bathroom_max_timeout:
+          name: "Bathroom guard max timeout"
+          description: "Maximum wait for bathroom to clear."
+          default:
+            hours: 0
+            minutes: 15
+            seconds: 0
+          selector:
+            duration: {}
+
+        bathroom_grace_period:
+          name: "Bathroom grace period"
+          description: "Delay after bathroom clears before lamp off."
+          default:
+            hours: 0
+            minutes: 1
+            seconds: 30
+          selector:
+            duration: {}
+
+    # =========================================================================
+    # ④ TTS & CONVERSATION
+    # =========================================================================
+    tts_conversation:
+      name: "④ TTS & Conversation"
+      icon: mdi:microphone
+      collapsed: true
+      input:
+        conversation_agent:
+          name: "Conversation agent / persona"
+          description: "Pipeline name (for dispatcher) or conversation agent entity."
+          default: ""
+          selector:
+            text: {}
+
+        use_dispatcher:
+          name: "Use dispatcher for agent resolution"
+          description: "Resolve agent + TTS voice via pyscript.agent_dispatch."
+          default: true
+          selector:
+            boolean: {}
+
+        tts_speaker:
+          name: "TTS speaker"
+          description: "Media player for voice announcements."
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        goodnight_prompt:
+          name: "Goodnight TTS prompt"
+          description: "LLM prompt for the final goodnight message."
+          default: >
+            Say a brief, warm goodnight. Be genuine and concise.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        enable_settling_tts:
+          name: "Enable settling-in TTS"
+          description: "Play a contextual message after media starts."
+          default: false
+          selector:
+            boolean: {}
+
+        settling_prompt:
+          name: "Settling-in TTS prompt"
+          description: "LLM prompt for settling message. Sensor context appended."
+          default: >
+            The user just started their bedtime media. Say something brief and
+            warm about settling in. Reference what's playing if relevant.
+            Maximum 200 characters, no quotation marks.
+          selector:
+            text:
+              multiline: true
+
+        settling_sensors:
+          name: "Settling/goodnight context sensors"
+          description: "Entity states injected into TTS prompts."
+          default: []
+          selector:
+            entity:
+              multiple: true
+
+    # =========================================================================
+    # ⑤ STATE & CONTROL
+    # =========================================================================
+    state_control:
+      name: "⑤ State & Control"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        bedtime_active_entity:
+          name: "Bedtime active entity"
+          description: "Boolean signalling routine is running. Suppresses naggers."
+          default: sensor.ai_bedtime_active
+          selector:
+            entity:
+
+        test_mode:
+          name: "Test mode"
+          description: "Skip device actions; only run TTS + logbook."
+          default: false
+          selector:
+            boolean: {}
+
+        enable_memory:
+          name: "Enable memory integration"
+          description: "Store bedtime timestamp via pyscript.memory_set."
+          default: true
+          selector:
+            boolean: {}
+
+        post_tts_delay:
+          name: "Post-TTS delay (seconds)"
+          description: "Pause after each TTS to let audio finish."
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 1
+              mode: slider
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Script properties
+# ═══════════════════════════════════════════════════════════════════════════════
+mode: single
+max_exceeded: silent
+
+fields:
+  countdown_override:
+    name: "Countdown Override"
+    description: "Override countdown minutes (0 = use default)."
+    required: false
+    selector:
+      number:
+        min: 0
+        max: 30
+        step: 1
+  skip_bathroom_guard:
+    name: "Skip Bathroom Guard"
+    description: "Skip the bathroom presence wait."
+    required: false
+    selector:
+      boolean: {}
+  skip_media:
+    name: "Skip Media"
+    description: "Skip media playback step."
+    required: false
+    selector:
+      boolean: {}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Variables
+# ═══════════════════════════════════════════════════════════════════════════════
+variables:
+  # ── Input extraction ──
+  tv_entity: !input tv_entity
+  tv_off_script: !input tv_off_script
+  tv_ir_remote: !input tv_ir_remote
+  tv_ir_command: !input tv_ir_command
+  tv_ir_device: !input tv_ir_device
+  living_room_lamp: !input living_room_lamp
+  media_players_stop: !input media_players_stop
+  reset_switches: !input reset_switches
+  reset_switch_delay: !input reset_switch_delay
+  media_target: !input media_target
+  audiobook_player: !input audiobook_player
+  audiobook_preset_uri: !input audiobook_preset_uri
+  audiobook_volume: !input audiobook_volume
+  audiobook_media_type: !input audiobook_media_type
+  kodi_entity: !input kodi_entity
+  kodi_preset_content: !input kodi_preset_content
+  kodi_content_type: !input kodi_content_type
+  kodi_volume: !input kodi_volume
+  skip_tv_off_input: !input skip_tv_off
+  default_countdown_minutes: !input default_countdown_minutes
+  countdown_helper: !input countdown_helper
+  bathroom_sensor: !input bathroom_sensor
+  bathroom_max_timeout: !input bathroom_max_timeout
+  bathroom_grace_period: !input bathroom_grace_period
+  conversation_agent: !input conversation_agent
+  use_dispatcher: !input use_dispatcher
+  tts_speaker: !input tts_speaker
+  goodnight_prompt: !input goodnight_prompt
+  enable_settling_tts: !input enable_settling_tts
+  settling_prompt: !input settling_prompt
+  settling_sensors: !input settling_sensors
+  v_bedtime_active: !input bedtime_active_entity
+  test_mode: !input test_mode
+  enable_memory: !input enable_memory
+  post_tts_delay: !input post_tts_delay
+
+  # ── Derived (fields use | default for standalone calls) ──
+  skip_media_val: "{{ skip_media | default(false) | bool }}"
+  skip_bathroom_val: "{{ skip_bathroom_guard | default(false) | bool }}"
+  countdown_override_val: "{{ countdown_override | default(0) | int }}"
+  effective_countdown: >-
+    {% if countdown_override_val > 0 %}
+      {{ countdown_override_val }}
+    {% elif countdown_helper not in ['', none]
+          and (states(countdown_helper) | default(0) | int) > 0 %}
+      {{ states(countdown_helper) | int }}
+    {% else %}
+      {{ default_countdown_minutes }}
+    {% endif %}
+  do_skip_tv: "{{ skip_tv_off_input or test_mode }}"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Sequence
+# ═══════════════════════════════════════════════════════════════════════════════
+sequence:
+  # ── 1. Bedtime flag ON (AP-06: cleanup at step 15) ─────────────────────
+  - alias: "1. Set bedtime_active ON"
+    action: input_boolean.turn_on
+    target:
+      entity_id: "{{ v_bedtime_active }}"
+
+  # ── 2. Agent resolution ────────────────────────────────────────────────
+  - alias: "2a. Dispatch agent (if enabled)"
+    if:
+      - condition: template
+        value_template: "{{ use_dispatcher }}"
+    then:
+      - action: pyscript.agent_dispatch
+        data:
+          wake_word: "{{ conversation_agent }}"
+        response_variable: dispatch_result
+        continue_on_error: true
+
+  - alias: "2b. Resolve agent + voice"
+    variables:
+      resolved_agent: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.agent_id is defined %}
+          {{ dispatch_result.agent_id }}
+        {% else %}
+          {{ conversation_agent }}
+        {% endif %}
+      resolved_voice: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.tts_engine is defined %}
+          {{ dispatch_result.tts_engine }}
+        {% else %}{% endif %}
+      resolved_voice_id: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.tts_voice is defined %}
+          {{ dispatch_result.tts_voice }}
+        {% else %}{% endif %}
+      resolved_persona: >-
+        {% if use_dispatcher and dispatch_result is defined
+              and dispatch_result.persona is defined %}
+          {{ dispatch_result.persona }}
+        {% else %}
+          {{ conversation_agent }}
+        {% endif %}
+
+  # ── 3. Speaker reset (power-cycle) ────────────────────────────────────
+  - alias: "3. Speaker reset"
+    if:
+      - condition: template
+        value_template: "{{ reset_switches | length > 0 and not test_mode }}"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: "{{ reset_switches }}"
+        continue_on_error: true
+      - delay: "{{ reset_switch_delay }}"
+      - action: switch.turn_off
+        target:
+          entity_id: "{{ reset_switches }}"
+        continue_on_error: true
+      - delay:
+          seconds: 3
+
+  # ── 4. TV shutdown stack (CEC → script → IR) ──────────────────────────
+  - alias: "4. TV shutdown"
+    if:
+      - condition: template
+        value_template: "{{ not do_skip_tv }}"
+    then:
+      - alias: "TV off — CEC/software"
+        if:
+          - condition: template
+            value_template: "{{ tv_entity not in ['', none] }}"
+        then:
+          - action: media_player.turn_off
+            target:
+              entity_id: "{{ tv_entity }}"
+            continue_on_error: true
+
+      - alias: "TV off — custom script"
+        if:
+          - condition: template
+            value_template: "{{ tv_off_script not in ['', none] }}"
+        then:
+          - action: script.turn_on
+            target:
+              entity_id: "{{ tv_off_script }}"
+            continue_on_error: true
+
+      - alias: "TV off — IR remote"
+        if:
+          - condition: template
+            value_template: >-
+              {{ tv_ir_remote not in ['', none]
+                 and tv_ir_command not in ['', none] }}
+        then:
+          - action: remote.send_command
+            target:
+              entity_id: "{{ tv_ir_remote }}"
+            data:
+              command: "{{ tv_ir_command }}"
+              device: "{{ tv_ir_device | default('') }}"
+            continue_on_error: true
+
+  # ── 5. Lights off (except holdback lamp) ───────────────────────────────
+  - alias: "5. Lights off"
+    if:
+      - condition: template
+        value_template: "{{ not test_mode }}"
+    then:
+      - action: homeassistant.turn_off
+        target: !input lights_off_target
+        continue_on_error: true
+
+  # ── 6. Stop additional media players ───────────────────────────────────
+  - alias: "6. Stop extra media players"
+    if:
+      - condition: template
+        value_template: "{{ media_players_stop | length > 0 }}"
+    then:
+      - action: media_player.media_stop
+        target:
+          entity_id: "{{ media_players_stop }}"
+        continue_on_error: true
+
+  # ── 7. Media playback branch ───────────────────────────────────────────
+  - alias: "7. Media playback"
+    choose:
+      - alias: "Audiobook (Music Assistant)"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ media_target == 'audiobook'
+                 and not skip_media_val
+                 and audiobook_player not in ['', none] }}
+        sequence:
+          - action: media_player.volume_set
+            target:
+              entity_id: "{{ audiobook_player }}"
+            data:
+              volume_level: "{{ audiobook_volume }}"
+            continue_on_error: true
+          - action: music_assistant.play_media
+            target:
+              entity_id: "{{ audiobook_player }}"
+            data:
+              media_id: "{{ audiobook_preset_uri }}"
+              media_type: "{{ audiobook_media_type }}"
+            continue_on_error: true
+
+      - alias: "Kodi playback"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ media_target == 'kodi'
+                 and not skip_media_val
+                 and kodi_entity not in ['', none] }}
+        sequence:
+          - action: media_player.volume_set
+            target:
+              entity_id: "{{ kodi_entity }}"
+            data:
+              volume_level: "{{ kodi_volume }}"
+            continue_on_error: true
+          - action: media_player.play_media
+            target:
+              entity_id: "{{ kodi_entity }}"
+            data:
+              media_content_id: "{{ kodi_preset_content }}"
+              media_content_type: "{{ kodi_content_type }}"
+            continue_on_error: true
+
+  # ── 8. Settling-in TTS ─────────────────────────────────────────────────
+  - alias: "8. Settling-in TTS"
+    if:
+      - condition: template
+        value_template: "{{ enable_settling_tts and tts_speaker not in ['', none] }}"
+    then:
+      - variables:
+          settling_sensor_ctx: >-
+            {% set ns = namespace(lines=[]) %}
+            {% for e in settling_sensors if e %}
+              {% set ns.lines = ns.lines + [e ~ ': ' ~ (states(e) | default('unknown'))] %}
+            {% endfor %}
+            {{ ns.lines | join('\n') }}
+
+      - alias: "Generate settling message via LLM"
+        action: pyscript.conversation_with_timeout
+        data:
+          agent_id: "{{ resolved_agent }}"
+          text: >-
+            {{ settling_prompt }}
+
+            sensor context:
+            {{ settling_sensor_ctx }}
+          timeout_secs: 60
+        response_variable: settling_llm
+        continue_on_error: true
+
+      - variables:
+          settling_speech: >-
+            {% set resp = settling_llm.response
+                  if settling_llm is defined else none %}
+            {% if resp is not none
+                  and resp.speech is defined
+                  and resp.speech.plain is defined
+                  and resp.speech.plain.speech is defined %}
+              {{ resp.speech.plain.speech | trim }}
+            {% endif %}
+
+      - alias: "Speak settling message"
+        if:
+          - condition: template
+            value_template: "{{ (settling_speech | default('')) | length > 0 }}"
+        then:
+          - action: pyscript.tts_queue_speak
+            data:
+              text: "{{ settling_speech }}"
+              voice: "{{ resolved_voice }}"
+              voice_id: "{{ resolved_voice_id | default('') }}"
+              target_mode: explicit
+              target: "{{ tts_speaker }}"
+              priority: 2
+            response_variable: _tts_settle
+            continue_on_error: true
+          - delay:
+              seconds: "{{ post_tts_delay | int }}"
+
+  # ── 9. Countdown delay ─────────────────────────────────────────────────
+  - alias: "9. Countdown ({{ effective_countdown }} min)"
+    delay:
+      seconds: "{{ 10 if test_mode else (effective_countdown | int) * 60 }}"
+
+  # ── 10. Bathroom guard ─────────────────────────────────────────────────
+  - alias: "10. Bathroom guard"
+    if:
+      - condition: template
+        value_template: >-
+          {{ bathroom_sensor not in ['', none]
+             and not skip_bathroom_val
+             and not test_mode }}
+    then:
+      # AP-20: Check if bathroom is occupied before starting wait
+      - alias: "Check if bathroom currently occupied"
+        if:
+          - condition: template
+            value_template: >-
+              {{ states(bathroom_sensor) | default('off')
+                 in ['on', 'detected', 'home'] }}
+        then:
+          # AP-04: wait_template with timeout + continue_on_timeout
+          # (wait_for_trigger entity_id doesn't support templates)
+          - alias: "Wait for bathroom to clear"
+            wait_template: >-
+              {{ states(bathroom_sensor) | default('off')
+                 not in ['on', 'detected', 'home'] }}
+            timeout: "{{ bathroom_max_timeout }}"
+            continue_on_timeout: true
+
+      - alias: "Grace period"
+        delay: "{{ bathroom_grace_period }}"
+
+  # ── 11. Holdback lamp off ──────────────────────────────────────────────
+  - alias: "11. Lamp off"
+    if:
+      - condition: template
+        value_template: "{{ living_room_lamp not in ['', none] and not test_mode }}"
+    then:
+      - action: homeassistant.turn_off
+        target:
+          entity_id: "{{ living_room_lamp }}"
+        continue_on_error: true
+
+  # ── 12. Goodnight TTS ──────────────────────────────────────────────────
+  - alias: "12. Goodnight TTS"
+    if:
+      - condition: template
+        value_template: >-
+          {{ (goodnight_prompt | default('')) | trim | length > 0
+             and tts_speaker not in ['', none] }}
+    then:
+      - variables:
+          gn_sensor_ctx: >-
+            {% set ns = namespace(lines=[]) %}
+            {% for e in settling_sensors if e %}
+              {% set ns.lines = ns.lines + [e ~ ': ' ~ (states(e) | default('unknown'))] %}
+            {% endfor %}
+            {{ ns.lines | join('\n') }}
+
+      - alias: "Generate goodnight message via LLM"
+        action: pyscript.conversation_with_timeout
+        data:
+          agent_id: "{{ resolved_agent }}"
+          text: >-
+            {{ goodnight_prompt }}
+
+            sensor context:
+            {{ gn_sensor_ctx }}
+          timeout_secs: 60
+        response_variable: gn_llm
+        continue_on_error: true
+
+      - variables:
+          gn_speech: >-
+            {% set resp = gn_llm.response
+                  if gn_llm is defined else none %}
+            {% if resp is not none
+                  and resp.speech is defined
+                  and resp.speech.plain is defined
+                  and resp.speech.plain.speech is defined
+                  and resp.speech.plain.speech | trim | length > 0 %}
+              {{ resp.speech.plain.speech | trim }}
+            {% else %}
+              Goodnight. Sleep well.
+            {% endif %}
+
+      - action: pyscript.tts_queue_speak
+        data:
+          text: "{{ gn_speech }}"
+          voice: "{{ resolved_voice }}"
+          voice_id: "{{ resolved_voice_id | default('') }}"
+          target_mode: explicit
+          target: "{{ tts_speaker }}"
+          priority: 2
+        response_variable: _tts_gn
+        continue_on_error: true
+
+      - delay:
+          seconds: "{{ post_tts_delay | int }}"
+
+  # ── 13. Memory — record bedtime ────────────────────────────────────────
+  - alias: "13. Memory write"
+    if:
+      - condition: template
+        value_template: "{{ enable_memory }}"
+    then:
+      - action: pyscript.memory_set
+        data:
+          key: "bedtime.actual"
+          value: "{{ now().isoformat() }}"
+          scope: household
+          expiration_days: 90
+          tags: "bedtime,routine"
+          force_new: true
+        response_variable: _mem_result
+        continue_on_error: true
+
+  # ── 14. Agent whisper — log completion ─────────────────────────────────
+  - alias: "14. Whisper"
+    action: pyscript.agent_whisper
+    data:
+      agent_name: "{{ resolved_persona }}"
+      user_query: "bedtime routine completed"
+      agent_response: >-
+        Bedtime routine finished. Media: {{ media_target }}.
+        Countdown: {{ effective_countdown }} min.
+      source: script
+    response_variable: _whisper_result
+    continue_on_error: true
+
+  # ── 15. Cleanup (AP-06: guaranteed — all prior steps continue_on_error) ─
+  - alias: "15. Cleanup"
+    action: input_boolean.turn_off
+    target:
+      entity_id: "{{ v_bedtime_active }}"

@@ -1,0 +1,8 @@
+{
+  "_comment": "Voice Mood Profile Map — TEMPLATE. Copy to voice_mood_profile_map.json. Keys are your exact ElevenLabs voice profile names. Values are agent slugs. Remove entries for agents you don't use.",
+  "Your ElevenLabs Voice Name - Rick": "rick",
+  "Your ElevenLabs Voice Name - Quark": "quark",
+  "Your ElevenLabs Voice Name - Kramer": "kramer",
+  "Your ElevenLabs Voice Name - Deadpool": "deadpool",
+  "Your ElevenLabs Voice Name - Doctor": "doctor_portuondo"
+}

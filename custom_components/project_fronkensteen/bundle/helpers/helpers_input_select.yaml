@@ -1,0 +1,247 @@
+# Input select helpers
+
+ai_sleep_lights_light_picker:
+  name: "AI Sleep Lights - Light Picker"
+  options:
+    - "(none)"
+  icon: mdi:lightbulb-outline
+
+ai_handoff_llm_lines_mode:
+  name: "AI Handoff - LLM Lines Mode"
+  options:
+    - static
+    - ha_text_ai
+    - conversation_agent
+  icon: mdi:text-box-edit
+  initial: static
+
+ai_sleep_lights_sensor:
+  name: "AI Sleep Lights - Presence Sensor"
+  options:
+    - binary_sensor.fp2_presence_sensor_bed
+  icon: mdi:motion-sensor
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Layer 1 Hot Context
+# ═══════════════════════════════════════════════════════════════════
+
+ai_context_preferred_language:
+  name: "AI Context - Preferred Language"
+  options:
+    - English
+    - Spanish
+    - Valencian
+    - Dutch
+  initial: English
+
+
+# I-45: Expertise-based agent routing mode (read by hot context → LLM prompt)
+ai_expertise_routing_mode:
+  name: "AI Expertise Routing Mode"
+  options:
+    - "off"
+    - suggest
+    - auto
+  icon: mdi:head-lightbulb
+  initial: auto
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_dispatcher — Agent Dispatcher
+# ═══════════════════════════════════════════════════════════════════
+
+ai_dispatcher_mode:
+  name: "AI Dispatcher - Mode"
+  options:
+    - auto
+    - round_robin
+    - fixed
+    - random
+  icon: mdi:swap-horizontal
+
+# Time-of-day era persona overrides. Pyscript overwrites options at
+# runtime with discovered personas. These are boot-time fallbacks.
+ai_dispatcher_era_morning:
+  name: "AI Dispatcher - Era Morning"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-sunset-up
+
+ai_dispatcher_era_afternoon:
+  name: "AI Dispatcher - Era Afternoon"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-sunny
+
+ai_dispatcher_era_evening:
+  name: "AI Dispatcher - Era Evening"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-night
+
+ai_dispatcher_era_late_night:
+  name: "AI Dispatcher - Era Late Night"
+  options:
+    - none
+    - deadpool
+    - doctor_portuondo
+    - kramer
+    - quark
+    - rick
+    - rotate
+  icon: mdi:weather-night-partly-cloudy
+
+ai_keyword_agent_select:
+  name: "Keyword Manager - Agent"
+  options:
+    - none
+  icon: mdi:account-voice
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_duck_manager — Unified Volume Ducking
+# ═══════════════════════════════════════════════════════════════════
+
+# I-39: Duck behavior — volume only, pause media, or both
+ai_duck_behavior:
+  name: "Duck Behavior"
+  options:
+    - volume
+    - pause
+    - both
+  icon: mdi:motion-pause
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_email_promotion — Email Priority Filter
+# ═══════════════════════════════════════════════════════════════════
+
+# Filter mode:
+#   whitelist — only contacts + keywords get through; everything else filtered
+#   blacklist — everything promoted EXCEPT blocked senders/keywords
+#   hybrid   — contacts + keywords promoted, blocked filtered, unknown filtered
+# Urgent keyword detection applies in all modes.
+ai_email_filter_mode:
+  name: "AI Email Filter Mode"
+  options:
+    - whitelist
+    - blacklist
+    - hybrid
+  initial: blacklist
+  icon: mdi:filter-variant
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_llm_budget — LLM Cost Control
+# ═══════════════════════════════════════════════════════════════════
+
+# C5: Budget cost source — which cost figure the budget gate uses
+ai_budget_cost_source:
+  name: "AI Budget - Cost Source"
+  options:
+    - estimated
+    - actual
+    - hybrid
+  initial: hybrid
+  icon: mdi:scale-balance
+
+# I-33: Budget metric selector (display preference — all limits are enforced)
+ai_budget_metric:
+  name: "AI Budget - Display Metric"
+  options:
+    - cost
+    - calls
+    - tokens
+  icon: mdi:chart-bar
+
+# I-33: Currency display label (does NOT convert — user must update rates)
+ai_budget_currency:
+  name: "AI Budget - Currency"
+  options:
+    - "€"
+    - "$"
+    - "£"
+  icon: mdi:currency-sign
+
+# I-33 Phase 2: Per-agent budget view level
+ai_budget_view_level:
+  name: "AI Budget - View Level"
+  options:
+    - engine
+    - agent
+    - model
+    - provider
+  icon: mdi:eye
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_privacy_gate — Identity-Confidence Feature Gating
+# ═══════════════════════════════════════════════════════════════════
+
+ai_privacy_gate_mode:
+  name: "AI Privacy Gate — Mode"
+  options:
+    - auto
+    - force_suppress_all
+    - force_allow_all
+  initial: auto
+  icon: mdi:shield-edit
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep State Detection
+# ═══════════════════════════════════════════════════════════════════
+
+ai_sleep_detection_sensor:
+  name: "AI Sleep Detection - Presence Sensor"
+  options:
+    - binary_sensor.fp2_presence_sensor_main_room
+    - binary_sensor.fp2_presence_sensor_living_room
+    - binary_sensor.fp2_presence_sensor_bed
+    - binary_sensor.fp2_presence_sensor_workshop
+    - binary_sensor.fp2_presence_sensor_kitchen
+    - binary_sensor.fp2_presence_sensor_lobby
+    - binary_sensor.fp2_presence_sensor_bathroom
+    - binary_sensor.fp2_presence_sensor_shower
+  icon: mdi:motion-sensor
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_tts_queue — TTS Queue Speaker Routing
+# ═══════════════════════════════════════════════════════════════════
+
+# I-38: TTS conflict mode — what to do when target speaker is already playing
+ai_tts_conflict_mode:
+  name: "TTS Conflict Mode"
+  options:
+    - override
+    - wait
+    - skip
+  icon: mdi:swap-horizontal-bold
+
+# TTS speaker selects removed 2026-03-29 — redundant with tts_speaker_config.json
+# (single source of truth for zone-to-speaker mapping). Were dashboard-only display
+# entities with zero functional consumers.
+
+# ── Volume Restore Mode ─────────────────────────────────────────────────
+ai_tts_restore_mode:
+  name: "TTS Restore Mode"
+  icon: mdi:volume-source
+  options:
+    - dynamic
+    - fixed
+
+
+

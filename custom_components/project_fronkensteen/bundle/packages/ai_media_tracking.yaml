@@ -1,0 +1,20 @@
+# ======================================================================
+# AI Media Tracking — Radarr/Sonarr Integration (I-47)
+# ======================================================================
+# Status: Active
+# Deployed: 2026-03-10
+# Thin package — storage helpers only. All config knobs live in the blueprint.
+#
+# Pyscript sensor: sensor.ai_media_promotion_status  (pyscript/media_promote.py)
+#   States: ok, error, idle
+#   Key attributes: last sync result, promoted media counts
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_media_tracking_enabled, ai_media_data_stale
+#   - sensor.ai_media_upcoming:   state=summary, attrs: sonarr, radarr, recent_downloads
+#
+# Dependencies:
+#   - Blueprints: media_tracking.yaml
+#   - Context: ai_context_hot.yaml (reads sonarr/radarr helpers for L1 injection)
+#   - Other packages: ai_privacy_gate.yaml
+# ======================================================================

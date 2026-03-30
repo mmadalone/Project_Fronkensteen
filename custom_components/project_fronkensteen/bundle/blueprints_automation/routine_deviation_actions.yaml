@@ -1,0 +1,207 @@
+blueprint:
+  name: "Routine deviation actions"
+  author: madalone
+  description: >
+    # Routine Deviation Actions
+
+    Fires when `routine_fingerprint.py` detects that the user's zone sequence
+    has deviated from a known routine fingerprint. Consumes the
+    `ai_routine_deviation` event.
+
+    ### Use cases
+
+    - Send a check-in notification when the evening routine deviates
+    - Speak a TTS message asking if everything is OK
+    - Adjust automations that depend on the expected routine
+
+    ### Signal
+
+    Event `ai_routine_deviation` with data:
+    `{fingerprint_id, expected_zone, actual_zone, step, total_steps}`
+
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/routine_deviation_actions.yaml
+  homeassistant:
+    min_version: 2024.10.0
+
+  input:
+    # ===========================================================================
+    # ① CONTROL
+    # ===========================================================================
+    control:
+      name: "① Control"
+      icon: mdi:tune
+      collapsed: false
+      description: >
+        Kill switch and filtering options.
+      input:
+        enable_toggle:
+          name: Enable toggle
+          description: >
+            Per-instance kill switch. Automation only fires when this is ON.
+          selector:
+            entity:
+              domain: input_boolean
+
+        min_routine_progress:
+          name: Minimum routine progress
+          description: >
+            Only fire if deviation happens after this fraction of the routine
+            is complete (0.0–1.0). Prevents false positives on early steps.
+            E.g., 0.5 = only fire if at least half the routine was completed.
+          default: 0.5
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.1
+
+        cooldown_minutes:
+          name: Cooldown (minutes)
+          description: >
+            Suppress repeat triggers within this many minutes.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 180
+              unit_of_measurement: min
+
+        fingerprint_filter:
+          name: Fingerprint filter
+          description: >
+            Comma-separated fingerprint IDs to watch. Leave empty to watch all
+            fingerprints. E.g., "evening_weekday_living_room_bed,morning_weekday_bed_kitchen"
+          default: ""
+          selector:
+            text: {}
+
+    # ===========================================================================
+    # ② ACTIONS
+    # ===========================================================================
+    actions:
+      name: "② Actions"
+      icon: mdi:cog-play
+      collapsed: false
+      description: >
+        What to do when a deviation is detected.
+      input:
+        deviation_actions:
+          name: Deviation actions
+          description: >
+            Actions to run on routine deviation.
+          default: []
+          selector:
+            action: {}
+
+        tts_speaker:
+          name: TTS speaker (optional)
+          description: >
+            Media player for an optional TTS check-in message.
+          default: {}
+          selector:
+            entity:
+              domain: media_player
+
+        tts_message:
+          name: TTS message
+          description: >
+            Static TTS message to speak on deviation. Leave empty to skip TTS.
+            You can use `{{ expected }}` and `{{ actual }}` for zone names.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable_toggle
+  v_min_progress: !input min_routine_progress
+  v_cooldown: !input cooldown_minutes
+  v_fp_filter: !input fingerprint_filter
+  v_tts_speaker: !input tts_speaker
+  v_tts_message: !input tts_message
+
+triggers:
+  - trigger: event
+    event_type: ai_routine_deviation
+
+conditions:
+  - condition: state
+    entity_id: !input enable_toggle
+    state: "on"
+
+  # ── Progress gate ──
+  - condition: template
+    value_template: >-
+      {% set step = trigger.event.data.step | default(0) | int %}
+      {% set total = trigger.event.data.total_steps | default(1) | int %}
+      {% if total == 0 %}
+        false
+      {% else %}
+        {{ (step / total) >= v_min_progress | float }}
+      {% endif %}
+
+  # ── Fingerprint filter ──
+  - condition: template
+    value_template: >-
+      {% set fp_id = trigger.event.data.fingerprint_id | default('') %}
+      {% if v_fp_filter | trim == '' %}
+        true
+      {% else %}
+        {% set allowed = v_fp_filter.split(',') | map('trim') | list %}
+        {{ fp_id in allowed }}
+      {% endif %}
+
+  # ── Cooldown gate ──
+  - condition: template
+    value_template: >-
+      {% set last = this.attributes.last_triggered | default(None) %}
+      {% if last is none %}
+        true
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last, 0)) > (v_cooldown | int * 60) }}
+      {% endif %}
+
+actions:
+  # ── Dispatcher: resolve TTS voice ──
+  - alias: "Resolve TTS voice via dispatcher"
+    action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    continue_on_error: true
+    data:
+      wake_word: "routine_deviation"
+      intent_text: "routine deviation check-in"
+      skip_continuity: true
+
+  - alias: "Set expected, actual, fingerprint id"
+    variables:
+      expected: "{{ trigger.event.data.expected_zone | default('unknown') }}"
+      actual: "{{ trigger.event.data.actual_zone | default('unknown') }}"
+      fingerprint_id: "{{ trigger.event.data.fingerprint_id | default('unknown') }}"
+      _voice: "{{ (_dispatch | default({})).get('tts_engine', 'tts.home_assistant_cloud') }}"
+      _voice_id: "{{ (_dispatch | default({})).get('tts_voice', '') }}"
+
+  # ── TTS announcement ──
+  - alias: "TTS announcement"
+    if:
+      - condition: template
+        value_template: "{{ v_tts_message | trim != '' }}"
+    then:
+      - alias: "Speak routine deviation check-in message"
+        action: pyscript.tts_queue_speak
+        response_variable: _tts_result
+        continue_on_error: true
+        data:
+          text: "{{ v_tts_message }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
+          target_mode: explicit
+          target: "{{ v_tts_speaker }}"
+          announce: true
+          priority: 3
+
+  # ── Custom actions ──
+  - !input deviation_actions

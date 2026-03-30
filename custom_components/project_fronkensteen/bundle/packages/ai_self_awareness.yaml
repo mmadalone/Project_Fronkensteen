@@ -1,0 +1,61 @@
+# =============================================================================
+# AI Self-Awareness Package — Task 2 of Voice Context Architecture
+# =============================================================================
+# Architecture spec: voice_context_architecture.md § "Agent Self-Awareness"
+# Provides: script.ai_update_self_awareness
+#
+# DEPRECATED (2026-03-09): Self-awareness is now updated by:
+#   1. agent_whisper() in agent_whisper.py — sets topic/name/time after each
+#      blueprint-driven interaction (40+ call sites, user-source only)
+#   2. agent_interaction_log() in agent_whisper.py — LLM self-report tool on
+#      ALL Extended OpenAI agents (user-source only, sets topic/name/time)
+# ai_llm_call_counter no longer updates self-awareness (2026-03-10) —
+# it was resetting the timestamp on every announcement/automation call.
+# This script is kept for backward compatibility with any remaining callers.
+#
+# State consolidated into: sensor.ai_last_interaction (via state.set)
+#   State: agent name  |  Attrs: agent_entity, topic, handoff_reason, handoff_source
+#   input_datetime.ai_last_interaction_time — when it happened (stays as helper)
+# =============================================================================
+
+# input_text: moved to helpers_input_text.yaml (C5 consolidation)
+
+script:
+  ai_update_self_awareness:
+    alias: "AI - Update Self-Awareness"
+    description: "Call after each conversation.process to track the last agent interaction"
+    icon: mdi:chat-processing
+    mode: queued
+    max: 3
+    fields:
+      agent_name:
+        description: "Human-readable name of the agent that responded (e.g. Rick, Quark)"
+        example: "Rick"
+        required: true
+        selector:
+          text:
+      agent_entity:
+        description: "entity_id of the conversation agent (e.g. conversation.rick_extended)"
+        example: "conversation.rick_extended"
+        required: false
+        default: "none"
+        selector:
+          text:
+      topic:
+        description: "One-line summary of what was discussed (leave blank if unknown)"
+        example: "workshop lights"
+        required: false
+        default: ""
+        selector:
+          text:
+    sequence:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.ai_last_interaction_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: pyscript.update_last_interaction
+        data:
+          agent_name: "{{ agent_name | default('unknown') | truncate(50, true, '') }}"
+          agent_entity: "{{ agent_entity | default('none') | truncate(100, true, '') }}"
+          topic: "{{ topic | default('') | truncate(200, true, '') }}"

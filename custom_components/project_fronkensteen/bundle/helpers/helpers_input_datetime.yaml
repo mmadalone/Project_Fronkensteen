@@ -1,0 +1,234 @@
+# Input datetime helpers
+# Bedtime timestamps (bedtime_last_start/success/abort/reply_received) were orphans — removed 2026-03-04
+
+########################################
+# System Setup — Time Trigger Placeholder
+########################################
+# Used as default for blueprint time-trigger inputs (pref_wake_*, pref_bed_time).
+# HA validates at: triggers at setup — "" fails. This entity satisfies validation
+# while the preference toggle (use_pref_wake) gates actual firing. Replace with
+# your real input_datetime entity when enabling preference wake/bed times.
+
+ai_time_placeholder:
+  name: "Time Placeholder (do not delete)"
+  icon: mdi:clock-outline
+  has_time: true
+  has_date: false
+
+ai_notification_last_announced:
+  name: Notification last announced
+  icon: mdi:clock-check
+  has_date: true
+  has_time: true
+
+ai_email_last_announce:
+  name: "Email Last Announce"
+  icon: mdi:email-check
+  has_date: true
+  has_time: true
+
+ai_summarizer_batch_time:
+  name: "AI Summarizer Batch Time"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_away_patterns — Away Patterns
+# ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_context_hot — Hot Context
+# ═══════════════════════════════════════════════════════════════════
+ai_context_bed_time:
+  name: "AI Context - Bedtime Target"
+  has_date: false
+  has_time: true
+
+
+# ── Self-Awareness (Task 2) ──
+ai_last_interaction_time:
+  name: "AI - Last Interaction Time"
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_embedding — Semantic Search
+# ═══════════════════════════════════════════════════════════════════
+# Nightly batch embedding schedule. Runs before summarization (04:00).
+ai_embedding_batch_time:
+  name: "AI Embedding - Batch Time"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_banter — Reactive Banter (Pattern 1)
+# ═══════════════════════════════════════════════════════════════════
+ai_banter_last_reaction:
+  name: "AI Banter — Last Reaction Time"
+  has_date: true
+  has_time: true
+  icon: mdi:message-reply-text
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_escalation — Agent Escalation
+# ═══════════════════════════════════════════════════════════════════
+ai_escalation_last_followthrough:
+  name: "AI Escalation Last Follow-Through"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-check
+
+ai_session_timestamp_proactive_bedtime_escalation_rick:
+  name: "AI Proactive Bedtime Escalation — Session Timestamp (Rick)"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-star
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_focus_guard — Focus Guard
+# ═══════════════════════════════════════════════════════════════════
+# Last meal timestamp. Updated by voice command ("I just ate") or
+# pyscript.focus_guard_mark_meal service.
+ai_last_meal_time:
+  name: "Last Meal Time"
+  has_date: true
+  has_time: true
+  icon: mdi:food-apple
+
+# Snooze expiry. Set by voice command ("remind me in 30 minutes")
+# or pyscript.focus_guard_snooze. Calendar P1 (critical) nudges bypass snooze.
+ai_focus_guard_snooze_until:
+  name: "Focus Guard - Snooze Until"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm-snooze
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_predictive_schedule — Predictive Schedule
+# ═══════════════════════════════════════════════════════════════════
+# Predicted routine start time. Updated by the bedtime advisor.
+ai_predicted_routine_start:
+  name: "AI Predicted Routine Start"
+  has_date: false
+  has_time: true
+  icon: mdi:clock-start
+
+# I-29: Predicted wake time. Used by calendar_alarm.yaml as the dynamic trigger time.
+ai_predicted_wake_time:
+  name: "AI Predicted Wake Time"
+  has_date: false
+  has_time: true
+  icon: mdi:alarm
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_sleep_detection — Sleep Detection
+# ═══════════════════════════════════════════════════════════════════
+ai_sleep_start:
+  name: "AI Sleep - Start"
+  has_date: true
+  has_time: true
+  icon: mdi:bed
+
+ai_sleep_end:
+  name: "AI Sleep - End"
+  has_date: true
+  has_time: true
+  icon: mdi:alarm
+
+ai_sleep_window_start:
+  name: "AI Sleep Detection - Window Start"
+  has_date: false
+  has_time: true
+  icon: mdi:weather-night
+
+ai_sleep_window_end:
+  name: "AI Sleep Detection - Window End"
+  has_date: false
+  has_time: true
+  icon: mdi:weather-sunny
+
+ai_conversation_summarizer_batch_time:
+  name: AI Conversation Summarizer Batch Time
+  has_date: false
+  has_time: true
+  icon: mdi:clock-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_winddown — Bedtime Wind-Down System (C11)
+# ═══════════════════════════════════════════════════════════════════
+ai_winddown_last_offer:
+  name: "AI Wind-Down - Last Offer"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-check-outline
+
+ai_winddown_session_start:
+  name: "AI Wind-Down - Session Start"
+  has_date: true
+  has_time: true
+  icon: mdi:clock-start
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_budget — Budget System
+# ═══════════════════════════════════════════════════════════════════
+# Tracks the last date the daily budget reset ran. Used by the startup
+# trigger to detect missed midnight resets (e.g. HA was restarting at 00:00).
+ai_budget_last_reset:
+  name: "AI Budget - Last Reset Date"
+  has_date: true
+  has_time: false
+  icon: mdi:calendar-check
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_theatrical — Theatrical Mode (C12 / Pattern 4)
+# ═══════════════════════════════════════════════════════════════════
+ai_theatrical_last_exchange:
+  name: "AI Theatrical - Last Exchange Time"
+  has_date: true
+  has_time: true
+  icon: mdi:drama-masks
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Music Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_music_follow_me_last_move:
+  name: "Music Follow-Me — Last Move"
+  icon: mdi:calendar
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Therapy Session (QS-5)
+# ═══════════════════════════════════════════════════════════════════
+ai_therapy_session_start:
+  name: "AI Therapy Session Start"
+  icon: mdi:clock-start
+  has_date: true
+  has_time: true
+
+ai_therapy_last_session:
+  name: "AI Therapy Last Session"
+  icon: mdi:clock-check
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Notification Follow-Me (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_notification_follow_me_reminder_loop_last_tick:
+  name: "Notification Follow-Me — Reminder Loop Last Tick"
+  icon: mdi:clock-alert
+  has_date: true
+  has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# Interaction Summarizer (migrated from UI)
+# ═══════════════════════════════════════════════════════════════════
+ai_interaction_summarizer_batch_time:
+  name: "Interaction Summarizer — Batch Time"
+  icon: mdi:clock-time-eight
+  has_date: false
+  has_time: true

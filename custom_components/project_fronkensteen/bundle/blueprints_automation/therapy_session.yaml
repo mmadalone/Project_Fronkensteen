@@ -1,0 +1,1172 @@
+blueprint:
+  name: Therapy Session
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/therapy_session.yaml
+  description: |-
+    # Therapy Session Framework
+
+    Persona-agnostic therapy session management supporting individual and couple
+    modes. Manages the full session lifecycle: entry, continuous conversation loop,
+    session tracking, and graceful exit with session summary.
+
+    ## Features
+    - **Individual & couple therapy** with configurable session type
+    - **4 entry points:** toggle, voice handoff, natural language, scheduled time
+    - **Session continuity:** remembers session count and last summary
+    - **Couple mode:** LLM-driven speaker identification with turn tracking
+    - **Session recovery:** checkpoint-based crash recovery
+    - **QS-5 isolation:** individual memories private, couple memories shared
+    - **Markdown reports:** auto-generate or on-demand via voice/dashboard
+    - **All prompts configurable** via blueprint inputs
+  domain: automation
+  homeassistant:
+    min_version: 2025.4.0
+  input:
+    # =========================================================================
+    # ① Core
+    # =========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:brain
+      description: Satellite, speaker, therapy toggle, and therapist persona.
+      collapsed: false
+      input:
+        enable:
+          name: Enable
+          description: Kill switch for this automation instance.
+          default: true
+          selector:
+            boolean:
+
+        therapy_toggle:
+          name: Therapy mode toggle
+          description: >
+            Input boolean that activates therapy mode. Turn ON to start,
+            OFF to stop. Auto-turns off after session ends.
+          default: input_boolean.ai_therapy_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        satellite:
+          name: Satellite
+          description: The voice satellite to run the session on.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        speaker:
+          name: Speaker (media player)
+          description: >
+            The media player entity for the satellite speaker. Used to detect
+            when TTS finishes playing before reopening the mic.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        therapist_persona:
+          name: Therapist persona
+          description: >
+            Pipeline display name of the therapist (e.g., "Doctor Portuondo",
+            "Frasier Crane"). NOT hardcoded to any persona.
+          default: "Doctor Portuondo"
+          selector:
+            text:
+
+        therapy_variant:
+          name: Therapy variant
+          description: >
+            Pipeline variant suffix. Combined with therapist persona to form
+            the pipeline name (e.g., "Doctor Portuondo - Therapy").
+          default: "Therapy"
+          selector:
+            text:
+
+        pipeline_select:
+          name: Pipeline select entity
+          description: The satellite's pipeline selector entity.
+          default: ""
+          selector:
+            entity:
+              domain: select
+
+    # =========================================================================
+    # ② Session Configuration
+    # =========================================================================
+    session_config:
+      name: "② Session Configuration"
+      icon: mdi:tune-variant
+      description: Session type, timeout, language, and entry/exit behavior.
+      collapsed: true
+      input:
+        session_type_default:
+          name: Default session type
+          description: Session type when not specified by handoff variant or user.
+          default: individual
+          selector:
+            select:
+              options:
+                - individual
+                - couple
+
+        ask_session_type:
+          name: Ask session type at start
+          description: >
+            Ask "Individual or couple's session?" before starting.
+            Skipped if the handoff variant already specifies (e.g., "therapy couple").
+          default: true
+          selector:
+            boolean:
+
+        timeout_minutes:
+          name: Session timeout (minutes)
+          description: Auto-end session after this many minutes.
+          default: 45
+          selector:
+            number:
+              min: 5
+              max: 120
+              mode: box
+
+        therapy_language:
+          name: Language override
+          description: >
+            Override the therapist's native language. Leave empty to use the
+            therapist's natural language (e.g., Spanish for Portuondo).
+          default: ""
+          selector:
+            select:
+              options:
+                - ""
+                - English
+                - Spanish
+                - Valencian
+                - Dutch
+                - Portuguese
+
+        start_message:
+          name: Individual opening message
+          description: Opening TTS message for individual sessions.
+          default: "The session is open. What brings you here today?"
+          selector:
+            text:
+              multiline: true
+
+        start_message_couple:
+          name: Couple opening message
+          description: Opening TTS message for couple sessions.
+          default: "The session is open. I'm here for both of you. Who would like to start?"
+          selector:
+            text:
+              multiline: true
+
+        goodbye_detection:
+          name: User goodbye ends session
+          description: Allow user to end session by saying goodbye.
+          default: true
+          selector:
+            boolean:
+
+        therapist_end_session:
+          name: Therapist can end session
+          description: Allow therapist to end session via end_conversation tool.
+          default: true
+          selector:
+            boolean:
+
+        voice_mood_during_therapy:
+          name: Keep voice mood active
+          description: Whether voice mood modulation stays active during therapy.
+          default: true
+          selector:
+            boolean:
+
+        therapy_trigger_phrases:
+          name: Therapy trigger phrases
+          description: >
+            Phrases that trigger therapy handoff from any agent (for prompt guidance).
+            Comma-separated.
+          default: "need therapy, couples therapy, necesito terapia, terapia de pareja, emotional support, need to talk to someone"
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ②b Test Mode
+    # =========================================================================
+    test_mode:
+      name: "②b Test Mode"
+      icon: mdi:test-tube
+      description: >
+        Debug mode for deployment testing. Shortens timeout, skips gates,
+        announces state transitions via TTS, and avoids polluting memory.
+      collapsed: true
+      input:
+        test_mode_enabled:
+          name: Enable test mode
+          description: >
+            When ON: 3-min timeout, skip privacy/budget gates, prefix
+            memory keys with test_, announce state transitions via TTS,
+            single-cycle option exits after one mic exchange.
+          default: false
+          selector:
+            boolean:
+
+        test_single_cycle:
+          name: Single cycle (one exchange then exit)
+          description: >
+            Exit the session after one mic open/close cycle.
+            Useful for validating the loop without sitting through a full session.
+          default: false
+          selector:
+            boolean:
+
+    # =========================================================================
+    # ③ Prompts
+    # =========================================================================
+    prompts:
+      name: "③ Prompts"
+      icon: mdi:text-box-edit
+      description: All session prompts — fully configurable.
+      collapsed: true
+      input:
+        therapy_system_prompt:
+          name: Therapy system prompt (ESP)
+          description: >
+            Injected as extra_system_prompt every mic cycle. Defines session
+            behavior rules. The base therapist prompt (character, style) comes
+            from the Extended OpenAI Conversation entity — this ESP adds
+            session context on top.
+          default: |-
+            You are conducting a therapy session. Stay focused on the patient.
+            Do NOT hand off to other agents unless the user explicitly asks.
+            Do NOT proactively route during therapy. The session stays with you.
+            If the conversation drifts to non-therapy topics, gently redirect.
+            After each patient turn, call save_therapy_turn with the speaker name
+            and a brief summary of what they said.
+          selector:
+            text:
+              multiline: true
+
+        couple_system_prompt:
+          name: Couple mode system prompt (ESP addition)
+          description: Additional ESP block injected during couple sessions.
+          default: |-
+            This is a COUPLE'S therapy session. Both partners are present.
+            You may address either person by name for directed questions.
+            When saving therapy memories in this session, use scope "couple".
+          selector:
+            text:
+              multiline: true
+
+        session_context_template:
+          name: Session context template
+          description: >
+            Template injected into ESP with session continuity info.
+            Variables: {session_number}, {last_session_summary}, {session_type}, {user}
+          default: |-
+            This is session {session_number} with {user}. Session type: {session_type}.
+            Previous session summary: {last_session_summary}
+          selector:
+            text:
+              multiline: true
+
+        session_type_question:
+          name: Session type question
+          description: Question asked to determine individual vs couple session.
+          default: "Individual or couple's session?"
+          selector:
+            text:
+              multiline: true
+
+        session_end_prompt:
+          name: Session end prompt
+          description: Guidance for the therapist when ending the session naturally.
+          default: "When you feel the session has reached a natural conclusion, or the patient seems ready to stop, offer a brief closing reflection and call end_conversation. Do not drag the session out."
+          selector:
+            text:
+              multiline: true
+
+        speaker_tracking_prompt:
+          name: Speaker tracking prompt (couple mode)
+          description: ESP instructions for speaker identification in couple mode.
+          default: |-
+            SPEAKER TRACKING: Users identify themselves by saying their name
+            (e.g., "Name1 here", "Name2 here"). If you cannot determine
+            who is speaking, ask before responding. Always call save_therapy_turn
+            after each patient speaks, identifying the speaker.
+          selector:
+            text:
+              multiline: true
+
+    # =========================================================================
+    # ④ Privacy & Memory
+    # =========================================================================
+    privacy:
+      name: "④ Privacy & Memory"
+      icon: mdi:shield-account
+      description: Privacy gates, memory scoping, and report generation.
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy tier
+          description: >
+            Identity confidence tier required. Therapy is intimate — T1 recommended.
+          default: "t1"
+          selector:
+            select:
+              options:
+                - "off"
+                - t1
+                - t2
+                - t3
+
+        privacy_gate_person:
+          name: Privacy gate person
+          description: Person entity for identity confidence check.
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+        budget_floor:
+          name: LLM budget floor (%)
+          description: >
+            Minimum remaining LLM budget to continue session.
+            Lower than other features because therapy is high-value.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 100
+              mode: slider
+
+        memory_scope_individual:
+          name: Individual memory scope
+          description: Memory scope for individual therapy sessions.
+          default: "user"
+          selector:
+            select:
+              options:
+                - user
+                - household
+
+        memory_scope_couple:
+          name: Couple memory scope
+          description: Memory scope for couple therapy sessions.
+          default: "couple"
+          selector:
+            select:
+              options:
+                - couple
+                - household
+
+        session_memory_expiration:
+          name: Session memory expiration (days)
+          description: Days until session summaries expire. 0 = never.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 3650
+              mode: box
+
+        auto_generate_report:
+          name: Auto-generate report on session end
+          description: Automatically generate a .md report when session ends.
+          default: false
+          selector:
+            boolean:
+
+        report_output_dir:
+          name: Report output directory
+          description: Directory for .md report files (accessible via /local/).
+          default: "/config/www/therapy_reports"
+          selector:
+            text:
+
+    # =========================================================================
+    # ⑤ Infrastructure
+    # =========================================================================
+    infra:
+      name: "⑤ Infrastructure"
+      icon: mdi:cog
+      description: TTS, dispatcher, continuous conversation, and suppression toggles.
+      collapsed: true
+      input:
+        use_dispatcher:
+          name: Use AI dispatcher for voice
+          description: Resolve TTS voice via the AI dispatcher.
+          default: true
+          selector:
+            boolean:
+
+        tts_voice:
+          name: TTS voice (fallback)
+          description: TTS entity used when dispatcher is disabled.
+          default: ""
+          selector:
+            entity:
+              domain: tts
+
+        silence_media_url:
+          name: Silence media URL
+          description: URL to a silent audio file for echo-free mic reopen.
+          default: ""
+          selector:
+            text:
+
+        suppress_toggles:
+          name: Suppress toggles during session
+          description: >
+            Input booleans to turn OFF during therapy to prevent interruptions.
+            Restored on session end. Recommended:
+            ai_notifications_master_enabled (master gate — suppresses all
+            notification blueprints at once). Optionally add individual toggles
+            for non-blueprint interruptions.
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: true
+
+        continuous_conversation_entity:
+          name: Continuous conversation entity
+          description: Input boolean that keeps the mic cycling.
+          default: sensor.ai_continuous_conversation_active
+          selector:
+            entity:
+
+        follow_me_entity:
+          name: Follow-me entity
+          description: Input boolean for follow-me notification system.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        voice_mood_entity:
+          name: Voice mood entity
+          description: Input boolean for voice mood modulation.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+    # =========================================================================
+    # ⑥ Couple Mode
+    # =========================================================================
+    couple:
+      name: "⑥ Couple Mode"
+      icon: mdi:account-group
+      description: Couple session configuration.
+      collapsed: true
+      input:
+        couple_users:
+          name: Couple user slugs
+          description: Comma-separated user slugs for couple session (e.g., "person1,person2").
+          default: ""
+          selector:
+            text:
+
+        speaker_id_phrases:
+          name: Speaker identification phrases
+          description: Phrases users say to identify themselves (for prompt guidance).
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        couple_directed_questions:
+          name: Allow directed questions
+          description: Therapist can address specific person by name.
+          default: true
+          selector:
+            boolean:
+
+        turn_history_size:
+          name: Turn history size
+          description: Max recent turns to include in ESP for couple mode.
+          default: 15
+          selector:
+            number:
+              min: 5
+              max: 50
+              mode: box
+
+    # =========================================================================
+    # ⑦ Schedule
+    # =========================================================================
+    schedule:
+      name: "⑦ Schedule"
+      icon: mdi:calendar-clock
+      description: Scheduled therapy sessions.
+      collapsed: true
+      input:
+        schedule_enabled:
+          name: Enable scheduled sessions
+          default: false
+          selector:
+            boolean:
+
+        scheduled_time:
+          name: Session time
+          description: Time to start scheduled sessions.
+          default: "20:00:00"
+          selector:
+            time:
+
+        scheduled_days:
+          name: Active days
+          description: Days of the week for scheduled sessions.
+          default:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: Monday
+                  value: mon
+                - label: Tuesday
+                  value: tue
+                - label: Wednesday
+                  value: wed
+                - label: Thursday
+                  value: thu
+                - label: Friday
+                  value: fri
+                - label: Saturday
+                  value: sat
+                - label: Sunday
+                  value: sun
+
+mode: single
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable
+  v_toggle: !input therapy_toggle
+  v_timeout: !input timeout_minutes
+  v_start_message: !input start_message
+  v_start_message_couple: !input start_message_couple
+  v_session_type_default: !input session_type_default
+  v_ask_session_type: !input ask_session_type
+  v_therapy_system_prompt: !input therapy_system_prompt
+  v_couple_system_prompt: !input couple_system_prompt
+  v_session_context_template: !input session_context_template
+  v_session_type_question: !input session_type_question
+  v_speaker_tracking_prompt: !input speaker_tracking_prompt
+  v_therapy_language: !input therapy_language
+  v_therapist_persona: !input therapist_persona
+  v_therapy_variant: !input therapy_variant
+  v_use_dispatcher: !input use_dispatcher
+  v_voice_mood: !input voice_mood_during_therapy
+  v_budget_floor: !input budget_floor
+  v_privacy_tier: !input privacy_tier
+  v_privacy_gate_person: !input privacy_gate_person
+  v_goodbye_detection: !input goodbye_detection
+  v_therapist_end_session: !input therapist_end_session
+  v_couple_users: !input couple_users
+  v_turn_history_size: !input turn_history_size
+  v_couple_directed: !input couple_directed_questions
+  v_auto_report: !input auto_generate_report
+  v_report_dir: !input report_output_dir
+  v_silence_url: !input silence_media_url
+  v_suppress: !input suppress_toggles
+  v_bypass_follow_me: true
+  v_test_mode: !input test_mode_enabled
+  v_test_single_cycle: !input test_single_cycle
+  v_schedule_enabled: !input schedule_enabled
+  v_memory_scope_individual: !input memory_scope_individual
+  v_memory_scope_couple: !input memory_scope_couple
+  v_session_expiry: !input session_memory_expiration
+  _continuous_conv: !input continuous_conversation_entity
+  _follow_me: !input follow_me_entity
+  _voice_mood: !input voice_mood_entity
+  satellite_entity: !input satellite
+  speaker_entity: !input speaker
+  pipeline_select: !input pipeline_select
+
+triggers:
+  # ── Toggle ON ──
+  - id: start
+    trigger: state
+    entity_id: !input therapy_toggle
+    to: "on"
+
+  # ── Toggle OFF ──
+  - id: stop
+    trigger: state
+    entity_id: !input therapy_toggle
+    to: "off"
+
+  # ── Scheduled session ──
+  - id: schedule
+    trigger: time
+    at: !input scheduled_time
+
+conditions:
+  - condition: template
+    value_template: "{{ v_enable }}"
+
+actions:
+  # ══════════════════════════════════════════════════════════════════════
+  # STOP trigger: restore toggles and exit
+  # ══════════════════════════════════════════════════════════════════════
+  - alias: "Stop trigger: cleanup and exit"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'stop' }}"
+    then:
+      - alias: "Deactivate continuous conversation"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input continuous_conversation_entity
+        continue_on_error: true
+      - alias: "Restore suppressed toggles"
+        if:
+          - condition: template
+            value_template: "{{ v_suppress | length > 0 }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input suppress_toggles
+            continue_on_error: true
+      - alias: "Restore follow-me"
+        if:
+          - condition: template
+            value_template: "{{ _follow_me not in ['', 'none', 'unknown', 'unavailable'] }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: "{{ _follow_me }}"
+            continue_on_error: true
+      - alias: "Restore voice mood"
+        if:
+          - condition: template
+            value_template: "{{ not v_voice_mood and _voice_mood not in ['', 'none', 'unknown', 'unavailable'] }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: "{{ _voice_mood }}"
+            continue_on_error: true
+      - stop: "Session stopped via toggle OFF"
+
+  # ══════════════════════════════════════════════════════════════════════
+  # SCHEDULE trigger: check day-of-week
+  # ══════════════════════════════════════════════════════════════════════
+  - alias: "Schedule guard: check day and enable flag"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'schedule' }}"
+    then:
+      - condition: template
+        value_template: >-
+          {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+          {% set today = days[now().weekday()] %}
+          {{ v_schedule_enabled and today in (v_schedule_enabled | default('')) }}
+      - alias: "Auto-activate therapy toggle for scheduled session"
+        action: input_boolean.turn_on
+        target:
+          entity_id: !input therapy_toggle
+        continue_on_error: true
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 0. PRE-SESSION CHECKS
+  # ══════════════════════════════════════════════════════════════════════
+
+  # 0a. Resolve user
+  - alias: "0a · Resolve user"
+    variables:
+      resolved_user: >-
+        {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
+        {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+        {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+        {% elif occ in ['dual', 'home'] %}{{ _primary }}
+        {% else %}{{ _primary }}{% endif %}
+
+  # 0b. Budget gate (fail-open, skipped in test mode)
+  - alias: "0b · Budget gate"
+    condition: template
+    value_template: >-
+      {{ v_test_mode | bool(false)
+         or (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(20)) }}
+
+  # 0c. Privacy gate (skipped in test mode)
+  - alias: "0c · Privacy gate"
+    condition: template
+    value_template: >-
+      {%- if v_test_mode | bool(false) -%}true
+      {%- else -%}
+        {%- set tier = v_privacy_tier -%}
+        {%- if tier == 'off' or not is_state('input_boolean.ai_privacy_gate_enabled', 'on') -%}
+          true
+        {%- else -%}
+          {%- set mode = states('input_select.ai_privacy_gate_mode') | default('auto') -%}
+          {%- set override = states('input_select.ai_privacy_gate_therapy_session') | default('auto') -%}
+          {%- if mode == 'force_allow_all' or override == 'force_allow' -%}true
+          {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
+          {%- else -%}
+            {%- set slug = resolved_user | default('', true) -%}
+            {{ is_state('input_boolean.ai_privacy_gate_' ~ slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endif -%}
+
+  # 0d. Suppress toggles
+  - alias: "0d · Suppress notification toggles"
+    if:
+      - condition: template
+        value_template: "{{ v_suppress | length > 0 }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: !input suppress_toggles
+        continue_on_error: true
+
+  - alias: "0d · Suppress follow-me"
+    if:
+      - condition: template
+        value_template: "{{ _follow_me not in ['', 'none', 'unknown', 'unavailable'] }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ _follow_me }}"
+        continue_on_error: true
+
+  - alias: "0d · Suppress voice mood (if configured)"
+    if:
+      - condition: template
+        value_template: "{{ not v_voice_mood and _voice_mood not in ['', 'none', 'unknown', 'unavailable'] }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "{{ _voice_mood }}"
+        continue_on_error: true
+
+  # 0e. Resolve session type from default (ask later if configured)
+  - alias: "0e · Resolve session type"
+    variables:
+      resolved_session_type: "{{ v_session_type_default }}"
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 1. PIPELINE SWITCH
+  # ══════════════════════════════════════════════════════════════════════
+
+  # 1a. Save current pipeline + switch.
+  #   For handoff entry, voice_handoff already switched the pipeline and
+  #   registered a restore. For toggle/schedule entry, we do it here.
+  - alias: "1a · Save current pipeline"
+    variables:
+      saved_pipeline: "{{ states(pipeline_select) }}"
+
+  - alias: "1b · Switch pipeline to therapy variant"
+    variables:
+      target_pipeline: >-
+        {% set persona = v_therapist_persona | trim %}
+        {% set variant = v_therapy_variant | trim %}
+        {% set target = persona ~ ' - ' ~ variant %}
+        {% set opts = state_attr(pipeline_select, 'options') | default([]) %}
+        {% set ns = namespace(match='') %}
+        {% for opt in opts %}
+          {% if opt | lower == target | lower %}
+            {% set ns.match = opt %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.match }}
+
+  - alias: "1b · Guard: abort if no matching pipeline"
+    if:
+      - condition: template
+        value_template: "{{ target_pipeline | trim == '' }}"
+    then:
+      - stop: "No matching pipeline found for therapy variant"
+
+  - alias: "1c · Switch pipeline"
+    action: select.select_option
+    target:
+      entity_id: !input pipeline_select
+    data:
+      option: "{{ target_pipeline }}"
+
+  # 1d. Register restore with voice_handoff (for toggle/schedule entries)
+  - alias: "1d · Register pipeline restore"
+    action: pyscript.voice_handoff_register_restore
+    data:
+      satellite: "{{ satellite_entity }}"
+      pipeline_select: "{{ pipeline_select }}"
+      saved_pipeline: "{{ saved_pipeline }}"
+    continue_on_error: true
+
+  - alias: "1e · Pipeline switch settle delay"
+    delay:
+      milliseconds: 500
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 2. SESSION START
+  # ══════════════════════════════════════════════════════════════════════
+
+  - alias: "2a · Initialize session via pyscript"
+    action: pyscript.therapy_session_start
+    data:
+      user: "{{ resolved_user }}"
+      session_type: "{{ resolved_session_type }}"
+      therapist: "{{ v_therapist_persona | lower | replace(' ', '_') }}"
+      couple_users: "{{ v_couple_users }}"
+      turn_history_size: "{{ v_turn_history_size | int(15) }}"
+    response_variable: session_data
+    continue_on_error: true
+
+  - alias: "2b · Extract session info"
+    variables:
+      session_number: "{{ (session_data | default({})).get('session_number', 1) }}"
+      last_summary: "{{ (session_data | default({})).get('last_summary', 'No previous session.') }}"
+      was_resumed: "{{ (session_data | default({})).get('resumed', false) }}"
+
+  # ── Activate continuous conversation ──
+  - alias: "2c · Activate continuous conversation"
+    action: input_boolean.turn_on
+    target:
+      entity_id: !input continuous_conversation_entity
+    continue_on_error: true
+
+  # ── Ensure therapy toggle is ON (for handoff/schedule entries) ──
+  - alias: "2d · Ensure therapy toggle ON"
+    action: input_boolean.turn_on
+    target:
+      entity_id: !input therapy_toggle
+    continue_on_error: true
+
+  # ── Resolve TTS voice ──
+  - alias: "2e · Resolve TTS voice"
+    variables:
+      _voice: >-
+        {% if v_use_dispatcher %}
+          {{ state_attr(pipeline_select, 'options') | default([]) | first | default('') }}
+        {% else %}
+          {{ states('tts_voice') | default('') }}
+        {% endif %}
+      _voice_id: ""
+
+  # ── Speak opening message ──
+  - alias: "2f · Speak opening message"
+    variables:
+      opening_message: >-
+        {% if resolved_session_type == 'couple' and v_start_message_couple | trim | length > 0 %}
+          {{ v_start_message_couple }}
+        {% elif v_start_message | trim | length > 0 %}
+          {{ v_start_message }}
+        {% else %}
+
+        {% endif %}
+
+  - alias: "2f · Speak opening via TTS"
+    if:
+      - condition: template
+        value_template: "{{ opening_message | trim | length > 0 }}"
+    then:
+      - action: pyscript.tts_queue_speak
+        continue_on_error: true
+        data:
+          text: "{{ opening_message }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+          priority: 1
+      - alias: "2f · Audio download delay"
+        delay:
+          seconds: 3
+      - alias: "2f · Wait for speaker idle"
+        wait_template: >-
+          {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+             'paused', 'unknown'] }}
+        timeout: "00:00:15"
+        continue_on_timeout: true
+
+  # ── Echo guard ──
+  - alias: "2g · Echo guard"
+    delay:
+      seconds: 2
+
+  # ── Build initial ESP ──
+  - alias: "2h · Build initial ESP"
+    variables:
+      therapy_esp: >-
+        {{ v_therapy_system_prompt }}
+        {{ v_session_context_template
+           | replace('{session_number}', session_number | string)
+           | replace('{last_session_summary}', last_summary | default('No previous session.'))
+           | replace('{session_type}', resolved_session_type)
+           | replace('{user}', resolved_user) }}
+        {% if was_resumed | bool %}
+        NOTE: This session was interrupted and is being resumed. Continue where you left off.
+        {% endif %}
+        {% if resolved_session_type == 'couple' %}
+        {{ v_couple_system_prompt }}
+        {{ v_speaker_tracking_prompt }}
+        {% endif %}
+
+  # ── Open mic ──
+  - alias: "2i · Open mic with therapy ESP"
+    action: assist_satellite.start_conversation
+    target:
+      entity_id: !input satellite
+    data:
+      start_media_id: "{{ v_silence_url }}"
+      preannounce: false
+      extra_system_prompt: "{{ therapy_esp }}"
+    continue_on_error: true
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 3. LOOP VARIABLES
+  # ══════════════════════════════════════════════════════════════════════
+
+  # ── Test mode: announce session start ──
+  - alias: "3-test · Announce session start (test mode)"
+    if:
+      - condition: template
+        value_template: "{{ v_test_mode | bool(false) }}"
+    then:
+      - action: pyscript.tts_queue_speak
+        continue_on_error: true
+        data:
+          text: >-
+            Test mode. Session {{ session_number }}, type {{ resolved_session_type }},
+            user {{ resolved_user }}.
+            {% if was_resumed | bool %}Resumed from checkpoint.{% endif %}
+            Pipeline: {{ target_pipeline }}.
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+          priority: 1
+      - delay:
+          seconds: 5
+
+  - alias: "3 · Loop variables"
+    variables:
+      _effective_timeout: >-
+        {% if v_test_mode | bool(false) %}3{% else %}{{ v_timeout | float(45) }}{% endif %}
+      loop_deadline: "{{ as_timestamp(now()) + _effective_timeout | float * 60 }}"
+      no_speech_count: 0
+      tts_fail_count: 0
+      mic_open_time: "{{ as_timestamp(now()) }}"
+      loop_cycle_count: 0
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 4. CONTINUOUS THERAPY LOOP (Pattern 11c)
+  # ══════════════════════════════════════════════════════════════════════
+
+  - alias: "4 · Continuous therapy loop"
+    repeat:
+      while:
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and tts_fail_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states(_continuous_conv) != 'off'
+               and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(20)) }}
+      sequence:
+        # A0. Wait for satellite to start listening
+        - alias: "A0 · Wait for satellite to start (leaves idle)"
+          wait_template: "{{ not is_state(satellite_entity, 'idle') }}"
+          timeout: "00:00:05"
+          continue_on_timeout: true
+
+        # A. Wait for conversation turn to finish
+        - alias: "A · Wait for turn to finish (satellite → idle)"
+          wait_template: "{{ is_state(satellite_entity, 'idle') }}"
+          timeout: "00:01:00"
+          continue_on_timeout: true
+
+        # B. No-speech detection
+        - alias: "B · No-speech detection (3 strikes = exit)"
+          variables:
+            no_speech_count: >-
+              {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
+              {% if dur < 12 %}
+                {{ no_speech_count | int(0) + 1 }}
+              {% else %}
+                0
+              {% endif %}
+
+        # C. Combined exit check
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and tts_fail_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states(_continuous_conv) != 'off'
+               and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(20)) }}
+
+        # D. Echo guard
+        - alias: "D · Echo guard"
+          delay:
+            seconds: 3
+
+        # E. Wait for speaker to finish TTS
+        - alias: "E · Wait for speaker idle"
+          wait_template: >-
+            {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+               'paused', 'unknown'] }}
+          timeout: "00:00:15"
+          continue_on_timeout: true
+
+        # F. Record mic-open timestamp + cycle count
+        - alias: "F · Record mic-open timestamp"
+          variables:
+            mic_open_time: "{{ as_timestamp(now()) }}"
+            loop_cycle_count: "{{ loop_cycle_count | int(0) + 1 }}"
+
+        # F-test. Single cycle exit (test mode)
+        - alias: "F-test · Single cycle exit"
+          if:
+            - condition: template
+              value_template: >-
+                {{ v_test_mode | bool(false)
+                   and v_test_single_cycle | bool(false)
+                   and loop_cycle_count | int(0) >= 1 }}
+          then:
+            - action: pyscript.tts_queue_speak
+              continue_on_error: true
+              data:
+                text: "Test mode: single cycle complete. Ending session."
+                voice: "{{ _voice }}"
+                voice_id: "{{ _voice_id }}"
+                target_mode: explicit
+                target: "{{ speaker_entity }}"
+                priority: 1
+            - delay:
+                seconds: 3
+            - action: input_boolean.turn_off
+              target:
+                entity_id: !input therapy_toggle
+              continue_on_error: true
+
+        # G. Build ESP with session + couple context
+        - alias: "G · Build therapy ESP"
+          variables:
+            therapy_esp: >-
+              {{ v_therapy_system_prompt }}
+              {{ v_session_context_template
+                 | replace('{session_number}', session_number | string)
+                 | replace('{last_session_summary}', last_summary | default('No previous session.'))
+                 | replace('{session_type}', resolved_session_type)
+                 | replace('{user}', resolved_user) }}
+              {% if resolved_session_type == 'couple' %}
+              {{ v_couple_system_prompt }}
+              {{ v_speaker_tracking_prompt }}
+              {% set turns = state_attr('sensor.ai_therapy_status', 'turn_history') | default([]) %}
+              {% if turns | length > 0 %}
+              Recent turns:
+              {% for t in turns %}
+              [{{ t.s | default('?') | upper | truncate(1, true, '') }}] {{ t.c | default('') }}
+              {% endfor %}
+              {% endif %}
+              {% set speaker = state_attr('sensor.ai_therapy_status', 'active_speaker') | default('') %}
+              {% if speaker | length > 0 %}
+              Last identified speaker: {{ speaker }}
+              {% endif %}
+              {% endif %}
+
+        # H. Reopen mic with updated ESP
+        - alias: "H · Reopen mic with therapy ESP"
+          action: assist_satellite.start_conversation
+          target:
+            entity_id: !input satellite
+          data:
+            start_media_id: "{{ v_silence_url }}"
+            preannounce: false
+            extra_system_prompt: "{{ therapy_esp }}"
+          continue_on_error: true
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 5. SESSION END & CLEANUP
+  # ══════════════════════════════════════════════════════════════════════
+
+  # 5a. End session via pyscript
+  - alias: "5a · End session"
+    action: pyscript.therapy_session_end
+    data:
+      user: "{{ resolved_user }}"
+      session_type: "{{ resolved_session_type }}"
+      therapist: "{{ v_therapist_persona | lower | replace(' ', '_') }}"
+      session_number: "{{ session_number | int(0) }}"
+    response_variable: end_result
+    continue_on_error: true
+
+  # 5b. Auto-generate report (if configured)
+  - alias: "5b · Auto-generate report"
+    if:
+      - condition: template
+        value_template: "{{ v_auto_report }}"
+    then:
+      - action: pyscript.therapy_session_report
+        data:
+          user: "{{ resolved_user }}"
+          session_number: "{{ session_number | int(0) }}"
+          session_type: "{{ resolved_session_type }}"
+          output_dir: "{{ v_report_dir }}"
+        continue_on_error: true
+
+  # 5c. Deactivate continuous conversation
+  - alias: "5c · Deactivate continuous conversation"
+    action: input_boolean.turn_off
+    target:
+      entity_id: !input continuous_conversation_entity
+    continue_on_error: true
+
+  # 5d. Turn off therapy toggle
+  - alias: "5d · Deactivate therapy toggle"
+    action: input_boolean.turn_off
+    target:
+      entity_id: !input therapy_toggle
+    continue_on_error: true
+
+  # 5e. Pipeline restore is handled by voice_handoff's restore logic
+  #   (voice_handoff registered the pre-therapy pipeline via
+  #   voice_handoff_register_restore — its restore timer will fire
+  #   and set the pipeline back to the correct era-based agent)
+
+  # 5f. Restore suppressed toggles
+  - alias: "5f · Restore suppressed toggles"
+    if:
+      - condition: template
+        value_template: "{{ v_suppress | length > 0 }}"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: !input suppress_toggles
+        continue_on_error: true
+
+  - alias: "5f · Restore follow-me"
+    if:
+      - condition: template
+        value_template: "{{ _follow_me not in ['', 'none', 'unknown', 'unavailable'] }}"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "{{ _follow_me }}"
+        continue_on_error: true
+
+  - alias: "5f · Restore voice mood"
+    if:
+      - condition: template
+        value_template: "{{ not v_voice_mood and _voice_mood not in ['', 'none', 'unknown', 'unavailable'] }}"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: "{{ _voice_mood }}"
+        continue_on_error: true

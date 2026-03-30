@@ -1,0 +1,294 @@
+"""Shared utility functions for pyscript modules.
+
+Helper functions shared across multiple pyscript modules.
+Imported via: from shared_utils import build_result_entity_name, load_entity_config
+Imported via: from shared_utils import discover_persons, get_person_slugs, get_person_tracker, get_person_config
+"""
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import yaml
+
+_CONFIG_PATH = Path("/config/pyscript/entity_config.yaml")
+_config_cache: dict | None = None
+
+
+def load_entity_config() -> dict:
+    """Load entity_config.yaml. Cached after first read.
+
+    Returns the full config dict, or empty dict on error.
+    Call reload_entity_config() to force re-read after file changes.
+    """
+    global _config_cache
+    if _config_cache is not None:
+        return _config_cache
+    # If already on a worker thread (e.g. via asyncio.to_thread), read directly.
+    # Otherwise, dispatch Path bound methods to a thread pool to avoid HA
+    # blocking-call warning.  Only native CPython methods (_CONFIG_PATH.exists,
+    # _CONFIG_PATH.read_text) are submitted — pyscript-defined functions return
+    # coroutines in a thread context and must not be passed to the pool.
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            if not _CONFIG_PATH.exists():
+                import logging
+                logging.getLogger(__name__).warning(
+                    "shared_utils: entity_config.yaml not found at %s", _CONFIG_PATH
+                )
+                _config_cache = {}
+                return _config_cache
+            _config_cache = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(
+                "shared_utils: failed to load entity_config.yaml: %s", exc
+            )
+            _config_cache = {}
+    else:
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                if not pool.submit(_CONFIG_PATH.exists).result(timeout=5):
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "shared_utils: entity_config.yaml not found at %s",
+                        _CONFIG_PATH,
+                    )
+                    _config_cache = {}
+                    return _config_cache
+                raw = pool.submit(_CONFIG_PATH.read_text).result(timeout=5)
+            _config_cache = yaml.safe_load(raw) or {}
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error(
+                "shared_utils: thread pool config read failed: %s", exc
+            )
+            _config_cache = {}
+    return _config_cache
+
+
+def reload_entity_config() -> dict:
+    """Force re-read of entity_config.yaml. Returns the new config."""
+    global _config_cache
+    _config_cache = None
+    return load_entity_config()
+
+
+
+
+
+_LAST_INTERACTION = "sensor.ai_last_interaction"
+
+
+def set_last_interaction(**kwargs):
+    """Update sensor.ai_last_interaction with partial updates.
+
+    Only non-empty kwargs are applied; other attributes are preserved.
+    Valid kwargs: agent_name, agent_entity, topic, handoff_reason, handoff_source.
+    """
+    try:
+        attrs = state.getattr(_LAST_INTERACTION) or {}  # noqa: F821
+    except Exception:
+        attrs = {}
+    try:
+        cur = state.get(_LAST_INTERACTION) or ""  # noqa: F821
+    except Exception:
+        cur = ""
+    state.set(  # noqa: F821
+        _LAST_INTERACTION,
+        value=kwargs.get("agent_name") or cur,
+        new_attributes={
+            "agent_entity": kwargs.get("agent_entity") or attrs.get("agent_entity", ""),
+            "topic": kwargs.get("topic") or attrs.get("topic", ""),
+            "handoff_reason": kwargs.get("handoff_reason") or attrs.get("handoff_reason", ""),
+            "handoff_source": kwargs.get("handoff_source") or attrs.get("handoff_source", ""),
+            "friendly_name": "AI Last Interaction",
+            "icon": "mdi:account-voice",
+        },
+    )
+
+
+def parse_csv_helper(entity_id: str, prefix: str = "") -> list:
+    """Read a CSV input_text helper and return a list of stripped, non-empty values.
+
+    Args:
+        entity_id: Full entity ID of the input_text helper.
+        prefix: Optional domain prefix to auto-prepend (e.g. "media_player.").
+
+    Returns:
+        List of strings. Empty list on error or if helper is unavailable.
+    """
+    try:
+        raw = state.get(entity_id) or ""  # noqa: F821
+        if raw and raw not in ("unknown", "unavailable", ""):
+            result = []
+            for s in raw.split(","):
+                s = s.strip()
+                if s:
+                    if prefix and not s.startswith(prefix):
+                        s = prefix + s
+                    result.append(s)
+            return result
+    except Exception:
+        pass
+    return []
+
+
+# ── Person Discovery (Task 22) ──────────────────────────────────────────────
+
+_persons_cache: dict | None = None
+_persons_cache_ts: float = 0.0
+_PERSONS_CACHE_TTL = 300  # 5 minutes
+
+
+def discover_persons() -> dict[str, dict]:
+    """Discover persons from HA person.* entities, overlay non-discoverable config.
+
+    Returns: {"your_user": {"entity_id": "person.your_user", "friendly_name": "Your User",
+              "trackers": ["device_tracker.phone"], "state": "home",
+              "slug": "your_user", "calendar": "...", "notify_service": "...", ...}, ...}
+    """
+    global _persons_cache, _persons_cache_ts
+    now = time.monotonic()
+    if _persons_cache is not None and (now - _persons_cache_ts) < _PERSONS_CACHE_TTL:
+        return _persons_cache
+
+    # Discover from person.* entities
+    persons = {}
+    try:
+        for eid in state.names("person"):  # noqa: F821
+            slug = eid.split(".", 1)[1]
+            attrs = state.getattr(eid) or {}  # noqa: F821
+            persons[slug] = {
+                "entity_id": eid,
+                "slug": slug,
+                "friendly_name": attrs.get("friendly_name", slug.title()),
+                "trackers": attrs.get("device_trackers", []),
+                "state": state.get(eid),  # noqa: F821
+            }
+    except Exception:
+        pass
+
+    # Overlay non-discoverable config from entity_config.yaml
+    cfg = load_entity_config()
+    overlay = cfg.get("persons", {})
+    for slug, pdata in persons.items():
+        pdata.update(overlay.get(slug, {}))
+
+    _persons_cache = persons
+    _persons_cache_ts = now
+    return persons
+
+
+def reload_persons() -> dict[str, dict]:
+    """Force cache invalidation and re-discover persons."""
+    global _persons_cache
+    _persons_cache = None
+    return discover_persons()
+
+
+def get_person_slugs() -> list[str]:
+    """Return sorted list of person slugs (e.g. ['user1', 'user2'])."""
+    return sorted(discover_persons().keys())
+
+
+def get_person_tracker(slug: str) -> str | None:
+    """Return the primary device tracker for a person slug, or None."""
+    p = discover_persons().get(slug)
+    return p["trackers"][0] if p and p.get("trackers") else None
+
+
+def get_person_config(slug: str, key: str, default=None):
+    """Return a config value for a person slug (e.g. 'calendar', 'notify_service')."""
+    return discover_persons().get(slug, {}).get(key, default)
+
+
+# ── Entity Name Helper ──────────────────────────────────────────────────────
+
+def build_result_entity_name(entity_id: str) -> dict:
+    """Build a friendly_name dict from a sensor/result entity ID.
+
+    Args:
+        entity_id: Full entity ID (e.g. "sensor.ai_duck_manager_result").
+
+    Returns:
+        Dict with "friendly_name" key for use in state.set(new_attributes=...).
+    """
+    tail = entity_id.split(".")[-1]
+    parts = [part.capitalize() for part in tail.split("_") if part]
+    return {"friendly_name": " ".join(parts) or tail}
+
+
+# ── Active User Resolution ─────────────────────────────────────────────────
+
+def resolve_active_user() -> str:
+    """Resolve active user via identity confidence (highest wins).
+
+    Falls back to first person from discover_persons() if no confidence
+    data available.
+    """
+    best_slug, best_conf = "", 0
+    for eid in state.names("person"):  # noqa: F821
+        slug = eid.split(".", 1)[1]
+        try:
+            conf = int(float(state.get(f"sensor.identity_confidence_{slug}") or 0))  # noqa: F821
+        except (TypeError, ValueError):
+            conf = 0
+        if conf > best_conf:
+            best_slug, best_conf = slug, conf
+    if not best_slug:
+        slugs = get_person_slugs()
+        best_slug = slugs[0] if slugs else ""
+    return best_slug
+
+
+# ── Memory Owner Resolution (QS-5) ───────────────────────────────────────
+
+def resolve_memory_owner(explicit_owner: str = "", scope: str = "user") -> str:
+    """Resolve owner for a memory operation.
+
+    Priority:
+      1. Explicit owner parameter (normalized).
+      2. Auto-resolve from identity confidence (for user scope).
+      3. Empty string (for household/session scope).
+    """
+    if explicit_owner:
+        return explicit_owner.strip().lower()
+    if scope in ("household", "session"):
+        return ""
+    return resolve_active_user()
+
+
+def resolve_memory_owner_with_confidence(
+    explicit_owner: str = "", scope: str = "user"
+) -> tuple:
+    """Resolve owner with certainty flag for dual-occupancy safety.
+
+    Returns:
+        (owner_slug: str, is_certain: bool)
+        is_certain is False when occupancy is dual and the confidence
+        gap between the top two persons is below 20 points.
+    """
+    if explicit_owner:
+        return explicit_owner.strip().lower(), True
+    if scope in ("household", "session"):
+        return "", True
+    occ = str(state.get("sensor.occupancy_mode") or "")  # noqa: F821
+    if occ != "dual":
+        return resolve_active_user(), True
+    # Dual mode — check confidence gap
+    scores = {}
+    for eid in state.names("person"):  # noqa: F821
+        slug = eid.split(".", 1)[1]
+        try:
+            scores[slug] = int(
+                float(state.get(f"sensor.identity_confidence_{slug}") or 0)  # noqa: F821
+            )
+        except (TypeError, ValueError):
+            scores[slug] = 0
+    if len(scores) >= 2:
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        gap = ranked[0][1] - ranked[1][1]
+        if gap < 20:
+            return ranked[0][0], False  # uncertain
+    return resolve_active_user(), True

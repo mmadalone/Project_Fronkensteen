@@ -489,16 +489,22 @@ variables:
 - Order matters — first sensor with presence wins. Document this clearly in the input description.
 - Always provide a fallback player option for when no presence is detected.
 - Include `min_presence_time` input to filter out walk-throughs.
-- Offer `protect_active_playback` option to skip rooms already playing something.
+- Offer `protect_active_playback` option to skip rooms already playing something. **Bypass when enqueue is `replace`** — replace explicitly means "override what's playing," so the guard should not block it.
 - Offer `stop_other_players` option to stop all other configured players before starting.
 
 ```yaml
 # protect_active_playback — skip if target is already playing
+# Bypass when enqueue is 'replace' — override intent is explicit
 - alias: "Skip if target player is active"
   condition: template
   value_template: >-
-    {{ not (protect_active_playback
-            and states(target_player) == 'playing') }}
+    {% if not protect_active_playback %}
+      true
+    {% elif enqueue_mode == 'replace' %}
+      true
+    {% else %}
+      {{ states(target_player) not in ['playing', 'buffering'] }}
+    {% endif %}
 
 # stop_other_players — stop all other configured players before starting
 - alias: "Stop other players if configured"

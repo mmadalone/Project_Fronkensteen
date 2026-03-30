@@ -1,0 +1,215 @@
+blueprint:
+  name: "Email priority filter – IMAP to pyscript pipeline"
+  author: madalone
+  description: >
+    # Email priority filter – IMAP to pyscript pipeline
+
+    Listens for IMAP content events from a specific email account and
+    passes sender + subject to pyscript.email_promote_process for
+    priority filtering and L2 promotion. Gated by a kill switch.
+
+    ### Recent changes
+    - **v1:** Initial blueprint — replaces automation from ai_email_promotion.yaml
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/email_priority_filter.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① IMAP SOURCE
+    # ===========================================================================
+    imap_source:
+      name: "① IMAP source"
+      icon: mdi:email-receive
+      description: The IMAP integration entry to listen for.
+      collapsed: false
+      input:
+        imap_entry_id:
+          name: IMAP entry ID
+          description: >
+            The config entry ID of the IMAP integration
+            (found in .storage/core.config_entries).
+          default: ""
+          selector:
+            text: {}
+
+    # ===========================================================================
+    # ② CONTROLS
+    # ===========================================================================
+    controls:
+      name: "② Controls"
+      icon: mdi:toggle-switch
+      description: Kill switch and announcement controls.
+      collapsed: false
+      input:
+        kill_switch:
+          name: Kill switch
+          description: >
+            Input boolean that enables/disables the email filter.
+            When OFF, incoming emails are ignored.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+
+        notification_master_gate:
+          name: Notification master gate
+          description: >-
+            Global notification gate. When OFF, all notification
+            automations using this gate are suppressed (e.g., during therapy).
+          default: input_boolean.ai_notifications_master_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        suppress_urgent_tts:
+          name: Suppress urgent TTS announcements
+          description: >
+            When enabled, urgent emails are still promoted to L2 memory
+            but the TTS announcement is skipped. Use this when
+            email_follow_me instances already handle announcements
+            to avoid duplicate speech on the same email.
+          default: false
+          selector:
+            boolean: {}
+
+    # ===========================================================================
+    # ③ BYPASS — Follow-Me
+    # ===========================================================================
+    bypass:
+      name: "③ Bypass"
+      icon: mdi:shield-off-outline
+      description: Temporarily disable follow-me during processing.
+      collapsed: true
+      input:
+        bypass_follow_me:
+          name: Bypass Notification Follow-Me
+          description: >
+            Temporarily pause notification follow-me during processing
+            to prevent notifications from interrupting.
+          default: true
+          selector:
+            boolean: {}
+
+        bypass_claim_script:
+          name: Refcount claim script
+          description: >
+            Script entity that registers a bypass claim. Create from the
+            Refcount Bypass — Claim blueprint.
+          default: script.refcount_bypass_claim
+          selector:
+            entity:
+              domain: script
+
+        bypass_release_script:
+          name: Refcount release script
+          description: >
+            Script entity that releases a bypass claim. Create from the
+            Refcount Bypass — Release blueprint.
+          default: script.refcount_bypass_release
+          selector:
+            entity:
+              domain: script
+
+    # ===========================================================================
+    # ④ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "④ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "t2"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+
+variables:
+  imap_entry_id: !input imap_entry_id
+  kill_switch: !input kill_switch
+  master_gate_entity: !input notification_master_gate
+  suppress_urgent_tts: !input suppress_urgent_tts
+  v_bypass_follow_me: !input bypass_follow_me
+  v_bypass_claim: !input bypass_claim_script
+  v_bypass_release: !input bypass_release_script
+  privacy_tier: !input privacy_tier
+
+mode: queued
+max: 5
+max_exceeded: silent
+
+triggers:
+  - alias: "IMAP email received"
+    trigger: event
+    event_type: imap_content
+    event_data:
+      entry_id: !input imap_entry_id
+
+conditions:
+  - alias: "Notification master gate must be ON"
+    condition: template
+    value_template: >-
+      {{ is_state(master_gate_entity, 'on')
+         or states(master_gate_entity) in ['unknown', 'unavailable'] }}
+
+  - alias: "Kill switch is ON"
+    condition: state
+    entity_id: !input kill_switch
+    state: "on"
+
+actions:
+  # Save & bypass follow-me
+  - alias: "0 · Save & bypass follow-me"
+    variables:
+      follow_me_was_on: >-
+        {{ v_bypass_follow_me | bool(false) }}
+
+  - alias: "0 · Disable follow-me (if configured)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Claim follow-me bypass via refcount"
+            action: "{{ v_bypass_claim }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+
+  - alias: "Process email through priority filter"
+    action: pyscript.email_promote_process
+    response_variable: _email_result
+    data:
+      sender: "{{ trigger.event.data.sender }}"
+      subject: "{{ trigger.event.data.subject }}"
+      suppress_tts: "{{ suppress_urgent_tts }}"
+
+  # Restore follow-me
+  - alias: "1 · Restore follow-me (if bypassed)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ follow_me_was_on }}"
+        sequence:
+          - alias: "Release follow-me bypass via refcount"
+            action: "{{ v_bypass_release }}"
+            continue_on_error: true
+            data:
+              owner: "{{ this.entity_id }}"
+

@@ -1,0 +1,2737 @@
+blueprint:
+  name: "Goodnight Negotiator (Hybrid) v8.9.0"
+  description: >
+    ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/goodnight_negotiator_hybrid-header.jpeg)
+
+
+    Hybrid bedtime script with optional staged confirmations (TV/devices + lights/devices
+    + Bedtime audio).
+    Stage 3 supports: confirm, ask what to play, Music Assistant search (by category),
+    Announce selection, then play.
+
+
+    V8.9.0 notes (prompt externalization):
+    - feat: all 17 hardcoded LLM prompts exposed as `!input` declarations in new section ⑫ Prompts (collapsed).
+    - feat: bridge variables for Jinja-bearing prompts (baked_open_prompt, baked_close_prompt, prompt_ask_tv_off, prompt_confirm_tv_off, prompt_ask_devices_off, prompt_confirm_devices_off).
+    - feat: safety_prefix is now an editable input (was hardcoded `_pfx` string).
+    - refactor: prompt_cancel reused at 5 call sites via single bridge variable.
+    - refactor: prompt_unclear_proceed and prompt_unclear_skip reused at 4 call sites each.
+    - zero breaking changes: all defaults match the previous hardcoded text verbatim.
+
+
+    Notes on Music Assistant search/play:
+    - Stage 3 uses an LLM to return a strict JSON payload (media_id/media_type/etc.) and then calls
+      `music_assistant.play_media` directly (no `music_assistant.search`).
+    - Provide your Music Assistant config_entry_id (see Developer Tools or the MA URL).
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/goodnight_negotiator_hybrid.yaml
+  domain: script
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    core_routing:
+      name: "① Core Routing"
+      icon: mdi:router-wireless
+      collapsed: false
+      input:
+        user_name:
+          name: User's name (for spoken context)
+          description: How the assistant will address you.
+          default: friend
+          selector:
+            text:
+
+        area_name:
+          name: Area name (for spoken context only)
+          description: E.g. workshop, bedroom, living room.
+          default: workshop
+          selector:
+            text:
+
+        conversation_agent:
+          name: Voice Assistant
+          description: >
+            The Assist Pipeline (Voice Assistant) used for the bedtime
+            negotiation. The pipeline bundles the conversation agent, TTS
+            engine, and TTS voice. When the dispatcher is enabled, this
+            selection is overridden automatically.
+          default: "Rick - Bedtime"
+          selector:
+            text:
+
+        use_dispatcher:
+          name: Use Dispatcher
+          description: >-
+            When enabled, the AI dispatcher selects the persona dynamically
+            (ignoring the Voice Assistant selection above). When disabled, the
+            Voice Assistant you selected above is used directly.
+          default: true
+          selector:
+            boolean:
+
+        satellite_entity:
+          name: Voice satellite entity
+          description: This is where questions will be asked and spoken lines will be played.
+          selector:
+            entity:
+              domain: assist_satellite
+
+    express_mode_timing:
+      name: "② Express Mode & Timing"
+      icon: mdi:timer-outline
+      collapsed: true
+      input:
+        express_mode:
+          name: Express mode (skip all confirmations)
+          description: >
+            When enabled, skips all "ask" prompts and executes stages directly.
+            Useful when you just want to say "goodnight" and have everything happen.
+            Individual stage modes are still respected (skip = skip, do_it_anyway = do it).
+          default: false
+          selector:
+            boolean:
+
+        inter_stage_delay:
+          name: Delay between stages (seconds)
+          description: >
+            Brief pause between stages to let actions complete and give user breathing room.
+            Set to 0 for no delay.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 600
+              mode: slider
+              step: 0.5
+
+        qa_unclear_retries:
+          name: Unclear answer retries (yes/no questions)
+          description: >
+            when a yes/no question gets an unclear reply, re-ask up to this many times.
+            after retries are exhausted, unclear/empty answers default to no (skip).
+            set to 0 to never re-ask.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 10
+              mode: slider
+              step: 1
+
+        run_debounce_seconds:
+          name: Prevent double-runs (debounce seconds)
+          description: >
+            Ignores a new trigger if this script already ran in the last n seconds.
+            Helps prevent doubled speech when multiple triggers fire around the same time.
+            Set to 0 to disable.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 300
+              mode: slider
+              step: 1
+              unit_of_measurement: s
+
+        tts_output_volume:
+          name: TTS output volume (optional)
+          description: >-
+            Volume level (0.0–1.0) to set on the satellite speaker before
+            TTS announcements. Only raises volume — if the speaker is
+            already louder, it stays where it is. Set to 0 to disable.
+          default: 0.0
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    custom_phrases:
+      name: "③ Custom Phrases"
+      icon: mdi:message-text-outline
+      collapsed: true
+      input:
+        phrase_confirmation:
+          name: Custom phrase – confirmation (e.g. "done")
+          description: >
+            Spoken after completing an action. Leave empty to let your persona generate it.
+            Example for Rick: "there, happy now?"
+          default: ""
+          selector:
+            text:
+
+        phrase_cancelled:
+          name: Custom phrase – cancelled
+          description: >
+            Spoken when user aborts. Leave empty to let your persona generate it.
+            Example for Rick: "whatever, forget it."
+          default: ""
+          selector:
+            text:
+
+        phrase_unclear_do_anyway:
+          name: Custom phrase – unclear response (doing it anyway)
+          description: >
+            Spoken when voice response is unclear but fallback is do_it_anyway.
+            Leave empty to let your persona generate it.
+            Example: "didn't catch that, doing it anyway."
+          default: ""
+          selector:
+            text:
+
+        phrase_unclear_skip:
+          name: Custom phrase – unclear response (skipping)
+          description: >
+            Spoken when voice response is unclear and fallback is skip.
+            Leave empty to let your persona generate it.
+            Example: "didn't catch that, skipping."
+          default: ""
+          selector:
+            text:
+
+        phrase_not_found:
+          name: Custom phrase – nothing found
+          description: >
+            Spoken when Music Assistant search returns no results.
+            Leave empty to let your persona generate it.
+            Example: "got nothing. your taste is too weird even for me."
+          default: ""
+          selector:
+            text:
+
+        phrase_ma_error:
+          name: Custom phrase – Music Assistant error
+          description: >
+            Spoken when Music Assistant fails to respond.
+            Leave empty to let your persona generate it.
+          default: ""
+          selector:
+            text:
+
+        phrase_playing:
+          name: Custom phrase – now playing (use {name} placeholder)
+          description: >
+            Spoken before playing audio. Use {name} for the track/album name.
+            Leave empty to let your persona generate it.
+            Example: "found {name}. don't say i never did anything for you."
+          default: ""
+          selector:
+            text:
+
+        phrase_category_empty:
+          name: Custom phrase – category empty but others have results
+          description: >
+            Spoken when the requested category (e.g. audiobook) has no results but other categories do.
+            Leave empty to let your persona generate it.
+            Example: "no audiobooks, but i found some music. want that instead?"
+          default: ""
+          selector:
+            text:
+
+    context_inputs:
+      name: "④ Context Inputs"
+      icon: mdi:information-outline
+      collapsed: true
+      input:
+        media_context_entities:
+          name: Media context entities (optional)
+          description: >
+            Optional list of media_player entities to use as context for the LLM.
+            If any selected entity is playing, its title/artist (when available) can be mentioned in the LLM text.
+            Tip: select the TV player entity and/or the room speaker entity/entities.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              domain: media_player
+
+        time_aware:
+          name: Current time aware (late-only)
+          description: >
+            If enabled, the script only mentions time when it is "late" (after the threshold below).
+            It will inject a simple hint ("it's late") into the LLM context (not the exact clock time).
+          default: true
+          selector:
+            boolean:
+
+        late_after_hour:
+          name: "Late after hour"
+          description: >
+            Used only when current time aware is enabled.
+            If the current hour is equal or later than this value, the LLM may mention that it's late.
+          default: 23
+          selector:
+            number:
+              min: 0
+              max: 23
+              mode: slider
+              step: 1
+
+        late_night_category_bias:
+          name: Late night category bias
+          description: >
+            When it's late (per the hour above) and category is set to "auto",
+            Bias toward this category. helps avoid accidentally blasting music at 2am.
+          default: audiobook
+          selector:
+            select:
+              options:
+                - music
+                - audiobook
+                - podcast
+                - radio
+                - none
+
+    opening_closing:
+      name: "⑤ Opening & Closing Lines"
+      icon: mdi:script-text-outline
+      collapsed: true
+      input:
+        opening_line_mode:
+          name: Say opening line
+          description: >
+            Disabled: no opening line.
+            Fixed_text: speak exactly the fixed opening line below.
+            Llm_generated: generate a short opening line with the LLM using the prompt below.
+          default: llm_generated
+          selector:
+            select:
+              options:
+                - disabled
+                - fixed_text
+                - llm_generated
+
+        opening_line_fixed:
+          name: Opening line (fixed text)
+          description: Used only when say opening line = fixed_text.
+          default: ""
+          selector:
+            text:
+
+        opening_line_prompt:
+          name: Opening prompt (LLM-generated)
+          description: >
+            Used only when say opening line = llm_generated.
+            Keep it short. no quotation marks.
+            If left empty, the script uses a baked-in default prompt.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        closing_line_mode:
+          name: Say closing line
+          description: >
+            Disabled: no closing line.
+            Fixed_text: speak exactly the fixed closing line below.
+            Llm_generated: generate a short closing line with the LLM using the prompt below.
+          default: llm_generated
+          selector:
+            select:
+              options:
+                - disabled
+                - fixed_text
+                - llm_generated
+
+        closing_line_fixed:
+          name: Closing line (fixed text)
+          description: Used only when say closing line = fixed_text.
+          default: ""
+          selector:
+            text:
+
+        closing_line_prompt:
+          name: Closing prompt (LLM-generated)
+          description: >
+            Used only when say closing line = llm_generated.
+            If left empty, the script uses a baked-in default prompt.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    stage1_tv_ir:
+      name: "⑥ Stage 1 – TV / IR Devices"
+      icon: mdi:television
+      collapsed: true
+      input:
+        stage1_enabled:
+          name: Enable stage 1 – TV / ir devices
+          description: >
+            Stage 1 is intended for TV power-off and/or ir blaster scripts.
+            If you don't use it, disable it.
+          default: true
+          selector:
+            boolean:
+
+        stage1_mode:
+          name: Stage 1 behavior
+          description: >
+            Ask: ask permission first (skipped if express mode is on).
+            Do_it_anyway: execute without asking.
+            Skip: do nothing.
+          default: ask
+          selector:
+            select:
+              options:
+                - ask
+                - do_it_anyway
+                - skip
+
+        stage1_friendly_name:
+          name: Stage 1 friendly name (spoken)
+          description: How the LLM will refer to stage 1 actions (e.g. "the TV")
+          default: the tv
+          selector:
+            text:
+
+        stage1_scripts:
+          name: Stage 1 scripts to run
+          description: Scripts to run when stage 1 is approved.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              domain: script
+
+        stage1_fallback_on_voice_fail:
+          name: Stage 1 fallback if voice fails (mode=ask only)
+          description: >
+            Applies only when stage 1 mode = ask and we do not get a usable response.
+            Do_it_anyway: run the scripts anyway (recommended for critical actions).
+            Skip: do nothing.
+          default: do_it_anyway
+          selector:
+            select:
+              options:
+                - do_it_anyway
+                - skip
+
+        stage1_confirm_completion:
+          name: Stage 1 announce completion
+          description: Say "done" or similar after stage 1 completes.
+          default: true
+          selector:
+            boolean:
+
+    stage2_lights:
+      name: "⑦ Stage 2 – Lights & Devices"
+      icon: mdi:lightbulb-group-outline
+      collapsed: true
+      input:
+        stage2_enabled:
+          name: Enable stage 2 – lights/devices
+          default: true
+          selector:
+            boolean:
+
+        stage2_mode:
+          name: Stage 2 behavior
+          description: >
+            Ask: ask permission first (skipped if express mode is on).
+            Do_it_anyway: execute without asking.
+            Skip: do nothing.
+          default: ask
+          selector:
+            select:
+              options:
+                - ask
+                - do_it_anyway
+                - skip
+
+        stage2_friendly_name:
+          name: Stage 2 friendly name (spoken)
+          description: How the LLM will refer to stage 2 actions (e.g. "the lights and devices")
+          default: the lights and devices
+          selector:
+            text:
+
+        stage2_targets:
+          name: Stage 2 targets to turn off
+          description: Pick any entities that support turn_off (lights, switches, media players, etc.)
+          default: {}
+          selector:
+            target: {}
+
+        stage2_fallback_on_voice_fail:
+          name: Stage 2 fallback if voice fails (mode=ask only)
+          description: >
+            Applies only when stage 2 mode = ask and we do not get a usable response.
+            Do_it_anyway: turn off targets anyway (recommended for critical actions).
+            Skip: do nothing.
+          default: do_it_anyway
+          selector:
+            select:
+              options:
+                - do_it_anyway
+                - skip
+
+        stage2_confirm_completion:
+          name: Stage 2 announce completion
+          description: Say "done" or similar after stage 2 completes.
+          default: true
+          selector:
+            boolean:
+
+    stage3_audio:
+      name: "⑧ Stage 3 – Bedtime Audio"
+      icon: mdi:music-note
+      collapsed: true
+      input:
+        stage3_enabled:
+          name: Enable stage 3 – bedtime audio (Music Assistant)
+          default: true
+          selector:
+            boolean:
+
+        stage3_mode:
+          name: Stage 3 behavior
+          description: >
+            Ask: ask permission first (skipped if express mode is on, will still ask what to play).
+            Just_do: start playback without asking.
+            Skip: do nothing.
+          default: ask
+          selector:
+            select:
+              options:
+                - ask
+                - just_do
+                - skip
+
+        stage3_category:
+          name: Stage 3 category (search scope)
+          description: >
+            Determines how Music Assistant search results are filtered.
+            Music: tracks + playlists + albums
+            Audiobook: audiobooks (or local items tagged/typed as audiobook)
+            Podcast: podcasts (Spotify provider is fine)
+            Radio: radio stations (radio browser / TuneIn providers are fine)
+            Auto: best-effort classification from your query (with late-night bias if configured)
+          default: audiobook
+          selector:
+            select:
+              options:
+                - music
+                - audiobook
+                - podcast
+                - radio
+                - auto
+
+        stage3_music_assistant_config_entry_id:
+          name: Music Assistant config entry id
+          description: >
+            REQUIRED. the config_entry_id for your Music Assistant integration.
+            Find it in: developer tools → states → search "music_assistant" → look at entity attributes,
+            Or check the URL when you open the Music Assistant integration page (the long hex string).
+            Example: 01ABC123DEF456...
+          default: ""
+          selector:
+            text:
+
+        stage3_music_assistant_player:
+          name: Music Assistant player entity
+          description: >
+            Select the Music Assistant media_player entity (example: media_player.workshop).
+            Do not select the raw sonos entity if you want MA queue control.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        stage3_delegate_script_entity_id:
+          name: Stage 3 delegate playback script (optional)
+          description: >
+            If set, Stage 3 will call this script instead of calling Music Assistant play_media directly.
+            Leave blank to use the built-in Music Assistant playback.
+            The script will be called with variables: media_player, media_type, media_id, enqueue, shuffle, query.
+          default: ""
+          selector:
+            entity:
+              domain: script
+        stage3_volume:
+          name: Bedtime audio volume (0 = don't change)
+          description: >
+            Set volume before playing (1-100). set to 0 to leave volume unchanged.
+            Recommended: 20-40 for bedtime audio.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 100
+              mode: slider
+              step: 5
+
+        stage3_queue_behavior:
+          name: Queue behavior before playback
+          description: >
+            Clear_then_replace (default): clear queue first, then play the selected item.
+            Replace: play now with enqueue=replace (usually clears the queue too).
+          default: clear_then_replace
+          selector:
+            select:
+              options:
+                - clear_then_replace
+                - replace
+
+        stage3_if_something_playing:
+          name: If something is already playing
+          description: >
+            Keep: do nothing (respect current playback).
+            Stop_and_ask: stop/clear and ask what to play.
+            Ask_to_replace: ask whether to replace what's playing.
+          default: ask_to_replace
+          selector:
+            select:
+              options:
+                - keep
+                - stop_and_ask
+                - ask_to_replace
+
+        stage3_ask_prompt_style:
+          name: Stage 3 ask wording
+          description: Controls the wording when asking whether to start bedtime audio.
+          default: music_or_story
+          selector:
+            select:
+              options:
+                - music_or_story
+                - music_only
+                - story_only
+                - custom
+
+        stage3_custom_main_question:
+          name: Stage 3 custom main question
+          description: Used only when stage 3 ask wording = custom.
+          default: ""
+          selector:
+            text:
+
+        stage3_fallback_on_voice_fail:
+          name: Stage 3 fallback if voice fails/unclear (mode=ask only)
+          description: >
+            Skip (default): do nothing.
+            Safe_default: proceed using the safe default category below (still asks what to play).
+          default: skip
+          selector:
+            select:
+              options:
+                - skip
+                - safe_default
+
+        stage3_safe_default_category:
+          name: Stage 3 safe default category (fallback only)
+          description: Used only when stage 3 fallback = safe_default.
+          default: audiobook
+          selector:
+            select:
+              options:
+                - music
+                - audiobook
+                - podcast
+                - radio
+
+        stage3_search_limit:
+          name: Stage 3 search limit
+          description: How many results Music Assistant should return per type bucket.
+          default: 8
+          selector:
+            number:
+              min: 1
+              max: 25
+              mode: slider
+              step: 1
+
+        stage3_announce_selection:
+          name: Announce what was found
+          description: >
+            Say something like "i found [title], starting now" before playing.
+            Helps user know what they're getting.
+          default: true
+          selector:
+            boolean:
+
+        stage3_offer_fallback_category:
+          name: Offer fallback category when target is empty
+          description: >
+            When enabled, if the target category (e.g. audiobook) has no results but other categories do,
+            The script will ask if you want to play from a different category instead of just failing.
+          default: true
+          selector:
+            boolean:
+
+        stage3_debug_log:
+          name: Debug log stage 3 selection to trace
+          description: >
+            If enabled, writes the chosen URI + chosen media type/category to the system log.
+            Useful to see what the script actually selected when something seems off.
+          default: false
+          selector:
+            boolean:
+
+    helpers:
+      name: "⑨ Helper-Backed Memory"
+      icon: mdi:memory
+      collapsed: true
+      input:
+        helpers_enabled:
+          name: Enable helper-backed memory/locking (optional)
+          description: >
+            If enabled and helper entity IDs are provided below, the script can store/reuse
+            small bits of state between runs (last opening line, last run timestamp, simple trace).
+            This helps prevent repeated openings and accidental double-runs.
+          default: false
+          selector:
+            boolean:
+
+        helper_last_run_epoch:
+          name: Helper input_number for last run epoch seconds
+          description: >
+            Optional. Example: input_number.ai_gn_last_run_epoch
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: input_number
+
+
+        helper_run_debounce_seconds:
+          name: Helper input_number for debounce seconds override
+          description: >
+            Optional. Example: input_number.ai_gn_run_debounce_seconds
+            If blank, uses the blueprint input "Run debounce (seconds)".
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: input_number
+
+
+        helper_lock_boolean:
+          name: Helper sensor lock (in-progress) (optional)
+          description: >
+            Optional. Example: sensor.ai_gn_bedtime_lock
+            A pyscript-managed sensor. If provided, the script refuses to start while it is "on",
+            then sets it "on" during the run and "off" at the end via pyscript.set_sensor_value.
+          default: ""
+          selector:
+            entity:
+
+
+        helper_last_opening_line:
+          name: Helper input_text for last opening line
+          description: "Optional. Example: input_text.ai_gn_last_opening_line"
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: input_text
+
+
+        helper_last_reply:
+          name: Helper input_text for last spoken reply (trace)
+          description: "Optional. Example: input_text.ai_gn_last_reply"
+          default: ""
+          selector:
+            entity:
+              filter:
+                domain: input_text
+
+    feedback:
+      name: "⑩ Feedback Options"
+      icon: mdi:bullhorn-outline
+      collapsed: true
+      input:
+        announce_unclear_responses:
+          name: Announce when response is unclear
+          description: >
+            When enabled, if the script hears something that doesn't match yes/no/abort,
+            It will say "I didn't catch that" before applying the fallback behavior.
+            Helps you know when voice recognition failed vs. intentional skip.
+          default: true
+          selector:
+            boolean:
+
+    # ─────────────────────────────────────────────────────────────
+    infrastructure:
+      name: "⑪ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      description: "Shared entity references for the dispatcher system."
+      input:
+        dispatcher_enabled:
+          name: "Dispatcher enabled entity"
+          description: "Boolean that enables the AI agent dispatcher."
+          default: input_boolean.ai_dispatcher_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ─────────────────────────────────────────────────────────────
+    prompts:
+      name: "⑫ Prompts"
+      icon: mdi:script-text-key-outline
+      collapsed: true
+      description: >-
+        LLM prompt templates used throughout the negotiation stages.
+        Edit these to change the personality or wording of each spoken line without
+        touching the script logic. Placeholders are Jinja — see each description.
+      input:
+        safety_prefix:
+          name: "Safety prefix"
+          description: >-
+            Prepended to every LLM call. Prevents the model from invoking functions.
+          default: >-
+            [BEDTIME — do NOT call any functions or tools. Respond only with speech text, no actions.]
+          selector:
+            text:
+              multiline: true
+
+        baked_open_prompt:
+          name: "Opening line prompt (baked default)"
+          description: >-
+            Prompt sent when opening_line_mode = llm_generated and no custom
+            opening prompt is provided.
+            Placeholders: {{ user_name }}, {{ area }}, {{ last_opening_line }}.
+          default: >-
+            say one short opening line to {{ user_name }} in the {{ area }}. no quotes. be natural. 1 sentence max.
+            important (strict): do not guess what is playing.
+            only state what's playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
+            if those fields are missing/empty/unknown, and you are asked what's playing, reply exactly: "i have no idea what's playing right now."
+            never mention time, lateness, or sleep schedules unless the context includes the exact phrase "it's late.".
+            never use the phrase "burning the midnight oil" (or any close variation). avoid all time-based clichés.
+            {% if last_opening_line != '""' %}do not repeat this exact line: "{{ last_opening_line }}".{% endif %}
+            make it noticeably different from your last opening.
+          selector:
+            text:
+              multiline: true
+
+        baked_close_prompt:
+          name: "Closing line prompt (baked default)"
+          description: >-
+            Prompt sent when closing_line_mode = llm_generated and no custom
+            closing prompt is provided.
+            Placeholders: {{ user_name }}.
+          default: >-
+            say one short closing goodnight line to {{ user_name }}. no quotes. be natural.
+            important (strict): do not guess what is playing.
+            only state what's playing if the context contains explicit media fields (for example: media_title, media_series_title, media_album_name, app_name, or source).
+            if those fields are missing/empty/unknown, and you are asked what's playing, reply exactly: "i have no idea what's playing right now."
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_tv_off:
+          name: "Ask TV off"
+          description: >-
+            Stage 1 LLM prompt: ask the user whether to turn off the TV.
+            Placeholders: {{ s1_name }}.
+          default: >-
+            ask a brief yes/no question: should i turn off {{ s1_name }}?
+          selector:
+            text:
+              multiline: true
+
+        prompt_already_off:
+          name: "Already off acknowledgement"
+          description: >-
+            Stage 1 LLM prompt: acknowledge that the TV is already off.
+          default: >-
+            acknowledge briefly that it's already off. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_cancel:
+          name: "Cancel / abort"
+          description: >-
+            LLM prompt used whenever the user aborts the routine.
+            Reused across all stages.
+          default: >-
+            say briefly that you're cancelling the bedtime routine. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_tv_stays_on:
+          name: "TV stays on"
+          description: >-
+            Stage 1 LLM prompt: acknowledge leaving the TV on and skipping audio.
+          default: >-
+            acknowledge briefly that you'll leave the tv on. say you'll continue with lights only and skip bedtime audio. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_tv_off:
+          name: "Confirm TV off"
+          description: >-
+            Stage 1 LLM prompt: brief confirmation after turning off the TV.
+            Placeholders: {{ s1_name }}.
+          default: >-
+            say a very brief confirmation that you turned off {{ s1_name }}. one or two words max.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_devices_off:
+          name: "Ask devices off"
+          description: >-
+            Stage 2 LLM prompt: ask the user whether to turn off lights/devices.
+            Placeholders: {{ s2_name }}.
+          default: >-
+            ask a brief yes/no question: should i turn off {{ s2_name }}?
+          selector:
+            text:
+              multiline: true
+
+        prompt_unclear_proceed:
+          name: "Unclear — doing it anyway"
+          description: >-
+            LLM prompt when response is unclear and fallback is do_it_anyway.
+            Reused across all stages.
+          default: >-
+            say briefly that you didn't understand but you're doing it anyway. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_unclear_skip:
+          name: "Unclear — skipping"
+          description: >-
+            LLM prompt when response is unclear and fallback is skip.
+            Reused across all stages.
+          default: >-
+            say briefly that you didn't understand so you're skipping this. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_devices_off:
+          name: "Confirm devices off"
+          description: >-
+            Stage 2 LLM prompt: brief confirmation after turning off devices.
+            Placeholders: {{ s2_name }}.
+          default: >-
+            say a very brief confirmation that you turned off {{ s2_name }}. one or two words max.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ma_missing:
+          name: "Music Assistant config missing"
+          description: >-
+            Stage 3 LLM prompt: inform user that MA config is missing.
+          default: >-
+            say briefly that Music Assistant config is missing so you can't play audio. one sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_ask_replace_audio:
+          name: "Ask replace current audio"
+          description: >-
+            Stage 3 LLM prompt: ask whether to replace currently playing audio.
+          default: >-
+            ask briefly: something is already playing. should i replace it with bedtime audio?
+          selector:
+            text:
+              multiline: true
+
+        prompt_no_speech:
+          name: "No speech heard"
+          description: >-
+            Stage 3 LLM prompt: user gave empty/no response to "what to play".
+          default: >-
+            say briefly that you didn't hear anything so you're skipping bedtime audio. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+        prompt_confirm_audio:
+          name: "Confirm starting audio"
+          description: >-
+            Stage 3 LLM prompt: confirm that bedtime audio is starting.
+          default: >-
+            say one short sentence confirming you will start bedtime audio now.
+          selector:
+            text:
+              multiline: true
+
+        prompt_nothing_found:
+          name: "Nothing found to play"
+          description: >-
+            Stage 3 LLM prompt: no results from Music Assistant.
+          default: >-
+            say briefly that you couldn't find anything to play. one short sentence.
+          selector:
+            text:
+              multiline: true
+
+mode: single
+max_exceeded: silent
+
+sequence:
+  - alias: "Set skip stage3 due to tv and 21 more variables"
+    variables:
+      _pfx: !input safety_prefix
+      skip_stage3_due_to_tv: false
+      user_name: !input user_name
+      area: !input area_name
+      v_pipeline_name: !input conversation_agent
+      use_dispatcher: !input use_dispatcher
+      v_dispatcher_enabled: !input dispatcher_enabled
+      sat: !input satellite_entity
+      tts_output_vol: !input tts_output_volume
+
+      # express mode & timing
+      express: !input express_mode
+      stage_delay: !input inter_stage_delay
+
+      run_debounce: !input run_debounce_seconds
+      qa_unclear_retries: !input qa_unclear_retries
+
+      # helper-backed memory (optional)
+      helpers_enabled: !input helpers_enabled
+      h_last_run_epoch: !input helper_last_run_epoch
+      h_debounce_seconds: !input helper_run_debounce_seconds
+      h_lock_boolean: !input helper_lock_boolean
+      h_last_opening: !input helper_last_opening_line
+      h_last_reply: !input helper_last_reply
+      # custom phrases
+      p_confirm: !input phrase_confirmation
+      p_cancel: !input phrase_cancelled
+      p_unclear_do: !input phrase_unclear_do_anyway
+      p_unclear_skip: !input phrase_unclear_skip
+      p_not_found: !input phrase_not_found
+      p_ma_error: !input phrase_ma_error
+      p_playing: !input phrase_playing
+      p_cat_empty: !input phrase_category_empty
+
+      # context config
+      ctx_media_entities: !input media_context_entities
+      time_aware_enabled: !input time_aware
+      late_hour: !input late_after_hour
+      late_category_bias: !input late_night_category_bias
+
+      # opening/closing
+      open_mode: !input opening_line_mode
+      open_fixed: !input opening_line_fixed
+      open_prompt_custom: !input opening_line_prompt
+      close_mode: !input closing_line_mode
+      close_fixed: !input closing_line_fixed
+      close_prompt_custom: !input closing_line_prompt
+
+      # stage 1
+      s1_enabled: !input stage1_enabled
+      s1_mode: !input stage1_mode
+      s1_name: !input stage1_friendly_name
+      s1_scripts: !input stage1_scripts
+      s1_fallback: !input stage1_fallback_on_voice_fail
+      s1_confirm: !input stage1_confirm_completion
+
+      # stage 2
+      s2_enabled: !input stage2_enabled
+      s2_mode: !input stage2_mode
+      s2_name: !input stage2_friendly_name
+      s2_targets: !input stage2_targets
+      s2_fallback: !input stage2_fallback_on_voice_fail
+      s2_confirm: !input stage2_confirm_completion
+
+      # stage 3
+      s3_enabled: !input stage3_enabled
+      s3_mode: !input stage3_mode
+      s3_category: !input stage3_category
+      s3_config_entry_id: !input stage3_music_assistant_config_entry_id
+      s3_player: !input stage3_music_assistant_player
+      s3_delegate_script_entity_id: !input stage3_delegate_script_entity_id
+      s3_volume: !input stage3_volume
+      s3_queue_behavior: !input stage3_queue_behavior
+      s3_if_playing: !input stage3_if_something_playing
+      s3_question_style: !input stage3_ask_prompt_style
+      s3_custom_question: !input stage3_custom_main_question
+      s3_fallback: !input stage3_fallback_on_voice_fail
+      s3_safe_default_category: !input stage3_safe_default_category
+      s3_limit: !input stage3_search_limit
+      s3_announce: !input stage3_announce_selection
+      s3_offer_fallback: !input stage3_offer_fallback_category
+      s3_debug: !input stage3_debug_log
+
+      # feedback options
+      announce_unclear: !input announce_unclear_responses
+
+      # state trackers
+      script_aborted: false
+      stage1_done: false
+      stage2_done: false
+      stage3_done: false
+
+      # expanded patterns for yes/no/abort (multilingual)
+      yes_pattern: '(^|\W)(yes|yeah|yep|yup|sure|ok|okay|alright|absolutely|affirmative|go ahead|do it|please|uh huh|mhm|doe maar|ja|jep|jawel|graag|natuurlijk|tuurlijk|sí|si|vale|claro|por supuesto|d''accord|oui|ouais|bien sûr)(\W|$)'
+      no_pattern: '(^|\W)(no|nope|nah|not now|not tonight|skip|pass|leave it|don''t|neen|nee|niet|laat maar|njet|no thanks|non|pas|nunca|no gracias)(\W|$)'
+      abort_pattern: '(^|\W)(cancel|abort|stop|never mind|nevermind|forget it|quit|exit|laat maar zitten|olvídalo|annuleer)(\W|$)'
+
+      # compute "late" flag
+      is_late: "{{ time_aware_enabled and (now().hour | int) >= (late_hour | int) }}"
+
+      # media context summary (now with artist)
+      first_playing_entity: >
+        {% set playing = '' %}
+        {% for e in ctx_media_entities %}
+          {% if (is_state(e, 'playing') or is_state(e, 'paused')) and playing == '' %}{% set playing = e %}{% endif %}
+        {% endfor %}
+        {{ playing }}
+
+      media_ctx_line: >
+        {% if first_playing_entity != '' %}
+          {% set title = state_attr(first_playing_entity, 'media_title') | default('') %}
+          {% set artist = state_attr(first_playing_entity, 'media_artist') | default('') %}
+          {% if states(first_playing_entity) | default('unknown') == 'paused' %}currently paused: {{ title }}{% else %}currently playing: {{ title }}{% endif %}{% if artist %} by {{ artist }}{% endif %}
+        {% else %}
+          ""
+        {% endif %}
+
+      time_ctx_line: >
+        {% if is_late %}it's late.{% else %}""{% endif %}
+
+      context_block: >
+        area: {{ area }}.
+        user: {{ user_name }}.
+        {% if time_ctx_line != '""' %}{{ time_ctx_line }}{% endif %}
+        {% if media_ctx_line != '""' %}{{ media_ctx_line }}{% endif %}
+
+
+      last_opening_line: >
+        {% if helpers_enabled and (h_last_opening | trim) != '' %}
+          {{ states(h_last_opening) | default('') | trim }}
+        {% else %}
+          ""
+        {% endif %}
+      # baked-in prompts — bridge variables (inputs contain Jinja placeholders)
+      _raw_open_prompt: !input baked_open_prompt
+      _raw_close_prompt: !input baked_close_prompt
+      baked_open_prompt: "{{ _raw_open_prompt }}"
+      baked_close_prompt: "{{ _raw_close_prompt }}"
+
+      # prompt bridge variables (inputs with Jinja placeholders)
+      _raw_prompt_ask_tv_off: !input prompt_ask_tv_off
+      v_prompt_ask_tv_off: "{{ _raw_prompt_ask_tv_off }}"
+      _raw_prompt_confirm_tv_off: !input prompt_confirm_tv_off
+      v_prompt_confirm_tv_off: "{{ _raw_prompt_confirm_tv_off }}"
+      _raw_prompt_ask_devices_off: !input prompt_ask_devices_off
+      v_prompt_ask_devices_off: "{{ _raw_prompt_ask_devices_off }}"
+      _raw_prompt_confirm_devices_off: !input prompt_confirm_devices_off
+      v_prompt_confirm_devices_off: "{{ _raw_prompt_confirm_devices_off }}"
+
+      # prompt bridge variables (plain text — no Jinja placeholders in default)
+      v_prompt_already_off: !input prompt_already_off
+      v_prompt_cancel: !input prompt_cancel
+      v_prompt_tv_stays_on: !input prompt_tv_stays_on
+      v_prompt_unclear_proceed: !input prompt_unclear_proceed
+      v_prompt_unclear_skip: !input prompt_unclear_skip
+      v_prompt_ma_missing: !input prompt_ma_missing
+      v_prompt_ask_replace_audio: !input prompt_ask_replace_audio
+      v_prompt_no_speech: !input prompt_no_speech
+      v_prompt_confirm_audio: !input prompt_confirm_audio
+      v_prompt_nothing_found: !input prompt_nothing_found
+  # ---------------------------------------------------------------------
+  # run control: prevent double-triggered speech
+  # ---------------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # preflight: optional helper-backed locking + debounce (before any speech)
+  # ---------------------------------------------------------------------
+  - alias: "Set now epoch and 4 more variables"
+    variables:
+      now_epoch: "{{ as_timestamp(now()) | float(0) }}"
+      helper_last_run: "{{ (states(h_last_run_epoch) | default('0') | float(0)) if (helpers_enabled and (h_last_run_epoch | trim) != '') else 0 }}"
+      helper_debounce: "{{ (states(h_debounce_seconds) | default('0') | float(run_debounce)) if (helpers_enabled and (h_debounce_seconds | trim) != '') else (run_debounce | float(0)) }}"
+      lock_is_on: "{{ helpers_enabled and (h_lock_boolean | trim) != '' and is_state(h_lock_boolean, 'on') }}"
+      should_debounce: "{{ helper_last_run > 0 and helper_debounce > 0 and (now_epoch - helper_last_run) < helper_debounce }}"
+
+  - alias: "Choose action path"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ lock_is_on }}"
+        sequence:
+          - alias: "Stop: Locked: script already running (helper lock is ON)"
+            stop: "Locked: script already running (helper lock is ON)"
+
+  - alias: "Choose action path"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ should_debounce }}"
+        sequence:
+          - alias: "Stop: Debounced: script already ran very recently (helper)"
+            stop: "Debounced: script already ran very recently (helper)"
+
+  # set helper state at start (best effort)
+  - alias: "set helper state at start (best effort)"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ helpers_enabled and (h_lock_boolean | trim) != '' }}"
+        sequence:
+          - alias: "Preflight: activate lock helper"
+            action: pyscript.set_sensor_value
+            continue_on_error: true
+            data:
+              entity_id: "{{ h_lock_boolean }}"
+              value: "on"
+              icon: "mdi:lock"
+              friendly_name: "AI Goodnight Bedtime Lock"
+
+  - alias: "Choose action path"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ helpers_enabled and (h_last_run_epoch | trim) != '' }}"
+        sequence:
+          - alias: "Preflight: record run epoch to helper"
+            action: input_number.set_value
+            continue_on_error: true
+            data:
+              entity_id: "{{ h_last_run_epoch }}"
+              value: "{{ now_epoch }}"
+
+  # ---------------------------------------------------------------------
+  # Agent selection — dispatcher > manual
+  # ---------------------------------------------------------------------
+  - alias: "Agent selection — dispatcher > manual"
+    choose:
+      - alias: "Dispatcher path"
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ use_dispatcher and is_state(v_dispatcher_enabled, 'on') }}
+        sequence:
+          - alias: "Dispatch agent for goodnight negotiation"
+            action: pyscript.agent_dispatch
+            response_variable: dispatch
+            data:
+              wake_word: ""
+              intent_text: "goodnight bedtime negotiation"
+              skip_continuity: true
+            continue_on_error: true
+          - alias: "Set agent id and 3 more variables"
+            variables:
+              agent_id: "{{ (dispatch | default({})).get('agent', '') }}"
+              dispatch_voice: "{{ (dispatch | default({})).get('tts_engine', '') }}"
+              dispatch_tts_voice: "{{ (dispatch | default({})).get('tts_voice', '') }}"
+              dispatch_persona: "{{ (dispatch | default({})).get('persona', 'rick') }}"
+    default:
+      - alias: "Resolve pipeline for manual agent selection"
+        action: pyscript.agent_dispatch
+        response_variable: pipeline_resolve
+        data:
+          pipeline_name: "{{ v_pipeline_name }}"
+        continue_on_error: true
+      - alias: "Set agent id and 3 more variables"
+        variables:
+          agent_id: "{{ (pipeline_resolve | default({})).get('agent', '') }}"
+          dispatch_voice: "{{ (pipeline_resolve | default({})).get('tts_engine', '') }}"
+          dispatch_tts_voice: "{{ (pipeline_resolve | default({})).get('tts_voice', '') }}"
+          dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
+
+  # ---------------------------------------------------------------------
+  # TTS volume (only raise, never lower)
+  # ---------------------------------------------------------------------
+  - alias: "Set satellite volume before first announce (only raise)"
+    if:
+      - condition: template
+        value_template: >-
+          {% set target = tts_output_vol | float(0) %}
+          {% set current = state_attr(sat, 'volume_level') | float(0) %}
+          {{ target > 0 and target > current }}
+    then:
+      - alias: "Set satellite volume for TTS playback"
+        action: media_player.volume_set
+        continue_on_error: true
+        target:
+          entity_id: "{{ sat }}"
+        data:
+          volume_level: "{{ tts_output_vol | float(0) }}"
+
+  # ---------------------------------------------------------------------
+  # opening line
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ open_mode == 'fixed_text' and (open_fixed | trim) != '' }}"
+        sequence:
+          - alias: "Opening: announce line via satellite"
+            action: assist_satellite.announce
+            continue_on_error: true
+            data:
+              entity_id: "{{ sat }}"
+              message: "{{ open_fixed }}"
+          - alias: "Choose action path"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ helpers_enabled and (h_last_opening | trim) != '' }}"
+                sequence:
+                  - alias: "Opening: save last opening line to helper"
+                    action: input_text.set_value
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ h_last_opening }}"
+                      value: "{{ open_fixed | trim }}"
+          - alias: "Choose action path"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ helpers_enabled and (h_last_reply | trim) != '' }}"
+                sequence:
+                  - alias: "Opening: save last reply to helper"
+                    action: input_text.set_value
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ h_last_reply }}"
+                      value: "{{ open_fixed | trim }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ open_mode == 'llm_generated' }}"
+        sequence:
+          - alias: "Opening: generate line via LLM"
+            action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_id }}"
+              text: >
+                {{ _pfx }}
+                {% if (open_prompt_custom | trim) != '' %}{{ open_prompt_custom }}{% else %}{{ baked_open_prompt }}{% endif %}
+                context:
+                {{ context_block }}
+            response_variable: open_llm
+
+          - alias: "Whisper — update self-awareness"
+            action: pyscript.agent_whisper
+            data:
+              agent_name: "{{ dispatch_persona }}"
+              user_query: "Goodnight negotiator bedtime interaction"
+              source: "automation"
+            continue_on_error: true
+
+          - alias: "Opening: announce line via satellite"
+            action: assist_satellite.announce
+            continue_on_error: true
+            data:
+              entity_id: "{{ sat }}"
+              message: "{{ open_llm.response.speech.plain.speech | default('') }}"
+          - alias: "Choose action path"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ helpers_enabled and (h_last_opening | trim) != '' }}"
+                sequence:
+                  - alias: "Opening: save last opening line to helper"
+                    action: input_text.set_value
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ h_last_opening }}"
+                      value: "{{ open_llm.response.speech.plain.speech | default('') | trim }}"
+          - alias: "Choose action path"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ helpers_enabled and (h_last_reply | trim) != '' }}"
+                sequence:
+                  - alias: "Opening: save last reply to helper"
+                    action: input_text.set_value
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ h_last_reply }}"
+                      value: "{{ open_llm.response.speech.plain.speech | default('') | trim }}"
+
+  # ---------------------------------------------------------------------
+  # stage 1 - scripts (tv/ir)
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ s1_enabled and s1_mode != 'skip' and (s1_scripts | count) > 0 and not stage1_done and not script_aborted }}"
+        sequence:
+          - alias: "Set s1 allow"
+            variables:
+              # express mode or do_it_anyway = yes, ask = unknown, skip = no
+              s1_allow: >
+                {% if express or s1_mode == 'do_it_anyway' %}yes
+                {% elif s1_mode == 'ask' %}unknown
+                {% else %}no{% endif %}
+
+          # ask if needed
+          - alias: "ask if needed"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s1_allow == 'unknown' }}"
+                sequence:
+                  - alias: "Stage 1: ask user via LLM"
+                    action: conversation.process
+                    continue_on_error: true
+                    data:
+                      agent_id: "{{ agent_id }}"
+                      text: >
+                        {{ _pfx }}
+                        {{ v_prompt_ask_tv_off }}
+                        context:
+                        {{ context_block }}
+                    response_variable: s1_q
+                  - alias: "Set s1 q text and 3 more variables"
+                    variables:
+                      s1_q_text: "{{ s1_q.response.speech.plain.speech | default('turn off ' ~ s1_name ~ '?') }}"
+                      s1_q_retries_left: "{{ qa_unclear_retries | int(0) }}"
+                      s1_q_text_lc: "{{ (s1_q_text | default('', true) | lower | trim) }}"
+                      s1_q_kind: >
+                        {% set q = (s1_q_text_lc | default('', true)) %}
+                        {% if q == '' %}unknown
+                        {% elif (q | regex_search('\\b(is|are)\\b')) and (q | regex_search('\\b(on|off|playing|paused)\\b')) %}state
+                        {% elif (q | regex_search('\\b(should i|do you want|want me to|shall i|can i)\\b')) and (q | regex_search('\\b(turn off|switch off|shut off|power off)\\b')) %}permission
+                        {% else %}unknown{% endif %}
+                  - alias: "Stage 1: ask TV permission via satellite"
+                    action: assist_satellite.ask_question
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ sat }}"
+                      question: "{{ s1_q_text }}"
+                      answers: []
+                    response_variable: s1_a
+                  - alias: "Set s1 s and 4 more variables"
+                    variables:
+                      s1_s: "{{ (s1_a.sentence | default('') | lower | trim) if s1_a is defined else '' }}"
+                      s1_aborted: "{{ s1_s != '' and (s1_s | regex_search(abort_pattern)) }}"
+                      s1_is_yes: "{{ s1_s != '' and (s1_s | regex_search(yes_pattern)) }}"
+                      s1_is_no: "{{ s1_s != '' and (s1_s | regex_search(no_pattern)) }}"
+                      s1_is_unclear: "{{ s1_s != '' and not s1_aborted and not s1_is_yes and not s1_is_no }}"
+                  - alias: "Repeat while condition holds"
+                    repeat:
+                      while:
+                        - condition: template
+                          value_template: "{{ s1_is_unclear and (s1_q_retries_left | int(0)) > 0 and not s1_aborted }}"
+                      sequence:
+                        - alias: "Set s1 q retries left"
+                          variables:
+                            s1_q_retries_left: "{{ (s1_q_retries_left | int(0)) - 1 }}"
+                        - alias: "Stage 1: retry TV permission (unclear response)"
+                          action: assist_satellite.ask_question
+                          continue_on_error: true
+                          data:
+                            entity_id: "{{ sat }}"
+                            question: "{{ s1_q_text }} please answer yes or no."
+                            answers: []
+                          response_variable: s1_a
+                        - alias: "Set s1 s and 4 more variables"
+                          variables:
+                            s1_s: "{{ (s1_a.sentence | default('') | lower | trim) if s1_a is defined else '' }}"
+                            s1_aborted: "{{ s1_s != '' and (s1_s | regex_search(abort_pattern)) }}"
+                            s1_is_yes: "{{ s1_s != '' and (s1_s | regex_search(yes_pattern)) }}"
+                            s1_is_no: "{{ s1_s != '' and (s1_s | regex_search(no_pattern)) }}"
+                            s1_is_unclear: "{{ s1_s != '' and not s1_aborted and not s1_is_yes and not s1_is_no }}"
+                  - alias: "Set s1 allow"
+                    variables:
+                      s1_allow: >
+                        {% if s1_aborted %}abort
+                        {% elif s1_is_yes %}yes
+                        {% elif s1_is_no %}no
+                        {% else %}no{% endif %}
+
+
+                  # if the llm asked a state question (e.g. "is the tv on?"), interpret yes/no as state
+                  - alias: "Choose action path"
+                    choose:
+                      # tv is not on -> acknowledge "already off" and do NOT skip stage 3
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_q_kind == 'state' and s1_allow == 'no' and not script_aborted }}"
+                        sequence:
+                          - alias: "Stage 1: acknowledge TV already off via LLM"
+                            action: conversation.process
+                            continue_on_error: true
+                            data:
+                              agent_id: "{{ agent_id }}"
+                              text: "{{ _pfx }} {{ v_prompt_already_off }}"
+                            response_variable: s1_state_no_resp
+                          - alias: "Stage 1: announce TV already off via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ s1_state_no_resp.response.speech.plain.speech | default('') }}"
+                          - alias: "Set s1 allow"
+                            variables:
+                              s1_allow: no_state
+
+                      # tv is on -> ask permission follow-up: do you want me to switch it off?
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_q_kind == 'state' and s1_allow == 'yes' and not script_aborted }}"
+                        sequence:
+                          - alias: "Set s1p q text, s1p retries left"
+                            variables:
+                              s1p_q_text: "do you want me to switch off {{ s1_name }}?"
+                              s1p_retries_left: "{{ qa_unclear_retries | int(0) }}"
+                          - alias: "Stage 1: ask TV switch-off confirmation via satellite"
+                            action: assist_satellite.ask_question
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              question: "{{ s1p_q_text }}"
+                              answers: []
+                            response_variable: s1p_a
+                          - alias: "Set s1p s and 4 more variables"
+                            variables:
+                              s1p_s: "{{ (s1p_a.sentence | default('') | lower | trim) if s1p_a is defined else '' }}"
+                              s1p_aborted: "{{ s1p_s != '' and (s1p_s | regex_search(abort_pattern)) }}"
+                              s1p_is_yes: "{{ s1p_s != '' and (s1p_s | regex_search(yes_pattern)) }}"
+                              s1p_is_no: "{{ s1p_s != '' and (s1p_s | regex_search(no_pattern)) }}"
+                              s1p_is_unclear: "{{ s1p_s != '' and not s1p_aborted and not s1p_is_yes and not s1p_is_no }}"
+                          - alias: "Repeat while condition holds"
+                            repeat:
+                              while:
+                                - condition: template
+                                  value_template: "{{ s1p_is_unclear and (s1p_retries_left | int(0)) > 0 and not s1p_aborted }}"
+                              sequence:
+                                - alias: "Set s1p retries left"
+                                  variables:
+                                    s1p_retries_left: "{{ (s1p_retries_left | int(0)) - 1 }}"
+                                - alias: "Stage 1: retry TV switch-off confirmation (unclear response)"
+                                  action: assist_satellite.ask_question
+                                  continue_on_error: true
+                                  data:
+                                    entity_id: "{{ sat }}"
+                                    question: "{{ s1p_q_text }} please answer yes or no."
+                                    answers: []
+                                  response_variable: s1p_a
+                                - alias: "Set s1p s and 4 more variables"
+                                  variables:
+                                    s1p_s: "{{ (s1p_a.sentence | default('') | lower | trim) if s1p_a is defined else '' }}"
+                                    s1p_aborted: "{{ s1p_s != '' and (s1p_s | regex_search(abort_pattern)) }}"
+                                    s1p_is_yes: "{{ s1p_s != '' and (s1p_s | regex_search(yes_pattern)) }}"
+                                    s1p_is_no: "{{ s1p_s != '' and (s1p_s | regex_search(no_pattern)) }}"
+                                    s1p_is_unclear: "{{ s1p_s != '' and not s1p_aborted and not s1p_is_yes and not s1p_is_no }}"
+                          - alias: "Set s1 allow"
+                            variables:
+                              s1_allow: >
+                                {% if s1p_aborted %}abort
+                                {% elif s1p_is_yes %}yes
+                                {% elif s1p_is_no %}no
+                                {% else %}no{% endif %}
+
+                      # unknown question kind -> fall back to permission semantics (do nothing here)
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_q_kind == 'unknown' }}"
+                        sequence: []
+          # announce unclear response if configured
+          - alias: "announce unclear response if configured"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ announce_unclear and (s1_is_unclear | default(false)) }}"
+                sequence:
+                  # use custom phrase if provided, else generate via LLM
+                  - alias: "use custom phrase if provided, else generate via LLM"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_fallback == 'do_it_anyway' and (p_unclear_do | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 1: announce unclear (doing anyway) via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_unclear_do }}"
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_fallback != 'do_it_anyway' and (p_unclear_skip | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 1: announce unclear (skipping) via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_unclear_skip }}"
+                    default:
+                      - alias: "Stage 1: generate unclear response via LLM"
+                        action: conversation.process
+                        continue_on_error: true
+                        data:
+                          agent_id: "{{ agent_id }}"
+                          text: >
+                            {{ _pfx }}
+                            {% if s1_fallback == 'do_it_anyway' %}
+                              {{ v_prompt_unclear_proceed }}
+                            {% else %}
+                              {{ v_prompt_unclear_skip }}
+                            {% endif %}
+                        response_variable: unclear_resp
+                      - alias: "Stage 1: announce unclear response via satellite"
+                        action: assist_satellite.announce
+                        continue_on_error: true
+                        data:
+                          entity_id: "{{ sat }}"
+                          message: "{{ unclear_resp.response.speech.plain.speech | default('') }}"
+
+          # handle abort
+          - alias: "handle abort"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s1_allow == 'abort' }}"
+                sequence:
+                  - alias: "Set script aborted"
+                    variables:
+                      script_aborted: true
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (p_cancel | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 1: announce abort (custom phrase) via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_cancel }}"
+                    default:
+                      - alias: "Stage 1: generate abort message via LLM"
+                        action: conversation.process
+                        continue_on_error: true
+                        data:
+                          agent_id: "{{ agent_id }}"
+                          text: "{{ _pfx }} {{ v_prompt_cancel }}"
+                        response_variable: cancel_resp
+                      - alias: "Stage 1: announce abort via satellite"
+                        action: assist_satellite.announce
+                        continue_on_error: true
+                        data:
+                          entity_id: "{{ sat }}"
+                          message: "{{ cancel_resp.response.speech.plain.speech | default('') }}"
+
+
+          # if user said no: acknowledge and skip stage 3 (bedtime audio)
+          - alias: "if user said no: acknowledge and skip stage 3 (bedtime audio)"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s1_allow == 'no' and not script_aborted }}"
+                sequence:
+                  - alias: "Stage 1: acknowledge TV stays on via LLM"
+                    action: conversation.process
+                    continue_on_error: true
+                    data:
+                      agent_id: "{{ agent_id }}"
+                      text: "{{ _pfx }} {{ v_prompt_tv_stays_on }}"
+                    response_variable: s1_no_resp
+                  - alias: "Stage 1: announce TV stays on via satellite"
+                    action: assist_satellite.announce
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ sat }}"
+                      message: "{{ s1_no_resp.response.speech.plain.speech | default('') }}"
+                  - alias: "Set skip stage3 due to tv"
+                    variables:
+                      skip_stage3_due_to_tv: true
+
+          # execute if allowed
+          - alias: "execute if allowed"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s1_allow == 'yes' and not script_aborted }}"
+                sequence:
+                  - alias: "Repeat for each item"
+                    repeat:
+                      for_each: "{{ s1_scripts }}"
+                      sequence:
+                        - alias: "Execute script"
+                          action: script.turn_on
+                          continue_on_error: true
+                          data:
+                            entity_id: "{{ repeat.item }}"
+                  # confirm completion
+                  - alias: "confirm completion"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s1_confirm }}"
+                        sequence:
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_confirm | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 1: announce completion (custom phrase) via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_confirm }}"
+                            default:
+                              - alias: "Stage 1: generate completion message via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_confirm_tv_off }}"
+                                response_variable: confirm_resp
+                              - alias: "Stage 1: announce completion via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ confirm_resp.response.speech.plain.speech | default('') }}"
+
+          - alias: "Set stage1 done"
+            variables:
+              stage1_done: true
+
+  # inter-stage delay
+  - alias: "inter-stage delay"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ stage_delay > 0 and not script_aborted }}"
+        sequence:
+          - alias: "Wait configured seconds"
+            delay:
+              seconds: "{{ stage_delay }}"
+
+  # ---------------------------------------------------------------------
+  # stage 2 - turn off targets
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ s2_enabled and s2_mode != 'skip' and (s2_targets != {}) and not stage2_done and not script_aborted }}"
+        sequence:
+          - alias: "Set s2 allow"
+            variables:
+              s2_allow: >
+                {% if express or s2_mode == 'do_it_anyway' %}yes
+                {% elif s2_mode == 'ask' %}unknown
+                {% else %}no{% endif %}
+
+          # ask if needed
+          - alias: "ask if needed"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s2_allow == 'unknown' }}"
+                sequence:
+                  - alias: "Stage 2: ask user via LLM"
+                    action: conversation.process
+                    continue_on_error: true
+                    data:
+                      agent_id: "{{ agent_id }}"
+                      text: >
+                        {{ _pfx }}
+                        {{ v_prompt_ask_devices_off }}
+                        context:
+                        {{ context_block }}
+                    response_variable: s2_q
+                  - alias: "Set s2 q text, s2 q retries left"
+                    variables:
+                      s2_q_text: "{{ s2_q.response.speech.plain.speech | default('turn off ' ~ s2_name ~ '?') }}"
+                      s2_q_retries_left: "{{ qa_unclear_retries | int(0) }}"
+                  - alias: "Stage 2: ask permission via satellite"
+                    action: assist_satellite.ask_question
+                    continue_on_error: true
+                    data:
+                      entity_id: "{{ sat }}"
+                      question: "{{ s2_q_text }}"
+                      answers: []
+                    response_variable: s2_a
+                  - alias: "Set s2 s and 4 more variables"
+                    variables:
+                      s2_s: "{{ (s2_a.sentence | default('') | lower | trim) if s2_a is defined else '' }}"
+                      s2_aborted: "{{ s2_s != '' and (s2_s | regex_search(abort_pattern)) }}"
+                      s2_is_yes: "{{ s2_s != '' and (s2_s | regex_search(yes_pattern)) }}"
+                      s2_is_no: "{{ s2_s != '' and (s2_s | regex_search(no_pattern)) }}"
+                      s2_is_unclear: "{{ s2_s != '' and not s2_aborted and not s2_is_yes and not s2_is_no }}"
+                  - alias: "Repeat while condition holds"
+                    repeat:
+                      while:
+                        - condition: template
+                          value_template: "{{ s2_is_unclear and (s2_q_retries_left | int(0)) > 0 and not s2_aborted }}"
+                      sequence:
+                        - alias: "Set s2 q retries left"
+                          variables:
+                            s2_q_retries_left: "{{ (s2_q_retries_left | int(0)) - 1 }}"
+                        - alias: "Stage 2: retry permission (unclear response)"
+                          action: assist_satellite.ask_question
+                          continue_on_error: true
+                          data:
+                            entity_id: "{{ sat }}"
+                            question: "{{ s2_q_text }} please answer yes or no."
+                            answers: []
+                          response_variable: s2_a
+                        - alias: "Set s2 s and 4 more variables"
+                          variables:
+                            s2_s: "{{ (s2_a.sentence | default('') | lower | trim) if s2_a is defined else '' }}"
+                            s2_aborted: "{{ s2_s != '' and (s2_s | regex_search(abort_pattern)) }}"
+                            s2_is_yes: "{{ s2_s != '' and (s2_s | regex_search(yes_pattern)) }}"
+                            s2_is_no: "{{ s2_s != '' and (s2_s | regex_search(no_pattern)) }}"
+                            s2_is_unclear: "{{ s2_s != '' and not s2_aborted and not s2_is_yes and not s2_is_no }}"
+                  - alias: "Set s2 allow"
+                    variables:
+                      s2_allow: >
+                        {% if s2_aborted %}abort
+                        {% elif s2_is_yes %}yes
+                        {% elif s2_is_no %}no
+                        {% else %}no{% endif %}
+
+          # announce unclear response if configured
+          - alias: "announce unclear response if configured"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ announce_unclear and (s2_is_unclear | default(false)) }}"
+                sequence:
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s2_fallback == 'do_it_anyway' and (p_unclear_do | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 2: announce via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_unclear_do }}"
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s2_fallback != 'do_it_anyway' and (p_unclear_skip | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 2: announce via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_unclear_skip }}"
+                    default:
+                      - alias: "Stage 2: ask user via LLM"
+                        action: conversation.process
+                        continue_on_error: true
+                        data:
+                          agent_id: "{{ agent_id }}"
+                          text: >
+                            {{ _pfx }}
+                            {% if s2_fallback == 'do_it_anyway' %}
+                              {{ v_prompt_unclear_proceed }}
+                            {% else %}
+                              {{ v_prompt_unclear_skip }}
+                            {% endif %}
+                        response_variable: unclear_resp2
+                      - alias: "Stage 2: announce via satellite"
+                        action: assist_satellite.announce
+                        continue_on_error: true
+                        data:
+                          entity_id: "{{ sat }}"
+                          message: "{{ unclear_resp2.response.speech.plain.speech | default('') }}"
+
+          # handle abort
+          - alias: "handle abort"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s2_allow == 'abort' }}"
+                sequence:
+                  - alias: "Set script aborted"
+                    variables:
+                      script_aborted: true
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (p_cancel | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 2: announce via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_cancel }}"
+                    default:
+                      - alias: "Stage 2: ask user via LLM"
+                        action: conversation.process
+                        continue_on_error: true
+                        data:
+                          agent_id: "{{ agent_id }}"
+                          text: "{{ _pfx }} {{ v_prompt_cancel }}"
+                        response_variable: cancel_resp2
+                      - alias: "Stage 2: announce via satellite"
+                        action: assist_satellite.announce
+                        continue_on_error: true
+                        data:
+                          entity_id: "{{ sat }}"
+                          message: "{{ cancel_resp2.response.speech.plain.speech | default('') }}"
+
+          # execute if allowed
+          - alias: "execute if allowed"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s2_allow == 'yes' and not script_aborted }}"
+                sequence:
+                  - alias: "Stage 2: turn off targets"
+                    action: homeassistant.turn_off
+                    continue_on_error: true
+                    target: !input stage2_targets
+                  # confirm completion
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s2_confirm }}"
+                        sequence:
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_confirm | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 2: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_confirm }}"
+                            default:
+                              - alias: "Stage 2: ask user via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_confirm_devices_off }}"
+                                response_variable: confirm_resp2
+                              - alias: "Stage 2: announce via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ confirm_resp2.response.speech.plain.speech | default('') }}"
+
+          - alias: "Set stage2 done"
+            variables:
+              stage2_done: true
+
+  # inter-stage delay
+  - alias: "inter-stage delay"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ stage_delay > 0 and not script_aborted }}"
+        sequence:
+          - alias: "Wait configured seconds"
+            delay:
+              seconds: "{{ stage_delay }}"
+
+  # ---------------------------------------------------------------------
+  # stage 3 - bedtime audio: confirm -> ask what to play -> search -> announce -> play
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ s3_enabled and s3_mode != 'skip' and not stage3_done and s3_player is not none and s3_player != '' and not script_aborted and not skip_stage3_due_to_tv }}"
+        sequence:
+          # check for missing config_entry_id
+          - alias: "check for missing config_entry_id"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ s3_config_entry_id is not defined or s3_config_entry_id == '' or s3_config_entry_id is none }}"
+                sequence:
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (p_ma_error | trim) != '' }}"
+                        sequence:
+                          - alias: "Stage 3: announce via satellite"
+                            action: assist_satellite.announce
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              message: "{{ p_ma_error }}"
+                    default:
+                      - alias: "Stage 3: process via LLM"
+                        action: conversation.process
+                        continue_on_error: true
+                        data:
+                          agent_id: "{{ agent_id }}"
+                          text: "{{ _pfx }} {{ v_prompt_ma_missing }}"
+                        response_variable: ma_err_resp
+                      - alias: "Stage 3: announce via satellite"
+                        action: assist_satellite.announce
+                        continue_on_error: true
+                        data:
+                          entity_id: "{{ sat }}"
+                          message: "{{ ma_err_resp.response.speech.plain.speech | default('') }}"
+                  - alias: "Set stage3 done"
+                    variables:
+                      stage3_done: true
+
+          - alias: "Choose action path"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not stage3_done }}"
+                sequence:
+                  - alias: "Set s3 is playing and 4 more variables"
+                    variables:
+                      s3_is_playing: "{{ is_state(s3_player, 'playing') or is_state(s3_player, 'paused') }}"
+                      # express mode skips the "do you want music" question but still asks "what to play"
+                      s3_need_confirm: "{{ s3_mode == 'ask' and not express }}"
+                      s3_allow: "unknown"
+                      # apply late-night category bias
+                      s3_effective_category: >
+                        {% if s3_category == 'auto' and is_late and late_category_bias != 'none' %}
+                          {{ late_category_bias }}
+                        {% else %}
+                          {{ s3_category }}
+                        {% endif %}
+                      # if already playing and policy is keep -> bail early
+                      s3_bail_keep: "{{ s3_is_playing and s3_if_playing == 'keep' }}"
+
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_bail_keep }}"
+                        sequence:
+                          - alias: "Set stage3 done"
+                            variables:
+                              stage3_done: true
+
+                  # if playing and stop_and_ask -> clear first, then proceed
+                  - alias: "if playing and stop_and_ask -> clear first, then proceed"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_is_playing and s3_if_playing == 'stop_and_ask' and not s3_bail_keep }}"
+                        sequence:
+                          - alias: "Stage 3: clear player queue"
+                            action: media_player.clear_playlist
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ s3_player }}"
+
+                  # if playing and ask_to_replace -> ask whether to replace (unless express mode)
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_is_playing and s3_if_playing == 'ask_to_replace' and s3_need_confirm and not s3_bail_keep }}"
+                        sequence:
+                          - alias: "Stage 3: process via LLM"
+                            action: conversation.process
+                            continue_on_error: true
+                            data:
+                              agent_id: "{{ agent_id }}"
+                              text: >
+                                {{ _pfx }}
+                                {{ v_prompt_ask_replace_audio }}
+                                context:
+                                {{ context_block }}
+                            response_variable: s3_swq
+                          - alias: "Set s3 swq text, s3 swq retries left"
+                            variables:
+                              s3_swq_text: "{{ s3_swq.response.speech.plain.speech | default('replace what is playing?') }}"
+                              s3_swq_retries_left: "{{ qa_unclear_retries | int(0) }}"
+                          - alias: "Stage 3: ask replace current playback via satellite"
+                            action: assist_satellite.ask_question
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              question: "{{ s3_swq_text }}"
+                              answers: []
+                            response_variable: s3_swa
+                          - alias: "Set s3 sws and 4 more variables"
+                            variables:
+                              s3_sws: "{{ (s3_swa.sentence | default('') | lower | trim) if s3_swa is defined else '' }}"
+                              s3_sw_aborted: "{{ s3_sws != '' and (s3_sws | regex_search(abort_pattern)) }}"
+                              s3_sw_is_yes: "{{ s3_sws != '' and (s3_sws | regex_search(yes_pattern)) }}"
+                              s3_sw_is_no: "{{ s3_sws != '' and (s3_sws | regex_search(no_pattern)) }}"
+                              s3_sw_is_unclear: "{{ s3_sws != '' and not s3_sw_aborted and not s3_sw_is_yes and not s3_sw_is_no }}"
+                          - alias: "Repeat while condition holds"
+                            repeat:
+                              while:
+                                - condition: template
+                                  value_template: "{{ s3_sw_is_unclear and (s3_swq_retries_left | int(0)) > 0 and not s3_sw_aborted }}"
+                              sequence:
+                                - alias: "Set s3 swq retries left"
+                                  variables:
+                                    s3_swq_retries_left: "{{ (s3_swq_retries_left | int(0)) - 1 }}"
+                                - alias: "Stage 3: retry replace playback (unclear response)"
+                                  action: assist_satellite.ask_question
+                                  continue_on_error: true
+                                  data:
+                                    entity_id: "{{ sat }}"
+                                    question: "{{ s3_swq_text }} please answer yes or no."
+                                    answers: []
+                                  response_variable: s3_swa
+                                - alias: "Set s3 sws and 4 more variables"
+                                  variables:
+                                    s3_sws: "{{ (s3_swa.sentence | default('') | lower | trim) if s3_swa is defined else '' }}"
+                                    s3_sw_aborted: "{{ s3_sws != '' and (s3_sws | regex_search(abort_pattern)) }}"
+                                    s3_sw_is_yes: "{{ s3_sws != '' and (s3_sws | regex_search(yes_pattern)) }}"
+                                    s3_sw_is_no: "{{ s3_sws != '' and (s3_sws | regex_search(no_pattern)) }}"
+                                    s3_sw_is_unclear: "{{ s3_sws != '' and not s3_sw_aborted and not s3_sw_is_yes and not s3_sw_is_no }}"
+                          - alias: "Set s3 allow"
+                            variables:
+                              s3_allow: >
+                                {% if s3_sw_aborted %}abort
+                                {% elif s3_sw_is_yes %}yes
+                                {% elif s3_sw_is_no %}no
+                                {% else %}no{% endif %}
+
+                          # announce unclear response if configured
+                          - alias: "announce unclear response if configured"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ announce_unclear and s3_sw_is_unclear }}"
+                                sequence:
+                                  - alias: "Choose action path"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ s3_fallback == 'safe_default' and (p_unclear_do | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: announce via satellite"
+                                            action: assist_satellite.announce
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ sat }}"
+                                              message: "{{ p_unclear_do }}"
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ s3_fallback != 'safe_default' and (p_unclear_skip | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: announce via satellite"
+                                            action: assist_satellite.announce
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ sat }}"
+                                              message: "{{ p_unclear_skip }}"
+                                    default:
+                                      - alias: "Stage 3: process via LLM"
+                                        action: conversation.process
+                                        continue_on_error: true
+                                        data:
+                                          agent_id: "{{ agent_id }}"
+                                          text: >
+                                            {{ _pfx }}
+                                            {% if s3_fallback == 'safe_default' %}
+                                              {{ v_prompt_unclear_proceed }}
+                                            {% else %}
+                                              {{ v_prompt_unclear_skip }}
+                                            {% endif %}
+                                        response_variable: unclear_resp3
+                                      - alias: "Stage 3: announce via satellite"
+                                        action: assist_satellite.announce
+                                        continue_on_error: true
+                                        data:
+                                          entity_id: "{{ sat }}"
+                                          message: "{{ unclear_resp3.response.speech.plain.speech | default('') }}"
+
+                  # handle abort from replace question
+                  - alias: "handle abort from replace question"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_allow == 'abort' }}"
+                        sequence:
+                          - alias: "Set script aborted"
+                            variables:
+                              script_aborted: true
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_cancel | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 3: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_cancel }}"
+                            default:
+                              - alias: "Stage 3: process via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
+                                response_variable: cancel_resp3
+                              - alias: "Stage 3: announce via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ cancel_resp3.response.speech.plain.speech | default('') }}"
+
+                  # main confirmation (if still unknown and ask mode, not express)
+                  - alias: "main confirmation (if still unknown and ask mode, not express)"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_need_confirm and s3_allow == 'unknown' and not script_aborted }}"
+                        sequence:
+                          - alias: "Set s3 main q"
+                            variables:
+                              s3_main_q: >
+                                {% if s3_question_style == 'custom' and (s3_custom_question | trim) != '' %}
+                                  {{ s3_custom_question }}
+                                {% elif s3_question_style == 'music_only' %}
+                                  want me to put on some music?
+                                {% elif s3_question_style == 'story_only' %}
+                                  want me to put on a bedtime story?
+                                {% else %}
+                                  want to play some music or a bedtime story?
+                                {% endif %}
+                          - alias: "Set s3 main text, s3 main retries left"
+                            variables:
+                              s3_main_text: "{{ s3_main_q }}"
+                              s3_main_retries_left: "{{ qa_unclear_retries | int(0) }}"
+                          - alias: "Stage 3: ask want bedtime audio via satellite"
+                            action: assist_satellite.ask_question
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              question: "{{ s3_main_text }}"
+                              answers: []
+                            response_variable: s3_a
+                          - alias: "Set s3 s and 4 more variables"
+                            variables:
+                              s3_s: "{{ (s3_a.sentence | default('') | lower | trim) if s3_a is defined else '' }}"
+                              s3_main_aborted: "{{ s3_s != '' and (s3_s | regex_search(abort_pattern)) }}"
+                              s3_main_is_yes: "{{ s3_s != '' and (s3_s | regex_search(yes_pattern)) }}"
+                              s3_main_is_no: "{{ s3_s != '' and (s3_s | regex_search(no_pattern)) }}"
+                              s3_main_is_unclear: "{{ s3_s != '' and not s3_main_aborted and not s3_main_is_yes and not s3_main_is_no }}"
+                          - alias: "Repeat while condition holds"
+                            repeat:
+                              while:
+                                - condition: template
+                                  value_template: "{{ s3_main_is_unclear and (s3_main_retries_left | int(0)) > 0 and not s3_main_aborted }}"
+                              sequence:
+                                - alias: "Set s3 main retries left"
+                                  variables:
+                                    s3_main_retries_left: "{{ (s3_main_retries_left | int(0)) - 1 }}"
+                                - alias: "Stage 3: retry bedtime audio question (unclear response)"
+                                  action: assist_satellite.ask_question
+                                  continue_on_error: true
+                                  data:
+                                    entity_id: "{{ sat }}"
+                                    question: "{{ s3_main_text }} please answer yes or no."
+                                    answers: []
+                                  response_variable: s3_a
+                                - alias: "Set s3 s and 4 more variables"
+                                  variables:
+                                    s3_s: "{{ (s3_a.sentence | default('') | lower | trim) if s3_a is defined else '' }}"
+                                    s3_main_aborted: "{{ s3_s != '' and (s3_s | regex_search(abort_pattern)) }}"
+                                    s3_main_is_yes: "{{ s3_s != '' and (s3_s | regex_search(yes_pattern)) }}"
+                                    s3_main_is_no: "{{ s3_s != '' and (s3_s | regex_search(no_pattern)) }}"
+                                    s3_main_is_unclear: "{{ s3_s != '' and not s3_main_aborted and not s3_main_is_yes and not s3_main_is_no }}"
+                          - alias: "Set s3 allow"
+                            variables:
+                              s3_allow: >
+                                {% if s3_main_aborted %}abort
+                                {% elif s3_main_is_yes %}yes
+                                {% elif s3_main_is_no %}no
+                                {% else %}no{% endif %}
+
+                          # announce unclear response if configured
+                          - alias: "announce unclear response if configured"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ announce_unclear and s3_main_is_unclear }}"
+                                sequence:
+                                  - alias: "Choose action path"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ s3_fallback == 'safe_default' and (p_unclear_do | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: announce via satellite"
+                                            action: assist_satellite.announce
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ sat }}"
+                                              message: "{{ p_unclear_do }}"
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ s3_fallback != 'safe_default' and (p_unclear_skip | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: announce via satellite"
+                                            action: assist_satellite.announce
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ sat }}"
+                                              message: "{{ p_unclear_skip }}"
+                                    default:
+                                      - alias: "Stage 3: process via LLM"
+                                        action: conversation.process
+                                        continue_on_error: true
+                                        data:
+                                          agent_id: "{{ agent_id }}"
+                                          text: >
+                                            {{ _pfx }}
+                                            {% if s3_fallback == 'safe_default' %}
+                                              {{ v_prompt_unclear_proceed }}
+                                            {% else %}
+                                              {{ v_prompt_unclear_skip }}
+                                            {% endif %}
+                                        response_variable: unclear_resp4
+                                      - alias: "Stage 3: announce via satellite"
+                                        action: assist_satellite.announce
+                                        continue_on_error: true
+                                        data:
+                                          entity_id: "{{ sat }}"
+                                          message: "{{ unclear_resp4.response.speech.plain.speech | default('') }}"
+
+                  # handle abort from main question
+                  - alias: "handle abort from main question"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_allow == 'abort' }}"
+                        sequence:
+                          - alias: "Set script aborted"
+                            variables:
+                              script_aborted: true
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_cancel | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 3: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_cancel }}"
+                            default:
+                              - alias: "Stage 3: process via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
+                                response_variable: cancel_resp4
+                              - alias: "Stage 3: announce via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ cancel_resp4.response.speech.plain.speech | default('') }}"
+
+                  # if just_do or express, allow = yes
+                  - alias: "if just_do or express, allow = yes"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (not s3_need_confirm or express) and s3_allow == 'unknown' and not script_aborted }}"
+                        sequence:
+                          - alias: "Set s3 allow"
+                            variables:
+                              s3_allow: "yes"
+
+                  # stop here if not allowed
+                  - alias: "stop here if not allowed"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_allow != 'yes' or script_aborted }}"
+                        sequence:
+                          - alias: "Set stage3 done"
+                            variables:
+                              stage3_done: true
+
+                  # if allowed, ask "what do you want to play?"
+                  - alias: "If allowed, ask what do you want to play"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ s3_allow == 'yes' and not stage3_done and not script_aborted }}"
+                        sequence:
+                          - alias: "Set what to play q"
+                            variables:
+                              what_to_play_q: >
+                                {% set cat = s3_effective_category %}
+                                {% if cat == 'music' %}okay, what music should I put on?
+                                {% elif cat == 'audiobook' %}okay, what audiobook should I put on?
+                                {% elif cat == 'podcast' %}okay, what podcast should I put on?
+                                {% elif cat == 'radio' %}okay, which radio station should I put on?
+                                {% else %}okay, what should I put on?{% endif %}
+                          - alias: "Stage 3: ask what to play via satellite"
+                            action: assist_satellite.ask_question
+                            continue_on_error: true
+                            data:
+                              entity_id: "{{ sat }}"
+                              question: "{{ what_to_play_q }}"
+                              answers: []
+                            response_variable: s3_q_a
+                          - alias: "Set user query raw, query aborted"
+                            variables:
+                              user_query_raw: "{{ (s3_q_a.sentence | default('') | trim) if s3_q_a is defined else '' }}"
+                              query_aborted: "{{ user_query_raw != '' and (user_query_raw | lower | regex_search(abort_pattern)) }}"
+
+                  # handle abort from "what to play" question
+                  - alias: "Handle abort from content selection question"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ query_aborted | default(false) }}"
+                        sequence:
+                          - alias: "Set script aborted"
+                            variables:
+                              script_aborted: true
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_cancel | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 3: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_cancel }}"
+                            default:
+                              - alias: "Stage 3: process via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_cancel }}"
+                                response_variable: cancel_resp5
+                              - alias: "Stage 3: announce via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ cancel_resp5.response.speech.plain.speech | default('') }}"
+
+                  # handle empty query: do nothing
+                  - alias: "handle empty query: do nothing"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (user_query_raw | default('') | trim) == '' and not script_aborted }}"
+                        sequence:
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ (p_unclear_skip | trim) != '' }}"
+                                sequence:
+                                  - alias: "Stage 3: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ p_unclear_skip }}"
+                            default:
+                              - alias: "Stage 3: process via LLM"
+                                action: conversation.process
+                                continue_on_error: true
+                                data:
+                                  agent_id: "{{ agent_id }}"
+                                  text: "{{ _pfx }} {{ v_prompt_no_speech }}"
+                                response_variable: empty_resp
+                              - alias: "Stage 3: announce via satellite"
+                                action: assist_satellite.announce
+                                continue_on_error: true
+                                data:
+                                  entity_id: "{{ sat }}"
+                                  message: "{{ empty_resp.response.speech.plain.speech | default('') }}"
+                          - alias: "Set stage3 done"
+                            variables:
+                              stage3_done: true
+
+                  # auto category: classify based on query keywords (with late-night bias)
+                  - alias: "Choose action path"
+                    choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ not stage3_done and not script_aborted and (user_query_raw | default('') | trim) != '' }}"
+                        sequence:
+                          - alias: "Set auto cat, s3 effective category final"
+                            variables:
+                              auto_cat: >
+                                {% set q = user_query_raw | lower %}
+                                {% if 'radio' in q or 'station' in q %}radio
+                                {% elif 'podcast' in q or 'episode' in q %}podcast
+                                {% elif 'audiobook' in q or 'boek' in q or 'libro' in q or 'verhaal' in q or 'story' in q or 'sleep' in q %}audiobook
+                                {% elif is_late and late_category_bias != 'none' %}{{ late_category_bias }}
+                                {% else %}music{% endif %}
+                              s3_effective_category_final: >
+                                {% if s3_category == 'auto' %}{{ auto_cat }}{% else %}{{ s3_effective_category }}{% endif %}
+
+                          # llm -> json -> play_media (no Music Assistant search)
+                          - alias: "Stage 3: process via LLM"
+                            action: conversation.process
+                            continue_on_error: true
+                            data:
+                              agent_id: "{{ agent_id }}"
+                              text: >
+                                {{ _pfx }}
+                                you control music assistant playback for bedtime.
+
+                                user request: "{{ user_query_raw | default('', true) | trim }}"
+                                requested category: "{{ s3_effective_category_final | default('music') }}"
+
+                                return only valid json (no markdown, no extra text) in this exact shape:
+                                {"action":"play_media","action_data":{"media_id":"<string>","media_type":"<one of: track, album, playlist, audiobook, podcast, radio>","artist":"NA","album":"NA","radio_mode":"NA"}}
+
+                                rules:
+                                - choose the best match available in music assistant providers for this query and category.
+                                - if artist/album/radio_mode not applicable, use "NA".
+                            response_variable: s3_llm
+
+                          - alias: "Set s3 llm speech and 7 more variables"
+                            variables:
+                              s3_llm_speech: "{{ s3_llm.response.speech.plain.speech | default('', true) }}"
+                              s3_llm_speech_str: "{{ s3_llm_speech | string }}"
+                              s3_llm_speech_unescaped: '{{ s3_llm_speech_str | replace("\\\"", "\"") | trim }}'
+                              s3_llm_parsed: "{{ (s3_llm_speech if (s3_llm_speech is mapping) else ((s3_llm_speech_unescaped | from_json(default=dict(action='none', action_data={}))) if s3_llm_speech_unescaped.startswith('{') else dict(action='none', action_data={}))) }}"
+                              llm_action_data_raw: "{{ s3_llm_parsed.action_data | default({}, true) }}"
+                              llm_action_data: "{{ dict(llm_action_data_raw.items() | rejectattr('1','eq','NA') | rejectattr('1','eq','') ) }}"
+                              chosen_media_id: "{{ llm_action_data_raw.media_id | default('', true) | trim }}"
+                              chosen_media_type: "{{ llm_action_data_raw.media_type | default('', true) | trim }}"
+
+                          - alias: "Choose action path"
+                            choose:
+                              - conditions:
+                                  - condition: template
+                                    value_template: "{{ chosen_media_id != '' and chosen_media_type != '' }}"
+                                sequence:
+                                  - alias: "Choose action path"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ (p_playing | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: announce via satellite"
+                                            action: assist_satellite.announce
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ sat }}"
+                                              message: "{{ p_playing }}"
+                                    default:
+                                      - alias: "Stage 3: process via LLM"
+                                        action: conversation.process
+                                        continue_on_error: true
+                                        data:
+                                          agent_id: "{{ agent_id }}"
+                                          text: "{{ _pfx }} {{ v_prompt_confirm_audio }}"
+                                        response_variable: playing_resp
+                                      - alias: "Stage 3: announce via satellite"
+                                        action: assist_satellite.announce
+                                        continue_on_error: true
+                                        data:
+                                          entity_id: "{{ sat }}"
+                                          message: "{{ playing_resp.response.speech.plain.speech | default('') }}"
+
+                                  # clear queue if configured
+                                  - alias: "clear queue if configured"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ s3_queue_behavior == 'clear_then_replace' }}"
+                                        sequence:
+                                          - alias: "Stage 3: clear player queue"
+                                            action: media_player.clear_playlist
+                                            continue_on_error: true
+                                            data:
+                                              entity_id: "{{ s3_player }}"
+
+                                  # resolve llm media_id to a real music assistant uri when needed
+                                  - alias: "Set llm media id raw and 3 more variables"
+                                    variables:
+                                      llm_media_id_raw: "{{ llm_action_data.media_id | default('', true) | string | trim }}"
+                                      llm_media_type_raw: "{{ llm_action_data.media_type | default('', true) | string | trim }}"
+                                      s3_resolve_query: "{{ (user_query_raw | default('', true) | string | trim) if (user_query_raw is defined and (user_query_raw | string | trim) != '') else llm_media_id_raw }}"
+                                      llm_media_id_is_uri: "{{ llm_media_id_raw != '' and (llm_media_id_raw.startswith('library://') or '://' in llm_media_id_raw) }}"
+                                  - alias: "Choose action path"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ not llm_media_id_is_uri and llm_media_type_raw != '' and s3_resolve_query != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: search Music Assistant library"
+                                            action: music_assistant.search
+                                            continue_on_error: true
+                                            data:
+                                              name: "{{ s3_resolve_query }}"
+                                              media_types:
+                                                - "{{ llm_media_type_raw }}"
+                                              limit: 10
+                                              config_entry_id: "{{ s3_config_entry_id }}"
+                                            response_variable: s3_resolve
+                                          - alias: "Set s3 list and 4 more variables"
+                                            variables:
+                                              s3_list: "{{ (s3_resolve[llm_media_type_raw + 's'] if (s3_resolve is defined and (llm_media_type_raw + 's') in s3_resolve) else []) | default([], true) }}"
+                                              s3_best_by_query: "{{ (s3_list | selectattr('name','defined') | selectattr('name','lower','eq',(s3_resolve_query | lower)) | list | first | default(none)) }}"
+                                              s3_best_by_raw: "{{ (s3_list | selectattr('name','defined') | selectattr('name','lower','eq',(llm_media_id_raw | lower)) | list | first | default(none)) }}"
+                                              s3_best: "{{ s3_best_by_query if (s3_best_by_query is not none) else (s3_best_by_raw if (s3_best_by_raw is not none) else ((s3_list | list | first) if (s3_list | length) > 0 else none)) }}"
+                                              resolved_media_id: "{{ (s3_best.uri if (s3_best is not none and (s3_best.uri | default('', true) | string | trim) != '') else llm_media_id_raw) }}"
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ llm_media_id_is_uri }}"
+                                        sequence:
+                                          - alias: "Set resolved media id"
+                                            variables:
+                                              resolved_media_id: "{{ llm_media_id_raw }}"
+                                    default:
+                                      - alias: "Set resolved media id"
+                                        variables:
+                                          resolved_media_id: "{{ llm_media_id_raw }}"
+
+                                  # play via Music Assistant (or delegate to a custom script)
+                                  - alias: "play via Music Assistant (or delegate to a custom script)"
+                                    choose:
+                                      - conditions:
+                                          - condition: template
+                                            value_template: "{{ (s3_delegate_script_entity_id | default('', true) | string | trim) != '' }}"
+                                        sequence:
+                                          - alias: "Stage 3: execute delegate playback script"
+                                            action: script.turn_on
+                                            continue_on_error: true
+                                            target:
+                                              entity_id: "{{ s3_delegate_script_entity_id }}"
+                                            data:
+                                              variables:
+                                                media_player: "{{ s3_player }}"
+                                                media_type: "{{ llm_action_data.media_type | default('', true) | string | trim }}"
+                                                media_id: "{{ resolved_media_id }}"
+                                                enqueue: "replace"
+                                                shuffle: false
+                                                query: "{{ user_query_raw | default('', true) | string | trim }}"
+                                    default:
+                                      - alias: "Stage 3: play media via Music Assistant"
+                                        action: music_assistant.play_media
+                                        continue_on_error: true
+                                        data: >
+                                          {{
+                                            (llm_action_data
+                                              | combine({
+                                                'media_id': resolved_media_id,
+                                                'entity_id': s3_player,
+                                                'enqueue': 'replace'
+                                              }))
+                                          }}
+
+                                  - alias: "Set stage3 done"
+                                    variables:
+                                      stage3_done: true
+                            default:
+                              - alias: "Choose action path"
+                                choose:
+                                  - conditions:
+                                      - condition: template
+                                        value_template: "{{ (p_ma_error | trim) != '' }}"
+                                    sequence:
+                                      - alias: "Stage 3: announce error via satellite"
+                                        action: assist_satellite.announce
+                                        continue_on_error: true
+                                        data:
+                                          entity_id: "{{ sat }}"
+                                          message: "{{ p_ma_error }}"
+                                default:
+                                  - alias: "Stage 3: process via LLM"
+                                    action: conversation.process
+                                    continue_on_error: true
+                                    data:
+                                      agent_id: "{{ agent_id }}"
+                                      text: "{{ _pfx }} {{ v_prompt_nothing_found }}"
+                                    response_variable: s3_notfound
+                                  - alias: "Stage 3: announce via satellite"
+                                    action: assist_satellite.announce
+                                    continue_on_error: true
+                                    data:
+                                      entity_id: "{{ sat }}"
+                                      message: "{{ s3_notfound.response.speech.plain.speech | default('') }}"
+                              - alias: "Set stage3 done"
+                                variables:
+                                  stage3_done: true
+
+  # ---------------------------------------------------------------------
+  # closing line (only if not aborted)
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ not script_aborted and close_mode == 'fixed_text' and (close_fixed | trim) != '' }}"
+        sequence:
+          - alias: "Closing: announce goodnight via satellite"
+            action: assist_satellite.announce
+            continue_on_error: true
+            data:
+              entity_id: "{{ sat }}"
+              message: "{{ close_fixed }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ not script_aborted and close_mode == 'llm_generated' }}"
+        sequence:
+          - alias: "Closing: generate goodnight via LLM"
+            action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_id }}"
+              text: >
+                {{ _pfx }}
+                {% if (close_prompt_custom | trim) != '' %}{{ close_prompt_custom }}{% else %}{{ baked_close_prompt }}{% endif %}
+                context:
+                {{ context_block }}
+            response_variable: close_llm
+
+          - alias: "Whisper — update self-awareness"
+            action: pyscript.agent_whisper
+            data:
+              agent_name: "{{ dispatch_persona }}"
+              user_query: "Goodnight negotiator bedtime interaction"
+              source: "automation"
+            continue_on_error: true
+
+          - alias: "Closing: announce LLM goodnight via satellite"
+            action: assist_satellite.announce
+            continue_on_error: true
+            data:
+              entity_id: "{{ sat }}"
+              message: "{{ close_llm.response.speech.plain.speech | default('') }}"
+
+  # ---------------------------------------------------------------------
+  # cleanup (best effort)
+  # ---------------------------------------------------------------------
+  - alias: "---------------------------------------------------------------------"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ helpers_enabled and (h_lock_boolean | trim) != '' }}"
+        sequence:
+          - alias: "Cleanup: release lock helper"
+            action: pyscript.set_sensor_value
+            continue_on_error: true
+            data:
+              entity_id: "{{ h_lock_boolean }}"
+              value: "off"
+              icon: "mdi:lock"
+              friendly_name: "AI Goodnight Bedtime Lock"

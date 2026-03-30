@@ -1,0 +1,231 @@
+# =============================================================================
+# Voice Session — Post-Pipeline Mic Control
+# =============================================================================
+# Triggered when ai_voice_session_pending is set. Waits for pipeline TTS
+# to finish, plays media (music compositions), then opens mic for feedback
+# via continuous conversation loop.
+#
+# Requires:
+#   - pyscript/voice_session.py (shared mic control services)
+#   - sensor.ai_voice_session_pending (trigger flag)
+#   - sensor.ai_last_satellite (satellite routing)
+#   - sensor.ai_continuous_conversation_active (stop signal)
+#
+# Create one instance (global — routes to the correct satellite via
+# ai_last_satellite, no per-satellite instances needed).
+# =============================================================================
+blueprint:
+  name: "Voice Session — Post-Pipeline Mic Control"
+  description: >
+    Triggered when ai_voice_session_pending is set. Waits for pipeline TTS
+    to finish, plays media (music compositions), then opens mic for feedback
+    via continuous conversation loop.
+  author: madalone
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/voice_session_mic.yaml
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ── ① Configuration ─────────────────────────────────────────
+    section_config:
+      name: "① Configuration"
+      icon: mdi:cog
+      collapsed: false
+      input:
+        silence_media:
+          name: Silence media URL
+          description: Audio file for silent mic open.
+          default: "http://homeassistant.local:8123/local/silence.wav"
+          selector:
+            text: {}
+
+        echo_guard_seconds:
+          name: Echo guard delay (seconds)
+          description: Wait after audio before opening mic.
+          default: 0.5
+          selector:
+            number:
+              min: 0
+              max: 5
+              step: 0.1
+
+        feedback_question:
+          name: Feedback question
+          description: >
+            Text spoken by the agent before opening mic on the first turn.
+            Leave empty for session types that don't need a verbal question.
+            For music_feedback, a sensible default is built automatically.
+          default: ""
+          selector:
+            text: {}
+
+        default_continuous_timeout:
+          name: Default continuous timeout (seconds)
+          description: >
+            Timeout for continuous loop if not in the request.
+          default: 120
+          selector:
+            number:
+              min: 10
+              max: 600
+
+    # ── ② Infrastructure ────────────────────────────────────────
+    section_infrastructure:
+      name: "② Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        ducking_flag:
+          name: "Ducking flag entity"
+          default: sensor.ai_ducking_flag
+          selector:
+            entity:
+
+        duck_guard_enabled:
+          name: "Duck guard enabled entity"
+          default: input_boolean.ai_duck_guard_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        session_pending_entity:
+          name: "Session pending entity"
+          description: "The sensor that triggers a voice session when set."
+          default: sensor.ai_voice_session_pending
+          selector:
+            entity:
+              domain: sensor
+
+        last_satellite_entity:
+          name: "Last satellite entity"
+          description: "Sensor that stores the last-active satellite entity_id."
+          default: sensor.ai_last_satellite
+          selector:
+            entity:
+
+mode: queued
+max: 3
+
+variables:
+  v_silence_media: !input silence_media
+  v_echo_guard: !input echo_guard_seconds
+  v_feedback_question_input: !input feedback_question
+  v_default_timeout: !input default_continuous_timeout
+  v_duck_flag: !input ducking_flag
+  v_duck_guard: !input duck_guard_enabled
+  _last_satellite: !input last_satellite_entity
+  # Derive HA base URL from silence_media (e.g. "http://host:8123")
+  v_ha_base_url: >-
+    {{ v_silence_media.split('/local/')[0] }}
+
+triggers:
+  - trigger: state
+    entity_id: !input session_pending_entity
+    not_to: ""
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state.state | length > 2 }}
+
+actions:
+  # ── 1. Parse request + clear flag ───────────────────────────────
+  - alias: "Parse request and extract fields"
+    variables:
+      parsed: "{{ trigger.to_state.state | from_json }}"
+      session_type: "{{ parsed.type | default('music_feedback') }}"
+      media_file: "{{ parsed.file | default('') }}"
+      target_player: "{{ parsed.player | default('') }}"
+      req_agent: "{{ parsed.agent | default('') }}"
+      req_volume: "{{ parsed.volume | default(0.5) | float(0.5) }}"
+      req_continuous: "{{ parsed.continuous | default(true) | bool }}"
+      req_timeout: "{{ parsed.continuous_timeout | default(v_default_timeout) | float }}"
+      satellite: "{{ states(_last_satellite) }}"
+
+  - alias: "Clear pending flag"
+    action: input_text.set_value
+    target:
+      entity_id: !input session_pending_entity
+    data:
+      value: ""
+
+  # ── 2. Build extra system prompt + feedback question ────────────
+  - alias: "Build extra system prompt and feedback question"
+    variables:
+      effective_esp: >-
+        {%- if session_type == 'music_feedback' -%}
+          You just composed a music track ({{ media_file.split('/')[-1] }})
+          for the user and it just finished playing.
+          The user may give feedback — do they want to keep it, change it,
+          or delete it? If they want changes (like "make it faster" or
+          "more bass"), call compose_music again with a modified prompt.
+          If they approve, call music_library with action "promote" and
+          cache_key "{{ media_file.split('/')[-1].split('.')[0] }}".
+          If they want to delete it, call music_library with action
+          "delete" and the same cache_key.
+        {%- else -%}
+          {{ parsed.extra_system_prompt | default('') }}
+        {%- endif -%}
+      effective_feedback_question: >-
+        {%- if v_feedback_question_input | length > 0 -%}
+          {{ v_feedback_question_input }}
+        {%- elif session_type == 'music_feedback' -%}
+          What did you think of the composition?
+        {%- else -%}
+        {%- endif -%}
+      feedback_context: >-
+        {%- if session_type == 'music_feedback' and media_file | length > 0 -%}
+          {{ media_file.split('/')[-1] }}|{{ media_file.split('/')[-1].split('.')[0] }}
+        {%- endif -%}
+
+  # ── 3. Wait for pipeline TTS to finish ──────────────────────────
+  - alias: "Wait for agent TTS to finish"
+    action: pyscript.voice_session_wait_audio
+    data:
+      satellite: "{{ satellite }}"
+      timeout: 30
+    continue_on_error: true
+
+  # ── 4. Build media URL for satellite playback ──────────────────
+  - alias: "Build composition URL for satellite"
+    variables:
+      composition_media_url: >-
+        {%- if session_type == 'music_feedback' and media_file | length > 0 -%}
+          {{ v_ha_base_url }}{{ media_file | replace('/config/www/', '/local/') }}
+        {%- else -%}
+        {%- endif -%}
+
+  # ── 5. Echo guard ───────────────────────────────────────────────
+  - alias: "Echo guard delay"
+    delay:
+      seconds: "{{ v_echo_guard | float(0.5) }}"
+
+  # ── 6. Open mic / continuous conversation ───────────────────────
+  #    Two-phase: Phase A announces composition via satellite (no mic),
+  #    Phase B opens feedback loop with start_message + extra_system_prompt
+  #    so the agent has full composition context on every turn.
+  - alias: "Open mic for feedback"
+    if:
+      - condition: template
+        value_template: "{{ req_continuous }}"
+    then:
+      - alias: "Continuous conversation for feedback"
+        action: pyscript.voice_session_continuous
+        data:
+          satellite: "{{ satellite }}"
+          silence_media: "{{ v_silence_media }}"
+          timeout: "{{ req_timeout }}"
+          no_speech_limit: 3
+          extra_system_prompt: "{{ effective_esp }}"
+          start_media_override: "{{ composition_media_url }}"
+          feedback_question: "{{ effective_feedback_question }}"
+          feedback_context: "{{ feedback_context }}"
+    else:
+      - alias: "Single mic open"
+        action: pyscript.voice_session_open_mic
+        data:
+          satellite: "{{ satellite }}"
+          silence_media: "{{ v_silence_media }}"
+          extra_system_prompt: "{{ effective_esp }}"
+          echo_guard_seconds: 0

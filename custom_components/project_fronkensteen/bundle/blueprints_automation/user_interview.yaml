@@ -1,0 +1,905 @@
+# =============================================================================
+# User Interview Blueprint — Orchestration
+# =============================================================================
+# Manages interview mode lifecycle: activate, auto-timeout, deactivate.
+# The actual interview is conducted by the LLM agent using hot context
+# guidance and the save_user_preference tool function.
+#
+# Uses continuous conversation loop (same pattern as voice_handoff.yaml)
+# so the agent keeps asking questions until interview mode is turned off.
+#
+# Instance: automation.ai_user_interview
+#
+# Deployed: 2026-03-11
+# Hardened: 2026-03-26 — budget gate, privacy gate, dispatcher toggle,
+#   user resolution, follow-me bypass, voice mood toggle, configurable
+#   prompts, tool suppression, exchange logging
+# =============================================================================
+
+blueprint:
+  name: "AI User Interview"
+  description: >
+    Manages the LLM-driven user preference interview. Activates interview
+    mode (hot context injection), runs a continuous conversation loop so
+    the agent keeps asking questions, and auto-deactivates after timeout.
+    Includes budget gate, privacy gate, and user resolution.
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/user_interview.yaml
+  author: madalone
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① Core
+    # ===========================================================================
+    core:
+      name: "① Core"
+      icon: mdi:account-voice
+      description: Satellite, speaker, interview toggle, and target user.
+      collapsed: false
+      input:
+        enable:
+          name: Enable
+          description: Kill switch for this automation instance.
+          default: true
+          selector:
+            boolean:
+
+        interview_toggle:
+          name: Interview mode toggle
+          description: >
+            Input boolean that activates interview mode. Turn ON to start,
+            OFF to stop. Auto-turns off after timeout.
+          default: input_boolean.ai_interview_mode
+          selector:
+            entity:
+              domain: input_boolean
+
+        satellite:
+          name: Satellite
+          description: The satellite to run the interview on.
+          default: ""
+          selector:
+            entity:
+              domain: assist_satellite
+
+        speaker:
+          name: Speaker (media player)
+          description: >
+            The media player entity for the satellite speaker. Used to detect
+            when TTS finishes playing before reopening the mic.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        interview_user:
+          name: Interview target user
+          description: >
+            Target user for the interview. Leave empty to auto-detect
+            from occupancy sensor, or pick a person from the registry.
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+        use_dispatcher:
+          name: Use AI dispatcher for voice
+          description: >
+            When enabled, resolves TTS voice via the AI dispatcher.
+            When disabled, uses the TTS voice entity directly.
+          default: true
+          selector:
+            boolean:
+
+    # ===========================================================================
+    # ② Configuration
+    # ===========================================================================
+    configuration:
+      name: "② Configuration"
+      icon: mdi:tune-variant
+      description: Timing, messages, voice, and prompt settings.
+      collapsed: true
+      input:
+        timeout_minutes:
+          name: Auto-timeout (minutes)
+          description: >
+            Automatically deactivate interview mode after this many minutes.
+            Prevents forgetting to turn it off.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 120
+              step: 5
+              unit_of_measurement: min
+
+        interview_language:
+          name: Interview language
+          description: >
+            Language for the interview conversation. The LLM will ask
+            questions and understand answers in this language.
+          default: "English"
+          selector:
+            select:
+              options:
+                - "English"
+                - "Spanish"
+                - "Valencian"
+                - "Dutch"
+                - "Portuguese"
+
+        start_message:
+          name: Start message
+          description: >
+            Opening line spoken via the satellite pipeline TTS when the
+            interview begins. Uses the satellite's configured voice.
+          default: "Alright, time to get to know you. First question — what's your full name?"
+          selector:
+            text:
+              multiline: true
+
+        tts_voice:
+          name: TTS voice entity
+          description: >
+            The TTS entity for the satellite's agent voice (e.g.,
+            tts.elevenlabs_rick_text_to_speech). Used to speak the
+            opening question in the correct voice.
+          default: ""
+          selector:
+            entity:
+              domain: tts
+
+        suppress_toggles:
+          name: Suppress during interview
+          description: >
+            Input booleans to turn OFF while the interview is running.
+            Restored to ON when the interview ends. Useful for silencing
+            notifications, follow-me, email alerts, etc.
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: true
+
+        interview_system_prompt:
+          name: Interview system prompt
+          description: >
+            LLM guidance injected on every mic reopen via extra_system_prompt.
+            Customize to change interview behavior.
+          default: >-
+            You are conducting a preference interview. Ask ONE question at a
+            time about the next unanswered topic. Keep questions natural and
+            conversational. When the user answers, call save_user_preference
+            with the parsed value. Do NOT call handoff_agent, start_debate,
+            or any non-interview tools.
+          selector:
+            text:
+              multiline: true
+
+        progress_prompt_template:
+          name: Progress prompt template
+          description: >
+            Template for "already asked" context. Use {done_list} as a
+            placeholder for the comma-separated list of completed topics.
+          default: >-
+            ALREADY ASKED (do NOT repeat): {done_list}. Ask about the NEXT
+            unanswered topic from the interview categories.
+          selector:
+            text:
+              multiline: true
+
+        voice_mood_during_interview:
+          name: Voice mood during interview
+          description: >
+            When OFF, temporarily disables voice mood modulation during the
+            interview for a more neutral voice.
+          default: true
+          selector:
+            boolean:
+
+        interview_style:
+          name: Interview style
+          description: >
+            Tone for the interview. Affects how the agent phrases questions.
+          default: "casual"
+          selector:
+            select:
+              options:
+                - label: "Casual — friendly and conversational"
+                  value: "casual"
+                - label: "Formal — professional and precise"
+                  value: "formal"
+                - label: "Playful — witty and engaging"
+                  value: "playful"
+                - label: "Brief — one short question, move on"
+                  value: "brief"
+
+        question_depth:
+          name: Question depth
+          description: >
+            How deeply the agent probes each topic before moving on.
+          default: "standard"
+          selector:
+            select:
+              options:
+                - label: "Surface — accept first answer, move on"
+                  value: "surface"
+                - label: "Standard — one follow-up if vague"
+                  value: "standard"
+                - label: "Deep — probe for specifics and details"
+                  value: "deep"
+
+        interviewer_context_template:
+          name: Interviewer context template
+          description: >
+            Template injected after the system prompt. Use {user} for the
+            target user and {language} for the interview language.
+          default: >-
+            You are interviewing {user}. Conduct the entire interview in
+            {language}. Ask questions, understand answers, and respond
+            ONLY in {language}.
+          selector:
+            text:
+              multiline: true
+
+        empty_progress_prompt:
+          name: Empty progress prompt
+          description: >
+            Message shown to the agent when no interview progress exists yet.
+          default: "No preferences saved yet. Start with the first category."
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+    # ③ Infrastructure
+    # ===========================================================================
+    infrastructure:
+      name: "③ Infrastructure"
+      icon: mdi:cog-outline
+      description: Silence media, budget, and follow-me settings.
+      collapsed: true
+      input:
+        silence_media_url:
+          name: Silence media URL
+          description: >
+            URL to a short silence clip. Used to reopen the mic without
+            speaking (start_conversation requires start_message or
+            start_media_id).
+          default: "http://homeassistant.local:8123/local/silence.wav"
+          selector:
+            text:
+
+        use_cloud_tts:
+          name: Use HA Cloud TTS (free)
+          description: >
+            When enabled, uses Home Assistant Cloud TTS instead of the
+            dispatcher-resolved ElevenLabs voice. Saves API credits.
+          default: false
+          selector:
+            boolean:
+
+        budget_floor:
+          name: Budget floor (%)
+          description: >
+            Minimum budget remaining % to start or continue the interview.
+            Below this threshold, the interview exits gracefully.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        bypass_follow_me:
+          name: Bypass follow-me notifications
+          description: >
+            Pause notification follow-me during the interview to prevent
+            interruptions. Restored when the interview ends.
+          default: false
+          selector:
+            boolean:
+
+        auto_import_on_startup:
+          name: Auto-import interview files on HA start
+          description: >
+            When enabled, scans /config/interview/ on startup for files named
+            interview_{user}.yaml. Imports any that match a configured person.
+          default: true
+          selector:
+            boolean:
+
+        continuous_conversation_entity:
+          name: "Continuous conversation entity"
+          description: "Boolean controlling the continuous conversation loop."
+          default: sensor.ai_continuous_conversation_active
+          selector:
+            entity:
+
+        follow_me_entity:
+          name: "Follow-me notification entity"
+          description: "Boolean controlling follow-me notifications."
+          default: input_boolean.ai_notification_follow_me
+          selector:
+            entity:
+              domain: input_boolean
+
+        voice_mood_entity:
+          name: "Voice mood entity"
+          description: "Boolean controlling voice mood modulation."
+          default: input_boolean.ai_voice_mood_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+        interview_progress_entity:
+          name: "Interview progress entity"
+          description: "input_text storing interview progress JSON."
+          default: input_text.ai_interview_progress
+          selector:
+            entity:
+              domain: input_text
+
+    # ===========================================================================
+    # ④ Privacy
+    # ===========================================================================
+    privacy:
+      name: "④ Privacy"
+      icon: mdi:shield-account
+      description: Privacy gate integration.
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy tier
+          description: >
+            Privacy gate tier. off = no gate (always allowed).
+            t1/t2/t3 = check identity confidence before allowing.
+          default: "off"
+          selector:
+            select:
+              options:
+                - "off"
+                - t1
+                - t2
+                - t3
+
+        privacy_gate_person:
+          name: Privacy gate person
+          description: >
+            Person entity for privacy resolution. Only needed when
+            privacy_tier is not off.
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+    # ===========================================================================
+    # ⑤ Topics
+    # ===========================================================================
+    topics:
+      name: "⑤ Topics"
+      icon: mdi:format-list-checkbox
+      description: >
+        Choose which topics the interview covers and add your own.
+        The agent asks about each category's sub-topics one at a time,
+        saves answers to helpers (built-in) or L2 memory (custom),
+        and tracks progress so it never repeats a question.
+      collapsed: true
+      input:
+        interview_categories:
+          name: Interview categories
+          description: >
+            Comma-separated list of built-in categories. Delete any
+            category you want to skip — the agent will only ask about
+            what remains. To restore, paste the full default back.
+
+
+            Built-in categories and their sub-topics:
+
+            • identity — full name, spoken name, nickname, birthday,
+              languages spoken, preferred language
+
+            • household — who lives here, pets, regular guests
+
+            • work — office location, hybrid schedule, working hours,
+              commute details, calendar keywords for filtering
+
+            • schedule — weekday wake time, weekend wake time, bedtime,
+              meal times, nap habits, exercise routine
+
+            • health — dietary needs, caffeine cutoff time, medical
+              conditions the system should know about
+
+            • environment — temperature preference, lighting preference,
+              TTS volume comfort, sleep sounds
+
+            • media — favorite genres, streaming services, news sources,
+              sports teams, audiobook/podcast preferences
+
+            • communication — preferred AI persona, verbosity level,
+              humor tolerance, notification threshold, language context
+
+            • privacy — topics the AI should never bring up,
+              comfort level with proactive suggestions
+
+
+            Example: to only interview about daily routine, set this to
+            "identity, schedule, health, environment"
+          default: "identity, household, work, schedule, health, environment, media, communication, privacy"
+          selector:
+            text:
+
+        custom_topics:
+          name: Custom topics
+          description: >
+            Add your own interview topics beyond the 9 built-in
+            categories. The agent will ask about each key within a
+            category as a natural conversation question, then save the
+            answer to L2 memory. Progress is tracked — if the user
+            already answered, the agent won't ask again.
+
+
+            Format — one category per line:
+
+              category_name: key1, key2, key3
+
+
+            Examples:
+
+              cooking: skill_level, favorite_cuisine, dietary_restrictions, kitchen_tools
+
+              fitness: current_routine, goals, injuries, preferred_activities, gym_or_home
+
+              hobbies: types, how_often, solo_or_social, equipment_owned
+
+              travel: favorite_destinations, travel_style, languages_for_travel
+
+              music_taste: favorite_artists, genres, instruments_played, concert_frequency
+
+
+            The category name becomes the storage label and the keys
+            become individual questions. Use snake_case for keys so
+            they store cleanly (e.g., "favorite_cuisine" not
+            "favorite cuisine"). Leave empty to skip custom topics.
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+    # ===========================================================================
+mode: restart
+max_exceeded: silent
+
+variables:
+  v_enable: !input enable
+  v_toggle: !input interview_toggle
+  v_timeout: !input timeout_minutes
+  v_satellite: !input satellite
+  v_speaker: !input speaker
+  v_start_message: !input start_message
+  v_silence_url: !input silence_media_url
+  v_tts_voice: !input tts_voice
+  satellite_entity: !input satellite
+  speaker_entity: !input speaker
+  v_suppress: !input suppress_toggles
+  v_interview_user: !input interview_user
+  v_interview_language: !input interview_language
+  v_use_dispatcher: !input use_dispatcher
+  v_interview_system_prompt: !input interview_system_prompt
+  v_progress_prompt_template: !input progress_prompt_template
+  v_voice_mood: !input voice_mood_during_interview
+  v_use_cloud_tts: !input use_cloud_tts
+  v_budget_floor: !input budget_floor
+  v_bypass_follow_me: !input bypass_follow_me
+  v_privacy_tier: !input privacy_tier
+  v_privacy_gate_person: !input privacy_gate_person
+  v_auto_import: !input auto_import_on_startup
+  v_interview_style: !input interview_style
+  v_question_depth: !input question_depth
+  v_interviewer_context: !input interviewer_context_template
+  v_empty_progress_prompt: !input empty_progress_prompt
+  v_interview_categories: !input interview_categories
+  v_custom_topics: !input custom_topics
+  _continuous_conv: !input continuous_conversation_entity
+  _follow_me: !input follow_me_entity
+  _voice_mood: !input voice_mood_entity
+  _interview_progress: !input interview_progress_entity
+
+triggers:
+  # ── Interview mode toggled ON ──
+  - id: start
+    trigger: state
+    entity_id: !input interview_toggle
+    to: "on"
+
+  # ── Interview mode toggled OFF ──
+  - id: stop
+    trigger: state
+    entity_id: !input interview_toggle
+    to: "off"
+
+  # ── HA restart — auto-import interview files ──
+  - id: ha_start
+    trigger: homeassistant
+    event: start
+
+conditions:
+  - condition: template
+    value_template: "{{ v_enable }}"
+
+actions:
+  # ── Stop trigger: restore toggles and exit ──
+  - alias: "Stop trigger: restore toggles and exit"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'stop' }}"
+    then:
+      - alias: "Deactivate continuous conversation on stop"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input continuous_conversation_entity
+        continue_on_error: true
+      - alias: "Restore suppressed toggles"
+        if:
+          - condition: template
+            value_template: "{{ v_suppress | length > 0 }}"
+        then:
+          - alias: "Restore suppressed notification toggles"
+            action: input_boolean.turn_on
+            target:
+              entity_id: !input suppress_toggles
+            continue_on_error: true
+      - alias: "Restore follow-me on stop"
+        if:
+          - condition: template
+            value_template: "{{ v_bypass_follow_me }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input follow_me_entity
+            continue_on_error: true
+      - alias: "Restore voice mood on stop"
+        if:
+          - condition: template
+            value_template: "{{ not v_voice_mood }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input voice_mood_entity
+            continue_on_error: true
+      - alias: "Stop: Interview mode deactivated — notifications restored"
+        stop: "Interview mode deactivated — notifications restored"
+
+  # ── HA start trigger: auto-import interview files ──
+  - alias: "HA start — auto-import interview files if enabled"
+    if:
+      - condition: template
+        value_template: "{{ trigger.id == 'ha_start' and v_auto_import }}"
+    then:
+      - action: pyscript.user_interview_auto_import
+        continue_on_error: true
+      - stop: "Auto-import complete"
+
+  # ── Start trigger ──
+
+  # 0a. Resolve interview user
+  - alias: "0a · Resolve interview user"
+    variables:
+      resolved_user: >-
+        {% set pick = v_interview_user | trim %}
+        {% if pick != '' %}{{ pick.replace('person.', '') }}
+        {% else %}
+          {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
+          {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
+          {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('') }}
+          {% else %}{% endif %}
+        {% endif %}
+
+  - alias: "0a-guard · Abort if no user (away/unknown)"
+    if:
+      - condition: template
+        value_template: "{{ resolved_user | trim == '' }}"
+    then:
+      - stop: "No user resolved — away or unknown occupancy"
+
+  # Budget gate — fail-open (missing sensor defaults to 100%)
+  - alias: "Budget gate — skip interview if LLM budget below floor"
+    condition: template
+    value_template: >-
+      {% set pct = states('sensor.ai_llm_budget_remaining_pct') | float(100) %}
+      {{ pct >= (v_budget_floor | float(30)) }}
+
+  # Privacy gate — default tier=off means gate always passes
+  - alias: "Privacy gate — skip interview if identity confidence too low"
+    condition: template
+    value_template: >-
+      {%- set tier = v_privacy_tier -%}
+      {%- if tier == 'off' or not is_state('input_boolean.ai_privacy_gate_enabled', 'on') -%}
+        true
+      {%- else -%}
+        {%- set mode = states('input_select.ai_privacy_gate_mode') | default('auto') -%}
+        {%- set override = states('input_select.ai_privacy_gate_user_interview') | default('auto') -%}
+        {%- if mode == 'force_allow_all' or override == 'force_allow' -%}true
+        {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
+        {%- else -%}
+          {%- set slug = resolved_user | default('') -%}
+          {{ is_state('input_boolean.ai_privacy_gate_' ~ slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+        {%- endif -%}
+      {%- endif -%}
+
+  # 0. Suppress toggles during interview
+  - alias: "0 · Suppress toggles"
+    if:
+      - condition: template
+        value_template: "{{ v_suppress | length > 0 }}"
+    then:
+      - alias: "Suppress notification toggles during interview"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input suppress_toggles
+        continue_on_error: true
+
+  # 0-fm. Bypass follow-me during interview
+  - alias: "0-fm · Pause follow-me notifications to prevent interruptions"
+    if:
+      - condition: template
+        value_template: "{{ v_bypass_follow_me }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: !input follow_me_entity
+        continue_on_error: true
+
+  # 0-mood. Suppress voice mood during interview
+  - alias: "0-mood · Disable voice mood modulation for neutral interview tone"
+    if:
+      - condition: template
+        value_template: "{{ not v_voice_mood }}"
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: !input voice_mood_entity
+        continue_on_error: true
+
+  # 0b. Pre-seed progress from existing L1/L2 data
+  - alias: "0b · Pre-seed progress"
+    action: pyscript.user_interview_preseed
+    data:
+      user: "{{ resolved_user }}"
+    response_variable: preseed_result
+    continue_on_error: true
+
+  # 1a. Resolve voice via dispatcher (fall back to user-provided entity)
+  - variables:
+      _dispatch: {}
+
+  - alias: "1a · Resolve TTS voice"
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ v_use_dispatcher and is_state('input_boolean.ai_dispatcher_enabled', 'on') }}"
+        sequence:
+          - action: pyscript.agent_dispatch
+            response_variable: _dispatch
+            continue_on_error: true
+            data:
+              wake_word: "user_interview"
+              intent_text: "user interview"
+              skip_continuity: true
+    default: []
+
+  - variables:
+      _voice: >-
+        {% if v_use_cloud_tts %}tts.home_assistant_cloud
+        {% else %}
+          {% set d = (_dispatch | default({})).get('tts_engine', '') %}
+          {{ d if d else v_tts_voice }}
+        {% endif %}
+      _voice_id: >-
+        {% if v_use_cloud_tts %}
+        {% else %}{{ (_dispatch | default({})).get('tts_voice', '') }}{% endif %}
+
+  # 1b. Speak opening question via TTS queue (speaker only, correct voice)
+  - alias: "1b · Speak opening question"
+    if:
+      - condition: template
+        value_template: >-
+          {{ v_start_message | length > 0
+             and _voice not in ['', 'none', 'unknown', 'unavailable'] }}
+    then:
+      - alias: "Speak opening interview question via TTS queue"
+        action: pyscript.tts_queue_speak
+        continue_on_error: true
+        response_variable: _tts_result
+        data:
+          text: "{{ v_start_message }}"
+          voice: "{{ _voice }}"
+          voice_id: "{{ _voice_id }}"
+          target_mode: explicit
+          target: "{{ speaker_entity }}"
+          priority: 1
+      # 1b. Audio download delay — let speaker transition from idle → playing
+      - alias: "1b · Audio download delay"
+        delay:
+          seconds: 3
+      # 1c. Wait for speaker to finish playing
+      - alias: "1c · Wait for speaker idle"
+        wait_template: >-
+          {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+             'paused', 'unknown'] }}
+        timeout: "00:00:15"
+        continue_on_timeout: true
+
+  # 1d. Echo guard — let reverb decay before opening mic
+  - alias: "1d · Echo guard"
+    delay:
+      seconds: 2
+
+  # 1e. Open mic silently (no start_message — no self-hearing)
+  - alias: "1e · Open mic (silent)"
+    action: assist_satellite.start_conversation
+    target:
+      entity_id: !input satellite
+    data:
+      start_media_id: "{{ v_silence_url }}"
+      preannounce: false
+    continue_on_error: true
+
+  # 2. Activate continuous conversation signal
+  - alias: "2 · Activate continuous flag"
+    action: input_boolean.turn_on
+    target:
+      entity_id: !input continuous_conversation_entity
+    continue_on_error: true
+
+  # 3. Loop variables (separate step — can't combine with repeat)
+  - alias: "3 · Loop variables"
+    variables:
+      loop_deadline: "{{ as_timestamp(now()) + (v_timeout | float(30)) * 60 }}"
+      no_speech_count: 0
+      mic_open_time: "{{ as_timestamp(now()) }}"
+
+  # 4. Continuous interview loop
+  #   Same pattern as voice_handoff.yaml step 11c.
+  #   Keeps the mic cycling: wait for session end → echo guard →
+  #   wait for speaker done → reopen mic silently.
+  - alias: "4 · Continuous interview loop"
+    repeat:
+      while:
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states(_continuous_conv) != 'off'
+               and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(30)) }}
+      sequence:
+        # A0. Wait for session to start (satellite leaves idle)
+        - alias: "A0 · Wait for satellite to start listening (leaves idle)"
+          wait_template: "{{ not is_state(satellite_entity, 'idle') }}"
+          timeout: "00:00:05"
+          continue_on_timeout: true
+
+        # A. Wait for conversation turn to finish (satellite returns to idle)
+        - alias: "A · Wait for conversation turn to finish (satellite → idle)"
+          wait_template: "{{ is_state(satellite_entity, 'idle') }}"
+          timeout: "00:01:00"
+          continue_on_timeout: true
+
+        # B. No-speech detection
+        - alias: "B · Detect no-speech (short session = user didn't talk, 3 strikes = exit)"
+          variables:
+            session_duration: >-
+              {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
+              {{ dur }}
+            no_speech_count: >-
+              {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
+              {% if dur < 12 %}
+                {{ no_speech_count | int(0) + 1 }}
+              {% else %}
+                0
+              {% endif %}
+
+        # C. Combined exit check (includes budget)
+        - condition: template
+          value_template: >-
+            {{ as_timestamp(now()) < loop_deadline | float
+               and no_speech_count | int(0) < 3
+               and is_state(v_toggle, 'on')
+               and states(_continuous_conv) != 'off'
+               and (states('sensor.ai_llm_budget_remaining_pct') | float(100)) >= (v_budget_floor | float(30)) }}
+
+        # D. Echo guard — let TTS audio start downloading
+        - alias: "D · Echo guard — wait for TTS audio to start downloading"
+          delay:
+            seconds: 3
+
+        # E. Wait for speaker to finish TTS playback
+        - alias: "E · Wait for speaker to finish TTS playback before reopening mic"
+          wait_template: >-
+            {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
+               'paused', 'unknown'] }}
+          timeout: "00:00:15"
+          continue_on_timeout: true
+
+        # F. Record timestamp so we can detect no-speech in the next iteration
+        - alias: "F · Record mic-open timestamp for no-speech detection"
+          variables:
+            mic_open_time: "{{ as_timestamp(now()) }}"
+
+        # G. Build progress context for next turn
+        - alias: "G · Build extra_system_prompt with style, categories, and progress context"
+          variables:
+            interview_esp: >-
+              {{ v_interview_system_prompt }}
+              {{ v_interviewer_context | replace('{user}', resolved_user) | replace('{language}', v_interview_language) }}
+              {% set styles = {'casual':'Keep a casual, friendly, conversational tone.','formal':'Use a professional, respectful tone. Be precise and courteous.','playful':'Be playful, witty, and engaging. Make the interview fun.','brief':'Be concise. One short question per topic, move on quickly.'} %}
+              {{ styles[v_interview_style] if v_interview_style in styles else '' }}
+              {% set depths = {'surface':'Accept the first answer and move on. Do not probe for details.','standard':'Ask one follow-up if the answer is vague, then move on.','deep':'Probe for specifics. Ask clarifying follow-ups before moving on.'} %}
+              {{ depths[v_question_depth] if v_question_depth in depths else '' }}
+              {% set ns_cats = namespace(list=[]) %}
+              {% for c in v_interview_categories.split(',') %}
+                {% if c | trim != '' %}{% set ns_cats.list = ns_cats.list + [c | trim] %}{% endif %}
+              {% endfor %}
+              {% if ns_cats.list | length > 0 %}
+              Focus ONLY on these categories: {{ ns_cats.list | join(', ') }}.
+              {% endif %}
+              {% if v_custom_topics | trim != '' %}
+              Also cover these additional topics:
+              {{ v_custom_topics }}
+              {% endif %}
+              {% set raw = states(_interview_progress) | default('{}', true) %}
+              {% if raw not in ['unknown', 'unavailable', '', '{}'] %}
+                {% set progress = raw | from_json | default({}) %}
+                {% set user_progress = progress[resolved_user] if resolved_user in progress else {} %}
+                {% set ns = namespace(done=[]) %}
+                {% for cat, keys in user_progress.items() %}
+                  {% if keys == '*' %}
+                    {% set ns.done = ns.done + [cat ~ ' (all)'] %}
+                  {% elif keys is iterable and keys is not string %}
+                    {% for k in keys %}
+                      {% set ns.done = ns.done + [cat ~ '.' ~ k] %}
+                    {% endfor %}
+                  {% endif %}
+                {% endfor %}
+                {% if ns.done | length > 0 %}
+                  {{ v_progress_prompt_template | replace('{done_list}', ns.done | join(', ')) }}
+                {% else %}
+                  {{ v_empty_progress_prompt }}
+                {% endif %}
+              {% else %}
+                {{ v_empty_progress_prompt }}
+              {% endif %}
+
+        # H. Reopen mic silently with progress context
+        - alias: "Reopen mic with interview progress context"
+          action: assist_satellite.start_conversation
+          target:
+            entity_id: !input satellite
+          data:
+            start_media_id: "{{ v_silence_url }}"
+            preannounce: false
+            extra_system_prompt: "{{ interview_esp }}"
+          continue_on_error: true
+
+  # 5. Cleanup: deactivate continuous conversation
+  - alias: "5 · Deactivate continuous flag"
+    action: input_boolean.turn_off
+    target:
+      entity_id: !input continuous_conversation_entity
+    continue_on_error: true
+
+  # 6. Auto-deactivate interview mode if still on
+  - alias: "6 · Auto-deactivate interview mode"
+    if:
+      - condition: state
+        entity_id: !input interview_toggle
+        state: "on"
+    then:
+      - alias: "Turn off interview mode after loop exit"
+        action: input_boolean.turn_off
+        target:
+          entity_id: !input interview_toggle

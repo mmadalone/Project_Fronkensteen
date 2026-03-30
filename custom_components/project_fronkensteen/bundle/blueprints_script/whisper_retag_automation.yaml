@@ -1,0 +1,70 @@
+blueprint:
+  name: "Whisper Re-tag Automation Entries"
+  author: madalone
+  description: >
+    # Whisper Re-tag Automation Entries
+
+    One-shot cleanup script: scans existing whisper interaction entries
+    whose values match known automation patterns (goodnight negotiator,
+    music follow-me, notification replay, etc.) but were logged without
+    the `source_automation` tag, and re-tags them.
+
+    Run with **Dry Run** enabled first to preview matches. Then disable
+    it to apply the re-tag.
+
+    After re-tagging, the summarizer will correctly label these entries
+    as `[AUTO]` (system-delivered) instead of `[USER]` (user-initiated).
+
+    This is a maintenance tool — run it once after deploying the whisper
+    source filtering update, then disable or delete the script instance.
+  domain: script
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/whisper_retag_automation.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① CONFIGURATION
+    # ===========================================================================
+    configuration:
+      name: "① Configuration"
+      icon: mdi:cog
+      collapsed: false
+      description: Re-tag settings.
+      input:
+        dry_run:
+          name: Dry Run
+          description: >
+            Preview matches without writing. Enable this first to see what
+            would be re-tagged, then disable to apply.
+          default: true
+          selector:
+            boolean:
+
+sequence:
+  - alias: "Call whisper re-tag service"
+    action: pyscript.whisper_retag_automation
+    response_variable: retag_result
+    continue_on_error: true
+    data:
+      dry_run: !input dry_run
+
+  - alias: "Log result"
+    action: logbook.log
+    data:
+      name: "Whisper Re-tag"
+      message: >-
+        {% set r = retag_result | default({}) %}
+        Scanned {{ r.get('scanned', '?') }} entries —
+        matched {{ r.get('matched', '?') }},
+        retagged {{ r.get('retagged', '?') }},
+        failed {{ r.get('failed', '?') }},
+        already tagged {{ r.get('already_tagged', '?') }},
+        skipped {{ r.get('skipped', '?') }}
+        (dry_run={{ r.get('dry_run', '?') }})
+
+  - alias: "Stop: "
+    stop: ""
+    response_variable: retag_result
+
+mode: single

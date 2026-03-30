@@ -1,0 +1,21 @@
+# ======================================================================
+# AI Project Tracking
+# ======================================================================
+# Status: Active
+# Deployed: 2026-03-11
+# Source of truth: /config/projects/*.md (YAML frontmatter + markdown body)
+# Engine: pyscript/project_promote.py (reads files, promotes to L2 + L1)
+#
+# Pyscript sensor: sensor.ai_project_promotion_status  (pyscript/project_promote.py)
+#   States: ok, error, idle
+#   Key attributes: last sync result, project counts by status
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_project_tracking_enabled, ai_project_data_stale
+#   - helpers_input_text.yaml:    ai_project_last_sync, ai_project_hot_context_line
+#   - helpers_input_number.yaml:  ai_project_hot_context_limit
+#
+# Dependencies:
+#   - Blueprints: project_sync.yaml
+#   - Context: ai_context_hot.yaml (reads ai_project_hot_context_line for L1 injection)
+# ======================================================================
