@@ -8,11 +8,11 @@ Project Fronkensteen uses Home Assistant `input_*` helpers for user configuratio
 
 | Tier | Count | Source File(s) | Description |
 |------|-------|---------------|-------------|
-| **Essential** | ~205 | `helpers_input_boolean.yaml`, `helpers_input_text.yaml`, `helpers_input_number.yaml`, `helpers_input_select.yaml`, `helpers_input_datetime.yaml`, `helpers_input_button.yaml`, `helpers_counter.yaml` | Core helpers. Kill switches, user-facing config, system state. |
-| **Per-User** | ~75 | `packages/ai_per_user_helpers.yaml` | Cloned per household member. Profiles, schedules, privacy thresholds. |
-| **Dev Tuning** | ~126 | `packages/ai_dev_helpers.yaml` | Algorithm parameters. All have safe defaults hardcoded in pyscript modules. Optional. |
+| **Essential** | 217 | `helpers_input_boolean.yaml`, `helpers_input_text.yaml`, `helpers_input_number.yaml`, `helpers_input_select.yaml`, `helpers_input_datetime.yaml`, `helpers_input_button.yaml`, `helpers_counter.yaml` | Core helpers. Kill switches, user-facing config, system state. |
+| **Per-User** | 80 | `packages/ai_per_user_helpers.yaml` | Cloned per household member. Profiles, schedules, privacy thresholds. |
+| **Dev Tuning** | 126 | `packages/ai_dev_helpers.yaml` | Algorithm parameters. All have safe defaults hardcoded in pyscript modules. Optional. |
 
-**Total: ~406 helpers**
+**Total: 423 helpers**
 
 > **Dev Tuning helpers are entirely optional.** Every pyscript module has a hardcoded fallback for each parameter. Install the dev tuning package only if you want to fine-tune algorithm behavior from the UI.
 
@@ -26,7 +26,7 @@ Configure these helpers after installation. Everything else has sensible default
 
 | Helper | Type | What to Set |
 |--------|------|-------------|
-| `input_text.ai_primary_user` | text | Your HA person slug (e.g., `miquel`). Used as fallback when occupancy can't resolve who's home. |
+| `input_text.ai_primary_user` | text | Your HA person slug (e.g., `alice`). Used as fallback when occupancy can't resolve who's home. |
 | `input_text.ai_context_user_name` | text | Your display name (e.g., `Miquel`) |
 | `input_text.ai_context_user_name_spoken` | text | How TTS should pronounce your name (e.g., `Mee-kel`) |
 | `input_text.ai_context_user_languages` | text | Languages you speak, comma-separated |
@@ -36,7 +36,7 @@ Configure these helpers after installation. Everything else has sensible default
 
 ### 2. Per-User Helpers (required per person)
 
-Clone the blocks in `packages/ai_per_user_helpers.yaml` for each person in your household. Replace the `_miquel` / `_jessica` suffixes with your HA person slugs.
+Clone the blocks in `packages/ai_per_user_helpers.yaml` for each person in your household. Replace the `_person1` / `_person2` suffixes with your HA person slugs.
 
 **Must set per person:**
 

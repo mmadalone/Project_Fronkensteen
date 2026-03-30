@@ -449,7 +449,7 @@ See the [readme/](readme/) directory for detailed documentation on each blueprin
 2. **Restart Home Assistant**
 3. **Verify pyscript loaded**: Check Developer Tools > States for `pyscript.*` entities
 4. **Verify helpers loaded**: Check Developer Tools > States for `input_boolean.ai_*`
-5. **Verify sensors**: The `state_bridge.py` startup handler seeds ~66 `sensor.ai_*` sensors on boot
+5. **Verify sensors**: The `state_bridge.py` startup handler seeds 65 `sensor.ai_*` sensors on boot
 6. **Check logs**: Look for `pyscript` entries in Settings > System > Logs. Warnings are normal on first boot (empty caches, no memory data). Errors need investigation.
 
 ### First-Boot Expectations

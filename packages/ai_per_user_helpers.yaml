@@ -1,9 +1,9 @@
 # =============================================================================
-# AI Per-User Helpers — Household Customization (75 entities)
+# AI Per-User Helpers — Household Customization (80 entities)
 # =============================================================================
 # Customize for your household: duplicate each person's block and change
 # the suffix (_miquel, _jessica) to match your HA person slugs.
-# Provides: 75 helpers (9 bool + 12 num + 2 select + 38 text + 12 datetime + 2 counter)
+# Provides: 80 helpers (9 bool + 12 num + 2 select + 43 text + 12 datetime + 2 counter)
 # Dependencies: user_interview.py, presence_identity.py, preference consumers
 # =============================================================================
 
