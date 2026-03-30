@@ -14,6 +14,17 @@ from pathlib import Path
 import yaml
 from homeassistant.core import HomeAssistant
 
+
+class _HAYamlLoader(yaml.SafeLoader):
+    """YAML loader that ignores HA-specific tags like !secret and !include."""
+
+
+# Register handlers for HA tags so they don't crash the parser
+for _tag in ("!secret", "!include", "!include_dir_named", "!include_dir_merge_named",
+             "!include_dir_list", "!include_dir_merge_list", "!env_var", "!input"):
+    _HAYamlLoader.add_constructor(_tag, lambda loader, node: f"<{node.tag}>")
+
+
 from .const import (
     BUNDLE_TO_DEST,
     CODE_SUBDIRS,
@@ -98,7 +109,7 @@ def _merge_helpers(src: Path, dst: Path) -> dict:
 
     src_text = src.read_text(encoding="utf-8")
     src_lines = [l for l in src_text.split("\n") if not l.strip().startswith("#")]
-    src_data = yaml.safe_load("\n".join(src_lines)) or {}
+    src_data = yaml.load("\n".join(src_lines), Loader=_HAYamlLoader) or {}
 
     if not dst.exists():
         report["new_keys"] = list(src_data.keys())
@@ -106,7 +117,7 @@ def _merge_helpers(src: Path, dst: Path) -> dict:
 
     dst_text = dst.read_text(encoding="utf-8")
     dst_lines = [l for l in dst_text.split("\n") if not l.strip().startswith("#")]
-    dst_data = yaml.safe_load("\n".join(dst_lines)) or {}
+    dst_data = yaml.load("\n".join(dst_lines), Loader=_HAYamlLoader) or {}
 
     for key in src_data:
         if key in dst_data:
