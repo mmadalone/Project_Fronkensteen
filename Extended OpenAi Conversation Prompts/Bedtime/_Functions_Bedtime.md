@@ -92,6 +92,54 @@
       - service: script.voice_pause
 
 - spec:
+    name: play_media
+    description: >-
+      Search for and play media via Music Assistant. Use when the user
+      asks to play a song, album, artist, playlist, podcast, audiobook,
+      or radio station. Do NOT use execute_service for media playback —
+      always use this function. For stopping or pausing, use stop_radio,
+      shut_up, or pause_media instead.
+    parameters:
+      type: object
+      properties:
+        title:
+          type: string
+          description: >-
+            The title, name, or search query for the media to play.
+        media_type:
+          type: string
+          enum:
+            - track
+            - album
+            - artist
+            - playlist
+            - audiobook
+            - podcast
+            - radio
+          description: >-
+            The type of media to search for. Use "track" for songs,
+            "album" for full albums, "artist" to play an artist's catalog,
+            "playlist" for playlists, "audiobook" for audiobooks,
+            "podcast" for podcasts, "radio" for radio stations.
+        player:
+          type: string
+          description: >-
+            Media player entity to play on (e.g. media_player.workshop_sonos).
+            If omitted, plays on the default speaker.
+      required:
+        - title
+        - media_type
+  function:
+    type: script
+    sequence:
+      - service: script.voice_play_media
+        data:
+          title: "{{title}}"
+          media_type: "{{media_type}}"
+          player: "{{player|default('')}}"
+        response_variable: _function_result
+
+- spec:
     name: agent_interaction_log
     description: >-
       Log what was just discussed. Call this AFTER every response to keep
