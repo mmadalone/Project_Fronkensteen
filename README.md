@@ -203,6 +203,7 @@ Four deployed patterns for agent-to-agent interaction:
 ### Notifications & Announcements
 - **Email Follow-Me** — Priority email routing with sender classification, LLM subject/body summarization, UID-based dedup, and calendar-aware suppression during meetings.
 - **Proactive Briefing** — Scheduled, presence-triggered, or manual briefings assembled from 8 content sections (greeting, weather, calendar, email, schedule, household, memory, media). Budget-aware: full LLM mode above 20%, template-only below.
+- **Proactive Unified** — 1,642-line presence-triggered announcement engine (8 sections). Dual mode: template (input_text helpers, zero cost) or LLM (in-character via conversation agent). Budget gate auto-forces template. Dispatcher integration, TTS collision handling (dedup/queue/barge-in), nag-while-present with max cap, full weekend override profile, bedtime yes/no question via Assist Satellite (fires bedtime script on YES), privacy-gated, identity-gated. Consolidates 3 older proactive blueprints.
 - **Notification Dedup** — Cross-delivery duplicate prevention with fuzzy matching and TTL. Fail-open policy.
 - **Notification Replay** — "Tell me that again" replays the last notification.
 - **Alexa On-Demand Briefing** — "Alexa, briefing" or "Alexa, mail status" triggers pyscript pipeline delivery.
