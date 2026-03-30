@@ -24,11 +24,11 @@
         "title": "Household Setup",
         "description": "Configure your primary user. Additional household members can be added later via the per-user helpers package.",
         "data": {
-          "person_slug": "Person slug (must match your person.* entity, e.g. 'miquel')",
-          "display_name": "Display name (e.g. 'Miquel')",
-          "tts_pronunciation": "TTS pronunciation (how your name should be spoken, e.g. 'Mee-kel')",
+          "person_slug": "Person slug (must match your person.* entity, e.g. 'john')",
+          "display_name": "Display name (e.g. 'John')",
+          "tts_pronunciation": "TTS pronunciation (how your name should be spoken, e.g. 'John')",
           "preferred_language": "Preferred language",
-          "household_members": "Household members (e.g. 'Miquel, Jessica (partner)')",
+          "household_members": "Household members (e.g. 'John, Jane (partner)')",
           "pets": "Pets (e.g. 'Luna the cat' or 'none')"
         }
       },
