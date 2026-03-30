@@ -310,15 +310,20 @@ SCRIPT_FILES = [
 # Installed as a separate custom_component by the installer when
 # the Voice Pipeline feature group is enabled. HACS auto-updates
 # must be disabled for this component (it's a patched fork).
+# manifest.json is stored as manifest.json.bundle in the bundle to prevent
+# HACS from scanning it as a second integration. The installer renames it
+# back to manifest.json when copying to the target directory.
 ELEVENLABS_TTS_FILES = [
     "__init__.py",
     "config_flow.py",
     "const.py",
-    "manifest.json",
+    "manifest.json.bundle",
     "services.yaml",
     "strings.json",
     "tts.py",
 ]
+
+ELEVENLABS_RENAME = {"manifest.json.bundle": "manifest.json"}
 
 
 def get_files_for_groups(selected_groups: list[str]) -> dict[str, list[str]]:

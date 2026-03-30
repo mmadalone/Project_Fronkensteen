@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from .const import (
     BUNDLE_TO_DEST,
     CODE_SUBDIRS,
+    ELEVENLABS_RENAME,
     HELPER_FILES,
     SKIP_ON_UPDATE_SUBDIRS,
     get_files_for_groups,
@@ -225,8 +226,9 @@ def _process_file(
     if mode == "update" and bundle_subdir in SKIP_ON_UPDATE_SUBDIRS:
         return "skipped"
 
-    # Code files
-    dst = dest_dir / filename
+    # Code files — apply renames (e.g., manifest.json.bundle -> manifest.json)
+    target_name = ELEVENLABS_RENAME.get(filename, filename)
+    dst = dest_dir / target_name
     if mode == "update" and dst.exists() and _file_hash(src) == _file_hash(dst):
         return "skipped"
     _copy_file(src, dst)
