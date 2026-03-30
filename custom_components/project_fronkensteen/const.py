@@ -25,7 +25,6 @@ FEATURE_GROUPS = {
 # Used by installer.py for all file operations.
 BUNDLE_TO_DEST = {
     "pyscript": "pyscript",
-    "pyscript_modules": "pyscript",  # modules/ subdir preserved in filename
     "pyscript_templates": "pyscript",
     "packages": "packages",
     "blueprints_automation": "blueprints/automation/madalone",
@@ -37,7 +36,7 @@ BUNDLE_TO_DEST = {
 
 # Subdirectories that contain code files (always overwritten on update)
 CODE_SUBDIRS = {
-    "pyscript", "pyscript_modules", "packages",
+    "pyscript", "packages",
     "blueprints_automation", "blueprints_script",
     "elevenlabs_custom_tts",
 }
@@ -94,11 +93,10 @@ PYSCRIPT_FILES = {
     "user_interview.py": "creative",
     # Calendar (bundled with notifications since briefing uses it)
     "calendar_promote.py": "notifications",
-}
-
-PYSCRIPT_MODULES = {
+    # shared_utils lives in pyscript/modules/ — same bundle subdir
     "modules/shared_utils.py": "core",
 }
+
 
 PACKAGE_FILES = {
     # Core
@@ -336,7 +334,6 @@ def get_files_for_groups(selected_groups: list[str]) -> dict[str, list[str]]:
 
     result = {
         "pyscript": [f for f, g in PYSCRIPT_FILES.items() if g in active],
-        "pyscript_modules": [f for f, g in PYSCRIPT_MODULES.items() if g in active],
         "packages": [f for f, g in PACKAGE_FILES.items() if g in active],
         "blueprints_automation": [
             f for f, g in BLUEPRINT_AUTOMATION_FILES.items() if g in active
