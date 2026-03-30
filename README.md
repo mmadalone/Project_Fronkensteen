@@ -24,7 +24,7 @@ Five AI personas with distinct personalities run a house from a Raspberry Pi 5. 
 | Presence zones | 8 (Aqara FP2, multi-room) |
 | Languages | 3 (English, Spanish, Catalan) |
 | Style guide | 11 files, ~126K tokens |
-| README documentation | 162 files |
+| README documentation | 163 files |
 | Dashboard | 6 tabs, 2,945 lines |
 
 ---
@@ -276,6 +276,24 @@ A 6-tab, 2,521-line Lovelace dashboard for monitoring and configuring the entire
 - ~~**Therapy mode**~~ — **Deployed, untested.** Live voice testing blocked until ElevenLabs subscription renews (early April 2026). See Feature Highlights above.
 - **Deliberation mode** — Multi-agent internal consensus. Multiple agents respond internally, a synthesis agent presents the unified answer or the disagreement. (Pattern 2 — not yet built.)
 - **Header images** — 66 of 112 blueprints are missing Gemini-generated header images for the GitHub description field.
+
+### Blueprint Testing Status
+
+Of 112 total blueprints (77 automation + 35 script), **87 have live instances** running daily. **25 have never been deployed** and need community testing.
+
+**Blueprints with no deployed instance (19 automation + 6 script):**
+
+| Category | Blueprints | Why |
+|----------|-----------|-----|
+| Lighting/Scene | `circadian_lighting`, `ambient_music_autoplay`, `scene_preference_apply`, `zone_preactivation` | No color_temp bulbs to test |
+| Bedtime | `bedtime_winddown`, `bedtime_last_call`, `bedtime_advisory_actions`, `calendar_alarm`, `wake_up_guard_external_alarm` | Not yet configured |
+| Presence | `away_state_actions`, `coming_home`, `routine_deviation_actions`, `routine_stage_actions` | Not yet configured |
+| Music | `music_compose_batch_trigger`, `music_weekly_refresh`, `music_assistant_follow_me_idle_off`, `music_compose_approve` | Not yet configured |
+| Budget | `budget_cost_alert` | Not yet configured |
+| Voice | `voice_pe_resume_media`, `voice_pin_action`, `llm_voice_script` | Not yet configured |
+| Other | `automation_trigger_mon`, `bedtime_media_play_wrapper`, `rickyellsplusalexa`, `wakeup_chime` | Utility/unused |
+
+If you deploy any of these and they work (or don't), feedback is welcome via [GitHub Issues](https://github.com/mmadalone/Project_Fronkensteen/issues).
 
 ---
 

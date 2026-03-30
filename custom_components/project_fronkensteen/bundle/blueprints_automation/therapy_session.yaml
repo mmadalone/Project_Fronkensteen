@@ -585,6 +585,7 @@ variables:
   v_test_mode: !input test_mode_enabled
   v_test_single_cycle: !input test_single_cycle
   v_schedule_enabled: !input schedule_enabled
+  v_scheduled_days: !input scheduled_days
   v_memory_scope_individual: !input memory_scope_individual
   v_memory_scope_couple: !input memory_scope_couple
   v_session_expiry: !input session_memory_expiration
@@ -612,6 +613,7 @@ triggers:
   - id: schedule
     trigger: time
     at: !input scheduled_time
+    enabled: !input schedule_enabled
 
 conditions:
   - condition: template
@@ -663,16 +665,19 @@ actions:
   # ══════════════════════════════════════════════════════════════════════
   # SCHEDULE trigger: check day-of-week
   # ══════════════════════════════════════════════════════════════════════
-  - alias: "Schedule guard: check day and enable flag"
+  - alias: "Schedule guard: abort if schedule not active today"
     if:
       - condition: template
         value_template: "{{ trigger.id == 'schedule' }}"
     then:
-      - condition: template
-        value_template: >-
-          {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
-          {% set today = days[now().weekday()] %}
-          {{ v_schedule_enabled and today in (v_schedule_enabled | default('')) }}
+      - if:
+          - condition: template
+            value_template: >-
+              {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
+              {% set today = days[now().weekday()] %}
+              {{ not (v_schedule_enabled | bool(false) and today in v_scheduled_days) }}
+        then:
+          - stop: "Scheduled session not active for today"
       - alias: "Auto-activate therapy toggle for scheduled session"
         action: input_boolean.turn_on
         target:
