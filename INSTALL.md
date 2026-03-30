@@ -155,7 +155,7 @@ automation/*.yaml -> /config/blueprints/automation/madalone/
 script/*.yaml     -> /config/blueprints/script/madalone/
 ```
 
-**77 automation blueprints + 35 script blueprints.** These are templates — they don't do anything until you create instances (Step 12).
+**77 automation blueprints + 34 script blueprints.** These are templates — they don't do anything until you create instances (Step 12).
 
 ---
 

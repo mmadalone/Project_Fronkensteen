@@ -2,7 +2,7 @@
 # AI Per-User Helpers — Household Customization (80 entities)
 # =============================================================================
 # Customize for your household: duplicate each person's block and change
-# the suffix (_miquel, _jessica) to match your HA person slugs.
+# the suffix (_person1, _person2) to match your HA person slugs.
 # Provides: 80 helpers (9 bool + 12 num + 2 select + 43 text + 12 datetime + 2 counter)
 # Dependencies: user_interview.py, presence_identity.py, preference consumers
 # =============================================================================
@@ -13,45 +13,45 @@
 
 input_boolean:
   # ── Per-User Context Flags ──
-  ai_context_work_day_miquel:
-    name: "AI Context - Work Day (Miquel)"
+  ai_context_work_day_person1:
+    name: "AI Context - Work Day (Person 1)"
     initial: true
     icon: mdi:briefcase
-  ai_context_work_day_jessica:
-    name: "AI Context - Work Day (Jessica)"
+  ai_context_work_day_person2:
+    name: "AI Context - Work Day (Person 2)"
     initial: false
     icon: mdi:briefcase-search
 
   # ── WiFi Stale Detection ──
-  ai_wifi_stale_jessica:
-    name: "AI WiFi Stale Jessica"
+  ai_wifi_stale_person2:
+    name: "AI WiFi Stale Person 2"
     initial: false
     icon: mdi:wifi-alert
 
   # ── Per-Person Per-Tier State Booleans ──
   # Set by privacy_gate_hysteresis.yaml instances
-  ai_privacy_gate_miquel_t1_suppressed:
-    name: "Privacy Gate — Miquel T1 Suppressed"
+  ai_privacy_gate_person1_t1_suppressed:
+    name: "Privacy Gate — Person 1 T1 Suppressed"
     initial: false
     icon: mdi:bed-clock
-  ai_privacy_gate_miquel_t2_suppressed:
-    name: "Privacy Gate — Miquel T2 Suppressed"
+  ai_privacy_gate_person1_t2_suppressed:
+    name: "Privacy Gate — Person 1 T2 Suppressed"
     initial: false
     icon: mdi:email-lock
-  ai_privacy_gate_miquel_t3_suppressed:
-    name: "Privacy Gate — Miquel T3 Suppressed"
+  ai_privacy_gate_person1_t3_suppressed:
+    name: "Privacy Gate — Person 1 T3 Suppressed"
     initial: false
     icon: mdi:home-lightbulb
-  ai_privacy_gate_jessica_t1_suppressed:
-    name: "Privacy Gate — Jessica T1 Suppressed"
+  ai_privacy_gate_person2_t1_suppressed:
+    name: "Privacy Gate — Person 2 T1 Suppressed"
     initial: false
     icon: mdi:bed-clock
-  ai_privacy_gate_jessica_t2_suppressed:
-    name: "Privacy Gate — Jessica T2 Suppressed"
+  ai_privacy_gate_person2_t2_suppressed:
+    name: "Privacy Gate — Person 2 T2 Suppressed"
     initial: false
     icon: mdi:email-lock
-  ai_privacy_gate_jessica_t3_suppressed:
-    name: "Privacy Gate — Jessica T3 Suppressed"
+  ai_privacy_gate_person2_t3_suppressed:
+    name: "Privacy Gate — Person 2 T3 Suppressed"
     initial: false
     icon: mdi:home-lightbulb
 
@@ -60,9 +60,9 @@ input_boolean:
 # ═══════════════════════════════════════════════════════════════════
 
 input_number:
-  # Miquel thresholds (watches Jessica's confidence)
-  ai_privacy_gate_miquel_t1_suppress_at:
-    name: "Privacy Threshold — Miquel T1 Suppress"
+  # Person 1 thresholds (watches Person 2's confidence)
+  ai_privacy_gate_person1_t1_suppress_at:
+    name: "Privacy Threshold — Person 1 T1 Suppress"
     min: 5
     max: 70
     step: 5
@@ -70,8 +70,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_miquel_t1_reenable_at:
-    name: "Privacy Threshold — Miquel T1 Re-Enable"
+  ai_privacy_gate_person1_t1_reenable_at:
+    name: "Privacy Threshold — Person 1 T1 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -79,8 +79,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
-  ai_privacy_gate_miquel_t2_suppress_at:
-    name: "Privacy Threshold — Miquel T2 Suppress"
+  ai_privacy_gate_person1_t2_suppress_at:
+    name: "Privacy Threshold — Person 1 T2 Suppress"
     min: 5
     max: 70
     step: 5
@@ -88,8 +88,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_miquel_t2_reenable_at:
-    name: "Privacy Threshold — Miquel T2 Re-Enable"
+  ai_privacy_gate_person1_t2_reenable_at:
+    name: "Privacy Threshold — Person 1 T2 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -97,8 +97,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
-  ai_privacy_gate_miquel_t3_suppress_at:
-    name: "Privacy Threshold — Miquel T3 Suppress"
+  ai_privacy_gate_person1_t3_suppress_at:
+    name: "Privacy Threshold — Person 1 T3 Suppress"
     min: 5
     max: 70
     step: 5
@@ -106,8 +106,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_miquel_t3_reenable_at:
-    name: "Privacy Threshold — Miquel T3 Re-Enable"
+  ai_privacy_gate_person1_t3_reenable_at:
+    name: "Privacy Threshold — Person 1 T3 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -116,9 +116,9 @@ input_number:
     icon: mdi:arrow-down-bold
     mode: slider
 
-  # Jessica thresholds (watches Miquel's confidence)
-  ai_privacy_gate_jessica_t1_suppress_at:
-    name: "Privacy Threshold — Jessica T1 Suppress"
+  # Person 2 thresholds (watches Person 1's confidence)
+  ai_privacy_gate_person2_t1_suppress_at:
+    name: "Privacy Threshold — Person 2 T1 Suppress"
     min: 5
     max: 70
     step: 5
@@ -126,8 +126,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_jessica_t1_reenable_at:
-    name: "Privacy Threshold — Jessica T1 Re-Enable"
+  ai_privacy_gate_person2_t1_reenable_at:
+    name: "Privacy Threshold — Person 2 T1 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -135,8 +135,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
-  ai_privacy_gate_jessica_t2_suppress_at:
-    name: "Privacy Threshold — Jessica T2 Suppress"
+  ai_privacy_gate_person2_t2_suppress_at:
+    name: "Privacy Threshold — Person 2 T2 Suppress"
     min: 5
     max: 70
     step: 5
@@ -144,8 +144,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_jessica_t2_reenable_at:
-    name: "Privacy Threshold — Jessica T2 Re-Enable"
+  ai_privacy_gate_person2_t2_reenable_at:
+    name: "Privacy Threshold — Person 2 T2 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -153,8 +153,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
-  ai_privacy_gate_jessica_t3_suppress_at:
-    name: "Privacy Threshold — Jessica T3 Suppress"
+  ai_privacy_gate_person2_t3_suppress_at:
+    name: "Privacy Threshold — Person 2 T3 Suppress"
     min: 5
     max: 70
     step: 5
@@ -162,8 +162,8 @@ input_number:
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
-  ai_privacy_gate_jessica_t3_reenable_at:
-    name: "Privacy Threshold — Jessica T3 Re-Enable"
+  ai_privacy_gate_person2_t3_reenable_at:
+    name: "Privacy Threshold — Person 2 T3 Re-Enable"
     min: 5
     max: 70
     step: 5
@@ -177,8 +177,8 @@ input_number:
 # ═══════════════════════════════════════════════════════════════════
 
 input_select:
-  ai_context_preferred_language_miquel:
-    name: "AI Context - Preferred Language (Miquel)"
+  ai_context_preferred_language_person1:
+    name: "AI Context - Preferred Language (Person 1)"
     options:
       - English
       - Spanish
@@ -186,8 +186,8 @@ input_select:
       - Dutch
       - Portuguese
     initial: English
-  ai_context_preferred_language_jessica:
-    name: "AI Context - Preferred Language (Jessica)"
+  ai_context_preferred_language_person2:
+    name: "AI Context - Preferred Language (Person 2)"
     options:
       - Spanish
       - Valencian
@@ -202,11 +202,11 @@ input_text:
   # ── Shared User Profile (household-specific) ──
   ai_context_user_name:
     name: "AI Context - User Name"
-    initial: "Miquel"
+    initial: "Person 1"
     max: 50
   ai_context_user_name_spoken:
     name: "AI Context - User Name (TTS pronunciation)"
-    initial: "Mee-kel"
+    initial: ""
     max: 50
   ai_context_user_languages:
     name: "AI Context - User Languages"
@@ -214,7 +214,7 @@ input_text:
     max: 200
   ai_context_household:
     name: "AI Context - Household Members"
-    initial: "Miquel, Jessica (partner)"
+    initial: "Person 1, Person 2 (partner)"
     max: 200
   ai_context_pets:
     name: "AI Context - Pets"
@@ -222,174 +222,174 @@ input_text:
     max: 100
 
   # ── Per-Person Calendar Summaries ──
-  ai_calendar_today_summary_miquel:
-    name: "AI Calendar Today Summary (Miquel)"
+  ai_calendar_today_summary_person1:
+    name: "AI Calendar Today Summary (Person 1)"
     initial: ""
     max: 255
     icon: mdi:calendar-account
-  ai_calendar_tomorrow_summary_miquel:
-    name: "AI Calendar Tomorrow Summary (Miquel)"
+  ai_calendar_tomorrow_summary_person1:
+    name: "AI Calendar Tomorrow Summary (Person 1)"
     initial: ""
     max: 255
     icon: mdi:calendar-account
-  ai_calendar_today_summary_jessica:
-    name: "AI Calendar Today Summary (Jessica)"
+  ai_calendar_today_summary_person2:
+    name: "AI Calendar Today Summary (Person 2)"
     initial: ""
     max: 255
     icon: mdi:calendar-account-outline
-  ai_calendar_tomorrow_summary_jessica:
-    name: "AI Calendar Tomorrow Summary (Jessica)"
+  ai_calendar_tomorrow_summary_person2:
+    name: "AI Calendar Tomorrow Summary (Person 2)"
     initial: ""
     max: 255
     icon: mdi:calendar-account-outline
 
-  # ── Per-User Profile (Miquel) ──
-  ai_context_user_name_miquel:
-    name: "AI Context - User Name (Miquel)"
-    initial: "Miquel"
+  # ── Per-User Profile (Person 1) ──
+  ai_context_user_name_person1:
+    name: "AI Context - User Name (Person 1)"
+    initial: "Person 1"
     max: 50
-  ai_context_user_name_spoken_miquel:
-    name: "AI Context - User Name Spoken (Miquel)"
-    initial: "Mee-kel"
+  ai_context_user_name_spoken_person1:
+    name: "AI Context - User Name Spoken (Person 1)"
+    initial: ""
     max: 50
-  ai_context_user_languages_miquel:
-    name: "AI Context - User Languages (Miquel)"
+  ai_context_user_languages_person1:
+    name: "AI Context - User Languages (Person 1)"
     initial: "English, Spanish, Valencian, Dutch, Portuguese"
     max: 200
 
-  # ── Per-User Profile (Jessica) ──
-  ai_context_user_name_jessica:
-    name: "AI Context - User Name (Jessica)"
-    initial: "Jessica"
+  # ── Per-User Profile (Person 2) ──
+  ai_context_user_name_person2:
+    name: "AI Context - User Name (Person 2)"
+    initial: "Person 2"
     max: 50
-  ai_context_user_name_spoken_jessica:
-    name: "AI Context - User Name Spoken (Jessica)"
-    initial: "Jessica"
+  ai_context_user_name_spoken_person2:
+    name: "AI Context - User Name Spoken (Person 2)"
+    initial: "Person 2"
     max: 50
-  ai_context_user_languages_jessica:
-    name: "AI Context - User Languages (Jessica)"
+  ai_context_user_languages_person2:
+    name: "AI Context - User Languages (Person 2)"
     initial: "Spanish, Valencian"
     max: 200
 
   # ── Communication Preferences ──
-  ai_context_user_verbosity_miquel:
-    name: "AI Context - Verbosity (Miquel)"
+  ai_context_user_verbosity_person1:
+    name: "AI Context - Verbosity (Person 1)"
     icon: mdi:text-short
     max: 255
-  ai_context_user_verbosity_jessica:
-    name: "AI Context - Verbosity (Jessica)"
+  ai_context_user_verbosity_person2:
+    name: "AI Context - Verbosity (Person 2)"
     icon: mdi:text-short
     max: 255
-  ai_context_user_humor_miquel:
-    name: "AI Context - Humor (Miquel)"
+  ai_context_user_humor_person1:
+    name: "AI Context - Humor (Person 1)"
     icon: mdi:emoticon-happy
     max: 255
-  ai_context_user_humor_jessica:
-    name: "AI Context - Humor (Jessica)"
+  ai_context_user_humor_person2:
+    name: "AI Context - Humor (Person 2)"
     icon: mdi:emoticon-happy
     max: 255
-  ai_context_user_language_context_miquel:
-    name: "AI Context - Language Context (Miquel)"
+  ai_context_user_language_context_person1:
+    name: "AI Context - Language Context (Person 1)"
     icon: mdi:translate
     max: 255
-  ai_context_user_language_context_jessica:
-    name: "AI Context - Language Context (Jessica)"
+  ai_context_user_language_context_person2:
+    name: "AI Context - Language Context (Person 2)"
     icon: mdi:translate
     max: 255
-  ai_context_user_persona_miquel:
-    name: "AI Context - Persona Preference (Miquel)"
+  ai_context_user_persona_person1:
+    name: "AI Context - Persona Preference (Person 1)"
     icon: mdi:account-voice
     max: 255
-  ai_context_user_persona_jessica:
-    name: "AI Context - Persona Preference (Jessica)"
+  ai_context_user_persona_person2:
+    name: "AI Context - Persona Preference (Person 2)"
     icon: mdi:account-voice
     max: 255
-  ai_context_user_notify_threshold_miquel:
-    name: "AI Context - Notification Threshold (Miquel)"
+  ai_context_user_notify_threshold_person1:
+    name: "AI Context - Notification Threshold (Person 1)"
     icon: mdi:bell-cog
     max: 255
-  ai_context_user_notify_threshold_jessica:
-    name: "AI Context - Notification Threshold (Jessica)"
+  ai_context_user_notify_threshold_person2:
+    name: "AI Context - Notification Threshold (Person 2)"
     icon: mdi:bell-cog
     max: 255
 
   # ── Personality Preferences ──
-  ai_context_user_social_style_miquel:
-    name: "AI Context - Social Style (Miquel)"
+  ai_context_user_social_style_person1:
+    name: "AI Context - Social Style (Person 1)"
     icon: mdi:account-group
     max: 255
-  ai_context_user_social_style_jessica:
-    name: "AI Context - Social Style (Jessica)"
+  ai_context_user_social_style_person2:
+    name: "AI Context - Social Style (Person 2)"
     icon: mdi:account-group
     max: 255
-  ai_context_user_morning_or_night_miquel:
-    name: "AI Context - Morning/Night (Miquel)"
+  ai_context_user_morning_or_night_person1:
+    name: "AI Context - Morning/Night (Person 1)"
     icon: mdi:weather-night
     max: 255
-  ai_context_user_morning_or_night_jessica:
-    name: "AI Context - Morning/Night (Jessica)"
+  ai_context_user_morning_or_night_person2:
+    name: "AI Context - Morning/Night (Person 2)"
     icon: mdi:weather-night
     max: 255
-  ai_context_user_values_miquel:
-    name: "AI Context - Values (Miquel)"
+  ai_context_user_values_person1:
+    name: "AI Context - Values (Person 1)"
     icon: mdi:heart
     max: 255
-  ai_context_user_values_jessica:
-    name: "AI Context - Values (Jessica)"
+  ai_context_user_values_person2:
+    name: "AI Context - Values (Person 2)"
     icon: mdi:heart
     max: 255
-  ai_context_user_pet_peeves_miquel:
-    name: "AI Context - Pet Peeves (Miquel)"
+  ai_context_user_pet_peeves_person1:
+    name: "AI Context - Pet Peeves (Person 1)"
     icon: mdi:alert-circle
     max: 255
-  ai_context_user_pet_peeves_jessica:
-    name: "AI Context - Pet Peeves (Jessica)"
+  ai_context_user_pet_peeves_person2:
+    name: "AI Context - Pet Peeves (Person 2)"
     icon: mdi:alert-circle
     max: 255
-  ai_context_user_stress_relief_miquel:
-    name: "AI Context - Stress Relief (Miquel)"
+  ai_context_user_stress_relief_person1:
+    name: "AI Context - Stress Relief (Person 1)"
     icon: mdi:spa
     max: 255
-  ai_context_user_stress_relief_jessica:
-    name: "AI Context - Stress Relief (Jessica)"
+  ai_context_user_stress_relief_person2:
+    name: "AI Context - Stress Relief (Person 2)"
     icon: mdi:spa
     max: 255
 
   # ── Schedule Context ──
-  ai_context_user_wake_schedule_miquel:
-    name: "AI Context - Wake Schedule (Miquel)"
+  ai_context_user_wake_schedule_person1:
+    name: "AI Context - Wake Schedule (Person 1)"
     icon: mdi:alarm
     max: 255
-  ai_context_user_wake_schedule_jessica:
-    name: "AI Context - Wake Schedule (Jessica)"
+  ai_context_user_wake_schedule_person2:
+    name: "AI Context - Wake Schedule (Person 2)"
     icon: mdi:alarm
     max: 255
 
   # ── Privacy Preferences ──
-  ai_context_user_off_limits_miquel:
-    name: "AI Context - Off-Limits Topics (Miquel)"
+  ai_context_user_off_limits_person1:
+    name: "AI Context - Off-Limits Topics (Person 1)"
     icon: mdi:cancel
     max: 255
-  ai_context_user_off_limits_jessica:
-    name: "AI Context - Off-Limits Topics (Jessica)"
+  ai_context_user_off_limits_person2:
+    name: "AI Context - Off-Limits Topics (Person 2)"
     icon: mdi:cancel
     max: 255
-  ai_context_user_proactive_comfort_miquel:
-    name: "AI Context - Proactive Comfort (Miquel)"
+  ai_context_user_proactive_comfort_person1:
+    name: "AI Context - Proactive Comfort (Person 1)"
     icon: mdi:lightbulb-on
     max: 255
-  ai_context_user_proactive_comfort_jessica:
-    name: "AI Context - Proactive Comfort (Jessica)"
+  ai_context_user_proactive_comfort_person2:
+    name: "AI Context - Proactive Comfort (Person 2)"
     icon: mdi:lightbulb-on
     max: 255
 
   # ── Alt-Weekday Days (Preference Consumption B1) ──
-  ai_context_wake_time_alt_days_miquel:
-    name: "AI Context - Alt Weekday Days (Miquel)"
+  ai_context_wake_time_alt_days_person1:
+    name: "AI Context - Alt Weekday Days (Person 1)"
     icon: mdi:calendar-week
     max: 255
-  ai_context_wake_time_alt_days_jessica:
-    name: "AI Context - Alt Weekday Days (Jessica)"
+  ai_context_wake_time_alt_days_person2:
+    name: "AI Context - Alt Weekday Days (Person 2)"
     icon: mdi:calendar-week
     max: 255
 
@@ -399,66 +399,66 @@ input_text:
 
 input_datetime:
   # ── Away Patterns ──
-  ai_away_departed_miquel:
-    name: "AI Away - Miquel Departed At"
+  ai_away_departed_person1:
+    name: "AI Away - Person 1 Departed At"
     has_date: true
     has_time: true
     icon: mdi:exit-run
-  ai_away_departed_jessica:
-    name: "AI Away - Jessica Departed At"
+  ai_away_departed_person2:
+    name: "AI Away - Person 2 Departed At"
     has_date: true
     has_time: true
     icon: mdi:exit-run
-  ai_home_since_miquel:
-    name: "AI Home Since - Miquel"
+  ai_home_since_person1:
+    name: "AI Home Since - Person 1"
     has_date: true
     has_time: true
     icon: mdi:home-clock
-  ai_home_since_jessica:
-    name: "AI Home Since - Jessica"
+  ai_home_since_person2:
+    name: "AI Home Since - Person 2"
     has_date: true
     has_time: true
     icon: mdi:home-clock
 
-  # ── Per-User Schedule (Miquel) ──
+  # ── Per-User Schedule (Person 1) ──
   # Note: input_datetime has no 'initial' — set defaults via UI or automation.
   # Intended defaults: weekday 07:30, weekend 09:00, bedtime 22:30.
-  ai_context_wake_time_weekday_miquel:
-    name: "AI Context - Wake Time Weekday (Miquel)"
+  ai_context_wake_time_weekday_person1:
+    name: "AI Context - Wake Time Weekday (Person 1)"
     has_date: false
     has_time: true
-  ai_context_wake_time_weekend_miquel:
-    name: "AI Context - Wake Time Weekend (Miquel)"
+  ai_context_wake_time_weekend_person1:
+    name: "AI Context - Wake Time Weekend (Person 1)"
     has_date: false
     has_time: true
-  ai_context_bed_time_miquel:
-    name: "AI Context - Bedtime Target (Miquel)"
+  ai_context_bed_time_person1:
+    name: "AI Context - Bedtime Target (Person 1)"
     has_date: false
     has_time: true
 
-  # ── Per-User Schedule (Jessica) ──
-  # Shares bedtime with Miquel. Set wake/bed times via UI.
-  ai_context_wake_time_weekday_jessica:
-    name: "AI Context - Wake Time Weekday (Jessica)"
+  # ── Per-User Schedule (Person 2) ──
+  # Shares bedtime with Person 1. Set wake/bed times via UI.
+  ai_context_wake_time_weekday_person2:
+    name: "AI Context - Wake Time Weekday (Person 2)"
     has_date: false
     has_time: true
-  ai_context_wake_time_weekend_jessica:
-    name: "AI Context - Wake Time Weekend (Jessica)"
+  ai_context_wake_time_weekend_person2:
+    name: "AI Context - Wake Time Weekend (Person 2)"
     has_date: false
     has_time: true
-  ai_context_bed_time_jessica:
-    name: "AI Context - Bedtime Target (Jessica)"
+  ai_context_bed_time_person2:
+    name: "AI Context - Bedtime Target (Person 2)"
     has_date: false
     has_time: true
 
   # ── Alt-Weekday Wake Time (Preference Consumption B1) ──
-  ai_context_wake_time_alt_weekday_miquel:
-    name: "AI Context - Alt Weekday Wake Time (Miquel)"
+  ai_context_wake_time_alt_weekday_person1:
+    name: "AI Context - Alt Weekday Wake Time (Person 1)"
     has_date: false
     has_time: true
     icon: mdi:alarm-plus
-  ai_context_wake_time_alt_weekday_jessica:
-    name: "AI Context - Alt Weekday Wake Time (Jessica)"
+  ai_context_wake_time_alt_weekday_person2:
+    name: "AI Context - Alt Weekday Wake Time (Person 2)"
     has_date: false
     has_time: true
     icon: mdi:alarm-plus
@@ -468,15 +468,15 @@ input_datetime:
 # ═══════════════════════════════════════════════════════════════════
 
 counter:
-  ai_away_trip_count_miquel:
-    name: "AI Away Trip Count - Miquel"
+  ai_away_trip_count_person1:
+    name: "AI Away Trip Count - Person 1"
     icon: mdi:counter
     initial: 0
     minimum: 0
     step: 1
     restore: true
-  ai_away_trip_count_jessica:
-    name: "AI Away Trip Count - Jessica"
+  ai_away_trip_count_person2:
+    name: "AI Away Trip Count - Person 2"
     icon: mdi:counter
     initial: 0
     minimum: 0
