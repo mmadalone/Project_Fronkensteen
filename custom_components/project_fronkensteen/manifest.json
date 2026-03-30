@@ -1,7 +1,7 @@
 {
   "domain": "project_fronkensteen",
   "name": "Project Fronkensteen",
-  "after_dependencies": ["assist_pipeline", "energy", "recorder", "rest", "scrape"],
+  "after_dependencies": ["assist_pipeline", "conversation", "energy", "history", "recorder", "rest", "scrape"],
   "codeowners": ["@mmadalone"],
   "config_flow": true,
   "documentation": "https://github.com/mmadalone/Project_Fronkensteen",
