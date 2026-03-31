@@ -75,6 +75,16 @@ async def _handle_idle(var_name=None, old_value=None, select_entity=""):
         return
     if not select_entity:
         return
+    # Don't reset while a handoff automation is still running (its restore
+    # timer may be counting down) — let the blueprint handle the restore.
+    try:
+        for eid in state.names(domain="automation"):  # noqa: F821
+            if "handoff" in eid:
+                attrs = state.getattr(eid)  # noqa: F821
+                if (attrs or {}).get("current", 0) > 0:
+                    return
+    except Exception:
+        pass
 
     display_name, era = _get_era_display_name()
     if not display_name:
