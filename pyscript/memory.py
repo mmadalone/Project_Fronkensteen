@@ -1937,8 +1937,9 @@ async def memory_set(
 
         key_exists = await _memory_key_exists_db(key_norm)
 
+        # Skip duplicate-tag check when force_new — caller expects overlap
         duplicate_matches: list[tuple[dict[str, Any], float]] = []
-        if not key_exists and tags_search:
+        if not key_exists and tags_search and not force_new_bool:
             duplicate_matches = await _search_tag_candidates(
                 tags_search,
                 exclude_keys={key_norm},
@@ -1955,26 +1956,23 @@ async def memory_set(
             ]
 
         if duplicate_options and not key_exists:
-            if not force_new_bool:
-                _set_result(
-                    "error",
-                    op="set",
-                    key=key_norm,
-                    tags=tags_raw,
-                    error="duplicate_tags",
-                    matches=duplicate_options,
-                )
-                log.error("memory_set: duplicate tags detected, refusing to overwrite")  # noqa: F821
-                return {
-                    "status": "error",
-                    "op": "set",
-                    "key": key_norm,
-                    "tags": tags_raw,
-                    "error": "duplicate_tags",
-                    "matches": duplicate_options,
-                }
-            forced_duplicate_override = True
-            log.warning("memory_set: duplicate tags override forced by force_new")  # noqa: F821
+            _set_result(
+                "error",
+                op="set",
+                key=key_norm,
+                tags=tags_raw,
+                error="duplicate_tags",
+                matches=duplicate_options,
+            )
+            log.debug("memory_set: duplicate tags detected, refusing to overwrite")  # noqa: F821
+            return {
+                "status": "error",
+                "op": "set",
+                "key": key_norm,
+                "tags": tags_raw,
+                "error": "duplicate_tags",
+                "matches": duplicate_options,
+            }
 
         ok_db = await _memory_set_db(
             key_norm=key_norm,

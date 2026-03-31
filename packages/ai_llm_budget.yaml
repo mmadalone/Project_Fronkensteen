@@ -929,7 +929,7 @@ automation:
       state_changed event trigger dynamically catches ALL conversation.*
       entity changes (no hardcoded entity list). I-33 Phase 2: per-agent breakdown.
     mode: queued
-    max: 20
+    max: 100
     triggers:
       - trigger: event
         event_type: assist_pipeline/run/end
