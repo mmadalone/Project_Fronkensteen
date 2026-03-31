@@ -252,6 +252,36 @@ blueprint:
             entity:
               domain: input_text
 
+        fallback_morning:
+          name: Morning fallback message
+          description: >
+            Spoken when morning helper is empty AND LLM fails. Supports
+            {{ name }} and {{ area_name }} placeholders.
+          default: "Good morning, {{ name }}. You're in the {{ area_name }}."
+          selector:
+            text:
+              multiline: true
+
+        fallback_afternoon:
+          name: Afternoon fallback message
+          description: >
+            Spoken when afternoon helper is empty AND LLM fails. Supports
+            {{ name }} and {{ area_name }} placeholders.
+          default: "Hey {{ name }}, welcome back to the {{ area_name }}."
+          selector:
+            text:
+              multiline: true
+
+        fallback_evening:
+          name: Evening fallback message
+          description: >
+            Spoken when evening helper is empty AND LLM fails. Supports
+            {{ name }}, {{ area_name }}, and {{ tod_label }} placeholders.
+          default: "Good {{ tod_label }}, {{ name }}. I'm here in the {{ area_name }}."
+          selector:
+            text:
+              multiline: true
+
         refresh_after_run:
           name: Refresh messages after each run
           description: >
@@ -913,6 +943,9 @@ variables:
   morning_entity: !input message_morning_helper
   afternoon_entity: !input message_afternoon_helper
   evening_entity: !input message_evening_helper
+  v_fallback_morning: !input fallback_morning
+  v_fallback_afternoon: !input fallback_afternoon
+  v_fallback_evening: !input fallback_evening
 
   # ── name resolution ─────────────────────────────────────────────────────
   user_names_raw: !input user_names
@@ -1352,19 +1385,19 @@ actions:
         {% set name = chosen_direct_name %}
         {% if tod_label == 'morning' %}
           {% if morning in ['', 'unavailable', 'unknown'] %}
-            Good morning, {{ name }}. You're in the {{ area_name }}.
+            {{ v_fallback_morning | replace('{{ name }}', name) | replace('{{ area_name }}', area_name) | replace('{{ tod_label }}', tod_label) }}
           {% else %}
             {{ morning }}
           {% endif %}
         {% elif tod_label == 'afternoon' %}
           {% if afternoon in ['', 'unavailable', 'unknown'] %}
-            Hey {{ name }}, welcome back to the {{ area_name }}.
+            {{ v_fallback_afternoon | replace('{{ name }}', name) | replace('{{ area_name }}', area_name) | replace('{{ tod_label }}', tod_label) }}
           {% else %}
             {{ afternoon }}
           {% endif %}
         {% else %}
           {% if evening in ['', 'unavailable', 'unknown'] %}
-            Good {{ tod_label }}, {{ name }}. I'm here in the {{ area_name }}.
+            {{ v_fallback_evening | replace('{{ name }}', name) | replace('{{ area_name }}', area_name) | replace('{{ tod_label }}', tod_label) }}
           {% else %}
             {{ evening }}
           {% endif %}
