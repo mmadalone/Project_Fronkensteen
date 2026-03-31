@@ -39,10 +39,13 @@ sensor:
   # ── Temperature range last 24h ────────────────────────────────────
   # Three sensors: mean (state), min, max. HA statistics platform
   # no longer exposes min/max as attributes — separate sensors required.
+  # SETUP: Change entity_id below to your outdoor temperature sensor.
+  #        Must report °C with unit_of_measurement attribute.
+  #        Reference: entity_config.yaml → weather_temperature_entity
   - platform: statistics
     name: "AI Outside Temperature 24h"
     unique_id: ai_outside_temperature_24h
-    entity_id: sensor.weather_temperature
+    entity_id: sensor.aemet_temperature
     state_characteristic: mean
     max_age:
       hours: 24
@@ -51,7 +54,7 @@ sensor:
   - platform: statistics
     name: "AI Outside Temperature 24h Min"
     unique_id: ai_outside_temperature_24h_min
-    entity_id: sensor.weather_temperature
+    entity_id: sensor.aemet_temperature
     state_characteristic: value_min
     max_age:
       hours: 24
@@ -60,7 +63,7 @@ sensor:
   - platform: statistics
     name: "AI Outside Temperature 24h Max"
     unique_id: ai_outside_temperature_24h_max
-    entity_id: sensor.weather_temperature
+    entity_id: sensor.aemet_temperature
     state_characteristic: value_max
     max_age:
       hours: 24

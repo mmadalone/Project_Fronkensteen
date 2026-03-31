@@ -7,7 +7,12 @@ import logging
 import re
 from typing import Any, Literal
 
-from openai._exceptions import OpenAIError
+from openai._exceptions import (
+    InternalServerError,
+    NotFoundError,
+    OpenAIError,
+    RateLimitError,
+)
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 import yaml
@@ -39,6 +44,7 @@ from . import ExtendedOpenAIConfigEntry
 from .const import (
     CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
+    CONF_FALLBACK_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
@@ -51,6 +57,7 @@ from .const import (
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_FALLBACK_MODEL,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -97,6 +104,20 @@ _INLINE_TOOL_PARAMS = re.compile(
 )
 
 
+# Transient errors that warrant retrying with a fallback model
+_FALLBACK_ELIGIBLE_ERRORS = (RateLimitError, InternalServerError, NotFoundError)
+
+
+def _token_kwargs_for_model(model: str, max_tokens: int) -> dict:
+    """Return the correct token parameter dict for the given model."""
+    model_lower = model.lower()
+    use_new_token_param = any(
+        model_lower.startswith(prefix) or f"-{prefix}" in model_lower
+        for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
+    )
+    return {"max_completion_tokens": max_tokens} if use_new_token_param else {"max_tokens": max_tokens}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ExtendedOpenAIConfigEntry,
@@ -137,11 +158,15 @@ class ExtendedOpenAIAgentEntity(
         self.options = subentry.data
         self._attr_unique_id = subentry.subentry_id
 
+        model_display = self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        fallback = self.options.get(CONF_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL)
+        if fallback and fallback != model_display:
+            model_display = f"{model_display} \u2192 {fallback}"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, subentry.subentry_id)},
             name=subentry.title,
             manufacturer="OpenAI",
-            model=self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL),
+            model=model_display,
             entry_type=dr.DeviceEntryType.SERVICE,
         )
         self.client = entry.runtime_data
@@ -195,8 +220,48 @@ class ExtendedOpenAIAgentEntity(
 
         messages.append(user_message)
 
+        msg_snapshot = len(messages)
         try:
             query_response = await self.query(user_input, messages, exposed_entities, 0)
+        except _FALLBACK_ELIGIBLE_ERRORS as primary_err:
+            fallback_model = self.options.get(CONF_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL)
+            primary_model = self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+            if not fallback_model or fallback_model == primary_model:
+                _LOGGER.error(
+                    "Model %s failed: %s (no fallback configured)",
+                    primary_model, primary_err,
+                )
+                intent_response = intent.IntentResponse(language=user_input.language)
+                intent_response.async_set_error(
+                    intent.IntentResponseErrorCode.UNKNOWN,
+                    f"Sorry, I had a problem talking to OpenAI: {primary_err}",
+                )
+                return conversation.ConversationResult(
+                    response=intent_response, conversation_id=conversation_id
+                )
+            _LOGGER.warning(
+                "Model %s failed (%s: %s) — retrying with fallback model %s",
+                primary_model, type(primary_err).__name__, primary_err, fallback_model,
+            )
+            del messages[msg_snapshot:]
+            try:
+                query_response = await self.query(
+                    user_input, messages, exposed_entities, 0,
+                    model_override=fallback_model,
+                )
+            except OpenAIError as fallback_err:
+                _LOGGER.error(
+                    "Fallback model %s also failed: %s",
+                    fallback_model, fallback_err,
+                )
+                intent_response = intent.IntentResponse(language=user_input.language)
+                intent_response.async_set_error(
+                    intent.IntentResponseErrorCode.UNKNOWN,
+                    f"Sorry, I had a problem talking to OpenAI: {primary_err}",
+                )
+                return conversation.ConversationResult(
+                    response=intent_response, conversation_id=conversation_id
+                )
         except OpenAIError as err:
             _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
@@ -419,9 +484,10 @@ class ExtendedOpenAIAgentEntity(
         messages,
         exposed_entities,
         n_requests,
+        model_override: str | None = None,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
-        model = self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        model = model_override or self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
@@ -449,14 +515,7 @@ class ExtendedOpenAIAgentEntity(
 
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
-        # Determine which token parameter to use based on model
-        # Newer models (gpt-4o, gpt-5, o1, o3, etc.) require max_completion_tokens
-        model_lower = model.lower()
-        use_new_token_param = any(
-            model_lower.startswith(prefix) or f"-{prefix}" in model_lower
-            for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
-        )
-        token_kwargs = {"max_completion_tokens": max_tokens} if use_new_token_param else {"max_tokens": max_tokens}
+        token_kwargs = _token_kwargs_for_model(model, max_tokens)
 
         response = await self.client.chat.completions.create(
             model=model,
@@ -480,7 +539,8 @@ class ExtendedOpenAIAgentEntity(
             choice.finish_reason == "stop" and choice.message.function_call is not None
         ):
             return await self.execute_function_call(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input, messages, message, exposed_entities, n_requests + 1,
+                model_override=model_override,
             )
         # Some OpenAI servers returns tool_calls=[] on normal "stop" completions.
         # Only enter tool execution when tool_calls is present AND non-empty.
@@ -488,7 +548,8 @@ class ExtendedOpenAIAgentEntity(
             choice.finish_reason == "tool_calls" or choice.finish_reason == "stop"
         ):
             return await self.execute_tool_calls(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input, messages, message, exposed_entities, n_requests + 1,
+                model_override=model_override,
             )
         if choice.finish_reason == "length":
             raise TokenLengthExceededError(response.usage.completion_tokens)
@@ -502,6 +563,7 @@ class ExtendedOpenAIAgentEntity(
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        model_override: str | None = None,
     ) -> OpenAIQueryResponse:
         function_name = message.function_call.name
         function = next(
@@ -516,6 +578,7 @@ class ExtendedOpenAIAgentEntity(
                 exposed_entities,
                 n_requests,
                 function,
+                model_override=model_override,
             )
         raise FunctionNotFound(function_name)
 
@@ -527,6 +590,7 @@ class ExtendedOpenAIAgentEntity(
         exposed_entities,
         n_requests,
         functionSpec,
+        model_override: str | None = None,
     ) -> OpenAIQueryResponse:
         function = functionSpec["function"]
         function_executor = get_function_executor(function["type"])
@@ -562,7 +626,7 @@ class ExtendedOpenAIAgentEntity(
                 "content": str(result),
             }
         )
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(user_input, messages, exposed_entities, n_requests, model_override=model_override)
 
     async def execute_tool_calls(
         self,
@@ -571,6 +635,7 @@ class ExtendedOpenAIAgentEntity(
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        model_override: str | None = None,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
@@ -597,7 +662,7 @@ class ExtendedOpenAIAgentEntity(
                 )
             else:
                 raise FunctionNotFound(function_name)
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(user_input, messages, exposed_entities, n_requests, model_override=model_override)
 
     async def execute_tool_function(
         self,

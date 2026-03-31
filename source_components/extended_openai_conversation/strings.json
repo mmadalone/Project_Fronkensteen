@@ -25,6 +25,7 @@
         "data": {
           "prompt": "Prompt Template",
           "model": "Completion Model",
+          "fallback_model": "Fallback Model (retry on 429/5xx errors, leave empty to disable)",
           "max_tokens": "Maximum tokens to return in response",
           "temperature": "Temperature",
           "top_p": "Top P",

@@ -40,6 +40,7 @@ from .const import (
     CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
+    CONF_FALLBACK_MODEL,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -55,6 +56,7 @@ from .const import (
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_BASE_URL,
+    DEFAULT_FALLBACK_MODEL,
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
@@ -103,6 +105,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
     {
         CONF_PROMPT: DEFAULT_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
+        CONF_FALLBACK_MODEL: DEFAULT_FALLBACK_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
         CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         CONF_TOP_P: DEFAULT_TOP_P,
@@ -271,6 +274,11 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 CONF_CHAT_MODEL,
                 description={"suggested_value": options.get(CONF_CHAT_MODEL)},
                 default=DEFAULT_CHAT_MODEL,
+            ): str,
+            vol.Optional(
+                CONF_FALLBACK_MODEL,
+                description={"suggested_value": options.get(CONF_FALLBACK_MODEL)},
+                default=DEFAULT_FALLBACK_MODEL,
             ): str,
             vol.Optional(
                 CONF_MAX_TOKENS,

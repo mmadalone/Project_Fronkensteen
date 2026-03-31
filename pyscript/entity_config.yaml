@@ -48,6 +48,10 @@ music_players:
 # Used by: music_taste
 spotifyplus_entity: media_player.spotifyplus_miquel_angel_madalone
 
+# Outdoor temperature sensor (must report °C with unit_of_measurement)
+# Used by: packages/ai_history_context.yaml (statistics platform — update entity_id there)
+weather_temperature_entity: sensor.aemet_temperature
+
 # IMAP sensor
 # Used by: email_promote
 imap_sensor: sensor.gmail_messages
