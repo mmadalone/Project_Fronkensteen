@@ -334,7 +334,7 @@ Trace any feature back to its components.
 | Failure | Detection | Degradation Path |
 |---------|-----------|-----------------|
 | **Dispatcher cache failure** | 3 consecutive errors | Bypass mode: routes to `ai_dispatcher_fallback_pipeline` helper. Auto-clears on recovery. |
-| **ElevenLabs exhausted** | Character count below `ai_elevenlabs_credit_floor` | TTS swaps to HA Cloud (free). All features continue. |
+| **ElevenLabs exhausted** | Character count below `ai_elevenlabs_credit_floor` (disabled when floor < 0) | TTS swaps to HA Cloud (free). All features continue. Negative floor allows overage. |
 | **Memory DB write failure** | 3 consecutive errors | Read-only mode. Reads continue normally. Periodic recovery probe. |
 | **Budget exhausted** | Daily cost exceeds `ai_budget_daily_cost_limit` | Fallback agent (`ai_budget_fallback_agent`). Pipelines saved/restored at midnight. |
 | **TTS queue stuck** | Item age exceeds `ai_tts_stuck_timeout_minutes` | Watchdog auto-clears queue. Fires `ai_tts_queue_stuck` event. |

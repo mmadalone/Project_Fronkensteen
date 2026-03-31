@@ -473,7 +473,7 @@ This replaces the old filesystem-based recovery (scanning `_versioning/` directo
 
 The HA MCP git tools (`ha_create_checkpoint`, `ha_git_commit`, `ha_git_rollback`) only track `HA_CONFIG`. They know nothing about `PROJECT_DIR` or `GIT_REPO`.
 
-Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Publish Workflow defined in the project instructions. Claude handles the sync (rsync) and commit (git MCP) natively — no external script required.
+Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Publish Workflow defined in the project instructions. Claude handles the sync (rsync) and commit (git MCP) natively. For full repo sync including bundle population for the HACS installer, use `ha-master-sync-to-repo.sh` (handles rsync, patched component sync, bundle population, and zipped patched components).
 
 **Decision rule — two paths, zero deliberation:**
 

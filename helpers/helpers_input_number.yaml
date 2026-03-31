@@ -99,7 +99,7 @@ ai_cost_per_stt_call:
 # I-46: ElevenLabs credit floor (TTS swaps to HA Cloud below this)
 ai_elevenlabs_credit_floor:
   name: "ElevenLabs - Credit Floor"
-  min: 0
+  min: -100000
   max: 100000
   step: 1000
   initial: 5000

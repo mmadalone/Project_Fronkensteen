@@ -403,7 +403,7 @@ Use `assist_satellite.announce` for one-shot announcements. Use the manual duck/
 ### 7.5 Volume sync between platforms (Alexa ↔ MA)
 When MA plays through a platform speaker (e.g., Echo via Alexa Media Player), the volume can be changed on either side. Keeping them in sync requires careful handling.
 
-> **⚠️ Stability caveat:** This entire pattern is a **workaround for a platform limitation** — Alexa Media Player and Music Assistant don't natively share volume state. The paired-list approach with tolerance thresholds and cooldowns is the most robust community-developed solution, but it is inherently fragile. Alexa Media Player integration updates, MA version bumps, or changes to how either platform reports `volume_level` can silently break sync. If volume sync stops working after an update, check: (1) whether `volume_level` attribute format changed (some updates switch between 0.0–1.0 and 0–100 scales), (2) whether state reporting latency increased (may need to bump cooldown), (3) whether the Alexa integration changed how it handles rapid volume commands. Periodically check if native volume sync has been added to either integration — if it has, rip this pattern out and use the native solution.
+> **⚠️ Stability caveat:** This entire pattern is a **workaround for a platform limitation** — Alexa Media Player and Music Assistant don't natively share volume state. The paired-list approach with tolerance thresholds and cooldowns is the most robust community-developed solution, but it is inherently fragile. Alexa Media Player integration updates, MA version bumps, or changes to how either platform reports `volume_level` can silently break sync. If volume sync stops working after an update, check: (1) whether `volume_level` attribute format changed (some updates switch between 0.0–1.0 and 0–100 scales), (2) whether state reporting latency increased (may need to bump cooldown), (3) whether the Alexa integration changed how it handles rapid volume commands (see AP-77 — back-to-back calls like mute+volume_set are silently dropped by the Alexa cloud API). Periodically check if native volume sync has been added to either integration — if it has, rip this pattern out and use the native solution.
 
 **Architecture:** One automation handles bidirectional sync with:
 - Paired device lists (same-order indexing)
@@ -456,7 +456,9 @@ variables:
     {% else %}{{ '' }}{% endif %}
 ```
 
-**Mode:** Always use `mode: queued` with `max: 4` and `max_exceeded: silent` for volume sync — rapid changes will stack up.
+**Mode:** Use `mode: single` with `max_exceeded: silent` for volume sync. ~~Previously `mode: queued` with `max: 4`~~ — changed 2026-03-31 because queued runs caused cascade storms that filled all slots before the Alexa cloud API could process the volume change. `mode: single` ignores cascade triggers while the current run completes, giving the Alexa API time to process.
+
+**⚠️ Alexa mute+volume race (AP-77):** Never call `media_player.volume_mute` on Alexa devices immediately before `media_player.volume_set`. The Alexa cloud API silently drops the second of two rapid-fire calls to the same device. If your sync pattern includes mute sync, gate it to only fire when the source volume is zero (actually muting). Do NOT send `is_volume_muted: false` as a "just in case" unmute — `volume_set` implicitly unmutes, and the redundant mute call will cause the volume_set to be silently eaten with no error in logs.
 
 ### 7.6 Presence-aware player selection
 For "play music where I am" scenarios, use priority-ordered presence sensor ↔ player pairs:

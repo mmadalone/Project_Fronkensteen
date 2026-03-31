@@ -589,7 +589,7 @@ Tracks API costs across LLM, TTS, STT, and music generation. Enforces daily limi
 | `input_number.ai_cost_per_1k_tts_chars` | number | E | Estimated cost per 1K TTS characters. | 0.30 EUR |
 | `input_number.ai_cost_per_stt_call` | number | E | Estimated cost per STT call. | 0.02 EUR |
 | `input_number.ai_cost_per_music_generation` | number | E | Cost per music API generation. | 0.02 EUR |
-| `input_number.ai_elevenlabs_credit_floor` | number | E [config] | Character count below which TTS swaps to HA Cloud (free). | 5000 chars |
+| `input_number.ai_elevenlabs_credit_floor` | number | E [config] | Character count below which TTS swaps to HA Cloud (free). Negative values disable the gate (allow overage). | 5000 chars |
 | `input_number.ai_elevenlabs_credit_cap` | number | E | Credit cap override (0 = use API value). | 0 |
 | `input_number.ai_elevenlabs_monthly_cost` | number | E | Your ElevenLabs monthly subscription cost in USD. | $22 |
 | `input_number.ai_serper_plan_cost` | number | E | Your Serper plan cost in USD. | $50 |

@@ -1002,7 +1002,7 @@ automation:
         value_template: >-
           {% set remaining = states('sensor.elevenlabs_credits_remaining') | int(999999) %}
           {% set floor = states('input_number.ai_elevenlabs_credit_floor') | int(5000) %}
-          {{ remaining <= floor and remaining > 0 }}
+          {{ remaining <= floor and floor >= 0 }}
         id: credits_exhausted
       - trigger: state
         entity_id: input_boolean.ai_budget_fallback_active

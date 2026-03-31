@@ -60,6 +60,7 @@ Sections 10 and 11 — Things to never do, and build/review/edit workflows.
 | AP-33 | ❌ | TTS duck/restore without ducking flag | §7.4 |
 | AP-34 | ❌ | Conditions before input_boolean reset in voice bridges | §7.7 |
 | AP-35 | ⚠️ | `media_player.media_stop` where pause would preserve queue | §7.3 |
+| AP-77 | ❌ | `media_player.volume_mute` called on Alexa devices immediately before `media_player.volume_set` in the same action sequence. The Alexa cloud API silently drops the second of two rapid-fire calls to the same device — the `volume_set` is eaten with no error. Gate mute sync to only fire when the source volume is actually zero; `volume_set` implicitly unmutes. Also applies to any back-to-back Alexa `media_player.*` service calls without a delay. | §7.5 |
 
 #### Pyscript Orchestration
 

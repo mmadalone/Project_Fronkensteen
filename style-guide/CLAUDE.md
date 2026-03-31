@@ -14,6 +14,11 @@
 - README_TEMPL_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/template/
 - IMG_PREMISES: Rick & Quark series episode premise based off the blueprint features; Rick & Morty (Adult Swim cartoon) episode premise based off the blueprint features
 
+- HELPER_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/helpers/
+- README_PYSCrIPT_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/pyscript/
+- README_PACKAGES_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/packages/
+- Source of truth for Extended OpenAI conversation agent prompts: /Users/madalone/_Claude Projects/HA Master Style Guide/Extended OpenAi Conversation Prompts
+
 All edits happen in PROJECT_DIR and HA_CONFIG — never directly in GIT_REPO.
 The git repo is a publish-only mirror.
 
@@ -63,8 +68,21 @@ Before creating a new helper, check the relevant file — it may already exist.
 
 - **Source of truth:** Style guide files live in `PROJECT_DIR`. Blueprints live on `HA_CONFIG`.
 - **Git repo** (`GIT_REPO`) is a **publish-only mirror** — never edit files there directly.
-- Sync flow: `PROJECT_DIR` / `HA_CONFIG` → rsync → `GIT_REPO` → git commit → push.
+- Sync flow: `PROJECT_DIR` / `HA_CONFIG` → `ha-master-sync-to-repo.sh` → `GIT_REPO` → git commit → push. Script handles rsync, patched component sync to `source_components/`, bundle population, and zipped patched components.
 - Never auto-push. Always wait for Miquel's explicit go-ahead.
+- **GitHub CI:** `.github/workflows/validate.yaml` (HACS + hassfest) and `.github/workflows/release.yaml` (bundle sync + GitHub Release) run automatically on push/PR.
+
+## HACS Installer Integration
+
+- **Custom component:** `HA_CONFIG/custom_components/project_fronkensteen/` — config flow wizard (5 steps), file installer, helper merge, version tracking, 4 services.
+- **Source components:** `GIT_REPO/source_components/` — patched EOC v2.0.2 and ElevenLabs v0.6.3 source dirs. These are the source of truth for the zipped bundles.
+- **Both patched components bundled** as zips (manual distribution) AND pre-extracted subdirectories (installer). `manifest.json` → `manifest.json.bundle` rename avoids hassfest. ElevenLabs installed with voice feature group; EOC always installed (core). Unified `_FILE_RENAMES` map.
+- **Community docs:** `GIT_REPO/PREREQUISITES.md`, `INSTALL.md`, `ARCHITECTURE.md`, `helpers/helpers_setup_guide.md`, `helpers/helpers_reference.md`.
+
+## HACS Component Patches
+
+- **`custom_components/extended_openai_conversation/`** — patched against **v2.0.2** with two additions: (1) **4-layer tool-call speech sanitizer** in `conversation.py` strips function-call leaks before TTS. (2) **Fallback model support** (2026-03-31) — new `fallback_model` config option per agent subentry. On `RateLimitError` (429), `InternalServerError` (5xx), or `NotFoundError` (404): retries once with the fallback model. Per-turn only (not sticky). `model_override` threaded through all recursive tool-call paths. Files changed from upstream: `conversation.py`, `const.py`, `config_flow.py`, `strings.json`. **HACS auto-updates disabled** for this component.
+- **`custom_components/elevenlabs_custom_tts/tts.py`** — patched against **v0.6.3** with voice mood modulation (v3 pivot). Reads `voice_mood_profile_map.json` at init, reads per-agent `input_number.ai_voice_mood_{agent}_stability` + `input_text.ai_voice_mood_{agent}_tags` helpers at TTS time. Injects stability into VoiceSettings and tag prefix into message text (only for non-tagged messages — `"[" not in message` guard avoids double-tagging agent responses). **HACS auto-updates disabled** for this component.
 
 ## Context Management Principles
 

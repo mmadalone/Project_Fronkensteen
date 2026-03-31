@@ -93,7 +93,9 @@
       asks to play a song, album, artist, playlist, podcast, audiobook,
       or radio station. Do NOT use execute_service for media playback —
       always use this function. For stopping or pausing, use stop_radio,
-      shut_up, or pause_media instead.
+      shut_up, or pause_media instead. IMPORTANT: pass the user's
+      spoken title verbatim — never strip, rewrite, or substitute
+      words even if the title resembles a previous request.
     parameters:
       type: object
       properties:
@@ -101,6 +103,8 @@
           type: string
           description: >-
             The title, name, or search query for the media to play.
+            Pass the user's spoken title exactly as heard — do not
+            interpret, correct, or substitute titles from prior context.
         media_type:
           type: string
           enum:
@@ -141,14 +145,20 @@
       Use this when the user asks to play an audiobook, a bedtime
       story, or any spoken-word book content. Always prefer this
       over play_media for audiobook requests — it handles volume,
-      restart, and ducking automatically.
+      restart, and ducking automatically. IMPORTANT: pass the
+      user's spoken title verbatim as the title parameter — never
+      strip, rewrite, or substitute words even if the title
+      resembles a previous request. "More Bedtime Stories" and
+      "Bedtime Stories" are different audiobooks.
     parameters:
       type: object
       properties:
         title:
           type: string
           description: >-
-            The title of the audiobook to play.
+            The title of the audiobook to play. Pass the user's
+            spoken title exactly as heard — do not interpret,
+            correct, or substitute titles from prior context.
       required:
         - title
   function:

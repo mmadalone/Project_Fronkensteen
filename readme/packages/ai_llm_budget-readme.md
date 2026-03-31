@@ -60,5 +60,5 @@ Comprehensive budget tracking and cost control for all AI services: LLM calls/to
 - The budget remaining sensor uses a min-of-three-metrics approach: whichever metric (calls, tokens, cost) is most constrained determines the overall budget percentage.
 - Currency is EUR. The `input_select.ai_budget_currency` is a display label only (no conversion logic).
 - REST sensor recovery automation retries unavailable sensors after 5 minutes to prevent stale data for the full scan interval.
-- I-46 fallback mode: on exhaustion, dispatcher returns homeassistant agent, TTS swaps to HA Cloud, persistent notification created, auto-restores at midnight.
+- I-46 fallback mode: on exhaustion, dispatcher returns homeassistant agent, TTS swaps to HA Cloud, persistent notification created, auto-restores at midnight. Setting `ai_elevenlabs_credit_floor` to a negative value disables the ElevenLabs credit gate (allows overage usage).
 - Deployed: 2026-03-01. Major updates: I-33 (TTS/STT/cost tracking), I-32 (OpenRouter/exchange rate), I-46 (fallback mode).

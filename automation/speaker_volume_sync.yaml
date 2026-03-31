@@ -535,16 +535,23 @@ actions:
         variables:
           fresh_source_vol: "{{ state_attr(source_entity, 'volume_level') | float(0) }}"
 
-      # Sync mute state (vol=0 → mute, vol>0 → unmute)
-      - alias: "Sync mute state — mute if volume is zero"
-        action: media_player.volume_mute
-        continue_on_error: true
-        target:
-          entity_id: "{{ all_targets }}"
-        data:
-          is_volume_muted: "{{ (fresh_source_vol | default(0) | float(0)) == 0 }}"
+      # Sync mute state — only when actually muting (vol=0).
+      # Skipped for unmute: volume_set implicitly unmutes, and
+      # back-to-back mute+volume_set calls cause Alexa cloud API
+      # to silently drop the volume_set.
+      - alias: "Sync mute state — only when muting"
+        if:
+          - condition: template
+            value_template: "{{ (fresh_source_vol | default(0) | float(0)) == 0 }}"
+        then:
+          - action: media_player.volume_mute
+            continue_on_error: true
+            target:
+              entity_id: "{{ all_targets }}"
+            data:
+              is_volume_muted: true
 
-      # Sync volume level (bulk — one call, all targets)
+      # Sync volume level to all targets
       - alias: "Sync volume level to target device(s)"
         action: media_player.volume_set
         continue_on_error: true
@@ -571,6 +578,5 @@ actions:
                   continue_on_error: true
                   response_variable: _duck_snap
 
-mode: queued
-max: 4
+mode: single
 max_exceeded: silent

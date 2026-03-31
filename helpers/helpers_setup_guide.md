@@ -86,7 +86,7 @@ Also configure `pyscript/tts_speaker_config.json` — the single source of truth
 | `input_text.ai_embedding_model` | text | `text-embedding-3-small` | Embedding model name |
 | `input_text.ai_task_instance` | text | `sensor.ha_text_ai_deepseek_chat` | Your ha_text_ai sensor entity |
 | `input_text.ai_budget_fallback_agent` | text | `homeassistant` | Conversation agent to use when budget is exceeded |
-| `input_number.ai_elevenlabs_credit_floor` | number | 5000 | Character count floor before TTS swaps to HA Cloud |
+| `input_number.ai_elevenlabs_credit_floor` | number | 5000 | Character count floor before TTS swaps to HA Cloud. Set negative to disable (allow overage). |
 | `input_select.ai_budget_currency` | select | `EUR` | Your preferred currency symbol |
 
 ### 6. Email (if using email features)
