@@ -2,7 +2,7 @@
 # Voice Handoff Blueprint — Agent Switching (Dual Trigger)
 # =============================================================================
 # Two trigger sources:
-#   1. sensor.ai_handoff_pending (set by LLM handoff_agent tool)
+#   1. input_text.ai_handoff_pending (set by LLM handoff_agent tool)
 #   2. ai_handoff_request event (fired by dispatcher for self-handoffs)
 #
 # Farewell/greeting text generation uses 4 modes (llm_lines_mode input):
@@ -14,7 +14,7 @@
 #
 # Requires:
 #   - input_boolean.ai_voice_handoff_enabled
-#   - sensor.ai_handoff_pending
+#   - input_text.ai_handoff_pending
 #   - pyscript/agent_dispatcher.py (fires ai_handoff_request event)
 #   - pyscript/tts_queue.py (tts_queue_speak for commentary only)
 #   (restore_mode and restore_timeout are now blueprint inputs, not helpers)
@@ -396,11 +396,11 @@ blueprint:
             Boolean helper that prevents feedback loops during handoff. The
             blueprint sets this ON when a handoff starts and OFF when it finishes.
             If the outgoing agent's farewell accidentally triggers another handoff
-            request, this guard blocks re-entry. Select sensor.ai_handoff_processing
-            (seeded by state_bridge on startup).
-          default: sensor.ai_handoff_processing
+            request, this guard blocks re-entry.
+          default: input_boolean.ai_handoff_processing
           selector:
             entity:
+              domain: input_boolean
 
         stale_guard_timeout:
           name: Stale Guard Timeout (seconds)
@@ -586,14 +586,14 @@ mode: restart
 # =============================================================================
 triggers:
   - trigger: state
-    entity_id: sensor.ai_handoff_pending
+    entity_id: input_text.ai_handoff_pending
     not_to: ""
     id: flag_trigger
   - trigger: event
     event_type: ai_handoff_request
     id: event_trigger
   - trigger: state
-    entity_id: sensor.ai_handoff_pending
+    entity_id: input_text.ai_handoff_pending
     not_to: ""
     for: "00:00:30"
     id: watchdog_trigger
@@ -635,7 +635,7 @@ conditions:
   # Only the satellite that last responded should handle the handoff
   - condition: template
     value_template: >-
-      {{ states('input_text.ai_last_satellite') == satellite_entity }}
+      {{ states('sensor.ai_last_satellite') == satellite_entity }}
   # Re-entry guard — prevent feedback loops from commentary triggering handoff tools
   # Stale guard bypass: if guard stuck ON beyond stale_guard_timeout, treat as stale
   - condition: template
@@ -656,12 +656,11 @@ actions:
         value_template: "{{ trigger.id | default('') == 'watchdog_trigger' }}"
     then:
       - alias: "Clear stale handoff pending flag"
-        action: pyscript.set_sensor_value
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_handoff_pending
         data:
-          entity_id: sensor.ai_handoff_pending
           value: ""
-          icon: "mdi:account-switch"
-          friendly_name: "AI Handoff Pending"
       - alias: "Release processing guard after watchdog clear"
         action: input_boolean.turn_off
         target:
@@ -851,12 +850,11 @@ actions:
         value_template: "{{ trigger.id == 'flag_trigger' }}"
     then:
       - alias: "Clear handoff pending flag after reading"
-        action: pyscript.set_sensor_value
+        action: input_text.set_value
+        target:
+          entity_id: input_text.ai_handoff_pending
         data:
-          entity_id: sensor.ai_handoff_pending
           value: ""
-          icon: "mdi:account-switch"
-          friendly_name: "AI Handoff Pending"
 
   # 4. Validate target exists in pipeline options
   - alias: "Set pipeline options, target option"

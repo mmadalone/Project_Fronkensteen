@@ -45,7 +45,11 @@ ai_primary_user:
 # Voice Handoff (I-24 / I-45)
 ########################################
 
-# ai_handoff_pending removed — migrated to sensor (state.set, Session 7)
+ai_handoff_pending:
+  name: AI Handoff - Pending
+  icon: mdi:account-clock
+  max: 255
+  mode: text
 
 ai_handoff_persona_aliases:
   name: AI Handoff - Persona Aliases

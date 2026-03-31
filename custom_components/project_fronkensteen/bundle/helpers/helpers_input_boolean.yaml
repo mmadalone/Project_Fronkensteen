@@ -56,7 +56,10 @@ ai_notification_follow_me:
   icon: mdi:message-bulleted
   initial: true
 
-# ai_handoff_processing removed — migrated to sensor (state.set, Session 8)
+ai_handoff_processing:
+  name: AI Handoff Processing
+  icon: mdi:account-switch
+  initial: false
 
 # ai_continuous_conversation_active removed — migrated to sensor (state.set, Session 8)
 

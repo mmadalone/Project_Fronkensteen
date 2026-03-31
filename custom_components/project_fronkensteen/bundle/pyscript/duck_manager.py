@@ -220,8 +220,7 @@ def _get_volume_buddies() -> dict:
                 break
         if buddy:
             for a in alexa_set:
-                if a in players:
-                    buddies[a] = buddy
+                buddies[a] = buddy
     if buddies:
         log.info(f"duck_manager: volume buddies resolved: {buddies}")  # noqa: F821
     else:
