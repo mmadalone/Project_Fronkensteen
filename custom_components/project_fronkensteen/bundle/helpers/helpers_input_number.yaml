@@ -102,7 +102,6 @@ ai_elevenlabs_credit_floor:
   min: -100000
   max: 100000
   step: 1000
-  initial: 5000
   mode: box
   unit_of_measurement: "chars"
   icon: mdi:account-voice
