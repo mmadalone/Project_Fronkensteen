@@ -782,6 +782,77 @@ blueprint:
             text:
               multiline: true
 
+        nag_context_instruction:
+          name: Nag context instruction
+          description: >
+            Behavioral instruction injected into each proactive nag LLM
+            call, after the stage number and user name context lines.
+            Tells the agent what NOT to say. No placeholders — user name
+            and stage are provided in surrounding context automatically.
+
+
+            Examples:
+
+            - "Do not reference stage numbers, internal metadata, or
+            escalation status in your speech."
+
+            - "Never mention how many times you've reminded them. Keep
+            it natural."
+
+            - "Don't break character or reference the automation system."
+          default: >
+            Do not reference stage numbers, internal metadata, or
+            escalation status in your speech.
+          selector:
+            text:
+              multiline: true
+
+        sleepy_tv_instruction:
+          name: Sleepy TV softening instruction
+          description: >
+            Injected when the user is watching content on a channel or
+            input designated as wind-down/bedtime content (via the Sleepy
+            TV entities in ⑧). Tells the agent to adjust its tone.
+
+
+            Examples:
+
+            - "User is already watching designated bedtime/wind-down
+            content. Acknowledge they are winding down — soften your
+            tone accordingly."
+
+            - "They're watching sleepy TV — ease off, they're already
+            winding down."
+
+            - "Recognize that the user is doing the right thing by
+            winding down. Be encouraging, not nagging."
+          default: >
+            User is already watching designated bedtime/wind-down content.
+            Acknowledge they are winding down — soften your tone accordingly.
+          selector:
+            text:
+              multiline: true
+
+        nag_fallback_text:
+          name: Nag TTS fallback text
+          description: >
+            Spoken when the LLM fails to generate a proactive nag message.
+            This is the literal TTS output — no placeholders, no LLM
+            processing.
+
+
+            Examples:
+
+            - "Hey, you're still here. Don't you have somewhere to be?"
+
+            - "Still up? You know what time it is."
+
+            - "Ahem. Bed. Now."
+          default: "Hey, you're still here. Don't you have somewhere to be?"
+          selector:
+            text:
+              multiline: true
+
         autonomous_execution_prompt:
           name: Autonomous execution announcement prompt
           description: >
@@ -1245,6 +1316,25 @@ blueprint:
           selector:
             text:
               multiline: true
+
+        goodnight_fallback_text:
+          name: Goodnight TTS fallback text
+          description: >
+            Spoken when the LLM fails to generate a goodnight message.
+            This is the literal TTS output — no placeholders, no LLM
+            processing.
+
+
+            Examples:
+
+            - "Goodnight. Sleep well."
+
+            - "Night night. Lights out."
+
+            - "Sweet dreams. See you tomorrow."
+          default: "Goodnight. Sleep well."
+          selector:
+            text:
 
         default_countdown_minutes:
           name: Default countdown (minutes)
@@ -2095,6 +2185,9 @@ variables:
   stage_4_prompt_val: !input stage_4_prompt_overlay
   stage_5_prompt_val: !input stage_5_prompt_overlay
   stage_6_prompt_val: !input stage_6_prompt_overlay
+  nag_context_instruction_val: !input nag_context_instruction
+  sleepy_tv_instruction_val: !input sleepy_tv_instruction
+  nag_fallback_text_val: !input nag_fallback_text
   autonomous_execution_prompt_val: !input autonomous_execution_prompt
 
   # -------------------------------------------------------------------------
@@ -2158,6 +2251,7 @@ variables:
   audiobook_volume_val: !input audiobook_volume
   bedtime_prompt_val: !input bedtime_prompt
   goodnight_prompt_val: !input goodnight_prompt
+  goodnight_fallback_text_val: !input goodnight_fallback_text
   enable_negotiation_val: !input enable_countdown_negotiation
   enable_audiobook_offer_val: !input enable_audiobook_offer
 
@@ -3046,9 +3140,9 @@ actions:
                     Context:
                     User(s): {{ llm_user_reference | default('the user') }}
                     Stage: {{ (current_stage | int(0)) + 1 }} of {{ stage_count_val | int(4) }}
-                    Do not reference stage numbers, internal metadata, or escalation status in your speech.
+                    {{ nag_context_instruction_val }}
                     {% if is_sleepy_tv | default(false) | bool %}
-                    Note: User is already watching designated bedtime/wind-down content. Acknowledge they are winding down — soften your tone accordingly.
+                    Note: {{ sleepy_tv_instruction_val }}
                     {% endif %}
                     {{ context_snapshot }}
                     {% if bedtime_history_context | default('') | trim | length > 0 %}
@@ -3072,9 +3166,9 @@ actions:
                        and proactive_response.response.response_type | default('') != 'error'
                        and proactive_response.response.speech is defined %}
                       {{ proactive_response.response.speech.plain.speech
-                         | default("Hey, you're still here. Don't you have somewhere to be?") }}
+                         | default(nag_fallback_text_val) }}
                     {% else %}
-                      Hey, you're still here. Don't you have somewhere to be?
+                      {{ nag_fallback_text_val }}
                     {% endif %}
 
               # --- TTS delivery (proactive message) ---
@@ -3170,7 +3264,7 @@ actions:
                               voice: "{{ dispatch_proactive_voice }}"
                               voice_id: "{{ dispatch_proactive_tts_voice }}"
                               target: "{{ media_player_val }}"
-                              text: "{{ bedtime_question_fallback_val | default('Ready for bed?') }}"
+                              text: "{{ bedtime_question_fallback_val }}"
                             continue_on_error: true
 
                       - alias: "Log bedtime question asked"
@@ -3900,9 +3994,9 @@ actions:
            and goodnight_response.response.response_type | default('') != 'error'
            and goodnight_response.response.speech is defined %}
           {{ goodnight_response.response.speech.plain.speech
-             | default("Goodnight. Sleep well.") }}
+             | default(goodnight_fallback_text_val) }}
         {% else %}
-          Goodnight. Sleep well.
+          {{ goodnight_fallback_text_val }}
         {% endif %}
 
   - alias: "Whisper context — goodnight"

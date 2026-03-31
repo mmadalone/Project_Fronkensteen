@@ -356,6 +356,58 @@ blueprint:
           default: >-
             Now <action_word> <media_info> in <area_info> and on <player_info>
 
+        music_agent_error_text:
+          name: Music agent error response
+          description: >
+            Returned to the user when the LLM conversation agent call fails
+            (timeout, crash, empty response). This is the voice feedback for
+            a backend failure — not a user mistake.
+
+            Examples:
+            - "Sorry, the music assistant couldn't reach the AI agent. Please try again."
+            - "The AI agent didn't respond. Give it another shot."
+            - "Music request failed — the agent is unreachable right now."
+          default: >-
+            Sorry, the music assistant couldn't reach the AI agent. Please try again.
+          selector:
+            text:
+              multiline: false
+
+        music_parse_error_text:
+          name: Music parse error response
+          description: >
+            Returned to the user when the LLM response could not be parsed
+            into a valid media request (malformed JSON, missing fields).
+            The user's command was heard, but the AI returned unusable output.
+
+            Examples:
+            - "Sorry, I couldn't understand the music request. Please try again."
+            - "I didn't quite get that. Could you rephrase your music request?"
+            - "The AI couldn't parse that into a playable request. Try again."
+          default: >-
+            Sorry, I couldn't understand the music request. Please try again.
+          selector:
+            text:
+              multiline: false
+
+        playback_error_text:
+          name: Playback failure response
+          description: >
+            Returned to the user when Music Assistant's play_media call fails
+            or the player doesn't start playback. Indicates a player or media
+            issue, not an AI issue.
+
+            Examples:
+            - "Sorry, I couldn't start playback. The player may be unavailable or the media wasn't found. Please try again."
+            - "Playback failed — the player might be offline or the track wasn't found."
+            - "Couldn't play that. Check if the player is available and try again."
+          default: >-
+            Sorry, I couldn't start playback. The player may be
+            unavailable or the media wasn't found. Please try again.
+          selector:
+            text:
+              multiline: false
+
     llm_tuning:
       name: "⑤ LLM prompt tuning"
       icon: mdi:robot
@@ -665,6 +717,9 @@ variables:
   use_dispatcher: !input use_dispatcher
   v_dispatcher_enabled: !input dispatcher_enabled
   v_pipeline_name: !input llm_agent
+  v_music_agent_error: !input music_agent_error_text
+  v_music_parse_error: !input music_parse_error_text
+  v_playback_error: !input playback_error_text
   prompt:
     intro: !input llm_prompt_intro
     media_type: !input llm_prompt_media_type
@@ -766,8 +821,7 @@ actions:
              or result.response.speech is not defined }}
     then:
       - alias: "2a · Return LLM-error response to voice assistant"
-        set_conversation_response: >-
-          Sorry, the music assistant couldn't reach the AI agent. Please try again.
+        set_conversation_response: "{{ v_music_agent_error }}"
       - stop: "LLM conversation.process call failed or returned empty response"
 
   # 3 — Parse the LLM response. LLMs can return markdown-wrapped JSON,
@@ -817,8 +871,7 @@ actions:
         value_template: "{{ not (llm_parse_ok | bool) }}"
     then:
       - alias: "4a · Return parse-error response to voice assistant"
-        set_conversation_response: >-
-          Sorry, I couldn't understand the music request. Please try again.
+        set_conversation_response: "{{ v_music_parse_error }}"
       - stop: "LLM returned unparseable response"
 
   # =========================================================================
@@ -1239,9 +1292,7 @@ actions:
               {{ play_succeeded is defined and not (play_succeeded | bool) }}
         sequence:
           - alias: "10a · Return play-failed response"
-            set_conversation_response: >-
-              Sorry, I couldn't start playback. The player may be
-              unavailable or the media wasn't found. Please try again.
+            set_conversation_response: "{{ v_playback_error }}"
 
       - alias: "10b · Response: area + player targets"
         conditions:

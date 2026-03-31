@@ -83,6 +83,20 @@ blueprint:
             text:
               multiline: true
 
+        alert_fallback_text:
+          name: "TTS fallback text"
+          description: >-
+            Literal text spoken when the LLM fails to generate a response.
+            Standard Jinja template variables are available: evt_category,
+            evt_attempts, evt_grade. Examples: "System alert: {{ evt_category }}
+            recovery failed.", "Warning: {{ evt_category }} still down after
+            {{ evt_attempts }} tries.", "Recovery failed for {{ evt_category }}."
+          default: >-
+            System alert: {{ evt_category }} recovery failed after {{ evt_attempts }} attempts.
+          selector:
+            text:
+              multiline: true
+
     # ===========================================================================
     # ② PRESENCE ROUTING
     # ===========================================================================
@@ -237,6 +251,7 @@ variables:
   enable_tts: !input enable_tts
   conversation_agent: !input conversation_agent
   alert_prompt: !input alert_prompt
+  alert_fallback_text: !input alert_fallback_text
   presence_list: !input presence_sensors
   satellite_list: !input target_satellites
   category_filter: !input category_filter
@@ -383,7 +398,7 @@ actions:
             {% if speech | length > 0 %}
               {{ speech }}
             {% else %}
-              System alert: {{ evt_category }} recovery failed after {{ evt_attempts }} attempts.
+              {{ alert_fallback_text }}
             {% endif %}
 
       # ── 3d. TTS delivery via queue ──

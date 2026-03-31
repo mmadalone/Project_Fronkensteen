@@ -426,6 +426,19 @@ blueprint:
           default: ""
           selector:
             text:
+        safety_prefix:
+          name: "LLM safety prefix"
+          description: >
+            Text prepended to the LLM wake-up prompt to prevent the
+            conversation agent from invoking tools or service calls.
+
+            Examples:
+            - "[ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.]"
+            - "[ALARM — speech only, no tool calls or service actions.]"
+            - "[ALARM — respond with spoken text only. No function calls.]"
+          default: "[ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.]"
+          selector:
+            text:
 
 mode: single
 max_exceeded: silent
@@ -458,6 +471,7 @@ variables:
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   enable_user_prefs: !input enable_user_preferences
+  v_safety_prefix: !input safety_prefix
   use_pref_wake: !input use_preference_wake_time
   pref_alt_days_val: !input pref_wake_alt_days
   # ── User preference context ──
@@ -668,7 +682,7 @@ actions:
             data:
               agent_id: "{{ dispatch_agent }}"
               text: >-
-                [ALARM — do NOT call any functions or tools. Respond only with speech text, no actions.]
+                {{ v_safety_prefix }}
                 {{ (v_llm_wake_prompt | default('') | string)
                    ~ '\n\nmeta:\n'
                    ~ '- configured_wakeup_time: ' ~ (v_wakeup_time | default('07:00:00') | string) ~ '\n'

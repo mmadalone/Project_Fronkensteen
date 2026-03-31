@@ -357,6 +357,35 @@ blueprint:
             text:
               multiline: true
 
+        source_context_prompt:
+          name: Source context prompt
+          description: >-
+            Injected into the banter prompt when the triggering event
+            carries a source tag (set via proactive_unified's
+            "Banter source tag" input). {source} is replaced with the
+            tag value (e.g. "bedtime nag", "morning greeting").
+            Leave empty to skip source context even when a tag is present.
+
+
+            Examples:
+
+            - "The message you are reacting to was a {source} from a
+            fellow AI agent, not a user conversation. React to what
+            was SAID, not the fact that it was said."
+
+            - "Context: this was a {source}. Riff on the content, don't
+            just echo it."
+
+            - "Another agent just delivered a {source}. Add your own
+            spin — don't repeat what they said."
+          default: >-
+            The message you are reacting to was a {source} from a
+            fellow AI agent, not a user conversation. React to what
+            was SAID, not the fact that it was said.
+          selector:
+            text:
+              multiline: true
+
         max_words:
           name: Max Words
           description: Maximum word count for the banter reaction.
@@ -492,6 +521,7 @@ variables:
   tts_priority_val: !input tts_priority
   cooldown_helper: !input cooldown_helper
   banter_prompt_raw: !input banter_prompt
+  source_context_prompt_raw: !input source_context_prompt
   max_words_val: !input max_words
   tts_output_vol: !input tts_output_volume
   restore_delay: !input tts_restore_delay
@@ -652,6 +682,7 @@ action:
         {% endif %}
       mood: "neutral"
       is_notification: "{{ trigger.id == 'notification' }}"
+      event_source: "{{ trigger.event.data.source | default('') }}"
       raw_pool: >-
         {{ agent_pool_raw.split(',') | map('trim') | reject('eq', '') | list }}
 
@@ -722,6 +753,9 @@ action:
         [BANTER — do NOT call handoff_agent, execute_service, escalate_action,
         or any other tools. Respond with a brief in-character reaction only.
         Use the user's name from your context — never say "the user".]
+        {% if event_source | default('') | trim | length > 0 and source_context_prompt_raw | default('') | trim | length > 0 %}
+        {{ source_context_prompt_raw | replace('{source}', event_source | replace('_', ' ')) }}
+        {% endif %}
         {{ banter_prompt_raw
            | replace('{agent_a}', agent_a_display)
            | replace('{topic}', topic)

@@ -370,6 +370,63 @@ blueprint:
             text:
               multiline: true
 
+        llm_task_instruction:
+          name: LLM task instruction (proactive message)
+          description: >
+            Task instruction appended after the main prompt and context
+            entities. Tells the LLM how to format its response.
+
+
+            {name} is replaced with the resolved user name from "User
+            names / nicknames" above (e.g. "Miquel"), or "the user" if
+            that field is empty. To use your Home Assistant person display
+            name, enter it in "User names / nicknames" exactly as it
+            appears on your People page (Settings → People).
+
+
+            Examples:
+
+            - "respond with ONE short sentence to {name}. max 220 chars."
+
+            - "say something snarky to {name} about being up this late.
+            under 200 characters, no quotes."
+
+            - "greet {name} warmly. one sentence, 220 characters max."
+          default: >
+            respond with ONE short, natural sentence you would say out
+            loud to {name} in this situation. maximum 220 characters.
+            do not include quotation marks or any surrounding formatting.
+          selector:
+            text:
+              multiline: true
+
+        bedtime_task_instruction:
+          name: LLM task instruction (bedtime question)
+          description: >
+            Task instruction appended after the bedtime prompt and context
+            entities. Tells the LLM how to format the bedtime question.
+
+
+            {name} is replaced with the resolved user name (same source
+            as above). To use your Home Assistant person display name,
+            enter it in "User names / nicknames".
+
+
+            Examples:
+
+            - "ask {name} one yes/no question about going to bed. max
+            200 chars."
+
+            - "check if {name} wants to start the bedtime routine.
+            keep it under 200 characters, no quotation marks."
+          default: >
+            respond with ONE short yes/no question to ask {name} about
+            whether they want to go to bed now or start their bedtime
+            routine. maximum 200 characters. do not include quotation marks.
+          selector:
+            text:
+              multiline: true
+
         context_entities:
           name: Extra context sensors/entities for the LLM
           description: >
@@ -381,6 +438,18 @@ blueprint:
           selector:
             entity:
               multiple: true
+
+        banter_source_tag:
+          name: Banter source tag
+          description: >
+            Optional tag passed through the ai_conversation_response_ready
+            event as "source". Reactive banter reads this to adjust its
+            prompt context so it knows what kind of message it's reacting to.
+            Examples: "bedtime_nag", "morning_greeting", "proactive_checkin".
+            Leave empty for no tag.
+          default: ""
+          selector:
+            text:
 
     # ===========================================================================
     # ⑤ SCHEDULE & TIMING
@@ -992,6 +1061,8 @@ variables:
 
   llm_prompt_base: !input llm_prompt
   weekend_llm_prompt_override: !input weekend_llm_prompt_override
+  llm_task_instruction: !input llm_task_instruction
+  bedtime_task_instruction: !input bedtime_task_instruction
 
   today_key: >-
     {% set days = ['mon','tue','wed','thu','fri','sat','sun'] %}
@@ -1062,6 +1133,9 @@ variables:
   # ── guards ──────────────────────────────────────────────────────────────
   min_presence_seconds: !input min_presence_seconds
   block_if_media_playing: !input block_if_media_playing
+
+  # ── banter source tag ────────────────────────────────────────────────
+  banter_source_tag: !input banter_source_tag
 
   # ── context entities ───────────────────────────────────────────────────
   context_entities: !input context_entities
@@ -1417,16 +1491,14 @@ actions:
             data:
               agent_id: "{{ dispatch_agent }}"
               text: >-
-                {{ llm_prompt }}
+                {% if banter_source_tag | default('') | trim | length > 0 %}[SOURCE:{{ banter_source_tag }}] {% endif %}{{ llm_prompt }}
 
                 context:
                 - extra_entities:
                 {{ sensor_context }}
 
                 task:
-                respond with ONE short, natural sentence you would say out loud to {{ chosen_llm_name }}
-                in this situation. maximum 220 characters. do not include quotation marks
-                or any surrounding formatting.
+                {{ llm_task_instruction | replace('{name}', chosen_llm_name) }}
                 {% if enable_user_prefs | bool(true) %}
                 {% if _user_prefs_block | trim | length > 0 %}
                 User context: {{ _user_prefs_block }}
@@ -1594,9 +1666,7 @@ actions:
             {{ sensor_context }}
 
             task:
-            respond with ONE short yes/no question to ask {{ chosen_llm_name }} about whether
-            they want to go to bed now or start their bedtime routine.
-            maximum 200 characters. do not include quotation marks.
+            {{ bedtime_task_instruction | replace('{name}', chosen_llm_name) }}
             {% if enable_user_prefs | bool(true) %}
             {% if _user_prefs_block | trim | length > 0 %}
             User context: {{ _user_prefs_block }}

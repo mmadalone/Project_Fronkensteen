@@ -259,6 +259,19 @@ blueprint:
             text:
               multiline: true
 
+        fallback_tts_message:
+          name: Fallback TTS message
+          description: >-
+            Spoken text when the LLM fails to generate a response.
+            Use {name} for the user's name and {area} for the area.
+            Examples: "Last call, {name}. Wrap it up in the {area}.",
+            "Time's up, {name}. Let's go.", "{name}, final warning
+            for the {area}."
+          default: "Last call, {name}. Time to wrap it up in the {area}."
+          selector:
+            text:
+              multiline: true
+
         context_entities:
           name: Extra context entities
           description: >
@@ -428,6 +441,7 @@ variables:
   enable_sleep_budget: !input enable_sleep_budget
   v_safety_prefix: !input safety_prefix
   v_task_instruction: !input task_instruction
+  v_fallback_tts_message: !input fallback_tts_message
 
   # ── User preference context (Preference Consumption B3) ──
   _resolved_user: >-
@@ -663,7 +677,7 @@ actions:
     variables:
       last_call_message: >-
         {% set resp = ai_result.response if ai_result is defined else none %}
-        {% set fallback = "Last call, " ~ user_name ~ ". Time to wrap it up in the " ~ area_name ~ "." %}
+        {% set fallback = v_fallback_tts_message | replace('{name}', user_name) | replace('{area}', area_name) %}
         {% if resp is not none
               and resp.speech is defined
               and resp.speech.plain is defined

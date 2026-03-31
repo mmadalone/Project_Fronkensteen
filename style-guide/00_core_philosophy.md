@@ -500,7 +500,7 @@ Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Pu
 - Always include `description`, `icon`, and `alias` fields
 
 ### 9.3 Helpers
-- **Helpers are for user-configured values only.** Runtime state (code-written flags, counters, state tracking) must use `state.set()` sensors. Use `pyscript.set_sensor_value` bridge service for YAML automations/blueprints. See AP-74, Decision #92.
+- **Helpers are for user-configured values only.** Runtime state (code-written flags, counters, state tracking) must use `state.set()` sensors. Use `pyscript.set_sensor_value` bridge service for YAML automations/blueprints. See AP-74, Decision #92. **Exception (Decision #94):** critical mutex/guard helpers that must exist at boot and use synchronous core HA services (`input_boolean.turn_on/off`) — currently `ai_handoff_processing` and `ai_handoff_pending`.
 - **All helpers use the `ai_` prefix.** Two bulk renames enforced this: F14 (2026-03-19, 20 entities) and F14b (2026-03-28, 48 entities).
 - Input helpers use `ai_` plus persona and context:
   - Bedtime: `ai_<persona>_bedtime_<field>` (e.g., `ai_rick_bedtime_morning`, `ai_quark_gn_devices_question`)

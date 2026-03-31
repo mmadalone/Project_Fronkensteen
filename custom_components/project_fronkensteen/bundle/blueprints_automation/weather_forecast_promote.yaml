@@ -91,6 +91,16 @@ blueprint:
           selector:
             text:
               multiline: true
+        no_data_fallback_text:
+          name: No-data fallback text
+          description: >-
+            Text stored when no weather data is available from any sensor.
+            Examples: "No weather data available.", "Weather data is
+            currently unavailable.", "I couldn't get the forecast right now."
+          default: "No weather data available."
+          selector:
+            text:
+
         run_on_start:
           name: Run on HA start
           description: >
@@ -134,6 +144,7 @@ mode: single
 
 variables:
   v_run_on_start: !input run_on_start
+  v_no_data_fallback: !input no_data_fallback_text
 
 triggers:
   - trigger: time_pattern
@@ -224,7 +235,7 @@ actions:
     else:
       - alias: "Set final"
         variables:
-          _final: "No weather data available."
+          _final: "{{ v_no_data_fallback }}"
 
   # 3. Store result
   - alias: "Store weather summary in L1 sensor"

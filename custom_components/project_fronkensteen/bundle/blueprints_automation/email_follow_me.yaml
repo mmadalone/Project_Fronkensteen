@@ -948,6 +948,36 @@ blueprint:
               min: 0
               max: 4
               step: 1
+        brief_fallback_text:
+          name: "Brief announcement fallback text"
+          description: >
+            TTS fallback text when the LLM fails or returns an unusable
+            response for brief-style announcements. This is a Jinja template —
+            the variables {{ account_label }}, {{ display_sender }}, and
+            {{ truncated_subject }} are available in scope.
+
+            Examples:
+            - "New {{ account_label }} email from {{ display_sender }}: {{ truncated_subject }}."
+            - "{{ display_sender }} just emailed you about {{ truncated_subject }}."
+            - "Email from {{ display_sender }}. Subject: {{ truncated_subject }}."
+          default: >-
+            You have a {{ account_label | default('') }} email from {{ display_sender | default('someone') }}. Subject: {{ truncated_subject | default('(no subject)') }}.
+          selector:
+            text:
+              multiline: true
+        headline_fallback_text:
+          name: "Headline-only fallback text"
+          description: >
+            Minimal TTS fallback when no sender or subject data is available
+            and the announcement cannot be constructed from email metadata.
+
+            Examples:
+            - "You have an email."
+            - "New email received."
+            - "You've got mail."
+          default: "You have an email."
+          selector:
+            text:
 
 # =============================================================================
 # EXECUTION MODE
@@ -1022,6 +1052,8 @@ variables:
   v_stinger_fallback_url: !input stinger_fallback_media_url
   enable_threshold: !input enable_notify_threshold
   _email_priority: !input email_priority
+  brief_fallback: !input brief_fallback_text
+  headline_fallback: !input headline_fallback_text
 
 # =============================================================================
 # TRIGGERS
@@ -1752,10 +1784,10 @@ actions:
                     and (' ' in _cleaned or '_' not in _cleaned) %}
                 {{ _cleaned }}
               {% else %}
-                You have a {{ account_label }} email from {{ display_sender }}. Subject: {{ truncated_subject }}.
+                {{ brief_fallback }}
               {% endif %}
             {% else %}
-              You have a {{ account_label }} email from {{ display_sender }}. Subject: {{ truncated_subject }}.
+              {{ brief_fallback }}
             {% endif %}
 
       - alias: "7a-log · Log LLM failure if fallback was used"
@@ -1796,7 +1828,7 @@ actions:
         {% if _msg | length > 0 and (' ' in _msg or '_' not in _msg) %}
           {{ _msg }}
         {% else %}
-          You have an email.
+          {{ headline_fallback }}
         {% endif %}
 
   # 7b: tts_data variable removed in v3.19.0 — tts_queue_speak used directly

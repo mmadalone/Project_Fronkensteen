@@ -229,6 +229,14 @@ def _on_conversation_finished(**kwargs):
     )):
         return
 
+    # Extract optional [SOURCE:tag] prefix — pass as event field, strip from user_text
+    _source_tag = ""
+    if user_text.startswith("[SOURCE:"):
+        _end = user_text.find("]")
+        if _end > 8:
+            _source_tag = user_text[8:_end].strip()
+            user_text = user_text[_end + 1:].lstrip()
+
     # Extract response from last message
     last_msg = messages[-1] if messages else {}
     response_text = last_msg.get("content", "") if isinstance(last_msg, dict) else ""
@@ -263,8 +271,7 @@ def _on_conversation_finished(**kwargs):
     _topic = (
         (state.getattr("sensor.ai_last_interaction") or {}).get("topic") or "general"  # noqa: F821
     ).strip()
-    event.fire(  # noqa: F821
-        "ai_conversation_response_ready",
+    _event_kwargs = dict(
         agent_name=agent_display_name,
         agent_slug=agent_slug,
         agent_short=(
@@ -275,6 +282,9 @@ def _on_conversation_finished(**kwargs):
         user_text=user_text,
         topic=_topic,
     )
+    if _source_tag:
+        _event_kwargs["source"] = _source_tag
+    event.fire("ai_conversation_response_ready", **_event_kwargs)  # noqa: F821
 
     # Update counters
     current_attrs = state.getattr(_RESULT_ENTITY) or {}  # noqa: F821

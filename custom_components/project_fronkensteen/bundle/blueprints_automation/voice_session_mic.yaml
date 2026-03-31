@@ -60,6 +60,45 @@ blueprint:
           selector:
             text: {}
 
+        music_feedback_system_prompt:
+          name: Music feedback system prompt
+          description: >
+            System prompt injected into the satellite conversation when asking
+            for music feedback after a composition finishes playing. Tells the
+            agent how to handle user reactions (keep, change, delete).
+
+            Examples:
+            - "You just composed a music track. Ask if the user likes it. If they want changes, use the music_library tool."
+            - "A track was just generated. Get the user's opinion and offer to adjust it."
+            - "Music composition complete. Gather feedback — use music_library for any edits."
+          default: >-
+            You just composed a music track (FILE_PLACEHOLDER)
+            for the user and it just finished playing.
+            The user may give feedback — do they want to keep it, change it,
+            or delete it? If they want changes (like "make it faster" or
+            "more bass"), call compose_music again with a modified prompt.
+            If they approve, call music_library with action "promote" and
+            cache_key "KEY_PLACEHOLDER".
+            If they want to delete it, call music_library with action
+            "delete" and the same cache_key.
+          selector:
+            text:
+              multiline: true
+
+        music_feedback_question:
+          name: Music feedback question
+          description: >
+            The question asked aloud to the user after a composed music track
+            finishes playing. Only used for music_feedback session type.
+
+            Examples:
+            - "What did you think of the composition?"
+            - "How did that sound?"
+            - "Like it? Want me to change anything?"
+          default: "What did you think of the composition?"
+          selector:
+            text: {}
+
         default_continuous_timeout:
           name: Default continuous timeout (seconds)
           description: >
@@ -111,6 +150,8 @@ variables:
   v_silence_media: !input silence_media
   v_echo_guard: !input echo_guard_seconds
   v_feedback_question_input: !input feedback_question
+  v_music_feedback_system_prompt: !input music_feedback_system_prompt
+  v_music_feedback_question: !input music_feedback_question
   v_default_timeout: !input default_continuous_timeout
   v_duck_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
@@ -155,15 +196,9 @@ actions:
     variables:
       effective_esp: >-
         {%- if session_type == 'music_feedback' -%}
-          You just composed a music track ({{ media_file.split('/')[-1] }})
-          for the user and it just finished playing.
-          The user may give feedback — do they want to keep it, change it,
-          or delete it? If they want changes (like "make it faster" or
-          "more bass"), call compose_music again with a modified prompt.
-          If they approve, call music_library with action "promote" and
-          cache_key "{{ media_file.split('/')[-1].split('.')[0] }}".
-          If they want to delete it, call music_library with action
-          "delete" and the same cache_key.
+          {{ v_music_feedback_system_prompt
+             | replace('FILE_PLACEHOLDER', media_file.split('/')[-1])
+             | replace('KEY_PLACEHOLDER', media_file.split('/')[-1].split('.')[0]) }}
         {%- else -%}
           {{ parsed.extra_system_prompt | default('') }}
         {%- endif -%}
@@ -171,7 +206,7 @@ actions:
         {%- if v_feedback_question_input | length > 0 -%}
           {{ v_feedback_question_input }}
         {%- elif session_type == 'music_feedback' -%}
-          What did you think of the composition?
+          {{ v_music_feedback_question }}
         {%- else -%}
         {%- endif -%}
       feedback_context: >-

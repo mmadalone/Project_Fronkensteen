@@ -1534,6 +1534,19 @@ blueprint:
               min: 0
               max: 4
               step: 1
+        watchdog_reminder_text:
+          name: "Watchdog reminder TTS text"
+          description: >
+            Spoken text when the watchdog detects unread messages still
+            pending after the reminder delay has elapsed.
+
+            Examples:
+            - "Hey, you still have unread messages. Check your phone."
+            - "Reminder: you have messages waiting."
+            - "Don't forget — you have unread notifications."
+          default: "Hey, you still have unread messages. Check your phone."
+          selector:
+            text:
 
 # =============================================================================
 # EXECUTION MODE
@@ -1645,6 +1658,7 @@ variables:
   v_stinger_fallback_url: !input stinger_fallback_media_url
   enable_threshold: !input enable_notify_threshold
   _notif_priority: !input notification_priority
+  watchdog_reminder: !input watchdog_reminder_text
 
 # =============================================================================
 # TRIGGERS
@@ -1841,7 +1855,7 @@ actions:
                 response_variable: _wd_tts_result
                 continue_on_error: true
                 data:
-                  text: "Hey, you still have unread messages. Check your phone."
+                  text: "{{ watchdog_reminder }}"
                   voice: "{{ _wd_tts_engine }}"
                   voice_id: "{{ _wd_tts_voice }}"
                   target_mode: explicit
