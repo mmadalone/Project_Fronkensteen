@@ -579,10 +579,16 @@ async def voice_handoff(
             message=greeting_text,
             preannounce=False,
         )
+        # Wait for satellite to leave idle (proves it received the announce)
+        for _ in range(20):
+            if state.get(satellite) != "idle":  # noqa: F821
+                break
+            await asyncio.sleep(0.25)
+        # Now wait for the greeting audio to actually finish playing
+        await _wait_for_audio_done(satellite)
 
     # ── Open mic (seamless mode) ─────────────────────────────────────────
     if seamless:
-        await _wait_for_audio_done(satellite)
         await service.call(  # noqa: F821
             "assist_satellite", "start_conversation",
             entity_id=satellite,

@@ -312,22 +312,35 @@ class ExtendedOpenAIAgentEntity(
 
         # Detect if LLM is asking a follow-up question to enable continued conversation
         response_text = self._sanitize_for_speech(query_response.message.content) or ""
+        response_lower = response_text.lower()
 
-        should_continue = response_text.rstrip().endswith("?") or any(
-            phrase in response_text.lower()
+        is_farewell = any(
+            phrase in response_lower
             for phrase in [
-                "which one",
-                "would you like",
-                "do you want",
-                "would you prefer",
-                "which do you",
-                "what would you",
-                "shall i",
-                "should i",
-                "choose from",
-                "select from",
-                "pick from",
+                "goodbye", "good bye", "bye", "farewell", "see you",
+                "take care", "catch you later", "later,", "goodnight",
+                "good night", "until next time", "signing off",
+                "adios", "adiós", "hasta luego", "hasta la vista",
             ]
+        )
+
+        should_continue = not is_farewell and (
+            response_text.rstrip().endswith("?") or any(
+                phrase in response_lower
+                for phrase in [
+                    "which one",
+                    "would you like",
+                    "do you want",
+                    "would you prefer",
+                    "which do you",
+                    "what would you",
+                    "shall i",
+                    "should i",
+                    "choose from",
+                    "select from",
+                    "pick from",
+                ]
+            )
         )
 
         return conversation.ConversationResult(

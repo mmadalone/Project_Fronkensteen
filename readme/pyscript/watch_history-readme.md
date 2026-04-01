@@ -49,6 +49,7 @@ Pairs with `packages/ai_watch_history.yaml` (thin doc package). All triggers and
 - **Episode name fallback:** For library/streaming series where EPG data doesn't exist, `current_episode_name` is populated from `media_title` (which IS the episode name for series content).
 - Channel surfing detection: below-threshold PVR watch sessions are counted as "flips" rather than logged individually. The flip count is tracked in the session sensor attributes.
 - Blueprint uses `mode: restart` to handle rapid channel switches -- each new channel cancels the previous tracking session.
+- **Descriptive sensor state:** `_build_display_state()` sets sensor state to e.g. `"watching Seinfeld S03E10"` or `"watching Cartoon Network — Family Guy S06E01"` instead of generic `"watching"`. HA logbook shows the descriptive text in state change entries.
 - EPG data enrichment: for PVR content, the module fetches live broadcast metadata to populate season/episode fields that Kodi's player info alone doesn't provide. EPG overrides all other sources for PVR.
 - Source detection is keyword-based on `plugin://` file paths. Known sources: YouTube (`plugin.video.youtube`), Netflix (`plugin.video.netflix`), Prime Video (`plugin.video.amazon`), Movistar+ (`plugin.video.movistarplus`), Disney+ (`plugin.video.disney`), HBO Max (`plugin.video.hbomax`), Filmin (`plugin.video.filmin`), PVR (`pvr://`), library (local paths with `movie`/`episode` item type).
 

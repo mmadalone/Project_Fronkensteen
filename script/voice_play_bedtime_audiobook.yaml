@@ -256,7 +256,4 @@ sequence:
         data:
           seek_position: 0
 
-  - alias: "Settle delay — let HA propagate volume to linked entities before TTS ducks"
-    delay:
-      seconds: 1
 

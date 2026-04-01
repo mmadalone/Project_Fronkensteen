@@ -140,7 +140,10 @@ vsync_zones:
 # Duck Manager — group, announcement, and satellite configuration
 # ═══════════════════════════════════════════════════════════════════════════════
 # Used by: duck_manager (_get_duck_group, _get_announcement_players,
-#          _get_duck_satellites)
+#          _get_duck_satellites, _build_volume_alias_map)
+# Volume aliases (MA ↔ native speaker entities) are auto-discovered from
+# the entity registry by matching unique_id across platforms — no manual
+# config needed.  See I-24 in duck_manager.py.
 duck:
   group:
     - media_player.madteevee

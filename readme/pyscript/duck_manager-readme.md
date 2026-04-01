@@ -23,9 +23,10 @@ Reference-counted session-based volume ducking for media players. The first sess
 
 ## Key Functions
 
-- `_capture_and_duck()` — Two-pass volume capture: Pass 1 reads volumes directly, Pass 2 uses buddy fallback or default volume for devices that failed to report. Then sets duck/announcement volumes.
-- `_restore_and_verify()` — Two-pass restore: Pass 1 sets all volumes, waits 1.5s, Pass 2 verifies and retries any that didn't stick. Skips user-adjusted entities (I-22).
+- `_capture_and_duck()` — Two-pass volume capture: Pass 1 reads volumes (with I-24 alias resolution — prefers MA entity volume over native for same-device entities), Pass 2 uses buddy fallback or default volume for devices that failed to report. Then sets duck/announcement volumes.
+- `_restore_and_verify()` — Two-pass restore: Pass 1 re-reads alias/entity volume before restoring — if something changed it during the duck session, restores to the current value instead of the stale snapshot. Pass 2 verifies and retries any that didn't stick. Skips user-adjusted entities (I-22).
 - `_wait_for_announcements_done()` — Dynamic or fixed-delay wait for TTS playback to finish before restoring. Dynamic mode polls announcement player states with 250ms intervals.
+- `_build_volume_alias_map()` — I-24: Scans entity registry to auto-discover Music Assistant entities that wrap duck group / announcement members (same physical device, different HA integration). Two matching patterns: (A) shared `unique_id` across platforms (Sonos ↔ MA), (B) MA `unique_id` equals the native entity's `entity_id` (ESPHome/SpotifyPlus HA Player Provider). Cached at startup.
 - `_get_volume_buddies()` — Derives buddy map from volume_sync group helpers. Alexa devices (unreliable volume reporters) use their buddy's volume as fallback.
 - `_save_snapshot()` / `_load_snapshot()` — JSON file persistence for crash recovery
 
@@ -46,6 +47,7 @@ Reference-counted session-based volume ducking for media players. The first sess
 - `input_boolean.ai_duck_allow_manual_override` — I-22: Whether user volume changes during duck are respected
 - `input_number.ai_duck_default_volume` — Fallback volume when capture fails and no buddy available
 - `entity_config.yaml` `vsync_zones` — Volume sync zone config (players + alexa lists per zone) for buddy fallback (moved from `input_text` in Phase 2)
+- `/config/.storage/core.entity_registry` — Read at startup by I-24 alias discovery to match `unique_id` across platforms
 
 ## Package Pairing
 
@@ -61,8 +63,9 @@ Pairs with `packages/ai_duck_manager.yaml` which defines all ducking helpers, th
 ## Notes
 
 - Reference counting is the core design: multiple concurrent duck sources (satellite wake, TTS queue, external) can overlap safely. Only the first session captures volumes, and only the last session ending restores them.
+- I-24 (volume aliases): Music Assistant creates separate `media_player` entities that control the same physical speakers as native integrations (Sonos, ESPHome). When a script sets volume on the MA entity, the native entity lags 1-2s (UPnP propagation). Duck manager auto-discovers these aliases at startup by matching `unique_id` in the HA entity registry. During capture, it reads from the MA entity (always has the freshest volume). During restore, it re-reads both alias and native volume — if something changed during the duck session, it restores to the current value instead of the stale snapshot. No per-blueprint `update_snapshot` calls needed for aliased entities. Zero config — aliases are discovered automatically when speakers are added to the duck group.
 - The volume buddy system handles unreliable Alexa volume reporting: Alexa devices are mapped to a non-Alexa "buddy" in the same volume_sync group, and the buddy's captured volume is used as fallback.
 - I-39 (duck behavior): supports `pause` mode (pause media instead of reducing volume) and `both` mode (pause and reduce). Media is resumed on restore.
-- I-22 (manual override): if a user manually adjusts volume during ducking, that entity is skipped during restore to respect the user's intent.
+- I-22 (manual override): if a user manually adjusts volume during ducking, that entity is skipped during restore to respect the user's intent. `mark_user_adjusted` and `update_snapshot` resolve volume aliases automatically — passing an MA entity ID transparently updates the native entity in the snapshot.
 - Crash recovery: the volume snapshot is persisted to `/config/pyscript/duck_snapshot.json` after every duck. On startup, if the file exists, volumes are restored and the file is cleared.
 - Satellite triggers are registered dynamically at startup from `entity_config.yaml` `duck.satellites`. To add/remove satellites: update `entity_config.yaml`, then `pyscript.reload` or HA restart.

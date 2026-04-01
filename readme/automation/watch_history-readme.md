@@ -100,6 +100,7 @@ Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, Y
 ## Changelog
 
 - **v1:** Initial implementation.
+- **v1.1:** Descriptive sensor state — logbook shows "watching Seinfeld S03E10" instead of generic "watching".
 
 ## Author
 

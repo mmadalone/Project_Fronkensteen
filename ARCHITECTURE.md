@@ -9,7 +9,7 @@ How the pieces fit together.
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     TIER 2 — BLUEPRINTS (Features)                      │
-│  77 automation + 34 script blueprints                                   │
+│  78 automation + 34 script blueprints                                   │
 │  User-facing features: bedtime, wake-up, notifications, banter,         │
 │  briefings, music, calendar, theatrical debates, therapy, privacy       │
 │                                                                         │
@@ -21,7 +21,7 @@ How the pieces fit together.
            ▼                                  │
 ┌─────────────────────────────────────────────┼───────────────────────────┐
 │              PACKAGES (Glue Layer)           │                           │
-│  43 ai_*.yaml packages                      │                           │
+│  44 ai_*.yaml packages                      │                           │
 │                                             │                           │
 │  Template sensors — computed from pyscript   │                           │
 │    state (budget %, cache hit rate, privacy  │                           │
@@ -37,7 +37,7 @@ How the pieces fit together.
            ▼                                                              │
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    TIER 1 — PYSCRIPT (Engine)                           │
-│  37 Python modules · 158 services                                       │
+│  38 Python modules · 168 services                                       │
 │                                                                         │
 │  Infrastructure: shared_utils (all modules), common_utilities (LLM)     │
 │  Core: memory.py (SQLite + FTS5 + vec0, called by 25+ modules)          │
@@ -60,7 +60,7 @@ How the pieces fit together.
 │  /config/pyscript/model_pricing.json — OpenRouter pricing cache         │
 │  /config/pyscript/entity_config.yaml — hardware entity mapping          │
 │  /config/pyscript/tts_speaker_config.json — zone-to-speaker map        │
-│  helpers_input_*.yaml — user configuration (217 helpers)                │
+│  helpers_input_*.yaml — user configuration (215 helpers)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,7 @@ How the pieces fit together.
 
 ## Module Map
 
-37 pyscript modules organized by function.
+38 pyscript modules organized by function.
 
 ### Infrastructure (imported by all modules)
 
@@ -139,7 +139,7 @@ How the pieces fit together.
 |--------|----------|------|
 | `system_health.py` | — (sensor only) | Validates 7 subsystems every 30 min. Weighted scoring, state transitions. |
 | `system_recovery.py` | — (event-driven) | 7 recovery playbooks, exponential backoff, circuit breaker. Triggered by health events. |
-| `state_bridge.py` | `set_sensor_value`, `save_budget_state` | Generic bridge service for blueprints that can't call `state.set()`. Seeds 65 sensors on startup. |
+| `state_bridge.py` | `set_sensor_value`, `save_budget_state` | Generic bridge service for blueprints that can't call `state.set()`. Seeds 62 sensors on startup. |
 | `toggle_audit.py` | — (auto-triggered) | Source-attributed logging of every AI kill switch change. SQLite storage. |
 | `conversation_sensor.py` | — (event-triggered) | Tracks conversation metrics. Captures `extended_openai_conversation.conversation.finished` events. |
 | `entity_history.py` | `entity_history_query` | HA recorder queries for agents. |
@@ -201,7 +201,7 @@ User (UI/dashboard)     Helper entity              Pyscript / Blueprint
 sets value          →   input_boolean.ai_foo   ←   reads via state.get()
 ```
 
-Helpers are the user's configuration API. 423 helpers across 3 tiers (217 Essential, 80 Per-User, 126 Dev Tuning). Pyscript modules and blueprints read them; users and the dashboard write them. System-managed helpers (timestamps, flags) are written by code.
+Helpers are the user's configuration API. 457 helpers across 3 tiers (215 Essential, 80 Per-User, 162 Dev Tuning). Pyscript modules and blueprints read them; users and the dashboard write them. System-managed helpers (timestamps, flags) are written by code.
 
 ---
 
@@ -340,7 +340,7 @@ Trace any feature back to its components.
 | **TTS queue stuck** | Item age exceeds `ai_tts_stuck_timeout_minutes` | Watchdog auto-clears queue. Fires `ai_tts_queue_stuck` event. |
 | **Refcount stranded** | `counter.ai_notification_follow_me_bypass_refcount > 0` and stale > TTL | Watchdog resets to 0 every 2 minutes. Follow-me re-enables. |
 | **System health degraded** | Weighted score below threshold | `system_recovery.py` activates: 7 playbooks, exponential backoff, circuit breaker (3 retries/hour max). |
-| **Pyscript reload** | HA integration reload | `state_bridge.py` re-seeds all 65 runtime sensors. Budget state restored from JSON. |
+| **Pyscript reload** | HA integration reload | `state_bridge.py` re-seeds all 62 runtime sensors. Budget state restored from JSON. |
 
 ---
 
@@ -363,7 +363,7 @@ L1 is injected into every agent system prompt via the `ai_context_hot.yaml` pack
 ```
 /config/
 ├── pyscript/
-│   ├── *.py                          37 modules (engine)
+│   ├── *.py                          38 modules (engine)
 │   ├── modules/shared_utils.py       Shared library
 │   ├── entity_config.yaml            Hardware entity mapping
 │   ├── tts_speaker_config.json       Zone-to-speaker map
@@ -371,10 +371,10 @@ L1 is injected into every agent system prompt via the `ai_context_hot.yaml` pack
 │   ├── model_pricing.json            LLM pricing cache (auto-generated)
 │   └── budget_state.json             Budget persistence (auto-generated)
 ├── packages/
-│   └── ai_*.yaml                     43 packages (glue layer)
-├── automation/*.yaml                  77 automation blueprints (features)
+│   └── ai_*.yaml                     44 packages (glue layer)
+├── automation/*.yaml                  78 automation blueprints (features)
 ├── script/*.yaml                      34 script blueprints (features)
-├── helpers_input_*.yaml              7 helper definition files (217 entities)
+├── helpers_input_*.yaml              7 helper definition files (215 entities)
 ├── helpers_counter.yaml              Counter helpers
 ├── memory.db                         L2 memory database (auto-created)
 ├── ai-dashboard.yaml                 6-tab management dashboard

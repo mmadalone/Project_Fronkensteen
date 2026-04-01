@@ -51,6 +51,7 @@ Pairs with `packages/ai_listen_history.yaml` (thin doc package). All triggers an
 - **`media_album_name` mapping:** Music Assistant uses `media_album_name` (not `media_album`). Blueprint reads the correct attribute and passes it as `media_album` parameter.
 - **Content types supported:** track, radio, playlist, album, podcast, audiobook.
 - **No Kodi JSON-RPC:** Unlike `watch_history.py`, this module reads attributes directly from media_player entities -- MA/Spotify expose clean metadata.
+- **Descriptive sensor state:** `_build_display_state()` sets sensor state to e.g. `"listening to Radio Klara"` or `"listening to Artist — Title"` instead of generic `"listening"`. HA logbook shows the descriptive text in state change entries.
 
 ## Changelog
 

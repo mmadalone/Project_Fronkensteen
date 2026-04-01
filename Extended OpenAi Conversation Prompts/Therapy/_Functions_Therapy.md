@@ -263,9 +263,10 @@
   function:
     type: script
     sequence:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.ai_continuous_conversation_active
+      - action: pyscript.set_sensor_value
+        data:
+          entity_id: sensor.ai_continuous_conversation_active
+          value: "off"
 
 - spec:
     name: save_therapy_turn

@@ -118,7 +118,7 @@ Tracks music listening sessions on Music Assistant / Spotify players and logs th
 
 ## Changelog
 
-- **v1:** Initial implementation.
+- **v1:** Initial implementation with descriptive sensor state — logbook shows "listening to Radio Klara" instead of generic "listening".
 
 ## Author
 

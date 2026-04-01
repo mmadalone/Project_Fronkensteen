@@ -45,6 +45,8 @@ _user_adjusted_during_duck: set = set()  # I-22: entities user adjusted while du
 _lock = threading.Lock()
 _sat_sessions: dict = {}       # satellite_entity → session_id
 _last_duck_event: dict = {}    # {source, detail, duck_time, restore_time, duration_s, sessions}
+_volume_aliases: dict = {}     # I-24: native_entity → ma_entity (same physical device)
+_reverse_aliases: dict = {}    # I-24: ma_entity → native_entity
 result_entity_name: dict = {}
 
 
@@ -238,6 +240,94 @@ def _get_default_volume() -> float:
     return 0.5
 
 
+# ── I-24: Volume Alias Discovery ──────────────────────────────────────────────
+# MA creates media_player entities that wrap native speakers (Sonos, ESPHome).
+# When scripts set volume on the MA entity, the native entity's volume_level
+# attribute lags 1-2s (UPnP propagation).  During capture, read from the MA
+# entity instead — it always has the freshest value.
+
+@pyscript_executor  # noqa: F821
+def _build_volume_alias_map(duck_group_entities, announcement_entities):
+    """Scan entity registry for MA media_player entities that wrap
+    duck group / announcement members (same physical device).
+
+    Two matching patterns:
+      A) Shared unique_id, different platform (Sonos ↔ MA)
+      B) MA unique_id == duck/announce entity_id (ESPHome HA Player Provider)
+
+    Returns (forward_map, reverse_map).
+    """
+    import orjson as _orjson
+
+    forward = {}
+    reverse = {}
+    try:
+        with open("/config/.storage/core.entity_registry", "r") as f:
+            data = _orjson.loads(f.read())
+    except Exception:
+        return forward, reverse
+
+    entities = data.get("data", {}).get("entities", [])
+
+    # All entities duck_manager manages
+    managed_set = set(duck_group_entities) | set(announcement_entities)
+
+    # Index managed entities: unique_id → (entity_id, platform)
+    managed_uid_map = {}
+    managed_eid_set = set()
+    for ent in entities:
+        eid = ent.get("entity_id", "")
+        if eid in managed_set and eid.startswith("media_player."):
+            uid = ent.get("unique_id", "")
+            platform = ent.get("platform", "")
+            if uid:
+                managed_uid_map[uid] = (eid, platform)
+            managed_eid_set.add(eid)
+
+    # Find MA entities that alias managed entities
+    for ent in entities:
+        eid = ent.get("entity_id", "")
+        if not eid.startswith("media_player.") or eid in managed_set:
+            continue
+        if ent.get("disabled_by"):
+            continue
+        if ent.get("platform", "") != "music_assistant":
+            continue
+        uid = ent.get("unique_id", "")
+        if not uid:
+            continue
+
+        # Pattern A: shared unique_id (e.g. both have RINCON_...)
+        if uid in managed_uid_map:
+            native_eid, native_platform = managed_uid_map[uid]
+            if native_platform != "music_assistant":
+                forward[native_eid] = eid
+                reverse[eid] = native_eid
+                continue
+
+        # Pattern B: MA unique_id IS the native entity_id
+        # (ESPHome / SpotifyPlus HA Player Provider)
+        if uid in managed_eid_set:
+            forward[uid] = eid      # uid is the native entity_id
+            reverse[eid] = uid
+
+    return forward, reverse
+
+
+async def _load_volume_aliases():
+    """Build and cache volume alias maps. Called at startup and on reload."""
+    global _volume_aliases, _reverse_aliases
+    duck_group = _get_duck_group()
+    announce = _get_announcement_players()
+    fwd, rev = await _build_volume_alias_map(duck_group, announce)
+    _volume_aliases = fwd
+    _reverse_aliases = rev
+    if fwd:
+        log.info(f"duck_manager: volume aliases discovered: {fwd}")  # noqa: F821
+    else:
+        log.info("duck_manager: no volume aliases found (single-entity devices)")  # noqa: F821
+
+
 # ── Volume Helpers ────────────────────────────────────────────────────────────
 
 def _capture_volume(entity_id: str, guard_ducked: bool = True):
@@ -371,12 +461,24 @@ async def _capture_and_duck(skip_duck_entity: str = "") -> None:
         if p not in all_players:
             all_players.append(p)
 
-    # ── Pass 1: Primary capture ──
-    # Capture volumes outside lock, batch-write under lock
+    # ── Pass 1: Primary capture (with I-24 alias resolution) ──
+    # For entities with a volume alias (same physical device, different platform),
+    # read from the alias entity first — it gets script-driven volume changes
+    # instantly, while the duck group entity may lag 1-2s via UPnP.
     pass1_captures = {}
     for entity_id in all_players:
         if entity_id not in _volume_snapshot:
-            vol = _capture_volume(entity_id)
+            vol = None
+            alias_id = _volume_aliases.get(entity_id)
+            if alias_id:
+                vol = _capture_volume(alias_id)
+                if vol is not None:
+                    log.info(  # noqa: F821
+                        f"duck_manager: {entity_id} — using alias volume "
+                        f"{vol:.2f} from {alias_id}"
+                    )
+            if vol is None:
+                vol = _capture_volume(entity_id)
             if vol is not None:
                 pass1_captures[entity_id] = vol
     with _lock:
@@ -596,14 +698,38 @@ async def _restore_and_verify() -> None:
         return
 
     # Pass 1: restore all volumes (skip user-adjusted entities)
+    # I-24: Before restoring, check if the volume was changed during the duck
+    # session.  Read from alias (MA entity) first, then fall back to the
+    # entity itself.  If current volume differs from both the snapshot AND the
+    # duck volume, something intentionally changed it — restore to that instead.
+    duck_vol = _get_duck_volume()
     skipped_user = []
     for entity_id, vol in saved_snapshot.items():
         if entity_id in user_adjusted:
             skipped_user.append(entity_id)
             continue
+        restore_vol = vol
+        # Check alias first (fresher for MA-targeted changes)
+        alias_id = _volume_aliases.get(entity_id)
+        current_vol = None
+        if alias_id:
+            current_vol = _capture_volume(alias_id, guard_ducked=False)
+        # Fall back to the entity itself (covers non-aliased entities)
+        if current_vol is None:
+            current_vol = _capture_volume(entity_id, guard_ducked=False)
+        if (current_vol is not None
+                and abs(current_vol - duck_vol) > 0.02
+                and abs(current_vol - vol) > 0.02):
+            source = alias_id or entity_id
+            log.info(  # noqa: F821
+                f"duck_manager: {entity_id} — volume changed during duck "
+                f"({vol:.2f} → {current_vol:.2f} via {source}), "
+                f"restoring to current value"
+            )
+            restore_vol = current_vol
         try:
             await service.call("media_player", "volume_set",  # noqa: F821
-                               entity_id=entity_id, volume_level=vol)
+                               entity_id=entity_id, volume_level=restore_vol)
         except Exception as exc:
             log.warning(f"duck_manager: restore {entity_id} failed: {exc}")  # noqa: F821
 
@@ -1035,13 +1161,26 @@ async def duck_manager_mark_user_adjusted(entity_id: str = ""):
         return {"status": "error", "op": "mark_user_adjusted",
                 "error": "entity_id required"}
 
-    _user_adjusted_during_duck.add(entity_id)
+    # I-24: Resolve alias — if caller passed an MA entity (e.g. workshop_ma),
+    # map it to the duck group entity (e.g. workshop_sonos).
+    resolved_id = entity_id
+    if entity_id in _reverse_aliases:
+        resolved_id = _reverse_aliases[entity_id]
+        log.info(  # noqa: F821
+            f"duck_manager: mark_user_adjusted alias resolved "
+            f"{entity_id} → {resolved_id}"
+        )
+
+    _user_adjusted_during_duck.add(resolved_id)
+    if resolved_id != entity_id:
+        _user_adjusted_during_duck.add(entity_id)
+
     log.info(  # noqa: F821
-        f"duck_manager: marked {entity_id} as user-adjusted "
+        f"duck_manager: marked {resolved_id} as user-adjusted "
         f"(total={len(_user_adjusted_during_duck)})"
     )
     return {"status": "ok", "op": "mark_user_adjusted",
-            "entity_id": entity_id}
+            "entity_id": resolved_id}
 
 
 # ── Duck Guard: Blueprint Snapshot Update ─────────────────────────────────────
@@ -1093,22 +1232,33 @@ async def duck_manager_update_snapshot(entity_id: str = "",
         return {"status": "noop", "op": "update_snapshot",
                 "reason": "not_ducking"}
 
+    # I-24: Resolve alias — if caller passed an MA entity (e.g. workshop_ma),
+    # map it to the duck group entity (e.g. workshop_sonos).
+    resolved_id = entity_id
+    if entity_id in _reverse_aliases:
+        resolved_id = _reverse_aliases[entity_id]
+        log.info(  # noqa: F821
+            f"duck_manager: update_snapshot alias resolved "
+            f"{entity_id} → {resolved_id}"
+        )
+
     # Entity not in snapshot — not part of duck group, nothing to update
     with _lock:
-        if entity_id not in _volume_snapshot:
+        if resolved_id not in _volume_snapshot:
             return {"status": "noop", "op": "update_snapshot",
                     "reason": "entity_not_in_snapshot",
                     "entity_id": entity_id}
-        old_vol = _volume_snapshot[entity_id]
-        _volume_snapshot[entity_id] = float(volume_level)
+        old_vol = _volume_snapshot[resolved_id]
+        _volume_snapshot[resolved_id] = float(volume_level)
     await _save_snapshot()
 
     log.info(  # noqa: F821
-        f"duck_manager: duck guard updated snapshot for {entity_id} "
+        f"duck_manager: duck guard updated snapshot for {resolved_id} "
         f"({old_vol:.2f} → {float(volume_level):.2f})"
+        f"{' (via alias ' + entity_id + ')' if resolved_id != entity_id else ''}"
     )
     return {"status": "ok", "op": "update_snapshot",
-            "entity_id": entity_id,
+            "entity_id": resolved_id,
             "old_volume": old_vol,
             "new_volume": float(volume_level)}
 
@@ -1190,6 +1340,9 @@ async def _duck_manager_startup():
                   new_attributes={"icon": "mdi:duck", "friendly_name": "AI Ducking Flag"})
     except Exception:
         pass
+
+    # I-24: Discover volume aliases (MA ↔ native speaker entities)
+    await _load_volume_aliases()
 
     # Register satellite triggers dynamically from config
     global _satellite_triggers

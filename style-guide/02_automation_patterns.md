@@ -660,7 +660,22 @@ triggers:
 - More readable — intent is clear from the trigger type.
 - Target-first workflow: pick an area, then HA suggests relevant triggers.
 
-**Current status (as of HA 2026.2, February 2026):** Purpose-specific triggers remain a **Labs** feature — opt-in via Settings → System → Labs. The domain coverage has expanded steadily: 2025.12 introduced the first batch (light, cover, lock, motion/occupancy, and numeric state semantic triggers), 2026.1 added button press, climate mode, and device_tracker triggers, and 2026.2 brought calendar event (start/end), person presence (arrives home/leaves), vacuum docking, and media player state triggers — plus the first **purpose-specific conditions** (checking entity states using the same semantic language). When writing new automations, consider noting this as a future simplification opportunity in comments, but **don't use Labs features in production blueprints shared with others** unless `min_version` is set and the feature has graduated from Labs.
+**Current status (as of HA 2026.4, April 2026):** Purpose-specific triggers remain a **Labs** feature — opt-in via Settings → System → Labs. The domain coverage has expanded steadily:
+
+- **2025.12:** First batch — light, cover, lock, motion/occupancy, numeric state semantic triggers.
+- **2026.1:** Button press, climate mode, device_tracker triggers.
+- **2026.2:** Calendar event (start/end), person presence (arrives home/leaves), vacuum docking, media player state triggers. First **purpose-specific conditions**.
+- **2026.4:** Major expansion — **cross-domain triggers** that work across multiple entity types by real-world concept:
+  - Door / garage door / gate / window (binary sensors + covers combined)
+  - Motion detected/cleared (binary sensors + event entities combined)
+  - Occupancy detected/cleared
+  - Temperature / humidity / illuminance / power consumption changes and threshold crossings
+  - Battery level (low/not low, charging start/stop, level changes, threshold crossing)
+  - Air quality (CO, CO2, smoke detection)
+  - New domain-specific: counter (increment/decrement/reset/min/max), cover (all types), humidifier, input_boolean (works with switch triggers and vice versa), input_text (works with text triggers), moisture, remote, schedule, select (selection change), text, to-do list (item added/completed/removed), valve, water heater.
+  - All cross-domain triggers/conditions support targeting by **area, floor, or label** with automatic inclusion of new matching entities.
+
+When writing new automations, consider noting this as a future simplification opportunity in comments, but **don't use Labs features in production blueprints shared with others** unless `min_version` is set and the feature has graduated from Labs.
 
 ### 5.12 Idempotency — every action safe to run twice
 

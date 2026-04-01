@@ -1507,7 +1507,7 @@ async def music_compose_local(
     start = time.time()
 
     # Build MIDI in executor thread
-    midi_bytes = _build_midi_bytes(
+    midi_bytes = await _build_midi_bytes(
         agent, content_type, duration_s,
         tempo_shift, pitch_shift, instrument_override,
     )
@@ -1515,9 +1515,9 @@ async def music_compose_local(
         return {"status": "error", "error": "MIDI generation failed"}
 
     # Render to WAV in executor thread (fluidsynth CLI, not midi2audio)
-    _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
+    await _ensure_dirs_sync(str(STAGING_DIR), str(PRODUCTION_DIR))
     output_path = str(PRODUCTION_DIR / f"{key}.wav")
-    success = _render_midi_to_wav(midi_bytes, sf_path, output_path)
+    success = await _render_midi_to_wav(midi_bytes, sf_path, output_path)
     if not success:
         return {"status": "error", "error": "FluidSynth rendering failed"}
 
@@ -1537,7 +1537,7 @@ async def music_compose_local(
         "render_time_ms": render_time,
         "prompt_hint": prompt_hint,
     }
-    _write_meta_sync(str(PRODUCTION_DIR / f"{key}.json"), json.dumps(metadata, indent=2))
+    await _write_meta_sync(str(PRODUCTION_DIR / f"{key}.json"), json.dumps(metadata, indent=2))
 
     # Track calls — C5: FluidSynth local renders use "music_local" (zero cost)
     try:
