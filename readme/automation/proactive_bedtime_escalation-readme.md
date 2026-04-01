@@ -126,6 +126,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 | `media_player` | *(empty)* | Speaker for proactive TTS in this area |
 | `area_name` | `Living room` | Friendly area name for speech context |
 | `proactive_tts_volume` | `0.0` | Volume before TTS delivery (0 = skip) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

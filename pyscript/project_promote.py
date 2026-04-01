@@ -186,25 +186,22 @@ def _format_hot_context_entry(meta: dict, summary_text: str = "") -> str:
     elif next_action:
         return f"{name} ({status} — {next_action})"
     elif summary:
-        short = summary[:40] + "..." if len(summary) > 40 else summary
-        return f"{name} ({status} — {short})"
+        return f"{name} ({status} — {summary})"
     return f"{name} ({status})"
 
 
 @pyscript_compile  # noqa: F821
 def _build_hot_context_line(projects: list, limit: int = 5) -> str:
-    """Build the 255-char hot context line from sorted projects.
+    """Build the hot context line from sorted projects.
 
     projects: list of (meta, summary_text) tuples, pre-sorted by priority.
+    No truncation — full text stored in sensor attribute.
     """
     entries = []
     for meta, summary_text in projects[:limit]:
         entries.append(_format_hot_context_entry(meta, summary_text))
 
-    line = ", ".join(entries)
-    if len(line) > 250:
-        line = line[:247] + "..."
-    return line
+    return ", ".join(entries)
 
 
 @pyscript_compile  # noqa: F821
@@ -592,6 +589,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
             new_attributes={
                 "icon": "mdi:fire",
                 "friendly_name": "AI Project Hot Context Line",
+                "full_text": str(hot_line),
             },
         )
         state.set(  # noqa: F821
@@ -600,6 +598,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
             new_attributes={
                 "icon": "mdi:folder-star",
                 "friendly_name": "AI Active Projects Summary",
+                "full_text": str(summary_line),
             },
         )
         _update_last_sync()

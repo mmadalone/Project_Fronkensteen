@@ -337,6 +337,15 @@ blueprint:
               step: 0.05
               mode: slider
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ⑤ QUIET HOURS & DND
     # ===========================================================================
@@ -585,6 +594,7 @@ variables:
   v_satellite_entity: !input satellite_entity
   v_tts_output_player: !input tts_output_player
   v_tts_volume: !input tts_volume
+  v_bypass_ducking: !input bypass_ducking
   v_bypass_follow_me: !input bypass_follow_me
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
@@ -858,6 +868,7 @@ actions:
                             voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 3
+                            duck: "{{ not v_bypass_ducking }}"
                             target_mode: explicit
                             target: "{{ v_tts_output_player }}"
                           response_variable: tts_result
@@ -871,6 +882,7 @@ actions:
                         voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 3
+                        duck: "{{ not v_bypass_ducking }}"
                       response_variable: tts_result
                       continue_on_error: true
 
@@ -957,6 +969,7 @@ actions:
                             voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 2
+                            duck: "{{ not v_bypass_ducking }}"
                             target_mode: explicit
                             target: "{{ v_tts_output_player }}"
                           response_variable: tts_result
@@ -970,6 +983,7 @@ actions:
                         voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 2
+                        duck: "{{ not v_bypass_ducking }}"
                       response_variable: tts_result
                       continue_on_error: true
 
@@ -1056,6 +1070,7 @@ actions:
                             voice_id: "{{ dispatch_tts_voice }}"
                             volume_level: "{{ v_tts_volume }}"
                             priority: 1
+                            duck: "{{ not v_bypass_ducking }}"
                             target_mode: explicit
                             target: "{{ v_tts_output_player }}"
                           response_variable: tts_result
@@ -1069,6 +1084,7 @@ actions:
                         voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: 1
+                        duck: "{{ not v_bypass_ducking }}"
                       response_variable: tts_result
                       continue_on_error: true
 
@@ -1146,6 +1162,7 @@ actions:
                       voice_id: "{{ dispatch_tts_voice }}"
                       volume_level: "{{ v_tts_volume }}"
                       priority: 3
+                      duck: "{{ not v_bypass_ducking }}"
                       target_mode: explicit
                       target: "{{ v_tts_output_player }}"
                     response_variable: tts_result
@@ -1159,6 +1176,7 @@ actions:
                   voice_id: "{{ dispatch_tts_voice }}"
                   volume_level: "{{ v_tts_volume }}"
                   priority: 3
+                  duck: "{{ not v_bypass_ducking }}"
                 response_variable: tts_result
                 continue_on_error: true
 
@@ -1226,6 +1244,7 @@ actions:
                       voice_id: "{{ dispatch_tts_voice }}"
                       volume_level: "{{ v_tts_volume }}"
                       priority: 3
+                      duck: "{{ not v_bypass_ducking }}"
                       target_mode: explicit
                       target: "{{ v_tts_output_player }}"
                     response_variable: tts_result
@@ -1239,6 +1258,7 @@ actions:
                   voice_id: "{{ dispatch_tts_voice }}"
                   volume_level: "{{ v_tts_volume }}"
                   priority: 3
+                  duck: "{{ not v_bypass_ducking }}"
                 response_variable: tts_result
                 continue_on_error: true
 
@@ -1350,6 +1370,7 @@ actions:
                         voice_id: "{{ dispatch_tts_voice }}"
                         volume_level: "{{ v_tts_volume }}"
                         priority: "{{ _tier_priority | int(3) }}"
+                        duck: "{{ not v_bypass_ducking }}"
                         target_mode: explicit
                         target: "{{ v_tts_output_player }}"
                       response_variable: tts_result
@@ -1363,6 +1384,7 @@ actions:
                     voice_id: "{{ dispatch_tts_voice }}"
                     volume_level: "{{ v_tts_volume }}"
                     priority: "{{ _tier_priority | int(3) }}"
+                    duck: "{{ not v_bypass_ducking }}"
                   response_variable: tts_result
                   continue_on_error: true
 

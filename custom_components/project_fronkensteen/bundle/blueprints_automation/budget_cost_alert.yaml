@@ -76,6 +76,15 @@ blueprint:
           selector:
             text: {}
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ── § 3  Behavior ────────────────────────────────────────────────
     section_behavior:
       name: "③ Behavior"
@@ -106,6 +115,7 @@ variables:
   _cost: "{{ states(cost_entity) | float(0) }}"
   _limit: "{{ states('input_number.ai_budget_daily_cost_limit') | float(5) }}"
   _pct: "{{ ((_cost / [_limit, 0.01] | max) * 100) | round(0) }}"
+  bypass_ducking: !input bypass_ducking
 
 triggers:
   - trigger: numeric_state
@@ -173,6 +183,7 @@ actions:
           voice: !input tts_fallback_voice
           priority: 1
           target_mode: "presence"
+          duck: "{{ not bypass_ducking }}"
 
   # Auto-downgrade on critical (if enabled)
   - if:

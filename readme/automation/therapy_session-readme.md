@@ -186,6 +186,7 @@ Default therapy system prompt:
 |-------|---------|-------------|
 | `use_dispatcher` | `true` | Resolve TTS voice via the AI dispatcher |
 | `tts_voice` | _(empty)_ | TTS entity used when dispatcher is disabled |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 | `silence_media_url` | _(empty)_ | URL to a silent audio file for echo-free mic reopen |
 | `suppress_toggles` | `[]` | Input booleans to turn OFF during therapy. Restored on session end |
 | `continuous_conversation_entity` | `input_boolean.ai_continuous_conversation_active` | Input boolean that keeps the mic cycling |

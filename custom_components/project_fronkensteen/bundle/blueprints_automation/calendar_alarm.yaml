@@ -198,6 +198,14 @@ blueprint:
           selector:
             text:
               multiline: true
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
 
     # ===========================================================================
     # ⑤ INFRASTRUCTURE
@@ -412,6 +420,7 @@ variables:
   v_bypass_follow_me: !input bypass_follow_me
   v_bypass_claim: !input bypass_claim_script
   v_bypass_release: !input bypass_release_script
+  bypass_ducking: !input bypass_ducking
   # Music  v_wake_melody_enabled: !input wake_melody_enabled
   v_wake_melody_agent: !input wake_melody_agent
   v_wake_melody_volume: !input wake_melody_volume
@@ -651,6 +660,7 @@ actions:
                               target: "{{ speaker_entity | default('') }}"
                               volume_level: "{{ v_wake_melody_volume | float(0.3) }}"
                               priority: 2
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
                           - delay:
                               seconds: "{{ v_wake_melody_delay_after | int(2) }}"
@@ -706,6 +716,7 @@ actions:
               priority: 1
               target_mode: explicit
               target: "{{ v_tts_output_player }}"
+              duck: "{{ not bypass_ducking }}"
 
   # ── Post-interaction whisper ───────────────────────────────────────────
   - alias: "Whisper — update self-awareness"

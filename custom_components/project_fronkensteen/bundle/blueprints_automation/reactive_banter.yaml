@@ -487,6 +487,15 @@ blueprint:
               max: 4
               step: 1
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
 mode: single
 max_exceeded: silent
 
@@ -519,6 +528,7 @@ variables:
   tts_speaker_entity: !input tts_speaker
   tts_target_mode_val: !input tts_target_mode
   tts_priority_val: !input tts_priority
+  bypass_ducking: !input bypass_ducking
   cooldown_helper: !input cooldown_helper
   banter_prompt_raw: !input banter_prompt
   source_context_prompt_raw: !input source_context_prompt
@@ -929,7 +939,7 @@ action:
       target_mode: "{{ tts_target_mode_val }}"
       target: "{{ tts_speaker_entity if tts_target_mode_val == 'explicit' else '' }}"
       announce: true
-      duck: false
+      duck: "{{ not bypass_ducking }}"
       volume_level: "{{ tts_output_vol | float(0) if tts_output_vol | float(0) > 0 else none }}"
       restore_volume: "{{ tts_output_vol | float(0) > 0 }}"
       volume_restore_delay: "{{ restore_delay | int(8) }}"

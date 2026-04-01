@@ -171,6 +171,7 @@ Entry Points                          Orchestration
 | `tts_output_volume` | `0.0` | Volume override during exchange (0 = use current) |
 | `tts_volume_restore_delay` | `5` | Seconds before restoring volume |
 | `tts_playback_buffer` | `1` | Extra seconds after speaker idle before next turn |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

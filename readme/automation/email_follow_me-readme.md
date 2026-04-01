@@ -162,6 +162,7 @@ When a new email arrives via the IMAP integration, this blueprint determines whi
 |-------|---------|-------------|
 | `tts_announce` | `false` | Use announce mode for TTS |
 | `tts_output_volume` | `0.0` | Fixed TTS volume (0 = disabled) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

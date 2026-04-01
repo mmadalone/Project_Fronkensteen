@@ -146,6 +146,15 @@ blueprint:
           selector:
             boolean:
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
 mode: single
 max_exceeded: silent
 
@@ -159,6 +168,7 @@ variables:
   v_llm_prompt: !input llm_prompt
   v_llm_agent: !input llm_agent
   enable_user_prefs: !input enable_user_preferences
+  bypass_ducking: !input bypass_ducking
   v_confidence_map:
     low: 1
     medium: 2
@@ -275,6 +285,8 @@ actions:
               target: "{{ v_tts_speaker }}"
               announce: true
               priority: 3
+              duck: "{{ not bypass_ducking }}"
+
 
       - conditions:
           - condition: template
@@ -309,6 +321,8 @@ actions:
               target: "{{ v_tts_speaker }}"
               announce: true
               priority: 3
+              duck: "{{ not bypass_ducking }}"
+
 
   # ── Advisory actions ──
   - !input advisory_actions

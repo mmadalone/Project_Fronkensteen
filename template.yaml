@@ -57,18 +57,27 @@
         {% else %}
           {% set type = state_attr(mp, 'media_content_type') | default('unknown') %}
           {% set title = state_attr(mp, 'media_title') | default('')
-             | regex_replace('\\[COLOR [^\\]]*\\]', '')
-             | regex_replace('\\[/COLOR\\]', '') | trim %}
+             | regex_replace('\\[COLOR[^\\]]*\\]', '')
+             | regex_replace('\\[/COLOR\\]', '')
+             | regex_replace('\\[/?B\\]', '')
+             | regex_replace('\\[/?I\\]', '')
+             | regex_replace('\\[CR\\]', ' ') | trim %}
           {% set series = state_attr(mp, 'media_series_title') | default('') %}
           {% set season = state_attr(mp, 'media_season') | default('') %}
           {% set episode = state_attr(mp, 'media_episode') | default('') %}
+          {% set ch = states('sensor.madteevee_pvr_channel') | default('') %}
+          {% set is_pvr = ch not in ['', 'off', 'not_pvr', 'unknown', 'unavailable'] %}
+          {% set artist = state_attr(mp, 'media_artist') | default('') %}
           {% if type == 'tvshow' %}
             Series: {{ series }} - S{{ '%02d' | format(season | int(0)) }}E{{ '%02d' | format(episode | int(0)) }} - {{ title }}
           {% elif type == 'movie' %}
             Movie: {{ title }}
+          {% elif type == 'video' and is_pvr %}
+            Live TV: {{ title }} ({{ ch }})
+          {% elif type == 'video' and artist %}
+            Video: {{ title }} ({{ artist }})
           {% elif type == 'video' %}
-            {% set ch = states('sensor.madteevee_pvr_channel') | default('') %}
-            {% if ch not in ['', 'off', 'not_pvr', 'unknown', 'unavailable'] %}Live TV: {{ title }} ({{ ch }}){% else %}Live TV: {{ title }}{% endif %}
+            Video: {{ title }}
           {% else %}
             {{ title }}
           {% endif %}
@@ -78,25 +87,45 @@
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}unknown
           {% else %}
             {% set type = state_attr('media_player.madteevee', 'media_content_type') | default('unknown') %}
+            {% set ch = states('sensor.madteevee_pvr_channel') | default('') %}
+            {% set is_pvr = ch not in ['', 'off', 'not_pvr', 'unknown', 'unavailable'] %}
             {% if type == 'tvshow' %}series
             {% elif type == 'movie' %}movie
-            {% elif type == 'video' %}live_tv
+            {% elif type == 'video' and is_pvr %}live_tv
+            {% elif type == 'video' %}video
             {% else %}{{ type }}{% endif %}
           {% endif %}
         media_title: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}{{ state_attr('media_player.madteevee', 'media_title') | default('')
-             | regex_replace('\\[COLOR [^\\]]*\\]', '')
-             | regex_replace('\\[/COLOR\\]', '') | trim }}{% endif %}
+             | regex_replace('\\[COLOR[^\\]]*\\]', '')
+             | regex_replace('\\[/COLOR\\]', '')
+             | regex_replace('\\[/?B\\]', '')
+             | regex_replace('\\[/?I\\]', '')
+             | regex_replace('\\[CR\\]', ' ') | trim }}{% endif %}
         series_title: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
-          {% else %}{{ state_attr('media_player.madteevee', 'media_series_title') | default('') }}{% endif %}
+          {% else %}
+            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_series') | default('', true) %}
+            {% set ha = state_attr('media_player.madteevee', 'media_series_title') | default('') %}
+            {{ epg if epg else ha }}
+          {% endif %}
         season: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
-          {% else %}{{ state_attr('media_player.madteevee', 'media_season') | default('') }}{% endif %}
+          {% else %}
+            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_season') | default('', true) %}
+            {% set ha = state_attr('media_player.madteevee', 'media_season') | default('') %}
+            {% set val = epg if epg else ha %}
+            {{ '' if val in ['', -1, '-1'] else val }}
+          {% endif %}
         episode: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
-          {% else %}{{ state_attr('media_player.madteevee', 'media_episode') | default('') }}{% endif %}
+          {% else %}
+            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_episode') | default('', true) %}
+            {% set ha = state_attr('media_player.madteevee', 'media_episode') | default('') %}
+            {% set val = epg if epg else ha %}
+            {{ '' if val in ['', -1, '-1'] else val }}
+          {% endif %}
         player_state: >-
           {{ states('media_player.madteevee') }}
         pvr_channel: >-
@@ -112,13 +141,26 @@
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}
             {% set t = state_attr('sensor.madteevee_pvr_channel', 'title') | default('') %}
-            {{ t | regex_replace('\\[COLOR [^\\]]*\\]', '')
-                 | regex_replace('\\[/COLOR\\]', '') | trim }}
+            {{ t | regex_replace('\\[COLOR[^\\]]*\\]', '')
+                 | regex_replace('\\[/COLOR\\]', '')
+                 | regex_replace('\\[/?B\\]', '')
+                 | regex_replace('\\[/?I\\]', '')
+                 | regex_replace('\\[CR\\]', ' ') | trim }}
           {% endif %}
         plot: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}
             {% set p = state_attr('sensor.madteevee_pvr_channel', 'plot') | default('') %}
-            {% set p = p | regex_replace('\\[COLOR [^\\]]*\\]', '') | regex_replace('\\[/COLOR\\]', '') | trim %}
+            {% set p = p | regex_replace('\\[COLOR[^\\]]*\\]', '')
+                         | regex_replace('\\[/COLOR\\]', '')
+                         | regex_replace('\\[/?B\\]', '')
+                         | regex_replace('\\[/?I\\]', '')
+                         | regex_replace('\\[CR\\]', ' ') | trim %}
             {{ p[:500] if p else '' }}
           {% endif %}
+        media_source: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('sensor.ai_watch_history_status', 'current_source') | default('', true) }}{% endif %}
+        episode_name: >-
+          {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
+          {% else %}{{ state_attr('sensor.ai_watch_history_status', 'current_episode_name') | default('', true) }}{% endif %}

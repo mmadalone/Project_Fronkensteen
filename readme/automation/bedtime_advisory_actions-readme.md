@@ -89,6 +89,7 @@ ai_bedtime_advisory event
 | `llm_prompt` | `Generate a brief, gentle bedtime reminder...` | LLM prompt with `{recommendation}` placeholder (llm mode only) |
 | `llm_agent` | `{}` | Conversation agent entity for LLM-generated messages |
 | `enable_user_preferences` | `true` | Inject user preferences and sleep budget into advisory prompts |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

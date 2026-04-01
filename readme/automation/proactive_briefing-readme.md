@@ -134,7 +134,7 @@ Unified briefing blueprint that replaces both `proactive_briefing_morning` and `
 |-------|---------|-------------|
 | `sections` | `greeting,weather,calendar,email,schedule,household,memory,projects,media_today` | Enabled sections (CSV) |
 | `household_entities` | *(empty)* | Entity IDs for household section (CSV) |
-| `briefing_prompt` | *(empty)* | Custom LLM prompt with `{content}`, `{context}`, `{framing}` |
+| `briefing_prompt` | *(see default)* | LLM prompt with `{content}`, `{framing}`, `{context}` placeholders. Default instructs agent to deliver conversationally and mention every item |
 | `context_template` | *(empty)* | Jinja2 template injected into `{context}` |
 | `download_window` | `since_midnight` | Radarr/Sonarr window: since_midnight / rolling_24h |
 
@@ -151,6 +151,10 @@ Unified briefing blueprint that replaces both `proactive_briefing_morning` and `
 | `volume_restore_delay` | `5` | Seconds to wait before restoring volume |
 | `use_duck_guard` | `true` | Update duck manager snapshot after volume changes |
 | `pause_players` | `[]` | Media players to pause/resume around briefing |
+| `morning_starts_at` | `05:00:00` | Time when morning tone block begins. 00:00 = use global helper |
+| `afternoon_starts_at` | `12:00:00` | Time when afternoon tone block begins. 00:00 = use global helper |
+| `evening_starts_at` | `17:00:00` | Time when evening tone block begins. 00:00 = use global helper |
+| `bypass_ducking` | `false` | When true, TTS plays without volume ducking |
 
 </details>
 

@@ -154,6 +154,7 @@ Time-based alarm that fires on selected weekdays, optionally generates a wake-up
 | Ducking flag entity | `input_boolean.ai_ducking_flag` | Audio ducking active flag. |
 | Duck guard enabled | `input_boolean.ai_duck_guard_enabled` | Duck guard system toggle. |
 | Dispatcher enabled | `input_boolean.ai_dispatcher_enabled` | AI agent dispatcher toggle. |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

@@ -379,6 +379,15 @@ blueprint:
               max: 10
               step: 1
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # \u2500\u2500 \u2467 Stinger \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     stinger:
       name: "\u2467 Stinger"
@@ -643,6 +652,7 @@ variables:
   v_tts_output_vol: !input tts_output_volume
   v_tts_vol_restore_delay: !input tts_volume_restore_delay
   v_tts_playback_buffer: !input tts_playback_buffer
+  bypass_ducking: !input bypass_ducking
   v_native_fallback_voice: !input native_fallback_voice
   v_stinger_enabled: !input enable_pre_exchange_stinger
   v_stinger_url: !input stinger_fallback_media_url
@@ -791,6 +801,7 @@ action:
                         target: "{{ satellite_speaker_entity }}"
                         announce: true
                         priority: 2
+                        duck: "{{ not bypass_ducking }}"
                         metadata:
                           source: theatrical_native
                       response_variable: _tts_native_result

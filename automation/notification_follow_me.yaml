@@ -564,6 +564,15 @@ blueprint:
               step: 0.05
               mode: slider
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
         satellite_volume_snapshot:
           name: Satellite volume snapshot helper (optional)
           description: >-
@@ -1584,6 +1593,7 @@ variables:
   quiet_end_val: !input quiet_end
   tts_announce: !input tts_announce
   tts_output_vol: !input tts_output_volume
+  bypass_ducking: !input bypass_ducking
   sat_vol_snapshot_entity: !input satellite_volume_snapshot
   expressive_sens: !input expressive_sensitivity
   expressive_ref: !input expressive_patterns
@@ -1862,6 +1872,7 @@ actions:
                   target: "{{ _wd_satellite }}"
                   announce: "{{ tts_announce | bool(false) }}"
                   priority: "{{ _notif_priority | int(3) }}"
+                  duck: "{{ not bypass_ducking }}"
             else:
               - alias: "Log watchdog TTS skipped due to satellite state"
                 action: system_log.write
@@ -3312,6 +3323,7 @@ actions:
                           volume_level: "{{ tts_output_vol | float(0) }}"
                           announce: "{{ tts_announce | bool(false) }}"
                           priority: "{{ _notif_priority | int(3) }}"
+                          duck: "{{ not bypass_ducking }}"
                           metadata:
                             agent_name: "{{ dispatch_persona | default('rick') }}"
                             message: "{{ _safe_announcement[:200] }}"
@@ -3332,6 +3344,7 @@ actions:
                       volume_level: "{{ tts_output_vol | float(0) }}"
                       announce: "{{ tts_announce | bool(false) }}"
                       priority: "{{ _notif_priority | int(3) }}"
+                      duck: "{{ not bypass_ducking }}"
                       metadata:
                         agent_name: "{{ dispatch_persona | default('rick') }}"
                         message: "{{ _safe_announcement[:200] }}"
@@ -3667,6 +3680,7 @@ actions:
                       volume_level: "{{ tts_output_vol | float(0) }}"
                       announce: "{{ tts_announce | bool(false) }}"
                       priority: "{{ _notif_priority | int(3) }}"
+                      duck: "{{ not bypass_ducking }}"
             default:
               - alias: "No satellite — log batch tail skip"
                 action: system_log.write
@@ -4707,6 +4721,7 @@ actions:
                             volume_level: "{{ tts_output_vol | float(0) }}"
                             announce: "{{ tts_announce | bool(false) }}"
                             priority: "{{ _notif_priority | int(3) }}"
+                            duck: "{{ not bypass_ducking }}"
 
                     - alias: "No satellite — mobile push"
                       conditions:

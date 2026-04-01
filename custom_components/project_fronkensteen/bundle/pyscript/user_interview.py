@@ -37,7 +37,7 @@ from shared_utils import build_result_entity_name, get_person_slugs, load_entity
 #   - Tool function: agents call save_user_preference to persist data.
 #   - L1 map: known helpers (wake time, bedtime, etc.) get set directly.
 #   - L2 fallback: everything else → preference:{category}:{key}:{user}
-#   - Progress: JSON in input_text.ai_interview_progress tracks what's done.
+#   - Progress: JSON in sensor.ai_interview_progress (progress_json attr) tracks what's done.
 #   - Interview mode: input_boolean.ai_interview_mode gates hot context.
 #
 # Dependencies:
@@ -211,10 +211,11 @@ def _l1_has_value(entity_id: str, domain_hint: str = "text") -> bool:
 # ── Progress Tracking ────────────────────────────────────────────────────────
 
 def _load_progress(user: str) -> dict:
-    """Load interview progress from helper. Returns {category: [keys_done]}."""
+    """Load interview progress from attribute. Returns {category: [keys_done]}."""
     try:
-        raw = state.get("sensor.ai_interview_progress") or "{}"  # noqa: F821
-        if raw in ("unknown", "unavailable", ""):
+        attrs = state.getattr("sensor.ai_interview_progress") or {}  # noqa: F821
+        raw = attrs.get("progress_json", "{}")
+        if not raw or raw in ("unknown", "unavailable", ""):
             return {}
         all_progress = json.loads(raw)
         user_progress = all_progress.get(user, {})
@@ -228,10 +229,11 @@ def _load_progress(user: str) -> dict:
 
 
 def _save_progress(user: str, progress: dict) -> None:
-    """Save interview progress to helper."""
+    """Save interview progress to attribute; state is human-readable summary."""
     try:
-        raw = state.get("sensor.ai_interview_progress") or "{}"  # noqa: F821
-        if raw in ("unknown", "unavailable", ""):
+        attrs = state.getattr("sensor.ai_interview_progress") or {}  # noqa: F821
+        raw = attrs.get("progress_json", "{}")
+        if not raw or raw in ("unknown", "unavailable", ""):
             all_progress = {}
         else:
             all_progress = json.loads(raw)
@@ -247,13 +249,42 @@ def _save_progress(user: str, progress: dict) -> None:
             compacted[cat] = keys
     all_progress[user] = compacted
 
+    # Build human-readable state: percentage of answered keys across all categories
+    # Built-in categories: total from CATEGORIES definition
+    # Custom categories: every tracked key counts (answered = total)
+    total_keys = sum([len(v) for v in CATEGORIES.values()])
+    done_keys = 0
+    for cat, cat_keys in CATEGORIES.items():
+        entry = compacted.get(cat)
+        if entry == "*":
+            done_keys += len(cat_keys)
+        elif isinstance(entry, list):
+            done_keys += len(set(entry) & set(cat_keys))
+
+    # Custom categories (not in CATEGORIES) — count answered keys
+    for cat, entry in compacted.items():
+        if cat in CATEGORIES:
+            continue
+        if entry == "*":
+            # Can't know original key count; estimate from progress list before compaction
+            cat_done = len(progress.get(cat, []))
+        elif isinstance(entry, list):
+            cat_done = len(entry)
+        else:
+            continue
+        done_keys += cat_done
+        total_keys += cat_done  # answered = total for custom categories
+
+    pct = round(done_keys / total_keys * 100) if total_keys else 0
+
     try:
         state.set(  # noqa: F821
             "sensor.ai_interview_progress",
-            json.dumps(all_progress, separators=(",", ":"))[:255],
+            f"{pct}% complete",
             new_attributes={
                 "icon": "mdi:clipboard-check-outline",
                 "friendly_name": "AI Interview Progress",
+                "progress_json": json.dumps(all_progress, separators=(",", ":")),
             },
         )
     except Exception as exc:

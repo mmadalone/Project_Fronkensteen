@@ -62,6 +62,7 @@ Triggers a full music taste profile aggregation when a rebuild button is pressed
 | `rebuild_button` | `input_button.ai_music_taste_rebuild` | The input_button that triggers the rebuild |
 | `refresh_interval` | `/6` (every 6 hours) | Auto-rebuild interval: /1, /2, /6, /12 hours |
 | `run_on_start` | `true` | Rebuild automatically when Home Assistant starts |
+| `startup_delay` | `30` | Seconds to wait after HA start before rebuilding (lets pyscript finish initializing) |
 
 </details>
 
@@ -82,7 +83,7 @@ Default LLM prompt: "Given this music profile, write a concise genre/style summa
 
 - **Mode:** `single`
 - Scheduled trigger runs at minute :30 of the configured hour pattern
-- HA start trigger is gated by the `run_on_start` boolean
+- HA start trigger is gated by the `run_on_start` boolean with a configurable `startup_delay` (default 30s) to avoid a race condition with pyscript's `_startup()` handler, which otherwise overwrites the rebuild results (including the LLM genre summary) with the stale L2-cached profile
 - LLM summarization is handled within the pyscript service -- leave `llm_instance` blank to use raw profile instead
 
 ## Changelog

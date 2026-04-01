@@ -116,6 +116,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 | `satellite_entity` | *(empty)* | Assist Satellite for announcements (priority over media player) |
 | `tts_output_player` | *(empty)* | Media player for TTS via queue |
 | `tts_volume` | `0.0` | TTS volume (0 = don't change) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

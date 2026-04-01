@@ -113,6 +113,7 @@ Manages the LLM-driven user preference interview. Activates interview mode (hot 
 | **Speaker** | (required) | The `media_player` entity for the satellite speaker |
 | **Interview target user** | `""` | Person entity for the interview target; empty = auto-detect from occupancy |
 | **Use AI dispatcher for voice** | `true` | Resolve TTS voice via dispatcher; when off, uses TTS voice entity directly |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 ### ② Configuration
 

@@ -908,8 +908,8 @@ async def _play_tts(
     if volume_level is not None and volume_level > 0:
         for s in targets:
             try:
-                service.call("media_player", "volume_set",  # noqa: F821
-                             entity_id=s, volume_level=volume_level)
+                await service.call("media_player", "volume_set",  # noqa: F821
+                                   entity_id=s, volume_level=volume_level)
             except Exception:
                 pass
     # ── Voice mood modulation (v3): stability + tag prefix ──
@@ -951,7 +951,12 @@ async def _play_tts(
                 opts = kwargs.get("options", {})
                 opts.update(_mood_opts)
                 kwargs["options"] = opts
+            log.info(  # noqa: F821
+                f"tts_queue: _play_tts calling tts.speak on {s} "
+                f"voice={voice} voice_id={voice_id} text_len={len(text or '')}"
+            )
             service.call("tts", "speak", **kwargs)  # noqa: F821
+            log.info(f"tts_queue: _play_tts tts.speak dispatched for {s}")  # noqa: F821
         except Exception as e:
             # ── T24-1a: ElevenLabs outage fallback → HA Cloud ──
             if _is_elevenlabs_voice(voice):

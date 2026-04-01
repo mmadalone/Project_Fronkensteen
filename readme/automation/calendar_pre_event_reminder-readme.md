@@ -104,6 +104,7 @@ calendar entity
 |-------|---------|-------------|
 | `enable_notify_threshold` | `false` | Gate TTS against the active user's notification threshold preference |
 | `tts_priority` | `2` | TTS queue priority (0=emergency, 1=alert, 2=normal, 3=low, 4=ambient) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

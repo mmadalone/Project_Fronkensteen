@@ -100,7 +100,7 @@ Every pyscript service available as a blueprint building block. Blueprints call 
 | `pyscript.llm_task_call` | Budget-aware LLM chat via ha_text_ai | I-3 summarization (future), any background LLM task |
 | `pyscript.llm_direct_embed` | Budget-aware embedding generation via OpenAI API | memory_embed, memory_semantic_search |
 | `pyscript.summarize_interactions` | Batch-compress whisper interaction logs into per-agent summaries | `interaction_summarizer.yaml` nightly job |
-| `memory_context_refresh` (auto) | Writes recent summaries/mood to `sensor.ai_memory_context` every 15 min + startup | Hot context injection (I-4) — not a callable service. Topics now handled by C7 `sensor.ai_recent_topics` (instant updates via `agent_whisper.py`). |
+| `memory_context_refresh` (auto) | Writes recent summaries/mood to `sensor.ai_memory_context` every 15 min + startup | Hot context injection (I-4) — not a callable service. Limits configurable via helpers: `ai_memory_context_enabled` (toggle), `ai_memory_context_summary_limit`, `ai_memory_context_mood_limit`, `ai_memory_context_max_chars`. System-activity summaries auto-filtered. Topics handled by C7 `sensor.ai_recent_topics`. |
 | `pyscript.memory_todo_sync` | Bidirectional sync between L2 memory and HA todo list | `memory_todo_mirror.yaml` scheduled job (I-6) |
 
 **Notification & Dedup Services** (`notification_dedup.py`, `email_promote.py`)

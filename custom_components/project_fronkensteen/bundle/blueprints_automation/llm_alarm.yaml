@@ -162,6 +162,14 @@ blueprint:
           selector:
             text:
               multiline: true
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
 
     stage_3_llm:
       name: "③ LLM wake-up message"
@@ -463,6 +471,7 @@ variables:
   v_tts_output_player: !input tts_output_player
   v_tts_volume_before: !input tts_volume_before
   v_tts_volume_after: !input tts_volume_after
+  bypass_ducking: !input bypass_ducking
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
   privacy_tier: !input privacy_tier
@@ -753,6 +762,7 @@ actions:
       priority: 1
       target_mode: explicit
       target: "{{ v_tts_output_player }}"
+      duck: "{{ not bypass_ducking }}"
 
   - alias: "Whisper — update self-awareness"
     action: pyscript.agent_whisper
@@ -840,6 +850,7 @@ actions:
               priority: 1
               target_mode: explicit
               target: "{{ v_tts_output_player }}"
+              duck: "{{ not bypass_ducking }}"
 
           - alias: "Final wait for Stop after snooze"
             wait_for_trigger:

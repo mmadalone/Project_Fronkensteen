@@ -807,6 +807,15 @@ blueprint:
               max: 15
               unit_of_measurement: seconds
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ⑩ TV SLEEP TIMER
     # ===========================================================================
@@ -1363,6 +1372,7 @@ variables:
 
   # --- Timing inputs ---
   post_tts_delay_val: !input post_tts_delay
+  bypass_ducking: !input bypass_ducking
 
   # --- Settling-in TTS inputs ---
   enable_settling: !input enable_settling_tts
@@ -1762,6 +1772,7 @@ actions:
           target: "{{ kodi_tts_player }}"
           target_mode: explicit
           priority: 3
+          duck: "{{ not bypass_ducking }}"
         continue_on_error: true
 
       - alias: "Post-TTS buffer — let streaming audio finish"
@@ -1892,6 +1903,7 @@ actions:
                               target: "{{ speaker_entity | default('') }}"
                               volume_level: "{{ v_bedtime_music_volume | float(0.2) }}"
                               priority: 4
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
                           - alias: "Post-tune delay (tier 2)"
                             delay:
@@ -2043,6 +2055,7 @@ actions:
                               target: "{{ kodi_tts_player }}"
                               target_mode: explicit
                               priority: 3
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
 
                           - alias: "Post-TTS buffer for settling-in message"
@@ -2176,6 +2189,7 @@ actions:
                       target: "{{ kodi_tts_player }}"
                       target_mode: explicit
                       priority: 3
+                      duck: "{{ not bypass_ducking }}"
                     continue_on_error: true
 
                   - alias: "Whisper — update self-awareness"
@@ -2594,6 +2608,7 @@ actions:
                                       target: "{{ kodi_tts_player }}"
                                       target_mode: explicit
                                       priority: 3
+                                      duck: "{{ not bypass_ducking }}"
                                     continue_on_error: true
 
                                   - alias: "Post-TTS buffer for settling-in message"
@@ -2640,6 +2655,7 @@ actions:
           target: "{{ kodi_tts_player }}"
           target_mode: explicit
           priority: 3
+          duck: "{{ not bypass_ducking }}"
         continue_on_error: true
 
       - alias: "Whisper — update self-awareness"
@@ -2781,6 +2797,7 @@ actions:
                   target: "{{ kodi_tts_player }}"
                   target_mode: explicit
                   priority: 3
+                  duck: "{{ not bypass_ducking }}"
                 continue_on_error: true
 
               - alias: "Whisper — update self-awareness"

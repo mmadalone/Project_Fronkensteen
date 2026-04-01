@@ -909,6 +909,7 @@ sensor_context: >-
 
 **Rules:**
 - Filter out `unavailable`, `unknown`, and empty states — never feed garbage to the LLM.
+- **Filter idle media entities** — `media_player` entities not in `playing`, `paused`, or `buffering` state MUST be excluded from the context. Entities with `player_state` / `media_category` attributes (e.g. Kodi now-playing sensors) MUST be excluded when `player_state` is not `playing` or `paused`. Always-on media devices (Kodi PVR, background players) otherwise cause the LLM to falsely reference media consumption. When no media is active, inject a configurable no-media note into the context (exposed as a blueprint input, never hardcoded) so the LLM does not hallucinate media activity from prompt phrasing alone.
 - Use `friendly_name` with `| default(eid)` fallback — some entities lack friendly names.
 - Pass the assembled block inline to `conversation.process` `text:` field as part of the prompt context section.
 - The `namespace()` pattern is required because Jinja2 scoping rules prevent reassigning loop variables directly (see §3.6).
@@ -944,6 +945,33 @@ Blueprints MUST NOT implement manual duck/restore volume cycles. Ducking is hand
 > **Cross-reference: §7.4 documents the manual duck/restore pattern.** That pattern explains the underlying mechanism — it's valid for understanding how ducking works. All blueprints MUST use the centralized infrastructure (`tts_queue_speak` with default `duck: true`) instead of reimplementing §7.4 directly.
 
 > 📋 **QA Check CQ-10:** Verify new blueprints use `tts_queue_speak` or `dedup_announce` for TTS — not direct `tts.speak` with manual ducking. See `09_qa_audit_checklist.md`.
+
+#### Pattern 8a: Standard `bypass_ducking` Input (MANDATORY on all TTS blueprints)
+
+Every blueprint that calls `pyscript.tts_queue_speak` or `pyscript.dedup_announce` MUST expose a `bypass_ducking` boolean input (default `false`) and pass it to the TTS call. This gives instance owners per-automation control over ducking without touching code.
+
+```yaml
+# Input section:
+  bypass_ducking:
+    name: Bypass audio ducking
+    description: >
+      When enabled, TTS plays at full volume without lowering other speakers first.
+    default: false
+    selector:
+      boolean:
+
+# In the action — tts_queue_speak call:
+  data:
+    duck: "{{ not bypass_ducking }}"
+
+# In the action — dedup_announce call:
+  data:
+    duck: "{{ not bypass_ducking }}"
+```
+
+**Why `not`?** The input is phrased as "bypass ducking" (user-friendly positive opt-in), but the service parameter is `duck` (True = do duck). `not bypass_ducking` bridges the inversion: default `false` bypass = `duck: true` = ducking on.
+
+As of 2026-04-01, all 26 TTS-capable blueprints expose this input (70 TTS call sites total). New blueprints MUST include it from day one.
 
 ### 14.5.2 Blueprint TTS Routing Guide
 

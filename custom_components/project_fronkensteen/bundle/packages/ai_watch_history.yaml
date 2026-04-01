@@ -1,0 +1,34 @@
+# ======================================================================
+# AI Watch History — Kodi Playback Tracking
+# ======================================================================
+# Status: Active
+# Deployed: 2026-04-01
+# Thin package — documents helpers and sensor relationships.
+# All config knobs live in the blueprint.
+#
+# Pyscript sensor: sensor.ai_watch_history_status  (pyscript/watch_history.py)
+#   States: watching, paused, idle, error
+#   Key attributes (watching): current_category, current_title, current_channel,
+#     current_show, started_at, duration_so_far_min
+#   Key attributes (idle): last_watched, last_watched_at, today_count,
+#     today_total_minutes, today_entries
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_watch_history_enabled
+#   - helpers_input_number.yaml: ai_watch_min_duration_pvr,
+#       ai_watch_min_duration_content, ai_watch_history_retention_days
+#
+# Data source: sensor.madteevee_now_playing (template sensor in template.yaml)
+#   Pre-classifies content as live_tv/series/movie with PVR channel data.
+#   No direct Kodi JSON-RPC needed.
+#
+# L2 Memory keys:
+#   watch:{date}:{index}       — individual entries (30d expiry)
+#   watch:summary:{date}       — daily summary (2d expiry)
+#
+# Dependencies:
+#   - Blueprints: watch_history.yaml
+#   - Context: ai_context_hot.yaml (reads sensor for L1 injection)
+#   - Template sensors: sensor.madteevee_now_playing, sensor.madteevee_pvr_channel
+#   - Other packages: ai_privacy_gate.yaml
+# ======================================================================

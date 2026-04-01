@@ -213,6 +213,7 @@ If the user leaves bed briefly (e.g., bathroom) and returns within the configure
 | `privacy_gate_mode` | input_select | ai_privacy_gate_mode | Privacy gate mode |
 | `privacy_gate_person` | entity | person.miquel | Person entity for suppression lookups |
 | `ducking_flag` | input_boolean | ai_ducking_flag | Ducking flag |
+| `bypass_ducking` | boolean | false | Skip volume ducking on other speakers during TTS |
 
 ### Helper Entities
 

@@ -4078,15 +4078,90 @@ async def memory_semantic_search(
 # ── Ambient Memory Context (I-4) ──────────────────────────────────────────────
 
 MEMORY_CONTEXT_ENTITY = "sensor.ai_memory_context"
-MEMORY_CTX_SUMMARY_LIMIT = 5
-MEMORY_CTX_MOOD_LIMIT = 3
+
+# Option C: skip summaries that are purely system/automation activity with no user interaction.
+# These phrases indicate the summary has no useful context for the agent.
+_MEMORY_CTX_SKIP_PHRASES = (
+    "no user interactions occurred",
+    "no user interactions took place",
+    "no significant user interactions",
+    "the system delivered",
+    "the system processed",
+    "batched notification replays",
+)
+
+
+def _read_ctx_helper_int(entity_id: str, fallback: int) -> int:
+    """Read an input_number helper as int, with safe fallback."""
+    try:
+        raw = state.get(entity_id)  # noqa: F821
+        if raw in (None, "unknown", "unavailable"):
+            return fallback
+        return max(0, int(float(raw)))
+    except (TypeError, ValueError, NameError):
+        return fallback
+
+
+def _read_ctx_helper_bool(entity_id: str, fallback: bool) -> bool:
+    """Read an input_boolean helper, with safe fallback."""
+    try:
+        raw = state.get(entity_id)  # noqa: F821
+        if raw in (None, "unknown", "unavailable"):
+            return fallback
+        return raw == "on"
+    except (TypeError, ValueError, NameError):
+        return fallback
+
+
 @time_trigger("startup", "cron(*/15 * * * *)")  # noqa: F821
 async def memory_context_refresh():
-    """Refresh sensor.ai_memory_context with recent summaries and moods from L2."""
+    """Refresh sensor.ai_memory_context with recent summaries and moods from L2.
+
+    All limits are user-configurable via helpers:
+      - input_boolean.ai_memory_context_enabled  (master toggle, default on)
+      - input_number.ai_memory_context_summary_limit  (default 2)
+      - input_number.ai_memory_context_mood_limit  (default 1)
+      - input_number.ai_memory_context_max_chars  (default 80, 0 = no truncation)
+    """
+    # ── Option D: master toggle ──────────────────────────────────────
+    enabled = _read_ctx_helper_bool(
+        "input_boolean.ai_memory_context_enabled", True
+    )
+    if not enabled:
+        state.set(  # noqa: F821
+            MEMORY_CONTEXT_ENTITY,
+            value="disabled",
+            new_attributes={
+                "friendly_name": "AI Memory Context",
+                "context": "",
+                "icon": "mdi:brain",
+            },
+        )
+        return
+
+    # ── Option A: configurable limits ────────────────────────────────
+    summary_limit = _read_ctx_helper_int(
+        "input_number.ai_memory_context_summary_limit", 2
+    )
+    mood_limit = _read_ctx_helper_int(
+        "input_number.ai_memory_context_mood_limit", 1
+    )
+    max_chars = _read_ctx_helper_int(
+        "input_number.ai_memory_context_max_chars", 80
+    )
+
     try:
         _ensure_db_once()
-        summaries = await _memory_search_db("whisper summary", MEMORY_CTX_SUMMARY_LIMIT)
-        moods = await _memory_search_db("whisper mood", MEMORY_CTX_MOOD_LIMIT)
+        summaries = (
+            await _memory_search_db("whisper summary", summary_limit)
+            if summary_limit > 0
+            else []
+        )
+        moods = (
+            await _memory_search_db("whisper mood", mood_limit)
+            if mood_limit > 0
+            else []
+        )
     except Exception as exc:
         log.error("memory_context_refresh search failed: %s", exc)  # noqa: F821
         return
@@ -4109,7 +4184,14 @@ async def memory_context_refresh():
             val = entry.get("value", "")
             if not val or not val.strip():
                 continue
-            lines.append(f"- {val}")
+            # ── Option C: skip system-only summaries ─────────────────
+            val_lower = val.lower()
+            if any([phrase in val_lower for phrase in _MEMORY_CTX_SKIP_PHRASES]):
+                continue
+            # ── Option B: truncation ─────────────────────────────────
+            if max_chars > 0 and len(val) > max_chars:
+                val = val[:max_chars].rstrip() + "…"
+            lines.append(f"· {val}")
         if lines:
             parts.append(f"{section_name}:\n" + "\n".join(lines))
 

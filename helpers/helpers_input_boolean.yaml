@@ -195,6 +195,14 @@ ai_entity_history_enabled:
 # Flipped ON automatically when dimensions change. Flipped OFF after reindex completes.
 # ai_embedding_reindex_needed removed — migrated to sensor (state.set, Session 5)
 
+# ── Memory context in L1 prompt ─────────────────────────────────
+# Master toggle: inject recent summaries/moods into agent L1 context.
+# OFF = agents can still call memory_search on demand, but L1 is lighter.
+ai_memory_context_enabled:
+  name: "AI Memory - L1 Context Injection"
+  initial: true
+  icon: mdi:brain
+
 # ── Auto-archive (I-42 Phase 2) ──────────────────────────────────
 # Master toggle for memory auto-archiving.
 ai_memory_auto_archive:
@@ -253,6 +261,22 @@ ai_focus_meal_reminder_enabled:
 
 # When ON, meal reminder TTS is followed by opening the satellite mic
 # so the user can respond ("I ate at 14:00" or "I just ate").
+ai_focus_calendar_warn_enabled:
+  name: "Focus Guard - Calendar Warning"
+  icon: mdi:calendar-alert
+
+ai_focus_social_nudge_enabled:
+  name: "Focus Guard - Social Nudge"
+  icon: mdi:account-heart-outline
+
+ai_focus_break_suggest_enabled:
+  name: "Focus Guard - Break Suggestion"
+  icon: mdi:coffee-outline
+
+ai_focus_bedtime_approach_enabled:
+  name: "Focus Guard - Bedtime Approach"
+  icon: mdi:bed-clock
+
 ai_focus_meal_ask_eaten:
   name: "Focus Guard - Ask If Eaten"
   icon: mdi:microphone-message
@@ -678,3 +702,11 @@ ai_system_recovery_enabled:
 ai_contact_history_summarizer_kill_switch:
   name: "Contact History Summarizer — Kill Switch"
   icon: mdi:book-open-blank-variant
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_watch_history — Kodi Watch History Tracker
+# ═══════════════════════════════════════════════════════════════════
+ai_watch_history_enabled:
+  name: "AI Watch History"
+  icon: mdi:television-play
+  initial: true

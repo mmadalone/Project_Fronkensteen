@@ -137,6 +137,7 @@ ai_escalation_request event
 | `flash_count` | `5` | Number of on/off flash cycles |
 | `flash_brightness` | `255` | Brightness for flash cycles (0-255) |
 | `boost_volume_level` | `0.9` | Volume level (0.0-1.0) for volume_boost TTS |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

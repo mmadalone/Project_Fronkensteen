@@ -4,16 +4,13 @@ blueprint:
   description: >-
     # AI System Recovery Alert
 
-
     Fires when the self-healing recovery engine exhausts its retry budget
     for a health category. Sends a persistent notification, optionally
     pushes to a mobile device, and optionally announces via TTS using the
     full voice stack (dispatcher, presence routing, follow-me bypass).
 
-
     One instance is usually sufficient, but you can create multiple instances
     with different category filters or notification targets.
-
 
     ### Recent changes
 
@@ -181,6 +178,15 @@ blueprint:
               step: 0.05
               mode: slider
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ⑤ AGENT SELECTION
     # ===========================================================================
@@ -258,6 +264,7 @@ variables:
   notify_target: !input notify_target
   tts_announce_mode: !input tts_announce
   tts_output_vol: !input tts_output_volume
+  v_bypass_ducking: !input bypass_ducking
   use_dispatcher: !input use_dispatcher
   v_dispatcher_enabled: !input dispatcher_enabled
   v_bypass_follow_me: !input bypass_follow_me
@@ -413,6 +420,7 @@ actions:
           target: "{{ target_satellite }}"
           volume_level: "{{ tts_output_vol | float(0) }}"
           announce: "{{ tts_announce_mode | bool(false) }}"
+          duck: "{{ not v_bypass_ducking }}"
           priority: 1
           metadata:
             agent_name: "{{ dispatch_persona | default('system') }}"

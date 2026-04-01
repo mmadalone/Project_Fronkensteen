@@ -110,6 +110,7 @@ Switches the active voice assistant pipeline on a satellite when a user requests
 |---|---|---|
 | `tts_speaker` | _(empty)_ | Media player for TTS output |
 | `persona_aliases` | `deadpool=deepee,...` | Map canonical names to spoken nicknames |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

@@ -309,15 +309,26 @@ blueprint:
               multiline: false
 
         briefing_prompt:
-          name: LLM briefing prompt
+          name: Briefing LLM prompt
           description: >
-            LLM instruction for reformulating the briefing. Placeholders:
-            {content} = assembled section text, {context} = evaluated
-            context_template output, {framing} = time-aware framing
-            (morning/afternoon/evening tone and delivery instructions).
-            Leave empty for the default prompt which includes all three
-            automatically.
-          default: ""
+            Instructions sent to the AI agent telling it how to deliver
+            the briefing. The assembled briefing data (weather, calendar,
+            media, etc.) is injected automatically via placeholders.
+            Available placeholders: {content} = assembled briefing sections,
+            {framing} = time-appropriate tone hint (e.g. "wind-down" for
+            evening), {context} = extra context from the Context template
+            field below. Leave empty to use the built-in default.
+          default: >-
+            Deliver this briefing naturally in your personality.
+            Keep it conversational — not a bullet-point list. Be warm but concise.
+            {framing} Mention every item provided — do not skip or summarize lists
+            with 'and a few others' or similar. Each download, show, and event matters.
+
+
+            Here is the information:
+
+
+            {content}
           selector:
             text:
               multiline: true
@@ -347,6 +358,41 @@ blueprint:
                   value: since_midnight
                 - label: Rolling 24 hours
                   value: rolling_24h
+
+        morning_starts_at:
+          name: "Briefing tone — morning block starts at (00:00 = global)"
+          description: >
+            Sets when the morning tone block begins. The day is split into
+            4 tone blocks that control the briefing's greeting and framing:
+            late night (midnight → this time), morning (this time → afternoon
+            start), afternoon, and evening. Example: set to 05:00 for
+            morning 05:00–11:59 and late night 00:00–04:59.
+            Set to 00:00 to use the global default.
+          default: "05:00:00"
+          selector:
+            time: {}
+
+        afternoon_starts_at:
+          name: "Briefing tone — afternoon block starts at (00:00 = global)"
+          description: >
+            Sets when the afternoon tone block begins. Morning runs until
+            this time, afternoon runs from here until evening start.
+            Example: set to 12:00 for afternoon 12:00–16:59.
+            Set to 00:00 to use the global default.
+          default: "12:00:00"
+          selector:
+            time: {}
+
+        evening_starts_at:
+          name: "Briefing tone — evening block starts at (00:00 = global)"
+          description: >
+            Sets when the evening tone block begins. Afternoon runs until
+            this time, evening runs from here until midnight (where late
+            night takes over). Example: set to 17:00 for evening 17:00–23:59.
+            Set to 00:00 to use the global default.
+          default: "17:00:00"
+          selector:
+            time: {}
 
     # ===========================================================================
     # ⑤ VOLUME & MEDIA
@@ -409,6 +455,17 @@ blueprint:
           description: >
             Update duck manager snapshot after volume changes.
           default: true
+          selector:
+            boolean: {}
+
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first. Useful when the announcement should blend in
+            quietly rather than interrupt. Note: the announcement competes
+            with any active media at full volume.
+          default: false
           selector:
             boolean: {}
 
@@ -647,6 +704,10 @@ variables:
   v_privacy_person: !input privacy_gate_person
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   v_download_window: !input download_window
+  v_morning_starts_at: !input morning_starts_at
+  v_afternoon_starts_at: !input afternoon_starts_at
+  v_evening_starts_at: !input evening_starts_at
+  v_bypass_ducking: !input bypass_ducking
 
   # Evaluate context_template (Jinja2 → string)
   v_context: >-
@@ -1087,6 +1148,10 @@ actions:
       briefing_prompt: "{{ v_briefing_prompt | default('') }}"
       extra_context: "{{ v_context }}"
       download_window: "{{ v_download_window }}"
+      morning_starts_at: "{{ v_morning_starts_at }}"
+      afternoon_starts_at: "{{ v_afternoon_starts_at }}"
+      evening_starts_at: "{{ v_evening_starts_at }}"
+      duck: "{{ not v_bypass_ducking }}"
     response_variable: briefing_result
 
   - alias: "Log if briefing pyscript call failed"

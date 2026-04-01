@@ -118,6 +118,15 @@ blueprint:
             entity:
               domain: input_boolean
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ④ NOTIFICATION THRESHOLD
     # ===========================================================================
@@ -212,6 +221,7 @@ variables:
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   enable_threshold: !input enable_notify_threshold
   _tts_priority: !input tts_priority
+  bypass_ducking: !input bypass_ducking
 
 mode: single
 max_exceeded: silent
@@ -325,6 +335,7 @@ actions:
           voice_id: "{{ _tts_voice_id }}"
           priority: "{{ _tts_priority | int(2) }}"
           target_mode: "presence"
+          duck: "{{ not bypass_ducking }}"
     else:
       - alias: "Announce event reminder via direct TTS"
         continue_on_error: true
@@ -335,3 +346,4 @@ actions:
           voice: "{{ _tts_engine }}"
           voice_id: "{{ _tts_voice_id }}"
           priority: "{{ _tts_priority | int(2) }}"
+          duck: "{{ not bypass_ducking }}"

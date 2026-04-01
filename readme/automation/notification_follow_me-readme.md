@@ -297,6 +297,7 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 | Input | Default | Description |
 |---|---|---|
 | Enable notification threshold | false | Gate TTS against user's notification threshold preference (`input_text.ai_context_user_notify_threshold_{user}`) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 | Notification priority level | 3 | TTS queue priority (0=emergency … 4=ambient); used for queue ordering and threshold gating |
 
 ## Technical Notes

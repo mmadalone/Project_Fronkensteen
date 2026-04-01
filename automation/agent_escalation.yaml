@@ -322,6 +322,15 @@ blueprint:
               max: 1.0
               step: 0.05
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ⑥ MUSIC
     # ===========================================================================
@@ -532,6 +541,7 @@ actions:
       v_escalation_music_volume: !input escalation_music_volume
       v_escalation_delay_after: !input escalation_delay_after
       v_compose_if_missing: !input compose_escalation_if_missing
+      bypass_ducking: !input bypass_ducking
       # ── Prompt inputs ──
       v_escalation_prefix: !input escalation_safety_prefix
       v_prompts_quark: !input escalation_prompts_quark
@@ -934,6 +944,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           volume_level: "{{ boost_volume | float(0.9) }}"
+          duck: "{{ not bypass_ducking }}"
 
   # 7e. Send notification — mobile push
   - alias: "7e · Send mobile notification"
@@ -1047,6 +1058,7 @@ actions:
           priority: 1
           target_mode: explicit
           target: "{{ speaker_entity }}"
+          duck: "{{ not bypass_ducking }}"
 
   # 7g. Run script
   - alias: "7g · Run escalation script"

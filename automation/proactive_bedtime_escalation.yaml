@@ -1904,6 +1904,15 @@ blueprint:
             entity:
               domain: input_boolean
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ⑳ PRIVACY
     # ===========================================================================
@@ -2116,6 +2125,7 @@ variables:
   v_privacy_slug: "{{ v_privacy_person.split('.')[-1] }}"
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
+  bypass_ducking: !input bypass_ducking
 
   # -------------------------------------------------------------------------
   # Proactive layer inputs (①–④)
@@ -2992,6 +3002,7 @@ actions:
                               target: "{{ media_player_val }}"
                               target_mode: explicit
                               priority: 1
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
                     default:
                       - alias: "Generate autonomous bedtime announcement"
@@ -3019,6 +3030,8 @@ actions:
                           voice_id: "{{ dispatch_proactive_tts_voice }}"
                           target: "{{ media_player_val }}"
                           target_mode: explicit
+                          duck: "{{ not bypass_ducking }}"
+
                           priority: 1
                         continue_on_error: true
 
@@ -3214,6 +3227,7 @@ actions:
                   target_mode: presence
                   ttl_hours: "{{ ((effective_cooldown | float - 1) / 60) | round(2) }}"
                   volume_level: "{{ proactive_tts_volume_val | float(0) if proactive_tts_volume_val | float(0) > 0 else none }}"
+                  duck: "{{ not bypass_ducking }}"
                 continue_on_error: true
 
               - alias: "Whisper — update self-awareness"
@@ -3265,6 +3279,7 @@ actions:
                               voice_id: "{{ dispatch_proactive_tts_voice }}"
                               target: "{{ media_player_val }}"
                               text: "{{ bedtime_question_fallback_val }}"
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
 
                       - alias: "Log bedtime question asked"
@@ -3439,6 +3454,7 @@ actions:
                               target: "{{ media_player_val }}"
                               text: "{{ bedtime_tts_message }}"
                               priority: 2
+                              duck: "{{ not bypass_ducking }}"
                             continue_on_error: true
 
                           - alias: "Wait configured seconds"
@@ -3497,6 +3513,7 @@ actions:
                   target: "{{ media_player_val }}"
                   text: "{{ bedtime_tts_message }}"
                   priority: 1
+                  duck: "{{ not bypass_ducking }}"
                 continue_on_error: true
 
               - alias: "Wait 5 seconds"
@@ -3960,6 +3977,7 @@ actions:
                       target: "{{ media_player_val }}"
                       text: "{{ settling_message }}"
                       priority: 2
+                      duck: "{{ not bypass_ducking }}"
                     continue_on_error: true
 
                   - alias: "Post-TTS buffer for settling-in"
@@ -4024,6 +4042,7 @@ actions:
               target: "{{ media_player_val }}"
               text: "{{ goodnight_message }}"
               priority: 2
+              duck: "{{ not bypass_ducking }}"
             continue_on_error: true
 
           - alias: "Post-TTS buffer for goodnight"

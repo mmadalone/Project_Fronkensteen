@@ -229,6 +229,7 @@ Four deployed patterns for agent-to-agent interaction:
 - **Music Taste** — Spotify + Music Assistant playback analysis. Genre, artist, and mood trending with taste model rebuilding.
 - **Alexa Presence Radio** — "Alexa, turn on [station]" plays on the speaker in your current room. Follow-Me interlock, multi-zone mapping, pause-vs-stop behavior, duck guard integration.
 - **Media Tracking** — Radarr/Sonarr integration for upcoming releases and recent download notifications.
+- **Watch History** — Kodi playback tracking with source detection (YouTube, Netflix, Prime Video, Movistar+, PVR, library) via JSON-RPC. EPG season/episode enrichment for PVR channels. Configurable minimum watch duration thresholds filter channel surfing. Channel flip counting. L2 memory logging with daily summaries. Hot context injection ("Now watching" / "Recently watched").
 
 ### Memory & Learning
 - **Routine Fingerprinting** — Greedy Markov chains from zone transition sequences. Stage tracking, ETA calculation, deviation detection with automated actions.

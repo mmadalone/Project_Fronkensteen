@@ -106,6 +106,34 @@ def _get_afternoon_hour():
 def _get_evening_hour():
     return _helper_int("input_number.ai_briefing_evening_hour", 17)
 
+
+def _get_morning_minutes():
+    return _get_morning_hour() * 60
+
+
+def _get_afternoon_minutes():
+    return _get_afternoon_hour() * 60
+
+
+def _get_evening_minutes():
+    return _get_evening_hour() * 60
+
+
+def _parse_time_boundary(time_str, global_helper_entity, default_hour):
+    """Parse 'HH:MM:SS' time boundary to minutes-since-midnight.
+
+    If time_str is '00:00:00', '', or falsy, falls back to global helper (integer hour).
+    """
+    if time_str and str(time_str) not in ("00:00:00", "00:00", "0", "", "unknown", "unavailable"):
+        parts = str(time_str).split(":")
+        try:
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
+            return h * 60 + m
+        except (ValueError, IndexError):
+            pass
+    return _helper_int(global_helper_entity, default_hour) * 60
+
 # BUDGET_STRIPPED_THRESHOLD — now read from input_number.ai_budget_personality_threshold
 
 WEATHER_MAP = {
@@ -138,15 +166,31 @@ MOOD_GENTLE_MAP = {
     "tired": "you seemed tired",
 }
 
-def _briefing_framing_for_hour(hour: int) -> str:
-    """Return time-appropriate framing instructions for the LLM."""
-    afternoon_hour = _get_afternoon_hour()
-    evening_hour = _get_evening_hour()
-    if hour < afternoon_hour:
+def _briefing_framing(
+    now_minutes: int,
+    morning_m: int = 0, afternoon_m: int = 0, evening_m: int = 0,
+) -> str:
+    """Return time-appropriate framing instructions for the LLM.
+
+    All boundaries in minutes-since-midnight. 0 = use global helper.
+    """
+    if not morning_m:
+        morning_m = _get_morning_minutes()
+    if not afternoon_m:
+        afternoon_m = _get_afternoon_minutes()
+    if not evening_m:
+        evening_m = _get_evening_minutes()
+    if now_minutes < morning_m:
+        return (
+            "This is a late-night briefing. The user is still up past midnight. "
+            "Frame it as a day-in-review and wind-down. Don't present tomorrow's "
+            "schedule as something imminent — focus on wrapping up."
+        )
+    elif now_minutes < afternoon_m:
         return (
             "This is a morning briefing. Set the tone for the day ahead."
         )
-    elif hour < evening_hour:
+    elif now_minutes < evening_m:
         return (
             "This is an afternoon update. Frame it as a mid-day check-in."
         )
@@ -172,14 +216,19 @@ def _verbosity_word_range() -> str:
     return "200-400 words"  # "normal" or unrecognized → default
 
 
-def _briefing_prompt_for_hour(hour: int) -> str:
+def _briefing_prompt_for_time(
+    now_minutes: int,
+    morning_m: int = 0, afternoon_m: int = 0, evening_m: int = 0,
+) -> str:
     """Return a time-appropriate default LLM prompt for the briefing."""
-    framing = _briefing_framing_for_hour(hour)
+    framing = _briefing_framing(now_minutes, morning_m, afternoon_m, evening_m)
     _wrange = _verbosity_word_range()
     return (
         "Deliver this briefing naturally in your personality. "
         "Keep it conversational — not a bullet-point list. Be warm but concise "
-        f"(aim for {_wrange} of concise speech). {framing}"
+        f"(aim for {_wrange} of concise speech). {framing} "
+        "Mention every item provided — do not skip or summarize lists with "
+        "'and a few others' or similar. Each download, show, and event matters."
         "\n\nHere is the information:\n\n{content}"
     )
 
@@ -204,20 +253,23 @@ def _set_result(state_value: str = "ok", **attrs: Any) -> None:
 
 # ── Pure-Python Sync Helpers ─────────────────────────────────────────────────
 
-@pyscript_compile  # noqa: F821
 def _section_greeting(
-    hour: int,
-    morning_hour: int = 5,
-    afternoon_hour: int = 12,
-    evening_hour: int = 17,
+    now_minutes: int,
+    morning_m: int = 0, afternoon_m: int = 0, evening_m: int = 0,
 ) -> str:
     """Time-aware greeting. Raw text — the LLM will add personality."""
-    if hour < morning_hour:
-        return "You're up early."
-    if hour < afternoon_hour:
+    if not morning_m:
+        morning_m = _get_morning_minutes()
+    if not afternoon_m:
+        afternoon_m = _get_afternoon_minutes()
+    if not evening_m:
+        evening_m = _get_evening_minutes()
+    if now_minutes < morning_m:
+        return "It's late — you're still up."
+    if now_minutes < afternoon_m:
         return "Good morning."
-    if hour < evening_hour:
-        return "Afternoon already."
+    if now_minutes < evening_m:
+        return "Good afternoon."
     return "Good evening."
 
 
@@ -314,7 +366,7 @@ async def _section_weather() -> str:
         return ""
 
 
-async def _section_calendar(hour: int = 0) -> str:
+async def _section_calendar(now_minutes: int = 0, evening_m: int = 0) -> str:
     """Build calendar section from L1 helper (populated by Task 18a)."""
     try:
         cal_raw = state.get(  # noqa: F821
@@ -335,7 +387,7 @@ async def _section_calendar(hour: int = 0) -> str:
         return ""
 
     # Evening: past-tense summary — don't list events as upcoming
-    if hour >= _get_evening_hour():
+    if now_minutes >= (evening_m or _get_evening_minutes()):
         if count == 1:
             return f"You had 1 event today: {events[0]}."
         return f"You had {count} events today."
@@ -358,7 +410,7 @@ async def _section_calendar(hour: int = 0) -> str:
     return f"You have {count} events today."
 
 
-async def _section_email(hour: int = 0) -> str:
+async def _section_email(now_minutes: int = 0, evening_m: int = 0) -> str:
     """Build email section from priority count helper (Task 18b)."""
     try:
         count = int(float(
@@ -371,7 +423,7 @@ async def _section_email(hour: int = 0) -> str:
         return ""
 
     plural = "s" if count > 1 else ""
-    if hour >= _get_evening_hour():
+    if now_minutes >= (evening_m or _get_evening_minutes()):
         return f"{count} unread priority email{plural}."
     return f"{count} priority email{plural} overnight."
 
@@ -539,8 +591,10 @@ async def _section_projects() -> str:
     _SKIP = {"", "unknown", "unavailable", "none", None}
 
     try:
-        summary = state.get("sensor.ai_active_projects_summary")  # noqa: F821
-        hot_line = state.get("sensor.ai_project_hot_context_line")  # noqa: F821
+        summary_attrs = state.getattr("sensor.ai_active_projects_summary") or {}  # noqa: F821
+        summary = summary_attrs.get("full_text") or state.get("sensor.ai_active_projects_summary")  # noqa: F821
+        hot_attrs = state.getattr("sensor.ai_project_hot_context_line") or {}  # noqa: F821
+        hot_line = hot_attrs.get("full_text") or state.get("sensor.ai_project_hot_context_line")  # noqa: F821
     except Exception as exc:
         log.warning(f"dispatcher: {exc}")  # noqa: F821
         return ""
@@ -675,14 +729,19 @@ async def _assemble_briefing(
     sections_override: str = "",
     household_entities_override: str = "",
     download_window: str = "since_midnight",
+    morning_m: int = 0,
+    afternoon_m: int = 0,
+    evening_m: int = 0,
 ) -> dict:
     """Assemble all briefing sections. Each section fails independently.
 
     sections_override is always passed from the blueprint. Falls back to
     ALL_SECTIONS when empty. Returns dict with: sections (per-section text),
     assembled (full text), section_count, enabled.
+    Time boundaries in minutes-since-midnight (0 = use global helper).
     """
-    hour = datetime.now().hour
+    now = datetime.now()
+    now_minutes = now.hour * 60 + now.minute
     enabled = (
         _parse_sections_csv(sections_override)
         if sections_override
@@ -697,10 +756,10 @@ async def _assemble_briefing(
     if "greeting" in enabled:
         try:
             text = _section_greeting(
-                    hour,
-                    morning_hour=_get_morning_hour(),
-                    afternoon_hour=_get_afternoon_hour(),
-                    evening_hour=_get_evening_hour(),
+                    now_minutes,
+                    morning_m=morning_m,
+                    afternoon_m=afternoon_m,
+                    evening_m=evening_m,
                 )
             sections["greeting"] = text
             if text:
@@ -723,7 +782,7 @@ async def _assemble_briefing(
     # ── 3. Calendar ──
     if "calendar" in enabled:
         try:
-            text = await _section_calendar(hour)
+            text = await _section_calendar(now_minutes, evening_m)
             sections["calendar"] = text
             if text:
                 parts.append(text)
@@ -734,7 +793,7 @@ async def _assemble_briefing(
     # ── 4. Email ──
     if "email" in enabled:
         try:
-            text = await _section_email(hour)
+            text = await _section_email(now_minutes, evening_m)
             sections["email"] = text
             if text:
                 parts.append(text)
@@ -838,6 +897,10 @@ async def _deliver_briefing(
     briefing_prompt: str = "",
     extra_context: str = "",
     download_window: str = "since_midnight",
+    morning_m: int = 0,
+    afternoon_m: int = 0,
+    evening_m: int = 0,
+    duck: bool = True,
 ) -> dict:
     """Full delivery pipeline.
 
@@ -852,6 +915,9 @@ async def _deliver_briefing(
         sections_override=sections_override,
         household_entities_override=household_entities_override,
         download_window=download_window,
+        morning_m=morning_m,
+        afternoon_m=afternoon_m,
+        evening_m=evening_m,
     )
     assembled = briefing["assembled"]
     sections = briefing["sections"]
@@ -923,7 +989,7 @@ async def _deliver_briefing(
             try:
                 dispatch_call = pyscript.agent_dispatch(  # noqa: F821
                     wake_word="proactive_briefing",
-                    intent_text=f"{briefing_label} briefing",
+                    intent_text="",
                     skip_continuity=True,
                 )
                 dispatch_resp = await dispatch_call
@@ -984,15 +1050,20 @@ async def _deliver_briefing(
     if not stripped and not test_mode:
         try:
             # Custom prompt from blueprint, or fallback to constant
+            _now = datetime.now()
+            _now_m = _now.hour * 60 + _now.minute
             if briefing_prompt:
                 prompt = (
                     briefing_prompt
-                    .replace("{framing}", _briefing_framing_for_hour(datetime.now().hour))
+                    .replace("{framing}", _briefing_framing(
+                        _now_m, morning_m, afternoon_m, evening_m))
                     .replace("{content}", assembled)
                     .replace("{context}", extra_context or "")
                 )
             else:
-                prompt = _briefing_prompt_for_hour(datetime.now().hour).format(content=assembled)
+                prompt = _briefing_prompt_for_time(
+                    _now_m, morning_m, afternoon_m, evening_m,
+                ).format(content=assembled)
             # conversation.process() pyscript shorthand returns None.
             # Use hass.services.async_call with return_response=True
             # (same mechanism as YAML response_variable).
@@ -1046,6 +1117,7 @@ async def _deliver_briefing(
             "voice_id": voice_id,
             "priority": 3,
             "target_mode": tts_target_mode,
+            "duck": duck,
         }
         if tts_target:
             tts_kwargs["target"] = tts_target
@@ -1228,6 +1300,14 @@ async def proactive_briefing_now(
     briefing_prompt: str = "",
     extra_context: str = "",
     download_window: str = "since_midnight",
+    morning_starts_at: str = "00:00:00",
+    afternoon_starts_at: str = "00:00:00",
+    evening_starts_at: str = "00:00:00",
+    duck: bool = True,
+    # Backward compat (deprecated — use *_starts_at time strings)
+    morning_hour: int = 0,
+    afternoon_hour: int = 0,
+    evening_hour: int = 0,
 ):
     """
     yaml
@@ -1328,10 +1408,60 @@ async def proactive_briefing_now(
             options:
               - since_midnight
               - rolling_24h
+      morning_starts_at:
+        name: Morning starts at
+        description: >-
+          Time when morning block begins (HH:MM:SS). Late night runs
+          from midnight to this time. 00:00:00 = use global helper.
+        default: "00:00:00"
+        selector:
+          time: {}
+      afternoon_starts_at:
+        name: Afternoon starts at
+        description: >-
+          Time when afternoon block begins (HH:MM:SS). Morning runs
+          until this time. 00:00:00 = use global helper.
+        default: "00:00:00"
+        selector:
+          time: {}
+      evening_starts_at:
+        name: Evening starts at
+        description: >-
+          Time when evening block begins (HH:MM:SS). Afternoon runs
+          until this time. 00:00:00 = use global helper.
+        default: "00:00:00"
+        selector:
+          time: {}
+      duck:
+        name: Volume ducking
+        description: >-
+          When true (default), lower volume on other speakers during TTS.
+          Set false to bypass ducking.
+        default: true
+        selector:
+          boolean: {}
     """
     # Normalize use_dispatcher (may arrive as string from YAML)
     if isinstance(use_dispatcher, str):
         use_dispatcher = use_dispatcher.lower() in ("true", "1", "yes", "on")
+    if isinstance(duck, str):
+        duck = duck.lower() in ("true", "1", "yes", "on")
+
+    # Backward compat: old integer hour params → time string conversion
+    if morning_starts_at in ("00:00:00", "00:00", "") and int(morning_hour or 0):
+        morning_starts_at = f"{int(morning_hour):02d}:00:00"
+    if afternoon_starts_at in ("00:00:00", "00:00", "") and int(afternoon_hour or 0):
+        afternoon_starts_at = f"{int(afternoon_hour):02d}:00:00"
+    if evening_starts_at in ("00:00:00", "00:00", "") and int(evening_hour or 0):
+        evening_starts_at = f"{int(evening_hour):02d}:00:00"
+
+    # Parse time boundaries to minutes-since-midnight
+    _morning_m = _parse_time_boundary(
+        morning_starts_at, "input_number.ai_briefing_morning_hour", 5)
+    _afternoon_m = _parse_time_boundary(
+        afternoon_starts_at, "input_number.ai_briefing_afternoon_hour", 12)
+    _evening_m = _parse_time_boundary(
+        evening_starts_at, "input_number.ai_briefing_evening_hour", 17)
 
     t_start = time.monotonic()
     test_mode = _is_test_mode()
@@ -1354,6 +1484,10 @@ async def proactive_briefing_now(
         briefing_prompt=briefing_prompt,
         extra_context=extra_context,
         download_window=download_window,
+        morning_m=_morning_m,
+        afternoon_m=_afternoon_m,
+        evening_m=_evening_m,
+        duck=duck,
     )
 
     elapsed = round((time.monotonic() - t_start) * 1000, 1)

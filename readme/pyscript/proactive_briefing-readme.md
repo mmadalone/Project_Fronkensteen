@@ -69,5 +69,9 @@ Pairs with `packages/ai_proactive_briefing.yaml` (kill switch, last briefing sum
 - **Section independence**: Each section assembler is wrapped in try/except. A failed section produces an empty string but does not block other sections. Partial briefings are normal.
 - **Stripped mode**: When daily budget exceeds the threshold, briefing skips LLM reformulation and uses raw assembled text with fallback TTS voice (`tts.home_assistant_cloud`).
 - **Media sections**: Supports `media_today`, `media_tomorrow`, `media_weekly` as separate section names (or `media` for today-only). Uses Radarr/Sonarr sensors.
-- **Custom prompts**: `briefing_prompt` supports `{content}`, `{context}`, and `{framing}` placeholders for per-instance customization.
+- **Custom prompts**: `briefing_prompt` supports `{content}` (assembled sections), `{framing}` (time-appropriate tone hint), and `{context}` (evaluated Jinja2 context template) placeholders. Default prompt instructs the agent to deliver conversationally and mention every item without skipping.
+- **Dispatcher mode**: When `use_dispatcher=True`, the dispatcher picks the agent based on the time-of-day era setting — topic affinity is intentionally skipped for system-initiated briefings.
+- **Media format**: Episode labels use TTS-friendly format ("season 3, episode 7") instead of coded format ("S03E07"). Scene release metadata (resolution, codec, release group) is stripped from download titles.
 - **Dedup integration**: After delivery, registers the briefing topic with the dedup system to prevent repeat announcements from other delivery channels.
+- **TTS calls**: `tts_queue.py` uses `service.call('tts', 'speak')` for TTS delivery. The `duck` parameter controls whether volume ducking is applied during playback.
+- **Time-of-day blocks**: Four tone blocks (late night, morning, afternoon, evening) controlled by per-instance `time` selector inputs or global `input_number` helpers as fallback. Late night = midnight to morning start; boundaries in minutes-since-midnight internally.

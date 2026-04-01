@@ -211,6 +211,18 @@ blueprint:
                 - label: "Barge in — interrupt current TTS"
                   value: barge_in
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first. Useful when proactive messages should blend
+            in quietly rather than interrupt the listening experience.
+            Note: bypassing ducking means the announcement competes with
+            any active media at full volume.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ③ TEMPLATE SETTINGS
     # ===========================================================================
@@ -433,11 +445,26 @@ blueprint:
             Optional. Sensors or other entities whose current states are
             passed to the LLM as extra context (e.g. temperatures, UPS
             status, media players, CPU temp, lights). Included as a simple
-            text list in the prompt.
+            text list in the prompt. Media entities are only included when
+            actively playing or paused.
           default: []
           selector:
             entity:
               multiple: true
+
+        no_media_context_note:
+          name: No-media context note
+          description: >
+            Injected into the LLM context when none of the context entities
+            have active media playback. Prevents the LLM from hallucinating
+            or assuming TV/media activity when nothing is playing. Set to
+            empty to disable.
+          default: >-
+            No media is currently playing on any device. Do not reference,
+            assume, or hallucinate any TV/media/streaming activity.
+          selector:
+            text:
+              multiline: true
 
         banter_source_tag:
           name: Banter source tag
@@ -942,6 +969,7 @@ variables:
   v_bedtime_active: !input bedtime_active_entity
   tts_output_vol: !input tts_output_volume
   tts_collision_mode: !input tts_collision_mode
+  bypass_ducking: !input bypass_ducking
   restore_delay: !input tts_restore_delay
   privacy_tier: !input privacy_tier
   v_privacy_enabled: !input privacy_gate_enabled
@@ -1139,6 +1167,7 @@ variables:
 
   # ── context entities ───────────────────────────────────────────────────
   context_entities: !input context_entities
+  no_media_note: !input no_media_context_note
 
   sensor_context: >-
     {% set entities = context_entities | default([]) %}
@@ -1148,13 +1177,34 @@ variables:
       {% set expanded = expand(entities) %}
       {%- for e in expanded %}
       {% if e.domain == 'media_player' %}
+      {% if e.state in ['playing', 'paused', 'buffering'] %}
       - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.state == 'playing' %} — "{{ e.attributes.media_title | default('unknown track') }}"{% if e.attributes.media_artist | default('') %} by {{ e.attributes.media_artist }}{% endif %}{% if e.attributes.media_content_type | default('') %} [{{ e.attributes.media_content_type }}]{% endif %}{% endif %}
-      {% elif e.attributes.player_state is defined or e.attributes.media_category is defined %}
+      {% endif %}
+      {% elif (e.attributes.player_state is defined or e.attributes.media_category is defined) %}
+      {% if (e.attributes.player_state | default('idle')) in ['playing', 'paused'] %}
       - {{ e.entity_id }} ({{ e.name }}): {{ e.state }} [{{ e.attributes.player_state | default('unknown') }}]{% if e.attributes.series_title | default('') %} — series: {{ e.attributes.series_title }}{% endif %}{% if e.attributes.season is not none and e.attributes.season is defined %}, season: {{ e.attributes.season }}{% endif %}{% if e.attributes.episode is not none and e.attributes.episode is defined %}, episode: {{ e.attributes.episode }}{% endif %}{% if e.attributes.pvr_programme | default('') %}, pvr: {{ e.attributes.pvr_programme }}{% endif %}{% if e.attributes.pvr_channel | default('') %}, channel: {{ e.attributes.pvr_channel }}{% endif %}{% if e.attributes.plot | default('') %}, plot: {{ e.attributes.plot }}{% endif %}
+      {% endif %}
       {% else %}
       - {{ e.entity_id }} ({{ e.name }}): {{ e.state }}{% if e.attributes.unit_of_measurement | default('') %} {{ e.attributes.unit_of_measurement }}{% endif %}
       {%- endif %}
       {%- endfor %}
+    {% endif %}
+
+  has_active_media: >-
+    {% set entities = context_entities | default([]) %}
+    {% if entities | length == 0 %}
+      false
+    {% else %}
+      {% set expanded = expand(entities) %}
+      {% set ns = namespace(found=false) %}
+      {% for e in expanded %}
+        {% if e.domain == 'media_player' and e.state in ['playing', 'paused', 'buffering'] %}
+          {% set ns.found = true %}
+        {% elif (e.attributes.player_state | default('idle')) in ['playing', 'paused'] %}
+          {% set ns.found = true %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.found }}
     {% endif %}
 
   # ── bedtime ─────────────────────────────────────────────────────────────
@@ -1496,6 +1546,7 @@ actions:
                 context:
                 - extra_entities:
                 {{ sensor_context }}
+                {% if not (has_active_media | bool(false)) and (no_media_note | default('') | trim | length > 0) %}- {{ no_media_note }}{% endif %}
 
                 task:
                 {{ llm_task_instruction | replace('{name}', chosen_llm_name) }}
@@ -1608,6 +1659,7 @@ actions:
       restore_volume: "{{ tts_output_vol | float(0) > 0 }}"
       volume_restore_delay: "{{ restore_delay | int(8) }}"
       skip_dedup: "{{ tts_collision_mode != 'dedup' }}"
+      duck: "{{ not bypass_ducking }}"
       chime_path: "{{ v_chime_path | default('') }}"
     continue_on_error: true
 
@@ -1664,6 +1716,7 @@ actions:
             context:
             - extra_entities:
             {{ sensor_context }}
+            {% if not (has_active_media | bool(false)) and (no_media_note | default('') | trim | length > 0) %}- {{ no_media_note }}{% endif %}
 
             task:
             {{ bedtime_task_instruction | replace('{name}', chosen_llm_name) }}

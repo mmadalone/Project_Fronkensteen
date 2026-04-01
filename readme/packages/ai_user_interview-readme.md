@@ -13,7 +13,7 @@ Provides helper entities for the LLM-driven user preference interview system. Th
 | Entity ID | Type | Purpose |
 |-----------|------|---------|
 | `input_boolean.ai_interview_mode` | Input Boolean | Whether an interview session is currently active |
-| `input_text.ai_interview_progress` | Input Text | JSON tracking interview progress (initial: `{}`, max: 255 chars) |
+| `sensor.ai_interview_progress` | Pyscript sensor | Interview progress. State: `"X/9 complete"`. `progress_json` attribute has per-user JSON (set by pyscript via `state.set()`) |
 | `input_select.ai_privacy_gate_user_interview` | Input Select | Privacy gate per-feature override for user interview |
 | `sensor.ai_user_interview_status` | Pyscript sensor | Interview status (ok/error/idle); attrs: interview progress, last completed topic |
 
@@ -33,4 +33,4 @@ Provides helper entities for the LLM-driven user preference interview system. Th
 ## Notes
 
 - This is a minimal package — three helpers (boolean, text, privacy gate select). All interview logic lives in the pyscript engine.
-- The progress helper stores JSON tracking which topics have been covered and responses collected, capped at 255 characters.
+- The progress sensor state shows `"X/9 complete"`. Full JSON is in the `progress_json` attribute (uses `"*"` compaction for complete categories).

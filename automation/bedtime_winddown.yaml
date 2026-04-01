@@ -806,6 +806,15 @@ blueprint:
               step: 0.05
               mode: slider
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # =========================================================================
     # ⑬ USER PREFERENCES
     # =========================================================================
@@ -924,6 +933,7 @@ variables:
   _last_offer: !input winddown_last_offer_entity
   tts_speaker: !input tts_speaker
   tts_volume: !input tts_volume
+  bypass_ducking: !input bypass_ducking
   enable_user_prefs: !input enable_user_preferences
 
   # ── User preference context (Preference Consumption B3) ──
@@ -1456,6 +1466,7 @@ actions:
               target_mode: explicit
               target: "{{ tts_speaker }}"
               priority: 1
+              duck: "{{ not bypass_ducking }}"
             continue_on_error: true
 
           - delay:
@@ -1624,6 +1635,7 @@ actions:
                   target_mode: explicit
                   target: "{{ tts_speaker }}"
                   priority: 2
+                  duck: "{{ not bypass_ducking }}"
                 continue_on_error: true
 
   # ── 15. Post-offer: advance stage + record timestamp ───────────────────

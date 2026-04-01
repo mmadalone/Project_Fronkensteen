@@ -1,0 +1,424 @@
+blueprint:
+  name: "Watch history — Kodi playback tracking (L2 + L1)"
+  author: madalone
+  description: >
+    # Watch History — Kodi Playback Tracking
+
+    Tracks what is watched on a Kodi media player, classifies content
+    (PVR/series/movie), measures watch duration, and logs to L2 memory.
+    Uses a pre-classified template sensor for metadata — no direct
+    Kodi JSON-RPC needed.
+
+    ### Triggers
+    - **Play start** — state changes to `playing`
+    - **Play pause** — state changes from `playing` to `paused`
+    - **Play stop** — state changes from `playing`/`paused` to `idle`/`off`
+    - **HA start** — recovery for sessions interrupted by restart
+
+    ### Data flow
+    1. Blueprint fires on state change → reads template sensor attributes
+    2. Calls `pyscript.watch_history_start` / `_stop` / `_pause`
+    3. Pyscript tracks duration, applies minimum thresholds, writes L2 memory
+    4. Sensor `sensor.ai_watch_history_status` updated for dashboard + L1 hot context
+
+    ### Recent changes
+    - **v1:** Initial implementation
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/watch_history.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① TARGET
+    # ===========================================================================
+    target_section:
+      name: "① Target"
+      icon: mdi:television
+      description: >
+        Kodi media player to track and its pre-classified now-playing
+        template sensor.
+      collapsed: false
+      input:
+        kodi_entity:
+          name: Kodi media player
+          description: >
+            The media_player entity for your Kodi instance.
+          default: media_player.madteevee
+          selector:
+            entity:
+              domain: media_player
+
+        now_playing_sensor:
+          name: Now Playing sensor
+          description: >
+            Template sensor that pre-classifies what is playing.
+            Must have attributes: media_category, media_title,
+            series_title, season, episode, pvr_channel,
+            pvr_channel_number, pvr_programme.
+          default: sensor.madteevee_now_playing
+          selector:
+            entity:
+              domain: sensor
+
+    # ===========================================================================
+    # ② THRESHOLDS
+    # ===========================================================================
+    thresholds_section:
+      name: "② Thresholds"
+      icon: mdi:timer-outline
+      description: >
+        Minimum watch duration before a session is logged.
+        Prevents channel surfing and accidental plays from cluttering
+        the history. PVR has a separate (longer) threshold.
+      collapsed: true
+      input:
+        min_duration_pvr_entity:
+          name: Min PVR duration helper
+          description: >
+            input_number entity for minimum PVR watch seconds.
+          default: input_number.ai_watch_min_duration_pvr
+          selector:
+            entity:
+              domain: input_number
+
+        min_duration_content_entity:
+          name: Min content duration helper
+          description: >
+            input_number entity for minimum movie/series watch seconds.
+          default: input_number.ai_watch_min_duration_content
+          selector:
+            entity:
+              domain: input_number
+
+        attribute_delay:
+          name: Attribute population delay
+          description: >
+            Seconds to wait after state → playing before reading template
+            sensor attributes. Increase if attributes are sometimes empty.
+          default: 1.5
+          selector:
+            number:
+              min: 0.5
+              max: 5.0
+              step: 0.5
+              unit_of_measurement: "s"
+
+    # ===========================================================================
+    # ③ MEMORY
+    # ===========================================================================
+    memory_section:
+      name: "③ Memory"
+      icon: mdi:database-clock
+      description: >
+        How long watch history entries are retained in L2 memory.
+      collapsed: true
+      input:
+        retention_days_entity:
+          name: Retention days helper
+          description: >
+            input_number entity for L2 memory retention (days).
+          default: input_number.ai_watch_history_retention_days
+          selector:
+            entity:
+              domain: input_number
+
+        summary_retention_days:
+          name: Daily summary retention (days)
+          description: >
+            How long the daily summary entry is retained in L2.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 7
+              step: 1
+
+    # ===========================================================================
+    # ④ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "④ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        tracking_enabled_entity:
+          name: Tracking enabled toggle
+          description: "Kill switch for watch history tracking."
+          default: input_boolean.ai_watch_history_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ⑤ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑤ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person entity for tier suppression lookups."
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+mode: restart
+
+# ── Variables ──────────────────────────────────────────────────────────────
+
+variables:
+  v_kodi: !input kodi_entity
+  v_now_playing: !input now_playing_sensor
+  v_attr_delay: !input attribute_delay
+  v_min_pvr_entity: !input min_duration_pvr_entity
+  v_min_content_entity: !input min_duration_content_entity
+  v_retention_entity: !input retention_days_entity
+  v_summary_retention: !input summary_retention_days
+  v_enabled: !input tracking_enabled_entity
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] if v_privacy_person else '' }}"
+
+# ── Triggers ──────────────────────────────────────────────────────────────
+
+triggers:
+  # 1. Playback starts
+  - trigger: state
+    id: play_start
+    entity_id: !input kodi_entity
+    to: "playing"
+
+  # 2. Content changed while playing (PVR channel switch, playlist advance)
+  #    Fires when the now_playing sensor state changes while Kodi stays "playing"
+  - trigger: state
+    id: content_change
+    entity_id: !input now_playing_sensor
+    not_from:
+      - "off"
+      - "unknown"
+      - "unavailable"
+    not_to:
+      - "off"
+      - "unknown"
+      - "unavailable"
+
+  # 3. Playback paused
+  - trigger: state
+    id: play_pause
+    entity_id: !input kodi_entity
+    from: "playing"
+    to: "paused"
+
+  # 4. Playback stopped (from playing or paused to idle/off)
+  - trigger: state
+    id: play_stop
+    entity_id: !input kodi_entity
+    from:
+      - "playing"
+      - "paused"
+    to:
+      - "idle"
+      - "off"
+
+  # 5. HA restart — recover session if Kodi is playing
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+# ── Conditions ──────────────────────────────────────────────────────────────
+
+conditions:
+  - condition: state
+    entity_id: !input tracking_enabled_entity
+    state: "on"
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all'
+          or v_privacy_slug | trim | length == 0 -%}
+        true
+      {%- elif mode == 'force_suppress_all' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ── Actions ──────────────────────────────────────────────────────────────
+
+actions:
+  - choose:
+      # ── PLAY START ────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_start
+        sequence:
+          - alias: "Wait for template sensor to populate"
+            delay:
+              seconds: "{{ v_attr_delay | float(1.5) }}"
+
+          - alias: "Read now-playing sensor attributes"
+            variables:
+              np_category: "{{ state_attr(v_now_playing, 'media_category') | default('', true) }}"
+              np_title: "{{ state_attr(v_now_playing, 'media_title') | default('', true) }}"
+              np_series: "{{ state_attr(v_now_playing, 'series_title') | default('', true) }}"
+              np_season: "{{ state_attr(v_now_playing, 'season') | default('', true) }}"
+              np_episode: "{{ state_attr(v_now_playing, 'episode') | default('', true) }}"
+              np_channel: "{{ state_attr(v_now_playing, 'pvr_channel') | default('', true) }}"
+              np_channel_num: "{{ state_attr(v_now_playing, 'pvr_channel_number') | default('', true) }}"
+              np_programme: "{{ state_attr(v_now_playing, 'pvr_programme') | default('', true) }}"
+
+          - alias: "Start tracking session"
+            action: pyscript.watch_history_start
+            data:
+              entity_id: "{{ v_kodi }}"
+              media_category: "{{ np_category }}"
+              media_title: "{{ np_title }}"
+              series_title: "{{ np_series }}"
+              season: "{{ np_season }}"
+              episode: "{{ np_episode }}"
+              pvr_channel: "{{ np_channel }}"
+              pvr_channel_number: "{{ np_channel_num }}"
+              pvr_programme: "{{ np_programme }}"
+              recovered: false
+
+      # ── CONTENT CHANGE (channel switch / playlist advance) ────────
+      - conditions:
+          - condition: trigger
+            id: content_change
+          - condition: state
+            entity_id: !input kodi_entity
+            state: "playing"
+        sequence:
+          - alias: "Wait for template sensor to settle"
+            delay:
+              seconds: "{{ v_attr_delay | float(1.5) }}"
+
+          - alias: "Read now-playing sensor attributes"
+            variables:
+              np_category: "{{ state_attr(v_now_playing, 'media_category') | default('', true) }}"
+              np_title: "{{ state_attr(v_now_playing, 'media_title') | default('', true) }}"
+              np_series: "{{ state_attr(v_now_playing, 'series_title') | default('', true) }}"
+              np_season: "{{ state_attr(v_now_playing, 'season') | default('', true) }}"
+              np_episode: "{{ state_attr(v_now_playing, 'episode') | default('', true) }}"
+              np_channel: "{{ state_attr(v_now_playing, 'pvr_channel') | default('', true) }}"
+              np_channel_num: "{{ state_attr(v_now_playing, 'pvr_channel_number') | default('', true) }}"
+              np_programme: "{{ state_attr(v_now_playing, 'pvr_programme') | default('', true) }}"
+
+          - alias: "Start new session (closes previous via pyscript)"
+            action: pyscript.watch_history_start
+            data:
+              entity_id: "{{ v_kodi }}"
+              media_category: "{{ np_category }}"
+              media_title: "{{ np_title }}"
+              series_title: "{{ np_series }}"
+              season: "{{ np_season }}"
+              episode: "{{ np_episode }}"
+              pvr_channel: "{{ np_channel }}"
+              pvr_channel_number: "{{ np_channel_num }}"
+              pvr_programme: "{{ np_programme }}"
+              recovered: false
+
+      # ── PLAY PAUSE ────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_pause
+        sequence:
+          - alias: "Mark session as paused"
+            action: pyscript.watch_history_pause
+            data:
+              entity_id: "{{ v_kodi }}"
+
+      # ── PLAY STOP ─────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_stop
+        sequence:
+          - alias: "End session, log if above threshold"
+            action: pyscript.watch_history_stop
+            data:
+              entity_id: "{{ v_kodi }}"
+              min_duration_pvr: "{{ states(v_min_pvr_entity) | int(180) }}"
+              min_duration_content: "{{ states(v_min_content_entity) | int(120) }}"
+              retention_days: "{{ states(v_retention_entity) | int(30) }}"
+              summary_retention_days: "{{ v_summary_retention | int(2) }}"
+
+      # ── HA START (recovery) ────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: ha_start
+        sequence:
+          - alias: "Check if Kodi is currently playing"
+            condition: template
+            value_template: "{{ is_state(v_kodi, 'playing') }}"
+
+          - alias: "Wait for template sensor to populate after HA start"
+            delay:
+              seconds: 5
+
+          - alias: "Read now-playing sensor for recovery"
+            variables:
+              np_category: "{{ state_attr(v_now_playing, 'media_category') | default('', true) }}"
+              np_title: "{{ state_attr(v_now_playing, 'media_title') | default('', true) }}"
+              np_series: "{{ state_attr(v_now_playing, 'series_title') | default('', true) }}"
+              np_season: "{{ state_attr(v_now_playing, 'season') | default('', true) }}"
+              np_episode: "{{ state_attr(v_now_playing, 'episode') | default('', true) }}"
+              np_channel: "{{ state_attr(v_now_playing, 'pvr_channel') | default('', true) }}"
+              np_channel_num: "{{ state_attr(v_now_playing, 'pvr_channel_number') | default('', true) }}"
+              np_programme: "{{ state_attr(v_now_playing, 'pvr_programme') | default('', true) }}"
+
+          - alias: "Recover tracking session"
+            action: pyscript.watch_history_start
+            data:
+              entity_id: "{{ v_kodi }}"
+              media_category: "{{ np_category }}"
+              media_title: "{{ np_title }}"
+              series_title: "{{ np_series }}"
+              season: "{{ np_season }}"
+              episode: "{{ np_episode }}"
+              pvr_channel: "{{ np_channel }}"
+              pvr_channel_number: "{{ np_channel_num }}"
+              pvr_programme: "{{ np_programme }}"
+              recovered: true

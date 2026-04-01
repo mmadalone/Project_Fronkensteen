@@ -2,7 +2,7 @@
 
 # User Preference Interview Engine
 
-Provides services for agent-driven conversational onboarding -- LLM agents call `save_user_preference` to persist answers to L1 helpers (known keys like wake time) or L2 memory (freeform preferences). Tracks interview progress per user in a JSON helper and exposes status for agents to decide what to ask next. Part of I-36 of the Voice Context Architecture.
+Provides services for agent-driven conversational onboarding -- LLM agents call `save_user_preference` to persist answers to L1 helpers (known keys like wake time) or L2 memory (freeform preferences). Tracks interview progress per user in a `state.set()` sensor and exposes status for agents to decide what to ask next. Part of I-36 of the Voice Context Architecture.
 
 ## Services
 
@@ -33,7 +33,7 @@ Provides services for agent-driven conversational onboarding -- LLM agents call 
 - `_save_to_l1_text(entity_id, value)` -- Save to `input_text` helper via `set_value`.
 - `_save_to_l1_select(entity_id, value)` -- Save to `input_select` helper via `select_option`.
 - `_save_to_l1_datetime(entity_id, value)` -- Save to `input_datetime` helper via `set_datetime`. Normalizes HH:MM to HH:MM:SS.
-- `_load_progress(user)` / `_save_progress(user, progress)` -- Read/write interview progress from `input_text.ai_interview_progress` JSON. Compacts fully-complete categories to `"*"` to stay under 255 chars.
+- `_load_progress(user)` / `_save_progress(user, progress)` -- Read/write interview progress from `sensor.ai_interview_progress` `progress_json` attribute. State is human-readable (`"N% complete"` — percentage of answered keys across both built-in and custom categories). Compacts fully-complete categories to `"*"`.
 - `_mark_done(user, category, key)` -- Mark a specific key as completed in progress tracking.
 - `_l1_has_value(entity_id, domain_hint)` -- Check if an L1 helper has a meaningful non-empty value.
 
@@ -41,7 +41,7 @@ Provides services for agent-driven conversational onboarding -- LLM agents call 
 
 - `input_boolean.ai_interview_mode` -- Gates hot context injection (agents see interview guidance)
 - `input_boolean.ai_test_mode` -- Test mode
-- `input_text.ai_interview_progress` -- JSON progress tracker per user (255 char limit, uses `"*"` compaction)
+- `sensor.ai_interview_progress` -- Interview progress tracker. State: `"N% complete"` (percentage of answered keys across built-in + custom categories). Attribute `progress_json`: per-user JSON (uses `"*"` compaction for complete categories)
 - L1 mapped helpers (read/write):
   - `input_text.ai_context_user_name_{user}`, `_name_spoken_{user}`, `_languages_{user}`
   - `input_text.ai_context_household`, `ai_context_pets`
@@ -78,6 +78,6 @@ Pairs with `packages/ai_user_interview.yaml` (interview mode toggle, progress tr
 - **Auto-discovery sensor**: `sensor.ai_preferences_context` scans all `input_text.ai_context_user_*_{user}` entities, skips identity keys (name, name_spoken, languages), outputs sorted `key: value` pairs for hot context. Adding a new preference = create the helper.
 - **Auto-import on startup**: Blueprint fires `pyscript.user_interview_auto_import` on HA start. Scans `/config/interview/` for `interview_*.yaml` files, imports any matching a `person.*` entity.
 - **Batch import optimization**: File import uses direct routing (skip `_save_preference` overhead), single progress write at end, no exchange logs, single sensor refresh. 50 keys import in ~2-3s (was 90s+).
-- **Progress compaction**: Fully-complete categories stored as `"*"` wildcard instead of full key list to stay within 255-char `input_text` limit.
+- **Progress compaction**: Fully-complete categories stored as `"*"` wildcard instead of full key list. JSON stored in `progress_json` attribute; state is human-readable `"N% complete"` (counts answered keys across all categories — built-in and custom).
 - **Preseed**: Scans all L1 mapped helpers and L2 preference keys to pre-mark already-answered topics, so the agent does not re-ask known information.
 - **Reset vs delete**: `user_interview_reset` clears the progress tracker but does NOT delete saved preferences from L1 or L2. Use it to re-interview a user about topics they already answered.

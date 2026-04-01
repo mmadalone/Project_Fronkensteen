@@ -88,6 +88,7 @@ input_boolean.ai_budget_fallback_active
 | `announcement_text` | `Budget limit reached. Switching to basic mode.` | TTS announcement text. Empty = skip |
 | `tts_speaker` | _(empty)_ | Speaker for the fallback announcement |
 | `tts_fallback_voice` | `tts.home_assistant_cloud` | TTS engine entity for fallback announcements |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

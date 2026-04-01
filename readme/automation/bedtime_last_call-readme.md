@@ -104,6 +104,7 @@ Speaks a single, AI-generated "last call" message when presence is detected in a
 | Input | Default | Description |
 |-------|---------|-------------|
 | Media player | _(empty)_ | Speaker for the spoken announcement. |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

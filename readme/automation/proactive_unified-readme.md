@@ -77,7 +77,7 @@ Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `p
 - Weekend bedtime question overrides
 - Template mode: time-of-day message helpers (morning/afternoon/evening) with optional refresh
 - LLM mode: user name randomization, context entity injection, customizable prompts
-- Rich sensor context in LLM prompts (media players show now-playing, Kodi shows series/episode/PVR details)
+- Rich sensor context in LLM prompts (media players show now-playing, Kodi shows series/episode/PVR details). Idle/off media entities are filtered out — only actively playing or paused media appears in the LLM context, preventing false "watching TV" references.
 - Privacy gate with per-person tier suppression
 - Stored traces: 15 for debugging
 
@@ -121,6 +121,7 @@ Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `p
 | `tts_output_volume` | `0.0` | Volume before TTS (0 = don't change) |
 | `tts_restore_delay` | `8` | Seconds to wait after TTS before restoring volume |
 | `tts_collision_mode` | `queue` | dedup / queue / barge_in |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 
@@ -147,7 +148,8 @@ Consolidation of `proactive.yaml` (template), `proactive_llm.yaml` (LLM), and `p
 | `llm_fallback_names` | `the user` | Fallback 3rd-person LLM reference terms |
 | `conversation_agent` | `Rick` | Voice Assistant when dispatcher is disabled |
 | `llm_prompt` | *(playful one-liner prompt)* | LLM prompt for proactive messages |
-| `context_entities` | `[]` | Extra sensors/entities for LLM context |
+| `context_entities` | `[]` | Extra sensors/entities for LLM context (idle media filtered) |
+| `no_media_context_note` | *(no-media guardrail)* | Injected into LLM context when no media is playing; prevents hallucinated TV references |
 
 </details>
 

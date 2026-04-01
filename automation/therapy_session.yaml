@@ -411,6 +411,15 @@ blueprint:
             entity:
               domain: tts
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
         silence_media_url:
           name: Silence media URL
           description: URL to a silent audio file for echo-free mic reopen.
@@ -580,6 +589,7 @@ variables:
   v_auto_report: !input auto_generate_report
   v_report_dir: !input report_output_dir
   v_silence_url: !input silence_media_url
+  bypass_ducking: !input bypass_ducking
   v_suppress: !input suppress_toggles
   v_bypass_follow_me: true
   v_test_mode: !input test_mode_enabled
@@ -887,6 +897,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
+          duck: "{{ not bypass_ducking }}"
       - alias: "2f · Audio download delay"
         delay:
           seconds: 3
@@ -954,6 +965,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
+          duck: "{{ not bypass_ducking }}"
       - delay:
           seconds: 5
 
@@ -1053,6 +1065,7 @@ actions:
                 target_mode: explicit
                 target: "{{ speaker_entity }}"
                 priority: 1
+                duck: "{{ not bypass_ducking }}"
             - delay:
                 seconds: 3
             - action: input_boolean.turn_off

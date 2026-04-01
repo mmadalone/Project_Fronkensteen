@@ -249,7 +249,7 @@ def _parse_sonarr_upcoming_attrs(attrs: dict) -> list:
             season = item.get("seasonNumber", "")
             label = title
             if season and ep_num:
-                label = f"{title} S{int(season):02d}E{int(ep_num):02d}"
+                label = f"{title} season {int(season)}, episode {int(ep_num)}"
             air_date = item.get("airDateUtc", item.get("airDate", ""))
             results.append({
                 "title": title,
@@ -269,7 +269,17 @@ def _parse_sonarr_upcoming_attrs(attrs: dict) -> list:
             continue
         title = key
         ep_code = str(val) if val else ""
-        label = f"{title} {ep_code}" if ep_code else title
+        if ep_code:
+            # Convert S13E07 → season 13, episode 7
+            import re as _re
+            ep_friendly = _re.sub(
+                r'S(\d{1,2})E(\d{1,3})',
+                lambda x: f"season {int(x.group(1))}, episode {int(x.group(2))}",
+                ep_code, flags=_re.IGNORECASE,
+            )
+            label = f"{title} {ep_friendly}"
+        else:
+            label = title
         results.append({"title": title, "label": label, "date": ""})
     return results
 
@@ -288,7 +298,7 @@ def _parse_sonarr_calendar_api(data: list) -> list:
         season = item.get("seasonNumber", "")
         label = title
         if season and ep_num:
-            label = f"{title} S{int(season):02d}E{int(ep_num):02d}"
+            label = f"{title} season {int(season)}, episode {int(ep_num)}"
         air_date = item.get("airDateUtc", item.get("airDate", ""))
         results.append({
             "title": title,
@@ -349,22 +359,54 @@ def _parse_history_response(data: list) -> list:
             season = episode.get("seasonNumber", "")
             label = title
             if season and ep_num:
-                label = f"{title} S{int(season):02d}E{int(ep_num):02d}"
+                label = f"{title} season {int(season)}, episode {int(ep_num)}"
             key = label
         elif movie.get("title"):
             title = movie["title"]
             label = title
             key = title
         else:
-            title = item.get("sourceTitle", "Unknown")
-            label = title
-            key = title
+            # sourceTitle is a raw scene release filename — clean it
+            label = _clean_source_title(item.get("sourceTitle", "Unknown"))
+            title = label
+            key = label
 
         if key not in seen:
             seen.add(key)
             results.append({"title": title, "label": label})
 
     return results
+
+
+@pyscript_compile  # noqa: F821
+def _clean_source_title(raw: str) -> str:
+    """Strip scene release junk from a sourceTitle, keeping show name + episode."""
+    import re as _re
+    if not raw or raw == "Unknown":
+        return raw
+    # Replace dots/underscores with spaces
+    cleaned = raw.replace(".", " ").replace("_", " ")
+    # Try to extract up to SxxExx pattern
+    m = _re.match(r'^(.+?\s+S\d{1,2}E\d{1,3})', cleaned, _re.IGNORECASE)
+    if m:
+        title_part = m.group(1).strip()
+        # Convert SxxExx to TTS-friendly format
+        title_part = _re.sub(
+            r'S(\d{1,2})E(\d{1,3})',
+            lambda x: f"season {int(x.group(1))}, episode {int(x.group(2))}",
+            title_part, flags=_re.IGNORECASE,
+        )
+        return title_part
+    # Try to extract up to a year (movie pattern: "Title 2026")
+    m = _re.match(r'^(.+?\s+(?:19|20)\d{2})\b', cleaned)
+    if m:
+        return m.group(1).strip()
+    # Last resort: cut at first resolution/codec indicator
+    cutoff = _re.split(
+        r'\b(?:720p|1080p|2160p|4K|WEB|HDTV|BluRay|REPACK|PROPER|AMZN|NF)\b',
+        cleaned, maxsplit=1, flags=_re.IGNORECASE,
+    )
+    return cutoff[0].strip() if cutoff[0].strip() else raw
 
 
 # ── Data Fetch Functions ────────────────────────────────────────────────────

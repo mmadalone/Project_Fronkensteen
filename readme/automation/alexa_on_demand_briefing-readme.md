@@ -88,7 +88,7 @@ Thin orchestration layer triggered by Alexa-exposed `input_boolean` entities. Tw
 | `trigger_mail_status` | _(required)_ | Alexa-exposed input_boolean for mail-only briefing |
 | `briefing_sections` | `greeting,weather,calendar,email,schedule,household,memory` | Comma-separated sections for full briefing |
 | `mail_prompt` | `Summarize my current email status concisely.` | LLM prompt for mail status mode |
-| `briefing_prompt` | _(empty)_ | LLM prompt override for full briefing |
+| `briefing_prompt` | _(see default)_ | LLM prompt with `{content}`, `{framing}`, `{context}` placeholders. Default instructs agent to deliver conversationally and mention every item |
 | `context_template` | _(empty)_ | Jinja2 template evaluated before passing to pyscript |
 | `household_entities` | _(empty)_ | CSV entity IDs for household section |
 
@@ -100,6 +100,10 @@ Thin orchestration layer triggered by Alexa-exposed `input_boolean` entities. Tw
 |-------|---------|-------------|
 | `fallback_speaker` | _(required)_ | Speaker used when no presence detected or bypass ON |
 | `tts_volume` | `0.0` | Volume for TTS delivery. 0 = let pyscript handle it |
+| `morning_starts_at` | `05:00:00` | Time when morning tone block begins. 00:00 = use global helper |
+| `afternoon_starts_at` | `12:00:00` | Time when afternoon tone block begins. 00:00 = use global helper |
+| `evening_starts_at` | `17:00:00` | Time when evening tone block begins. 00:00 = use global helper |
+| `bypass_ducking` | `false` | When true, TTS plays without volume ducking |
 
 </details>
 

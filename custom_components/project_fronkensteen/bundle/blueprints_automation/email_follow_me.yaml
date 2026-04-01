@@ -508,6 +508,14 @@ blueprint:
               max: 1.0
               step: 0.05
               mode: slider
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
 
     # =========================================================================
     # ⑥ RINGER MODE VOLUME CONTROL
@@ -1011,6 +1019,7 @@ variables:
   quiet_end_val: !input quiet_end
   tts_announce: !input tts_announce
   tts_output_vol: !input tts_output_volume
+  bypass_ducking: !input bypass_ducking
   email_prompt: !input email_prompt
   ringer_entity: !input ringer_mode_sensor
   quiet_vol: !input quiet_volume
@@ -2045,6 +2054,7 @@ actions:
                           volume_level: "{{ tts_output_vol | float(0) }}"
                           announce: "{{ tts_announce | bool(false) }}"
                           priority: "{{ _email_priority | int(3) }}"
+                          duck: "{{ not bypass_ducking }}"
                 default:
                   # ── Non-stinger path — tts_queue_speak without chime ──
                   - alias: "TTS speak via tts_queue (no stinger)"
@@ -2060,6 +2070,7 @@ actions:
                       volume_level: "{{ tts_output_vol | float(0) }}"
                       announce: "{{ tts_announce | bool(false) }}"
                       priority: "{{ _email_priority | int(3) }}"
+                      duck: "{{ not bypass_ducking }}"
 
       # --- No satellite: mobile push fallback ---
       - alias: "No satellite — send mobile push notification"
@@ -2655,6 +2666,7 @@ actions:
                         volume_level: "{{ tts_output_vol | float(0) }}"
                         announce: "{{ tts_announce | bool(false) }}"
                         priority: "{{ _email_priority | int(3) }}"
+                        duck: "{{ not bypass_ducking }}"
 
                 - alias: "No satellite — mobile push reminder"
                   conditions:

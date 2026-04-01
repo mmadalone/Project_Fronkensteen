@@ -177,6 +177,7 @@ Time-based wake-up automation with bed/workshop presence conditions, TTS announc
 | Ducking flag entity | `input_boolean.ai_ducking_flag` | Boolean indicating audio ducking is active |
 | Duck guard enabled entity | `input_boolean.ai_duck_guard_enabled` | Boolean enabling duck guard system |
 | Dispatcher enabled entity | `input_boolean.ai_dispatcher_enabled` | Boolean enabling AI agent dispatcher |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 ### Section 9 -- Privacy
 

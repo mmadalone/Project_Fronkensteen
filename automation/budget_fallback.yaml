@@ -108,6 +108,14 @@ blueprint:
           default: "tts.home_assistant_cloud"
           selector:
             text: {}
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
 
     # ===========================================================================
     # ③ INFRASTRUCTURE
@@ -164,6 +172,7 @@ actions:
       fallback_pipeline: !input fallback_pipeline
       announcement: !input announcement_text
       speaker_entity: !input tts_speaker
+      bypass_ducking: !input bypass_ducking
       _saved_pipelines: !input saved_pipelines_entity
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -236,6 +245,7 @@ actions:
                   voice: !input tts_fallback_voice
                   priority: 1
                   target: "{{ speaker_entity }}"
+                  duck: "{{ not bypass_ducking }}"
 
   # ─────────────────────────────────────────────────────────────────────────
   # DEACTIVATE: restore saved pipeline

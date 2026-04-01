@@ -200,6 +200,7 @@ Default prompt:
 |-------|---------|-------------|
 | `enable_notify_threshold` | `false` | Gate TTS against active user's notification threshold preference |
 | `tts_priority` | `2` | Queue priority for banter (0=emergency, 4=low) |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

@@ -131,6 +131,7 @@ device_tracker entity
 | `tts_speaker` | `{}` | Media player for TTS announcements |
 | `departure_message` | `{{ person }} has left home.` | TTS departure message template |
 | `arrival_message` | `{{ person }} is back after {{ duration }} minutes.` | TTS arrival message template |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

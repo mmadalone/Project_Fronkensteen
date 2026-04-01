@@ -151,6 +151,15 @@ blueprint:
             entity:
               domain: tts
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
         suppress_toggles:
           name: Suppress during interview
           description: >
@@ -482,6 +491,7 @@ variables:
   v_start_message: !input start_message
   v_silence_url: !input silence_media_url
   v_tts_voice: !input tts_voice
+  bypass_ducking: !input bypass_ducking
   satellite_entity: !input satellite
   speaker_entity: !input speaker
   v_suppress: !input suppress_toggles
@@ -721,6 +731,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
+          duck: "{{ not bypass_ducking }}"
       # 1b. Audio download delay — let speaker transition from idle → playing
       - alias: "1b · Audio download delay"
         delay:

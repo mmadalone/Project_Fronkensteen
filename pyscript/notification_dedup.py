@@ -582,6 +582,7 @@ async def dedup_announce(
     chime_path: str = "",
     restore_volume: bool = False,
     volume_restore_delay: int = 8,
+    duck: bool = True,
     metadata=None,
 ):
     """
@@ -690,6 +691,16 @@ async def dedup_announce(
           number:
             min: 1
             max: 30
+      duck:
+        name: Duck
+        description: >-
+          Enable volume ducking on other speakers during TTS. Passed through
+          to tts_queue_speak.
+        default: 8
+        selector:
+          number:
+            min: 1
+            max: 30
       metadata:
         name: Metadata
         description: >-
@@ -732,6 +743,7 @@ async def dedup_announce(
                 volume_level=volume_level,
                 restore_volume=restore_volume,
                 volume_restore_delay=volume_restore_delay,
+                duck=duck,
             )
             if voice_id:
                 tts_kwargs["voice_id"] = voice_id
@@ -819,6 +831,7 @@ async def dedup_announce(
             volume_level=volume_level,
             restore_volume=restore_volume,
             volume_restore_delay=volume_restore_delay,
+            duck=duck,
         )
         if voice_id:
             tts_kwargs["voice_id"] = voice_id

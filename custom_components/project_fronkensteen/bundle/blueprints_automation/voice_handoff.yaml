@@ -93,6 +93,15 @@ blueprint:
             entity:
               domain: media_player
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
         persona_aliases:
           name: Persona Aliases
           description: >-
@@ -679,6 +688,7 @@ actions:
       pipeline_select: !input pipeline_select
       satellite_entity: !input satellite
       speaker_entity: !input tts_speaker
+      bypass_ducking: !input bypass_ducking
       commentary_prompt_tpl: !input commentary_prompt
       greeting_prompt_tpl: !input greeting_prompt
       do_commentary: !input enable_commentary
@@ -1090,6 +1100,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
+          duck: "{{ not bypass_ducking }}"
       - alias: "Log if farewell TTS failed"
         if:
           - condition: template
@@ -1536,6 +1547,7 @@ actions:
           target_mode: explicit
           target: "{{ speaker_entity }}"
           priority: 1
+          duck: "{{ not bypass_ducking }}"
 
       - alias: "Log if greeting TTS failed"
         if:

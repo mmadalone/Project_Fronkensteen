@@ -251,6 +251,30 @@ template:
               {%- endif -%}
             {%- endif -%}
 
+            {# ── WATCH HISTORY (Now watching / recently watched) ── #}
+            {%- if is_state('input_boolean.ai_watch_history_enabled', 'on') -%}
+              {%- if is_state('sensor.ai_watch_history_status', 'watching') -%}
+                {%- set wtitle = state_attr('sensor.ai_watch_history_status', 'current_title') | default('', true) -%}
+                {%- set wchan = state_attr('sensor.ai_watch_history_status', 'current_channel') | default('', true) -%}
+                {%- set wshow = state_attr('sensor.ai_watch_history_status', 'current_show') | default('', true) -%}
+                {%- if wtitle -%}
+                  {%- if wchan -%}
+                    {%- set watch_line = 'Now watching: ' ~ wchan ~ ' — ' ~ wtitle -%}
+                  {%- elif wshow -%}
+                    {%- set watch_line = 'Now watching: ' ~ wshow ~ ' — ' ~ wtitle -%}
+                  {%- else -%}
+                    {%- set watch_line = 'Now watching: ' ~ wtitle -%}
+                  {%- endif -%}
+                  {%- set ns.lines = ns.lines + [watch_line] -%}
+                {%- endif -%}
+              {%- else -%}
+                {%- set last = state_attr('sensor.ai_watch_history_status', 'last_watched') | default('', true) -%}
+                {%- if last not in ['', 'none', 'unknown', 'unavailable'] -%}
+                  {%- set ns.lines = ns.lines + ['Recently watched: ' ~ last] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+
             {# ── Active music feedback session (I-56) ── #}
             {%- set mfc = states('sensor.ai_music_feedback_context') -%}
             {%- if mfc not in ['', 'unknown', 'unavailable', none] and '|' in mfc -%}
@@ -413,7 +437,7 @@ template:
 
             {# ── PROJECTS ── #}
             {%- if is_state('input_boolean.ai_project_tracking_enabled', 'on') -%}
-              {%- set proj_line = states('sensor.ai_project_hot_context_line') | default('', true) -%}
+              {%- set proj_line = state_attr('sensor.ai_project_hot_context_line', 'full_text') or states('sensor.ai_project_hot_context_line') | default('', true) -%}
               {%- if proj_line not in ['', 'none', 'unknown', 'unavailable'] -%}
                 {%- set ns.lines = ns.lines + ['Projects: ' ~ proj_line] -%}
               {%- endif -%}

@@ -694,20 +694,37 @@ views:
         name: Media Tracking
       - entity: sensor.ai_media_data_stale
         name: Data Stale
-      - entity: sensor.ai_media_upcoming
-        name: Upcoming Summary
-      - entity: sensor.ai_media_upcoming
-        name: Upcoming (Sonarr)
-        type: attribute
-        attribute: sonarr
-      - entity: sensor.ai_media_upcoming
-        name: Upcoming (Radarr)
-        type: attribute
-        attribute: radarr
-      - entity: sensor.ai_media_upcoming
-        name: Recent Downloads
-        type: attribute
-        attribute: recent_downloads
+    - type: markdown
+      content: >-
+        **Upcoming (Sonarr)**
+
+        {{ state_attr('sensor.ai_media_upcoming', 'sonarr') or 'None' }}
+
+        ---
+
+        **Upcoming (Radarr)**
+
+        {{ state_attr('sensor.ai_media_upcoming', 'radarr') or 'None' }}
+
+        ---
+
+        **Recent Downloads**
+
+        {{ state_attr('sensor.ai_media_upcoming', 'recent_downloads') or
+        'None' }}
+    - type: entities
+      title: Watch History
+      entities:
+      - entity: input_boolean.ai_watch_history_enabled
+        name: Watch History
+      - entity: sensor.ai_watch_history_status
+        name: Status
+      - entity: input_number.ai_watch_min_duration_pvr
+        name: Min PVR Duration
+      - entity: input_number.ai_watch_min_duration_content
+        name: Min Content Duration
+      - entity: input_number.ai_watch_history_retention_days
+        name: Retention
     - type: entities
       title: Music Composer
       entities:
@@ -779,6 +796,8 @@ views:
         name: Music Taste
       - entity: input_boolean.ai_media_tracking_enabled
         name: Media Tracking
+      - entity: input_boolean.ai_watch_history_enabled
+        name: Watch History
       - entity: input_boolean.ai_whisper_enabled
         name: Whisper Network
       - entity: input_boolean.ai_privacy_gate_enabled
@@ -988,10 +1007,19 @@ views:
         name: Data Stale
       - entity: sensor.ai_project_last_sync
         name: Last Sync
-      - entity: sensor.ai_project_hot_context_line
-        name: Hot Context Line
-      - entity: sensor.ai_active_projects_summary
-        name: Active Summary
+    - type: markdown
+      content: >-
+        **Hot Context Line**
+
+        {{ state_attr('sensor.ai_project_hot_context_line', 'full_text')
+        or states('sensor.ai_project_hot_context_line') or 'None' }}
+
+        ---
+
+        **Active Summary**
+
+        {{ state_attr('sensor.ai_active_projects_summary', 'full_text')
+        or states('sensor.ai_active_projects_summary') or 'None' }}
     - type: horizontal-stack
       cards:
       - type: button
@@ -1245,6 +1273,12 @@ views:
         name: Status
       - entity: sensor.ai_last_briefing_summary
         name: Last Summary
+      - entity: input_number.ai_briefing_morning_hour
+        name: Morning starts at
+      - entity: input_number.ai_briefing_afternoon_hour
+        name: Afternoon starts at
+      - entity: input_number.ai_briefing_evening_hour
+        name: Evening starts at
   - type: vertical-stack
     cards:
     - type: markdown
@@ -2798,6 +2832,25 @@ views:
           }
   - type: vertical-stack
     cards:
+    - type: markdown
+      content: '### L1 Context Token Budget
+
+        Controls how much memory context is injected into every agent prompt turn.
+        Disable to stop all L1 injection (agents can still search on demand).
+        Set limits to 0 to disable a specific section. Max chars 0 = no truncation.'
+    - type: entities
+      title: L1 Memory Context
+      entities:
+      - entity: input_boolean.ai_memory_context_enabled
+        name: L1 Context Injection
+      - entity: input_number.ai_memory_context_summary_limit
+        name: Max Summaries
+      - entity: input_number.ai_memory_context_mood_limit
+        name: Max Moods
+      - entity: input_number.ai_memory_context_max_chars
+        name: Max Chars per Entry
+      - entity: sensor.ai_memory_context
+        name: Context Status
     - type: markdown
       content: '### Memory Archive & Lifecycle
 

@@ -154,6 +154,15 @@ blueprint:
             entity:
               domain: media_player
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
     # ===========================================================================
     # ④ SAFETY & INTERRUPTION GUARDS
     # ===========================================================================
@@ -429,6 +438,7 @@ variables:
   effective_end_time: !input end_time
   min_presence_seconds: !input min_presence_seconds
   block_if_media_playing: !input block_if_media_playing
+  bypass_ducking: !input bypass_ducking
   enable_followup_script: !input enable_followup_script
   followup_delay_seconds: !input followup_delay_seconds
   followup_script: !input followup_script
@@ -704,6 +714,7 @@ actions:
           target: "{{ player }}"
           target_mode: explicit
           priority: 1
+          duck: "{{ not bypass_ducking }}"
         continue_on_error: true
 
   - alias: "Whisper — update self-awareness"

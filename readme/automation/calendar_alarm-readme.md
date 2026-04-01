@@ -138,6 +138,7 @@ input_datetime.ai_predicted_wake_time
 | `wake_message` | `Good morning. Time to get up.` | Static wake-up message (fallback) |
 | `use_llm` | `false` | Generate context-aware message via LLM |
 | `llm_wake_prompt` | `Generate a brief, friendly good-morning...` | LLM prompt for wake-up message |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

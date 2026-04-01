@@ -163,6 +163,14 @@ blueprint:
           selector:
             entity:
               domain: media_player
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
 
     section_4_escalation:
       name: "④ Escalation"
@@ -733,6 +741,7 @@ variables:
   v_dispatcher_enabled: !input dispatcher_enabled
   v_pipeline_name: !input llm_agent
   v_tts_output_player: !input tts_output_player
+  bypass_ducking: !input bypass_ducking
   v_num_stages: !input num_stages
   v_stage_delay: !input stage_delay_minutes
   v_start_volume: !input start_volume
@@ -1118,6 +1127,7 @@ actions:
             priority: "{{ 0 if is_last else (1 if not is_first else 2) }}"
             target_mode: explicit
             target: "{{ v_tts_output_player }}"
+            duck: "{{ not bypass_ducking }}"
           continue_on_error: true
 
         - alias: "Whisper — update self-awareness"

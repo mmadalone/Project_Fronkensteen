@@ -42,7 +42,7 @@ The central persistence layer for the entire Voice Context Architecture. Manages
 |---------|----------|-----------|
 | `@time_trigger("startup")` | `memory_health_check` | Runs health check, initializes sqlite-vec, reports to status sensor |
 | `@time_trigger("cron(0 3 * * *)")` | `memory_daily_housekeeping` | Daily at 03:00: purge expired entries (10-day grace), prune orphan relationships |
-| `@time_trigger("startup")`, `@time_trigger("cron(*/15 * * * *)")` | `memory_context_refresh` | Refreshes `sensor.ai_memory_context` with recent summaries, moods, and topics from L2 |
+| `@time_trigger("startup")`, `@time_trigger("cron(*/15 * * * *)")` | `memory_context_refresh` | Refreshes `sensor.ai_memory_context` with recent summaries and moods from L2. User-configurable: `ai_memory_context_enabled` (toggle), `ai_memory_context_summary_limit` (default 2), `ai_memory_context_mood_limit` (default 1), `ai_memory_context_max_chars` (default 80, 0=off). System-activity summaries auto-filtered via skip phrases. |
 | `@time_trigger("cron(*/5 * * * *)")` | `_memory_recovery_probe` | Every 5 min: checks if DB is recoverable after a write failure, clears circuit breaker on success |
 | `@time_trigger("startup")`, `@time_trigger("cron(5 0 * * *)")` | `budget_history_auto_refresh` | On startup and daily at 00:05: refreshes rolling budget usage sensor |
 | `@state_trigger("input_number.ai_budget_rolling_months")` | `budget_history_window_change` | Re-queries rolling budget when the window size helper changes |
@@ -74,6 +74,10 @@ The central persistence layer for the entire Voice Context Architecture. Manages
 - `input_boolean.ai_embedding_reindex_needed` — When ON, `memory_embed_batch` drops and recreates `mem_vec`
 - `input_text.ai_memory_search_query` — Dashboard search input
 - `input_text.ai_memory_edit_key` / `_value` / `_tags` / `_scope` — Dashboard editor fields
+- `input_boolean.ai_memory_context_enabled` — Master toggle for L1 context injection (default: on)
+- `input_number.ai_memory_context_summary_limit` — Max summaries in L1 context (default: 2)
+- `input_number.ai_memory_context_mood_limit` — Max moods in L1 context (default: 1)
+- `input_number.ai_memory_context_max_chars` — Per-entry truncation limit (default: 80, 0=no truncation)
 
 ## Package Pairing
 

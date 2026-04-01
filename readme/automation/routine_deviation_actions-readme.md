@@ -87,6 +87,7 @@ Fires when `routine_fingerprint.py` detects that the user's zone sequence has de
 | **Deviation actions** | `[]` | User-defined actions to run on routine deviation |
 | **TTS speaker** | (optional) | Media player for optional TTS check-in message |
 | **TTS message** | (empty) | Static TTS message; supports `{{ expected }}` and `{{ actual }}` variables. Empty = skip TTS |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 ## Technical Notes
 

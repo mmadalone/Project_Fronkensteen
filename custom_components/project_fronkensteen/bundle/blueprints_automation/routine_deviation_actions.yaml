@@ -113,6 +113,15 @@ blueprint:
             text:
               multiline: true
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
 mode: single
 max_exceeded: silent
 
@@ -123,7 +132,7 @@ variables:
   v_fp_filter: !input fingerprint_filter
   v_tts_speaker: !input tts_speaker
   v_tts_message: !input tts_message
-
+  v_bypass_ducking: !input bypass_ducking
 triggers:
   - trigger: event
     event_type: ai_routine_deviation
@@ -201,6 +210,7 @@ actions:
           target_mode: explicit
           target: "{{ v_tts_speaker }}"
           announce: true
+          duck: "{{ not v_bypass_ducking }}"
           priority: 3
 
   # ── Custom actions ──

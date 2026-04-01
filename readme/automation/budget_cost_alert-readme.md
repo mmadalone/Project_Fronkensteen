@@ -88,6 +88,7 @@ Notify and optionally auto-downgrade when daily cost exceeds configurable thresh
 | `notify_target` | _(empty)_ | Service target for mobile/push notifications (e.g., `notify.mobile_app_phone`). Empty = skip push |
 | `tts_announce` | `true` | Announce cost alerts via TTS |
 | `tts_fallback_voice` | `tts.home_assistant_cloud` | TTS engine for cost alert announcements |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 

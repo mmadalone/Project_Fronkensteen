@@ -92,7 +92,7 @@ _STARTUP_SENSORS = [
     ("sensor.ai_escalation_last_outcome", "", "mdi:shield-alert", "AI Escalation Last Outcome"),
     ("sensor.ai_recovery_pending_category", "", "mdi:wrench-clock", "AI Recovery Pending Category"),
     ("sensor.ai_budget_saved_pipelines", "{}", "mdi:content-save", "AI Budget Saved Pipelines"),
-    ("sensor.ai_interview_progress", "{}", "mdi:clipboard-check-outline", "AI Interview Progress"),
+    ("sensor.ai_interview_progress", "0/9 complete", "mdi:clipboard-check-outline", "AI Interview Progress"),
     # Session 5 — stale flags + session mutexes (booleans)
     ("sensor.ai_calendar_stale", "off", "mdi:calendar-alert", "AI Calendar Data Stale"),
     ("sensor.ai_email_stale", "off", "mdi:email-alert", "AI Email Data Stale"),
@@ -137,6 +137,8 @@ _STARTUP_SENSORS = [
     ("sensor.ai_voice_mood_kramer_tags", "", "mdi:tag-text", "AI Voice Mood Kramer Tags"),
     ("sensor.ai_voice_mood_deadpool_tags", "", "mdi:tag-text", "AI Voice Mood Deadpool Tags"),
     ("sensor.ai_voice_mood_doctor_portuondo_tags", "", "mdi:tag-text", "AI Voice Mood Doctor Portuondo Tags"),
+    # Watch history tracker
+    ("sensor.ai_watch_history_status", "idle", "mdi:television-classic", "AI Watch History"),
 ]
 
 

@@ -16,7 +16,7 @@ Provides helper entities for the project awareness system, allowing voice agents
 | `input_boolean.ai_project_tracking_enabled` | Input Boolean | Kill switch |
 | `input_boolean.ai_project_data_stale` | Input Boolean | Flag indicating project data needs refresh |
 | `input_text.ai_project_last_sync` | Input Text | Timestamp of last project sync |
-| `input_text.ai_project_hot_context_line` | Input Text | Top priorities summary for hot context (max 255 chars) |
+| `sensor.ai_project_hot_context_line` | Pyscript sensor | Top priorities for hot context. `full_text` attribute has untruncated content (set by pyscript via `state.set()`) |
 | `input_number.ai_project_hot_context_limit` | Input Number | Max number of projects shown in hot context |
 | `sensor.ai_project_promotion_status` | Pyscript sensor | Last sync result (ok/error/idle); attrs include project counts by status (set by pyscript via `state.set()`) |
 
@@ -30,7 +30,7 @@ Provides helper entities for the project awareness system, allowing voice agents
 
 ## Cross-References
 
-- **ai_context_hot.yaml** — projects block injected after Schedule section using `ai_project_hot_context_line`
+- **ai_context_hot.yaml** — projects block injected after Schedule section using `ai_project_hot_context_line` `full_text` attribute
 - **pyscript/proactive_briefing.py** — `_section_projects()` includes active projects in briefing content
 - **proactive_briefing.yaml** blueprint — `projects` available as a briefing section
 

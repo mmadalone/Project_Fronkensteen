@@ -252,6 +252,15 @@ blueprint:
             text:
               multiline: true
 
+        bypass_ducking:
+          name: Bypass volume ducking
+          description: >
+            When enabled, TTS plays without lowering the volume on other
+            speakers first.
+          default: false
+          selector:
+            boolean: {}
+
 mode: restart
 max_exceeded: silent
 
@@ -272,6 +281,7 @@ variables:
   v_tts_speaker: !input tts_speaker
   v_dep_message: !input departure_message
   v_arr_message: !input arrival_message
+  bypass_ducking: !input bypass_ducking
   person_display_name: !input person_display_name
   v_person: >-
     {% if person_display_name | default('', true) not in ['', 'unknown', 'unavailable'] %}
@@ -360,6 +370,8 @@ actions:
                   target: "{{ v_tts_speaker }}"
                   announce: true
                   priority: 3
+                  duck: "{{ not bypass_ducking }}"
+
 
           # ── Departure actions ──
           - alias: "Departure actions"
@@ -415,6 +427,8 @@ actions:
                   target: "{{ v_tts_speaker }}"
                   announce: true
                   priority: 3
+                  duck: "{{ not bypass_ducking }}"
+
 
           # ── Arrival actions ──
           - alias: "Arrival actions"

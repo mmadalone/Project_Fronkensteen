@@ -109,6 +109,7 @@ Default alert prompt:
 |-------|---------|-------------|
 | `tts_announce` | `false` | Use announce mode for TTS (ducks current audio, plays, resumes) |
 | `tts_output_volume` | `0.0` | Fixed volume (0.0--1.0) before announcement. 0 = disable volume control |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
 
 </details>
 
