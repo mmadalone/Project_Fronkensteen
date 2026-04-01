@@ -1082,10 +1082,10 @@ def _get_update_interval() -> int:
         return 15
 
 
-def _update_helper(entity_id: str, value: str) -> None:
+async def _update_helper(entity_id: str, value: str) -> None:
     """Update an input_text helper, truncating to 255 chars."""
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_text", "set_value",
             entity_id=entity_id, value=str(value)[:255],
         )
@@ -1748,7 +1748,7 @@ async def away_rebuild_patterns():
         for person in get_person_slugs():
             counter_entity = f"counter.ai_away_trip_count_{person}"
             try:
-                service.call("counter", "reset", entity_id=counter_entity)  # noqa: F821
+                await service.call("counter", "reset", entity_id=counter_entity)  # noqa: F821
             except Exception:
                 pass
 
@@ -1855,7 +1855,7 @@ async def _on_tracker_change(**kwargs):
             # Set departure timestamp helper
             dep_entity = f"input_datetime.ai_away_departed_{person}"
             try:
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "input_datetime", "set_datetime",
                     entity_id=dep_entity,
                     datetime=now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1938,7 +1938,7 @@ async def _on_tracker_change(**kwargs):
 
                 # I-40b: increment trip counter (atomic, persistent)
                 try:
-                    service.call(  # noqa: F821
+                    await service.call(  # noqa: F821
                         "counter", "increment",
                         entity_id=counter_entity,
                     )
@@ -1973,7 +1973,7 @@ async def _on_tracker_change(**kwargs):
             dep_entity = f"input_datetime.ai_away_departed_{person}"
             try:
                 # Set to a sentinel "cleared" value (epoch)
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "input_datetime", "set_datetime",
                     entity_id=dep_entity,
                     datetime="1970-01-01 00:00:00",

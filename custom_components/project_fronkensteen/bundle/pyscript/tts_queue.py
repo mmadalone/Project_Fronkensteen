@@ -955,7 +955,7 @@ async def _play_tts(
                 f"tts_queue: _play_tts calling tts.speak on {s} "
                 f"voice={voice} voice_id={voice_id} text_len={len(text or '')}"
             )
-            service.call("tts", "speak", **kwargs)  # noqa: F821
+            await service.call("tts", "speak", **kwargs)  # noqa: F821
             log.info(f"tts_queue: _play_tts tts.speak dispatched for {s}")  # noqa: F821
         except Exception as e:
             # ── T24-1a: ElevenLabs outage fallback → HA Cloud ──
@@ -968,10 +968,10 @@ async def _play_tts(
                 try:
                     # Strip stage directions for HA Cloud (can't process them)
                     fallback_text = re.sub(r'\[.*?\]', '', text).strip() or text
-                    service.call("tts", "speak",  # noqa: F821
-                                 entity_id=fallback_voice,
-                                 media_player_entity_id=s,
-                                 message=fallback_text)
+                    await service.call("tts", "speak",  # noqa: F821
+                                       entity_id=fallback_voice,
+                                       media_player_entity_id=s,
+                                       message=fallback_text)
                 except Exception as e2:
                     log.error(f"tts_queue: HA Cloud fallback also failed for {s}: {e2}")  # noqa: F821
             else:
@@ -988,8 +988,8 @@ async def _play_media(
     if volume_level is not None and volume_level > 0:
         for s in targets:
             try:
-                service.call("media_player", "volume_set",  # noqa: F821
-                             entity_id=s, volume_level=volume_level)
+                await service.call("media_player", "volume_set",  # noqa: F821
+                                   entity_id=s, volume_level=volume_level)
             except Exception:
                 pass
     for s in targets:
@@ -1001,7 +1001,7 @@ async def _play_media(
             }
             if announce:
                 kwargs["announce"] = True
-            service.call("media_player", "play_media", **kwargs)  # noqa: F821
+            await service.call("media_player", "play_media", **kwargs)  # noqa: F821
         except Exception as e:
             log.error(f"tts_queue: play_media failed for {s}: {e}")  # noqa: F821
 
@@ -1009,7 +1009,7 @@ async def _stop_playback(speaker: str | list[str]) -> None:
     targets = speaker if isinstance(speaker, list) else [speaker]
     for s in targets:
         try:
-            service.call("media_player", "media_stop", entity_id=s)  # noqa: F821
+            await service.call("media_player", "media_stop", entity_id=s)  # noqa: F821
         except Exception as exc:
             log.warning("tts_queue: media_stop failed for %s: %s", s, exc)  # noqa: F821
 
@@ -1216,8 +1216,8 @@ async def _process_queue() -> None:
             try:
                 spk_state = state.get(spk)  # noqa: F821
                 if spk_state in ("paused", "idle"):
-                    service.call("media_player", "media_play",  # noqa: F821
-                                 entity_id=spk)
+                    await service.call("media_player", "media_play",  # noqa: F821
+                                       entity_id=spk)
                     log.info(  # noqa: F821
                         f"tts_queue: resumed {spk} after queue drain "
                         f"(was playing before TTS)"
@@ -1321,7 +1321,7 @@ async def _play_item(item: dict) -> None:
     # I-33 Phase 2: Per-agent TTS tracking
     try:
         tts_agent = _voice_to_agent(voice, voice_id=voice_id, agent=item.get("agent", ""))
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "pyscript", "budget_track_call",
             service_type="tts",
             agent=tts_agent,
@@ -1444,8 +1444,8 @@ async def _play_item(item: dict) -> None:
                 # No duck session (announce-native) → wait for TTS to finish
                 await asyncio.sleep(restore_delay_sec)
             try:
-                service.call("media_player", "volume_set",  # noqa: F821
-                             entity_id=speaker_single, volume_level=original_volume)
+                await service.call("media_player", "volume_set",  # noqa: F821
+                                   entity_id=speaker_single, volume_level=original_volume)
             except Exception as exc:
                 log.warning(f"tts_queue: volume restore failed for {speaker_single}: {exc}")  # noqa: F821
             # Duck guard snapshot sync
@@ -1998,7 +1998,7 @@ async def _budget_restore_from_l2() -> bool:
                 breakdown = counters.pop("_breakdown", None)
                 if breakdown:
                     try:
-                        service.call(  # noqa: F821
+                        await service.call(  # noqa: F821
                             "pyscript", "budget_breakdown_restore",
                             data=breakdown,
                         )
@@ -2010,8 +2010,8 @@ async def _budget_restore_from_l2() -> bool:
                 if snapshots:
                     for eid, val in snapshots.items():
                         try:
-                            service.call("pyscript", "set_sensor_value",  # noqa: F821
-                                         entity_id=eid, value=str(val))
+                            await service.call("pyscript", "set_sensor_value",  # noqa: F821
+                                               entity_id=eid, value=str(val))
                         except Exception:
                             pass
 
@@ -2019,8 +2019,8 @@ async def _budget_restore_from_l2() -> bool:
                 # not input_number — these are state.set() sensors post-Phase 3)
                 for entity_id, val in counters.items():
                     try:
-                        service.call("pyscript", "set_sensor_value",  # noqa: F821
-                                     entity_id=entity_id, value=str(val))
+                        await service.call("pyscript", "set_sensor_value",  # noqa: F821
+                                           entity_id=entity_id, value=str(val))
                     except Exception:
                         pass
                 log.info(  # noqa: F821

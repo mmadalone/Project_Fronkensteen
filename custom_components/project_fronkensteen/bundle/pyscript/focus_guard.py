@@ -1039,7 +1039,7 @@ async def _evaluate_all(test_mode: bool = False) -> dict:
                 if ask_eaten:
                     try:
                         await asyncio.sleep(2)
-                        service.call(  # noqa: F821
+                        await service.call(  # noqa: F821
                             "assist_satellite", "start_conversation",
                             entity_id=_get_presence_satellite(),
                             preannounce=False,
@@ -1154,7 +1154,7 @@ async def focus_guard_mark_meal(meal_time=None):
     now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_last_meal_time",
             datetime=now_str,
@@ -1205,7 +1205,7 @@ async def focus_guard_snooze(minutes=30):
     snooze_str = snooze_until.strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_focus_guard_snooze_until",
             datetime=snooze_str,

@@ -505,6 +505,32 @@ def _format_short_entry(session: dict, duration_s: int) -> str:
 
 # ── Sensor Update ────────────────────────────────────────────────────────────
 
+def _build_display_state(state_val: str, session: dict | None) -> str:
+    """Build a descriptive state value for logbook display."""
+    if state_val != "watching" or not session:
+        return state_val
+    cat = session.get("media_category", "")
+    title = session.get("media_title", "")
+    series = session.get("series_title", "")
+    channel = session.get("pvr_channel", "")
+    season = session.get("season")
+    episode = session.get("episode")
+    # Build episode string (e.g., "S03E10")
+    ep_str = ""
+    if season and episode:
+        ep_str = f" S{str(season).zfill(2)}E{str(episode).zfill(2)}"
+    elif episode:
+        ep_str = f" E{str(episode).zfill(2)}"
+    if cat == "live_tv" and channel:
+        programme = series or title
+        return f"watching {channel} — {programme}{ep_str}" if programme else f"watching {channel}"
+    if series:
+        return f"watching {series}{ep_str}"
+    if title:
+        return f"watching {title}"
+    return "watching"
+
+
 def _update_sensor(state_val: str, **extra_attrs: Any) -> None:
     """Update sensor.ai_watch_history_status."""
     _ensure_result_entity_name()
@@ -544,8 +570,9 @@ def _update_sensor(state_val: str, **extra_attrs: Any) -> None:
                 for f in _daily_flip_details
             ][:15]
 
+    display_state = _build_display_state(state_val, extra_attrs.get("session"))
     try:
-        state.set(RESULT_ENTITY, value=state_val, new_attributes=attrs)  # noqa: F821
+        state.set(RESULT_ENTITY, value=display_state, new_attributes=attrs)  # noqa: F821
     except Exception as exc:
         log.warning("watch_history: sensor update failed: %s", exc)  # noqa: F821
 

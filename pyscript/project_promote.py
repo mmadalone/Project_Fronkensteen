@@ -344,10 +344,10 @@ async def _generate_llm_summary(slug: str, body: str) -> str:
 
 # ── HA Helper Updates ────────────────────────────────────────────────────────
 
-def _update_helper(entity_id: str, value: str) -> None:
+async def _update_helper(entity_id: str, value: str) -> None:
     """Update an input_text helper, truncating to 255 chars."""
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_text", "set_value",
             entity_id=entity_id, value=str(value)[:255],
         )
@@ -459,7 +459,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
         )
         if _consecutive_failures >= _FAILURE_NOTIFY_THRESHOLD:
             try:
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "persistent_notification", "create",
                     title="Project Tracking: Repeated Failures",
                     message=(
@@ -481,7 +481,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
     if _consecutive_failures > 0:
         _consecutive_failures = 0
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "persistent_notification", "dismiss",
                 notification_id="ai_project_scan_failure",
             )

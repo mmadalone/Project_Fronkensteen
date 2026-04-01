@@ -541,7 +541,7 @@ async def theatrical_mode_start(
                 # C3 fallback: call dispatcher_resolve_engine per participant
                 log.info("theatrical: cache miss for %s, trying dispatcher", n)
                 try:
-                    r = service.call(
+                    r = await service.call(
                         "pyscript", "dispatcher_resolve_engine",
                         pipeline_name=n, return_response=True,
                     )
@@ -615,7 +615,7 @@ async def theatrical_mode_start(
                 if isinstance(sp_attrs, dict):
                     saved_volumes[spk] = sp_attrs.get("volume_level", 0.5)
                 try:
-                    service.call(
+                    await service.call(
                         "media_player", "volume_set",
                         entity_id=spk, volume_level=vol,
                     )
@@ -744,7 +744,7 @@ async def theatrical_mode_start(
 
             # ── LLM call — C2 (timeout via conversation_with_timeout) ──
             try:
-                result = service.call(
+                result = await service.call(
                     "pyscript", "conversation_with_timeout",
                     agent_id=cur["engine"],
                     text=full_prompt,
@@ -823,7 +823,7 @@ async def theatrical_mode_start(
             # ── TTS delivery — H4 (capture response) ──────────────────
             if use_tts_queue and cur.get("speaker"):
                 try:
-                    tts_result = service.call(  # noqa: F841
+                    tts_result = await service.call(  # noqa: F841
                         "pyscript", "tts_queue_speak",
                         text=tts_text,
                         voice=cur["tts"],
@@ -841,7 +841,7 @@ async def theatrical_mode_start(
             elif cur.get("speaker"):
                 # Native fallback — direct tts.speak
                 try:
-                    service.call(
+                    await service.call(
                         "tts", "speak",
                         entity_id=cur["tts"],
                         media_player_entity_id=cur["speaker"],
@@ -912,7 +912,7 @@ async def theatrical_mode_start(
                     )
                     if _mic_uri:
                         _ask_kwargs["question_media_id"] = _mic_uri
-                    answer = service.call(
+                    answer = await service.call(
                         "assist_satellite", "ask_question",
                         **_ask_kwargs,
                     )
@@ -957,7 +957,7 @@ async def theatrical_mode_start(
         # M5: Update cooldown via service call (not state.set)
         try:
             now_str = time.strftime("%Y-%m-%d %H:%M:%S")
-            service.call(
+            await service.call(
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_theatrical_last_exchange",
                 datetime=now_str,
@@ -982,7 +982,7 @@ async def theatrical_mode_start(
                 + "; ".join(ctx_buf[-3:])
             )
             try:
-                service.call(
+                await service.call(
                     "pyscript", "memory_set",
                     key=f"theatrical_{int(started_at)}",
                     value=summary[:500],
@@ -1026,7 +1026,7 @@ async def theatrical_mode_start(
             await asyncio.sleep(tts_volume_restore_delay)
             for spk, orig_vol in saved_volumes.items():
                 try:
-                    service.call(
+                    await service.call(
                         "media_player", "volume_set",
                         entity_id=spk, volume_level=orig_vol,
                     )

@@ -25,7 +25,7 @@ def _get_era():
     return "evening"
 
 
-def _get_era_display_name():
+async def _get_era_display_name():
     """Resolve era persona to pipeline display name. Returns (display_name, era) or (None, era)."""
     era = _get_era()
     era_helper = "input_select.ai_dispatcher_era_" + era
@@ -34,7 +34,7 @@ def _get_era_display_name():
         return None, era
 
     try:
-        disp_result = service.call(  # noqa: F821
+        disp_result = await service.call(  # noqa: F821
             "pyscript", "agent_dispatch",
             pipeline_name=era_persona.capitalize(),
             return_response=True,
@@ -46,9 +46,9 @@ def _get_era_display_name():
     return display_name or None, era
 
 
-def _set_pipeline(select_entity, display_name):
+async def _set_pipeline(select_entity, display_name):
     """Set the primary assistant slot on a satellite."""
-    service.call(  # noqa: F821
+    await service.call(  # noqa: F821
         "select", "select_option",
         entity_id=select_entity, option=display_name,
     )
@@ -86,7 +86,7 @@ async def _handle_idle(var_name=None, old_value=None, select_entity=""):
     except Exception:
         pass
 
-    display_name, era = _get_era_display_name()
+    display_name, era = await _get_era_display_name()
     if not display_name:
         return
 
@@ -94,7 +94,7 @@ async def _handle_idle(var_name=None, old_value=None, select_entity=""):
     if current == display_name:
         return
 
-    _set_pipeline(select_entity, display_name)
+    await _set_pipeline(select_entity, display_name)
     mac = (var_name or "").split(".")[-1]
     log.info(  # noqa: F821
         "satellite_idle_reset: %s idle -> pipeline reset to %s (%s)",
@@ -113,7 +113,7 @@ async def _satellite_idle_startup():
         return
 
     try:
-        result = service.call(  # noqa: F821
+        result = await service.call(  # noqa: F821
             "pyscript", "dispatcher_get_satellite_maps",
             return_response=True,
         )
@@ -133,14 +133,14 @@ async def _satellite_idle_startup():
         _idle_triggers.append(_idle_trigger_factory(sat_entity, sel))
 
     # Initial pipeline set — push era-correct persona to all satellites now
-    display_name, era = _get_era_display_name()
+    display_name, era = await _get_era_display_name()
     set_count = 0
     if display_name:
         for sat_entity in sat_map:
             sel = sat_map[sat_entity]
             current = state.get(sel)  # noqa: F821
             if current != display_name:
-                _set_pipeline(sel, display_name)
+                await _set_pipeline(sel, display_name)
                 set_count = set_count + 1
 
     log.info(  # noqa: F821

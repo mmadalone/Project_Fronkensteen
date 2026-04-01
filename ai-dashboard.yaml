@@ -726,6 +726,17 @@ views:
       - entity: input_number.ai_watch_history_retention_days
         name: Retention
     - type: entities
+      title: Listen History
+      entities:
+      - entity: input_boolean.ai_listen_history_enabled
+        name: Listen History
+      - entity: sensor.ai_listen_history_status
+        name: Status
+      - entity: input_number.ai_listen_min_duration
+        name: Min Duration
+      - entity: input_number.ai_listen_history_retention_days
+        name: Retention
+    - type: entities
       title: Music Composer
       entities:
       - entity: input_boolean.ai_music_composer_enabled

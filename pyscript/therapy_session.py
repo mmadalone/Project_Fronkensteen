@@ -265,7 +265,7 @@ async def therapy_session_start(
 
     # ── Set helpers ──
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_therapy_session_start",
             datetime=now_iso[:19],
@@ -390,7 +390,7 @@ async def therapy_session_end(
 
     # ── Set last session datetime ──
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_therapy_last_session",
             datetime=now_iso[:19],

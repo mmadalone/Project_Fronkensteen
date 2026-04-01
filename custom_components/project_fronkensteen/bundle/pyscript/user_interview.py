@@ -323,10 +323,10 @@ async def _l2_set(
 
 # ── L1 Save Helpers ──────────────────────────────────────────────────────────
 
-def _save_to_l1_text(entity_id: str, value: str) -> bool:
+async def _save_to_l1_text(entity_id: str, value: str) -> bool:
     """Save to an input_text helper."""
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_text", "set_value",
             entity_id=entity_id, value=str(value)[:255],
         )
@@ -336,10 +336,10 @@ def _save_to_l1_text(entity_id: str, value: str) -> bool:
         return False
 
 
-def _save_to_l1_select(entity_id: str, value: str) -> bool:
+async def _save_to_l1_select(entity_id: str, value: str) -> bool:
     """Save to an input_select helper."""
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_select", "select_option",
             entity_id=entity_id, option=value,
         )
@@ -349,14 +349,14 @@ def _save_to_l1_select(entity_id: str, value: str) -> bool:
         return False
 
 
-def _save_to_l1_datetime(entity_id: str, value: str) -> bool:
+async def _save_to_l1_datetime(entity_id: str, value: str) -> bool:
     """Save to an input_datetime helper. Expects HH:MM or HH:MM:SS."""
     try:
         # Normalize to HH:MM:SS
         parts = value.strip().split(":")
         if len(parts) == 2:
             value = f"{parts[0]}:{parts[1]}:00"
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id=entity_id, time=value,
         )
@@ -387,7 +387,7 @@ async def _save_preference(
     if lookup in _L1_MAP:
         entity_tpl = _L1_MAP[lookup]
         entity_id = entity_tpl.replace("{user}", user_lower)
-        ok = _save_to_l1_text(entity_id, value)
+        ok = await _save_to_l1_text(entity_id, value)
         if ok:
             _mark_done(user_lower, cat_lower, key_lower)
         return {
@@ -401,7 +401,7 @@ async def _save_preference(
     if lookup in _L1_SELECT_MAP:
         entity_tpl = _L1_SELECT_MAP[lookup]
         entity_id = entity_tpl.replace("{user}", user_lower)
-        ok = _save_to_l1_select(entity_id, value)
+        ok = await _save_to_l1_select(entity_id, value)
         if ok:
             _mark_done(user_lower, cat_lower, key_lower)
         return {
@@ -415,7 +415,7 @@ async def _save_preference(
     if lookup in _L1_DATETIME_MAP:
         entity_tpl = _L1_DATETIME_MAP[lookup]
         entity_id = entity_tpl.replace("{user}", user_lower)
-        ok = _save_to_l1_datetime(entity_id, value)
+        ok = await _save_to_l1_datetime(entity_id, value)
         if ok:
             _mark_done(user_lower, cat_lower, key_lower)
         return {
@@ -429,7 +429,7 @@ async def _save_preference(
     auto_entity = f"input_text.ai_context_user_{key_lower}_{user_lower}"
     existing = state.get(auto_entity)  # noqa: F821
     if existing is not None:  # Entity exists (even if "unknown")
-        ok = _save_to_l1_text(auto_entity, value)
+        ok = await _save_to_l1_text(auto_entity, value)
         if ok:
             _mark_done(user_lower, cat_lower, key_lower)
         return {
@@ -968,15 +968,15 @@ async def user_interview_import(file: str = ""):
                 if lookup in all_l1:
                     entity_id = all_l1[lookup].replace("{user}", user_lower)
                     if entity_id.startswith("input_select."):
-                        ok = _save_to_l1_select(entity_id, val_str)
+                        ok = await _save_to_l1_select(entity_id, val_str)
                     elif entity_id.startswith("input_datetime."):
-                        ok = _save_to_l1_datetime(entity_id, val_str)
+                        ok = await _save_to_l1_datetime(entity_id, val_str)
                     else:
-                        ok = _save_to_l1_text(entity_id, val_str)
+                        ok = await _save_to_l1_text(entity_id, val_str)
                 else:
                     auto_entity = f"input_text.ai_context_user_{key_lower}_{user_lower}"
                     if auto_entity in all_input_texts:
-                        ok = _save_to_l1_text(auto_entity, val_str)
+                        ok = await _save_to_l1_text(auto_entity, val_str)
                     else:
                         l2_key = f"preference:{cat_lower}:{key_lower}:{user_lower}"
                         l2_tags = f"preference {cat_lower} {user_lower}"

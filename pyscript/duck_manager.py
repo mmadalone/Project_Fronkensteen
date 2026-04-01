@@ -334,7 +334,7 @@ async def _clear_snapshot():
 
 # ── Core Duck / Restore ───────────────────────────────────────────────────────
 
-def _capture_and_duck(skip_duck_entity: str = "") -> None:
+async def _capture_and_duck(skip_duck_entity: str = "") -> None:
     """Capture volumes and duck all players. Called on first session only.
 
     I-39: Also pauses playing media if duck_behavior is 'pause' or 'both'.
@@ -446,8 +446,8 @@ def _capture_and_duck(skip_duck_entity: str = "") -> None:
                 continue
             if _is_playing(entity_id):
                 try:
-                    service.call("media_player", "media_pause",  # noqa: F821
-                                 entity_id=entity_id)
+                    await service.call("media_player", "media_pause",  # noqa: F821
+                                       entity_id=entity_id)
                     _was_playing[entity_id] = True
                     paused_count += 1
                 except Exception as exc:
@@ -472,8 +472,8 @@ def _capture_and_duck(skip_duck_entity: str = "") -> None:
                 log.warning(f"duck_manager: skipping duck for {entity_id} — no volume captured")  # noqa: F821
                 continue
             try:
-                service.call("media_player", "volume_set",  # noqa: F821
-                             entity_id=entity_id, volume_level=duck_vol)
+                await service.call("media_player", "volume_set",  # noqa: F821
+                                   entity_id=entity_id, volume_level=duck_vol)
                 ducked_count += 1
             except Exception as exc:
                 log.warning(f"duck_manager: duck {entity_id} failed: {exc}")  # noqa: F821
@@ -485,8 +485,8 @@ def _capture_and_duck(skip_duck_entity: str = "") -> None:
             log.warning(f"duck_manager: skipping announce boost for {entity_id} — no volume captured")  # noqa: F821
             continue
         try:
-            service.call("media_player", "volume_set",  # noqa: F821
-                         entity_id=entity_id, volume_level=announce_vol)
+            await service.call("media_player", "volume_set",  # noqa: F821
+                               entity_id=entity_id, volume_level=announce_vol)
             boosted_count += 1
         except Exception as exc:
             log.warning(f"duck_manager: announce boost {entity_id} failed: {exc}")  # noqa: F821
@@ -589,8 +589,8 @@ async def _restore_and_verify() -> None:
     if not saved_snapshot and not paused_players:
         log.warning("duck_manager: nothing to restore (empty snapshot)")  # noqa: F821
         try:
-            service.call("input_boolean", "turn_off",  # noqa: F821
-                         entity_id="sensor.ai_ducking_flag")
+            await service.call("input_boolean", "turn_off",  # noqa: F821
+                               entity_id="sensor.ai_ducking_flag")
         except Exception:
             pass
         return
@@ -602,8 +602,8 @@ async def _restore_and_verify() -> None:
             skipped_user.append(entity_id)
             continue
         try:
-            service.call("media_player", "volume_set",  # noqa: F821
-                         entity_id=entity_id, volume_level=vol)
+            await service.call("media_player", "volume_set",  # noqa: F821
+                               entity_id=entity_id, volume_level=vol)
         except Exception as exc:
             log.warning(f"duck_manager: restore {entity_id} failed: {exc}")  # noqa: F821
 
@@ -611,8 +611,8 @@ async def _restore_and_verify() -> None:
     resumed_count = 0
     for entity_id in paused_players:
         try:
-            service.call("media_player", "media_play",  # noqa: F821
-                         entity_id=entity_id)
+            await service.call("media_player", "media_play",  # noqa: F821
+                               entity_id=entity_id)
             resumed_count += 1
         except Exception as exc:
             log.warning(f"duck_manager: resume {entity_id} failed: {exc}")  # noqa: F821
@@ -631,8 +631,8 @@ async def _restore_and_verify() -> None:
             continue
         if abs(current - target_vol) > 0.05:
             try:
-                service.call("media_player", "volume_set",  # noqa: F821
-                             entity_id=entity_id, volume_level=target_vol)
+                await service.call("media_player", "volume_set",  # noqa: F821
+                                   entity_id=entity_id, volume_level=target_vol)
                 retried.append(entity_id)
             except Exception as exc:
                 log.warning(f"duck_manager: retry restore {entity_id} failed: {exc}")  # noqa: F821
@@ -687,7 +687,7 @@ async def _add_session(source: str, detail: str = "") -> str:
             await asyncio.sleep(pre_delay_ms / 1000)
         # Skip ducking the TTS target speaker — it uses native announce ducking
         skip = detail if source == "tts_queue" else ""
-        _capture_and_duck(skip_duck_entity=skip)
+        await _capture_and_duck(skip_duck_entity=skip)
 
     await _update_status()
     return session_id
@@ -1146,7 +1146,7 @@ async def _duck_watchdog():
         detail_str = ", ".join(
             f"{s[1]}:{s[2]} ({s[3]:.0f}s)" for s in stale
         )
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "persistent_notification", "create",
             title="Duck Manager Watchdog",
             message=f"Force-restored {len(stale)} stale session(s): {detail_str}",

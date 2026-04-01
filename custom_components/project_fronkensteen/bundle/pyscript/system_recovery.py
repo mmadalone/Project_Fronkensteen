@@ -155,7 +155,7 @@ async def _do_pyscript_reload(category: str) -> bool:
 
     log.info("system_recovery: executing pyscript.reload for category '%s'", category)  # noqa: F821
     try:
-        service.call("pyscript", "reload")  # noqa: F821
+        await service.call("pyscript", "reload")  # noqa: F821
         return True
     except Exception as exc:
         log.error("system_recovery: pyscript.reload failed: %s", exc)  # noqa: F821
@@ -177,7 +177,7 @@ async def _do_reload_config_entries(details: dict) -> bool:
     for ce_id in entry_ids:
         try:
             log.info("system_recovery: reloading config entry %s", ce_id)  # noqa: F821
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "homeassistant", "reload_config_entry",
                 entry_id=ce_id,
             )

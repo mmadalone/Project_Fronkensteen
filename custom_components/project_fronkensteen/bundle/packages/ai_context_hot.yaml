@@ -253,7 +253,7 @@ template:
 
             {# ── WATCH HISTORY (Now watching / recently watched) ── #}
             {%- if is_state('input_boolean.ai_watch_history_enabled', 'on') -%}
-              {%- if is_state('sensor.ai_watch_history_status', 'watching') -%}
+              {%- if states('sensor.ai_watch_history_status') not in ['idle', 'paused', 'unknown', 'unavailable'] -%}
                 {%- set wtitle = state_attr('sensor.ai_watch_history_status', 'current_title') | default('', true) -%}
                 {%- set wchan = state_attr('sensor.ai_watch_history_status', 'current_channel') | default('', true) -%}
                 {%- set wshow = state_attr('sensor.ai_watch_history_status', 'current_show') | default('', true) -%}
@@ -271,6 +271,24 @@ template:
                 {%- set last = state_attr('sensor.ai_watch_history_status', 'last_watched') | default('', true) -%}
                 {%- if last not in ['', 'none', 'unknown', 'unavailable'] -%}
                   {%- set ns.lines = ns.lines + ['Recently watched: ' ~ last] -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+
+            {# ── LISTEN HISTORY (Now listening / recently listened) ── #}
+            {%- if is_state('input_boolean.ai_listen_history_enabled', 'on') -%}
+              {%- if states('sensor.ai_listen_history_status') not in ['idle', 'paused', 'unknown', 'unavailable'] -%}
+                {%- set la = state_attr('sensor.ai_listen_history_status', 'current_artist') | default('', true) -%}
+                {%- set lt = state_attr('sensor.ai_listen_history_status', 'current_title') | default('', true) -%}
+                {%- if la and lt -%}
+                  {%- set ns.lines = ns.lines + ['Now listening to: ' ~ la ~ ' — ' ~ lt] -%}
+                {%- elif lt -%}
+                  {%- set ns.lines = ns.lines + ['Now listening to: ' ~ lt] -%}
+                {%- endif -%}
+              {%- else -%}
+                {%- set ll = state_attr('sensor.ai_listen_history_status', 'last_listened') | default('', true) -%}
+                {%- if ll not in ['', 'none', 'unknown', 'unavailable'] -%}
+                  {%- set ns.lines = ns.lines + ['Recently listened to: ' ~ ll] -%}
                 {%- endif -%}
               {%- endif -%}
             {%- endif -%}

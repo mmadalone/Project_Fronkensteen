@@ -384,3 +384,27 @@ ai_watch_history_retention_days:
   mode: box
   unit_of_measurement: "days"
   icon: mdi:calendar-clock
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_listen_history — Music Listen History Tracker
+# ═══════════════════════════════════════════════════════════════════
+
+ai_listen_min_duration:
+  name: "AI Listen History — Min Duration"
+  min: 15
+  max: 600
+  step: 15
+  initial: 60
+  mode: slider
+  unit_of_measurement: "s"
+  icon: mdi:timer-outline
+
+ai_listen_history_retention_days:
+  name: "AI Listen History — Retention"
+  min: 7
+  max: 365
+  step: 1
+  initial: 30
+  mode: box
+  unit_of_measurement: "days"
+  icon: mdi:calendar-clock

@@ -94,15 +94,18 @@ _TOOL_CALL_SYNTAX = re.compile(
 )
 # Maverick leaks tool arguments without function name prefix:
 # e.g. 'action="promote", library_id="foo")'
-# Matches sequences of key="value" pairs optionally ending with )
+# Also catches unquoted (player=media_player.foo) and single-quoted values
+_TOOL_ARG_VALUE = r'(?:"[^"]*"|\'[^\']*\'|[\w.:/_-]+)'
 _ORPHAN_TOOL_ARGS = re.compile(
-    r'\b[a-z_]+=\s*"[^"]*"(?:\s*,\s*[a-z_]+=\s*"[^"]*")*\s*\)?',
+    r'\b[a-z_]+=\s*' + _TOOL_ARG_VALUE
+    + r'(?:\s*,\s*[a-z_]+=\s*' + _TOOL_ARG_VALUE + r')*\s*\)?',
     re.IGNORECASE,
 )
 # Layer 4: Inline tool-param sequences embedded mid-sentence
 # Catches residual (key="value", key2="value2") after earlier layers strip function names
 _INLINE_TOOL_PARAMS = re.compile(
-    r'\s*\(?[a-z_]+=\s*"[^"]*"(?:\s*,\s*[a-z_]+=\s*"[^"]*")*\s*\)?\s*',
+    r'\s*\(?[a-z_]+=\s*' + _TOOL_ARG_VALUE
+    + r'(?:\s*,\s*[a-z_]+=\s*' + _TOOL_ARG_VALUE + r')*\s*\)?\s*',
     re.IGNORECASE,
 )
 

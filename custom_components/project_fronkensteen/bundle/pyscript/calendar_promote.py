@@ -490,10 +490,10 @@ async def _fetch_calendar_events(
 
 # ── HA Helper Updates ────────────────────────────────────────────────────────
 
-def _update_helper(entity_id: str, value: str) -> None:
+async def _update_helper(entity_id: str, value: str) -> None:
     """Update an input_text helper, truncating to 255 chars."""
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_text", "set_value",
             entity_id=entity_id, value=str(value)[:255],
         )
@@ -649,7 +649,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
         failure_threshold = _helper_int("input_number.ai_calendar_failure_threshold", 3)
         if _consecutive_failures >= failure_threshold:
             try:
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "persistent_notification", "create",
                     title="Calendar Integration: Repeated Failures",
                     message=(
@@ -672,7 +672,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
     if _consecutive_failures > 0:
         _consecutive_failures = 0
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "persistent_notification", "dismiss",
                 notification_id="ai_calendar_api_failure",
             )
@@ -771,10 +771,10 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
 
         # ── Per-person L1 helpers (Gap 1: identity-aware hot context) ──
         for slug in get_person_slugs():
-            _update_helper(
+            await _update_helper(
                 f"input_text.ai_calendar_today_summary_{slug}", today_helper,
             )
-            _update_helper(
+            await _update_helper(
                 f"input_text.ai_calendar_tomorrow_summary_{slug}", tomorrow_helper,
             )
 
@@ -817,7 +817,7 @@ async def _promote_internal(test_mode: bool, force: bool) -> dict:
                     eid = f"input_boolean.ai_context_work_day_{slug}"
                     try:
                         if state.get(eid) != target_val:  # noqa: F821
-                            service.call(  # noqa: F821
+                            await service.call(  # noqa: F821
                                 "input_boolean",
                                 "turn_on" if is_work else "turn_off",
                                 entity_id=eid,

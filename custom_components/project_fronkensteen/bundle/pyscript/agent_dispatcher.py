@@ -870,7 +870,7 @@ async def _update_self_awareness(persona: str, entity: str) -> None:
     try:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         set_last_interaction(agent_name=persona, agent_entity=entity)
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_datetime", "set_datetime",
             entity_id="input_datetime.ai_last_interaction_time",
             datetime=now_str,

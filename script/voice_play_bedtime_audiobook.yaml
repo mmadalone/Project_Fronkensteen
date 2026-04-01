@@ -174,7 +174,7 @@ mode: single
 sequence:
   - alias: "Resolve inputs and field overrides into local variables"
     variables:
-      _version: "1.8.0"
+      _version: "1.9.0"
       v_ducking_flag: !input ducking_flag
       _sync_speakers: !input volume_sync_speakers
       _default_volume: !input default_volume
@@ -255,3 +255,8 @@ sequence:
           entity_id: "{{ _player }}"
         data:
           seek_position: 0
+
+  - alias: "Settle delay — let HA propagate volume to linked entities before TTS ducks"
+    delay:
+      seconds: 1
+

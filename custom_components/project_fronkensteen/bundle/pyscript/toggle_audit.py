@@ -353,7 +353,7 @@ async def _on_toggle_change(**kwargs):
     # Write to HA logbook for Activity panel visibility
     short_name = entity_id.replace("input_boolean.", "")
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "logbook", "log",
             name="Toggle Audit",
             message=f"{short_name} → {new_state} (by {source}: {source_detail or 'n/a'})",

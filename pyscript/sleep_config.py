@@ -220,7 +220,7 @@ async def sleep_config_populate_pickers():
             if state.get(eid) not in ("unavailable",)  # noqa: F821
         ])
         options = ["(none)"] + light_ids if light_ids else ["(none)"]
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_select", "set_options",
             entity_id="input_select.ai_sleep_lights_light_picker",
             options=options,
@@ -230,7 +230,7 @@ async def sleep_config_populate_pickers():
 
     # Sleep lights sensor picker
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_select", "set_options",
             entity_id="input_select.ai_sleep_lights_sensor",
             options=_get_fp2_sensors(),
@@ -240,7 +240,7 @@ async def sleep_config_populate_pickers():
 
     # Sleep detection sensor picker
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "input_select", "set_options",
             entity_id="input_select.ai_sleep_detection_sensor",
             options=_get_fp2_sensors(),
@@ -275,7 +275,7 @@ async def _sleep_config_startup():
         try:
             det_val = state.get("input_select.ai_sleep_detection_sensor") or ""  # noqa: F821
             if det_val in ("unknown", "unavailable", ""):
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "input_select", "select_option",
                     entity_id="input_select.ai_sleep_detection_sensor",
                     option=bed_sensor,
@@ -286,7 +286,7 @@ async def _sleep_config_startup():
         try:
             lights_val = state.get("input_select.ai_sleep_lights_sensor") or ""  # noqa: F821
             if lights_val in ("unknown", "unavailable", ""):
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "input_select", "select_option",
                     entity_id="input_select.ai_sleep_lights_sensor",
                     option=bed_sensor,
@@ -302,7 +302,7 @@ async def _sleep_config_startup():
                 if state.get(eid) not in ("unavailable",)  # noqa: F821
             ])
             if light_ids:
-                service.call(  # noqa: F821
+                await service.call(  # noqa: F821
                     "input_select", "select_option",
                     entity_id="input_select.ai_sleep_lights_light_picker",
                     option=light_ids[0],

@@ -314,7 +314,7 @@ async def entropy_correlation_report(lookback_days=7):
     # Format and send persistent notification
     report_md = _format_report(result, "manual" if lookback_days != 7 else "weekly")
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "persistent_notification", "create",
             title="G13 Entropy Correlation Report",
             message=report_md,

@@ -2787,7 +2787,7 @@ async def memory_health_check():
         log.warning("memory.py: sqlite-vec not available (vec0.so missing or failed to load)")  # noqa: F821
         # ── T24-2c: Persistent notification on vec0 failure ──
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "persistent_notification", "create",
                 title="AI Memory: sqlite-vec unavailable",
                 message=(
@@ -3933,7 +3933,7 @@ async def memory_embed_batch(
     # Clear reindex flag after batch completes
     if reindex:
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "input_boolean", "turn_off",
                 entity_id="sensor.ai_embedding_reindex_needed",
             )

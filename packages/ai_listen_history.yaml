@@ -1,0 +1,33 @@
+# ======================================================================
+# AI Listen History — Music Playback Tracking
+# ======================================================================
+# Status: Active
+# Deployed: 2026-04-01
+# Thin package — documents helpers and sensor relationships.
+# All config knobs live in the blueprint.
+#
+# Pyscript sensor: sensor.ai_listen_history_status  (pyscript/listen_history.py)
+#   States: listening, paused, idle
+#   Key attributes (listening): current_artist, current_title, current_album,
+#     current_source, current_room, current_player, started_at, duration_so_far_min
+#   Key attributes (idle): last_listened, last_listened_at, today_count,
+#     today_total_minutes, today_entries
+#
+# Helpers: Consolidated into helpers_input_*.yaml
+#   - helpers_input_boolean.yaml: ai_listen_history_enabled
+#   - helpers_input_number.yaml: ai_listen_min_duration,
+#       ai_listen_history_retention_days
+#
+# L2 Memory keys:
+#   listen:{date}:{index}       — individual entries (30d expiry)
+#   listen:summary:{date}       — daily summary (2d expiry)
+#
+# Content types: track, radio, playlist, album, podcast, audiobook
+# Sources: music_assistant, spotify, radio
+#
+# Dependencies:
+#   - Blueprints: listen_history.yaml
+#   - Context: ai_context_hot.yaml (reads sensor for L1 injection)
+#   - Entity config: entity_config.yaml (music_players, spotifyplus_entity)
+#   - Other packages: ai_privacy_gate.yaml
+# ======================================================================

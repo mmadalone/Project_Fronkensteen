@@ -1017,7 +1017,7 @@ async def agent_whisper(
             if topic_slug:
                 kwargs["topic"] = topic_slug[:200]
             set_last_interaction(**kwargs)
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_last_interaction_time",
                 datetime=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
@@ -1656,7 +1656,7 @@ async def agent_interaction_log(
     if src == "user":
         try:
             set_last_interaction(agent_name=agent, topic=topic_str[:200])
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_last_interaction_time",
                 datetime=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),

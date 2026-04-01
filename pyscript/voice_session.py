@@ -212,7 +212,7 @@ async def voice_session_open_mic(
     if echo_guard_seconds > 0:
         await asyncio.sleep(echo_guard_seconds)
 
-    service.call(  # noqa: F821
+    await service.call(  # noqa: F821
         "assist_satellite", "start_conversation",
         entity_id=satellite,
         start_media_id=sid,
@@ -376,7 +376,7 @@ async def voice_session_continuous(
         log.info(  # noqa: F821
             f"voice_session: Phase A — announcing media via {satellite}"
         )
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "announce",
             entity_id=satellite,
             media_id=first_media,
@@ -408,7 +408,7 @@ async def voice_session_continuous(
         log.info(  # noqa: F821
             f"voice_session: Phase B — start_message on {satellite}"
         )
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "start_conversation",
             entity_id=satellite,
             start_message=feedback_question,
@@ -419,7 +419,7 @@ async def voice_session_continuous(
         log.info(  # noqa: F821
             f"voice_session: Phase B — opening mic on {satellite}"
         )
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "start_conversation",
             entity_id=satellite,
             start_media_id=sid,
@@ -594,7 +594,7 @@ async def _run_discovery():
     """Fetch satellite device mappings from dispatcher cache."""
     global _select_map, _speaker_map
     try:
-        result = service.call(  # noqa: F821
+        result = await service.call(  # noqa: F821
             "pyscript", "dispatcher_get_satellite_maps",
             return_response=True,
         )

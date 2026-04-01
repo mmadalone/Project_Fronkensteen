@@ -1,6 +1,6 @@
 # Kodi Watch History Tracker
 
-Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, YouTube, Netflix, Prime Video, Movistar+, and local library content. The blueprint owns all triggers and config knobs; pyscript (`watch_history_start/stop/pause`) handles JSON-RPC source detection, EPG fetching, duration measurement, and memory writes.
+Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, YouTube, Netflix, Prime Video, Movistar+, Disney+, HBO Max, Filmin, and local library content. The blueprint owns all triggers and config knobs; pyscript (`watch_history_start/stop/pause`) handles JSON-RPC source detection, EPG fetching, duration measurement, and memory writes.
 
 ## How It Works
 
@@ -36,13 +36,16 @@ Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, Y
 
 ## Features
 
-- **Multi-source detection** -- classifies content via Kodi JSON-RPC `Player.GetItem` file property: PVR, YouTube, Netflix, Prime Video, Movistar+, local library.
-- **EPG enrichment** -- for PVR content, fetches live broadcast metadata (season, episode, episode name) via `PVR.GetBroadcasts`.
+- **Multi-source detection** -- classifies content via Kodi JSON-RPC `Player.GetItem` file property: PVR, YouTube, Netflix, Prime Video, Movistar+, Disney+, HBO Max, Filmin, local library.
+- **Direct media_player reads** -- pyscript reads metadata directly from the media_player entity (defense-in-depth), avoiding circular dependencies with the template sensor.
+- **Streaming series detection** -- addons that report `media_content_type: video` for everything are classified as `series` when `media_series_title` is present on the media_player entity.
+- **EPG enrichment** -- for PVR content, fetches live broadcast metadata (season, episode, episode name) via `PVR.GetBroadcasts`. EPG overrides all other sources for PVR.
+- **Episode name fallback** -- for library/streaming series, `current_episode_name` is populated from `media_title` when EPG data isn't available.
 - **Duration thresholds** -- configurable minimum watch times before logging (PVR: 180s default, other content: 120s default).
 - **Channel surfing detection** -- below-threshold PVR entries counted as "flips", not logged individually.
 - **L2 memory logging** -- watch sessions stored with structured tags (`media,watch_history,{category},{source}`) for agent search.
 - **Hot context integration** -- "Now watching" and "Recently watched" lines injected into `ai_context_hot.yaml`.
-- **Template sensor enrichment** -- `template.yaml` media sensor enhanced with season/episode/source/episode_name from watch history.
+- **Template sensor enrichment** -- `sensor.madteevee_now_playing` reads `media_source` and `episode_name` from watch history sensor; `series_title`/`season`/`episode` read from media_player first, EPG fallback for PVR only.
 - **PVR channel switch handling** -- `content_change` trigger on `sensor.madteevee_now_playing` catches channel switches that don't transition through idle.
 - **Privacy gate** -- tier-based suppression.
 
@@ -81,17 +84,18 @@ Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, Y
 | `privacy_tier` | `off` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
+| `privacy_gate_person` | `""` | Person entity for tier suppression lookups |
 
 </details>
 
 ## Technical Notes
 
 - **Mode:** `restart` -- rapid channel switches cancel previous tracking and start fresh.
-- **Content change trigger:** Watches `sensor.madteevee_now_playing` state changes to detect PVR channel switches that don't transition the media_player through idle/off states.
+- **Content change trigger:** Watches `sensor.madteevee_now_playing` state changes to detect PVR channel switches and playlist advances that don't transition the media_player through idle/off states.
+- **Metadata priority:** Pyscript reads directly from `media_player` entity via `state.getattr()` (ground truth). Blueprint-passed params from the template sensor serve as fallback. EPG data from JSON-RPC overrides all for PVR content.
 - **JSON-RPC config:** Read from `hass.config_entries.async_entries("kodi")` at pyscript startup. No hardcoded URLs or credentials.
-- **Source detection:** `Player.GetItem` file property inspected for `plugin://` patterns. Known sources mapped by keyword matching on inputstream URLs.
-- **EPG fetch:** `PVR.GetBroadcasts` with linear scan for active broadcast. Provides season/episode metadata that Kodi's player info alone doesn't expose.
+- **Source detection:** `Player.GetItem` file property inspected for `plugin://` patterns. Known sources: YouTube, Netflix, Prime Video, Movistar+, Disney+, HBO Max, Filmin, PVR. Keyword fallback for non-plugin URLs.
+- **EPG fetch:** `PVR.GetBroadcasts` with linear scan in batches of 30 for active broadcast. Provides season/episode metadata that Kodi's player info alone doesn't expose.
 
 ## Changelog
 

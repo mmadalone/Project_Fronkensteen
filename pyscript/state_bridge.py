@@ -139,6 +139,8 @@ _STARTUP_SENSORS = [
     ("sensor.ai_voice_mood_doctor_portuondo_tags", "", "mdi:tag-text", "AI Voice Mood Doctor Portuondo Tags"),
     # Watch history tracker
     ("sensor.ai_watch_history_status", "idle", "mdi:television-classic", "AI Watch History"),
+    # Listen history tracker
+    ("sensor.ai_listen_history_status", "idle", "mdi:music-off", "AI Listen History"),
 ]
 
 

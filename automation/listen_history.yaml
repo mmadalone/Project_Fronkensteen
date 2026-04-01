@@ -1,0 +1,401 @@
+blueprint:
+  name: "Listen history — Music playback tracking (L2)"
+  author: madalone
+  description: >
+    # Listen History — Music Playback Tracking
+
+    Tracks music listening sessions on Music Assistant / Spotify players,
+    measures listen duration, classifies source (track, radio, podcast,
+    audiobook), and logs to L2 memory.
+
+    ### Triggers
+    - **Play start** — state changes to `playing`
+    - **Track change** — `media_title` attribute changes while `playing`
+    - **Play pause** — state changes from `playing` to `paused`
+    - **Play stop** — state changes from `playing`/`paused` to `idle`/`off`/`standby`
+    - **HA start** — recovery for sessions interrupted by restart
+
+    ### Multi-player
+    Supports multiple media players. Use one blueprint instance with a
+    multi-select entity list. Each player is tracked independently
+    (separate sessions in pyscript module-level state).
+
+    ### Data flow
+    1. Blueprint fires on state change → reads media_player attributes
+    2. Calls pyscript.listen_history_start / _stop / _pause
+    3. Pyscript tracks duration, applies minimum threshold, writes L2 memory
+    4. Sensor sensor.ai_listen_history_status updated for hot context
+
+    ### v1
+    - Initial implementation
+  domain: automation
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/listen_history.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① TARGET
+    # ===========================================================================
+    target_section:
+      name: "① Target"
+      icon: mdi:music
+      description: >
+        Media player entities to track. Supports multiple players —
+        each is tracked independently with separate sessions.
+      collapsed: false
+      input:
+        target_players:
+          name: Target media players
+          description: >
+            Media player entities to track. Supports multiple players.
+            Each is tracked independently with separate sessions.
+          default:
+            - media_player.workshop_ma
+            - media_player.bathroom_ma
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+    # ===========================================================================
+    # ② THRESHOLDS
+    # ===========================================================================
+    thresholds_section:
+      name: "② Thresholds"
+      icon: mdi:timer-outline
+      description: >
+        Minimum listen duration before a session is logged.
+        Prevents short interactions and accidental plays from
+        cluttering the history.
+      collapsed: true
+      input:
+        min_duration_entity:
+          name: Min duration helper
+          description: >
+            input_number entity for minimum listen duration (seconds).
+            Tracks below this threshold are not logged.
+          default: input_number.ai_listen_min_duration
+          selector:
+            entity:
+              domain: input_number
+
+        attribute_delay:
+          name: Attribute population delay
+          description: >
+            Seconds to wait after state → playing before reading
+            media_player attributes. Increase if attributes arrive late.
+          default: 1.0
+          selector:
+            number:
+              min: 0.5
+              max: 5.0
+              step: 0.5
+              unit_of_measurement: "s"
+
+    # ===========================================================================
+    # ③ MEMORY
+    # ===========================================================================
+    memory_section:
+      name: "③ Memory"
+      icon: mdi:database-clock
+      description: >
+        How long listen history entries are retained in L2 memory.
+      collapsed: true
+      input:
+        retention_days_entity:
+          name: Retention days helper
+          description: >
+            input_number entity for L2 memory retention (days).
+          default: input_number.ai_listen_history_retention_days
+          selector:
+            entity:
+              domain: input_number
+
+        summary_retention_days:
+          name: Daily summary retention (days)
+          description: >
+            How long the daily summary entry is retained in L2.
+          default: 2
+          selector:
+            number:
+              min: 1
+              max: 7
+              step: 1
+
+    # ===========================================================================
+    # ④ INFRASTRUCTURE
+    # ===========================================================================
+    infrastructure:
+      name: "④ Infrastructure"
+      icon: mdi:cog
+      collapsed: true
+      input:
+        tracking_enabled_entity:
+          name: Tracking enabled toggle
+          description: "Kill switch for listen history tracking."
+          default: input_boolean.ai_listen_history_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+    # ===========================================================================
+    # ⑤ PRIVACY
+    # ===========================================================================
+    privacy:
+      name: "⑤ Privacy"
+      icon: mdi:shield-account
+      collapsed: true
+      input:
+        privacy_tier:
+          name: Privacy gate tier
+          description: >
+            Which privacy tier this feature belongs to. When the other
+            household member's identity confidence crosses the tier's
+            threshold, this automation is suppressed.
+            Off = no privacy gating.
+          default: "off"
+          selector:
+            select:
+              options:
+                - label: "Off — no privacy gating"
+                  value: "off"
+                - label: "T1 — Intimate (bedtime/wake)"
+                  value: "t1"
+                - label: "T2 — Personal (notifications/briefings)"
+                  value: "t2"
+                - label: "T3 — Ambient (detection/tracking)"
+                  value: "t3"
+        privacy_gate_enabled:
+          name: "Privacy gate enabled entity"
+          description: "Boolean that enables the privacy gate system."
+          default: input_boolean.ai_privacy_gate_enabled
+          selector:
+            entity:
+              domain: input_boolean
+        privacy_gate_mode:
+          name: "Privacy gate mode entity"
+          description: "Select that controls privacy gate behavior."
+          default: input_select.ai_privacy_gate_mode
+          selector:
+            entity:
+              domain: input_select
+        privacy_gate_person:
+          name: "Privacy gate person"
+          description: "Person entity for tier suppression lookups."
+          default: ""
+          selector:
+            entity:
+              domain: person
+
+mode: queued
+max: 10
+
+# ── Variables ──────────────────────────────────────────────────────────────
+
+variables:
+  v_players: !input target_players
+  v_attr_delay: !input attribute_delay
+  v_min_duration_entity: !input min_duration_entity
+  v_retention_entity: !input retention_days_entity
+  v_summary_retention: !input summary_retention_days
+  v_enabled: !input tracking_enabled_entity
+  privacy_tier: !input privacy_tier
+  v_privacy_enabled: !input privacy_gate_enabled
+  v_privacy_mode: !input privacy_gate_mode
+  v_privacy_person: !input privacy_gate_person
+  v_privacy_slug: "{{ v_privacy_person.split('.')[-1] if v_privacy_person else '' }}"
+
+# ── Triggers ──────────────────────────────────────────────────────────────
+
+triggers:
+  # 1. Playback starts on any target player
+  - trigger: state
+    id: play_start
+    entity_id: !input target_players
+    to: "playing"
+
+  # 2. Track changed while playing (media_title attribute change)
+  - trigger: state
+    id: track_change
+    entity_id: !input target_players
+    attribute: media_title
+    not_from:
+      - "unknown"
+      - "unavailable"
+    not_to:
+      - "unknown"
+      - "unavailable"
+
+  # 3. Playback paused
+  - trigger: state
+    id: play_pause
+    entity_id: !input target_players
+    from: "playing"
+    to: "paused"
+
+  # 4. Playback stopped
+  - trigger: state
+    id: play_stop
+    entity_id: !input target_players
+    from:
+      - "playing"
+      - "paused"
+    to:
+      - "idle"
+      - "off"
+      - "standby"
+
+  # 5. HA restart — recover sessions for any playing players
+  - trigger: homeassistant
+    event: start
+    id: ha_start
+
+# ── Conditions ──────────────────────────────────────────────────────────────
+
+conditions:
+  - condition: state
+    entity_id: !input tracking_enabled_entity
+    state: "on"
+  - alias: "Privacy gate"
+    condition: template
+    value_template: >-
+      {%- set tier = privacy_tier -%}
+      {%- set mode = states(v_privacy_mode) | default('off') -%}
+      {%- if tier == 'off'
+          or not is_state(v_privacy_enabled, 'on')
+          or mode == 'force_allow_all'
+          or v_privacy_slug | trim | length == 0 -%}
+        true
+      {%- elif mode == 'force_suppress_all' -%}
+        false
+      {%- else -%}
+        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+      {%- endif -%}
+
+# ── Actions ──────────────────────────────────────────────────────────────
+
+actions:
+  - choose:
+      # ── PLAY START ────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_start
+        sequence:
+          - alias: "Wait for media player attributes to populate"
+            delay:
+              seconds: "{{ v_attr_delay | float(1.0) }}"
+
+          - alias: "Read media player attributes"
+            variables:
+              v_entity: "{{ trigger.entity_id }}"
+              v_artist: "{{ state_attr(trigger.entity_id, 'media_artist') | default('', true) }}"
+              v_title: "{{ state_attr(trigger.entity_id, 'media_title') | default('', true) }}"
+              v_album: "{{ state_attr(trigger.entity_id, 'media_album_name') | default('', true) }}"
+              v_content_id: "{{ state_attr(trigger.entity_id, 'media_content_id') | default('', true) }}"
+              v_content_type: "{{ state_attr(trigger.entity_id, 'media_content_type') | default('', true) }}"
+
+          - alias: "Start tracking session"
+            action: pyscript.listen_history_start
+            data:
+              entity_id: "{{ v_entity }}"
+              media_artist: "{{ v_artist }}"
+              media_title: "{{ v_title }}"
+              media_album: "{{ v_album }}"
+              media_content_id: "{{ v_content_id }}"
+              media_content_type: "{{ v_content_type }}"
+              recovered: false
+
+      # ── TRACK CHANGE (playlist advance / radio song change) ──────
+      - conditions:
+          - condition: trigger
+            id: track_change
+          - condition: template
+            value_template: "{{ states(trigger.entity_id) == 'playing' }}"
+        sequence:
+          - alias: "Wait for media player attributes to settle"
+            delay:
+              seconds: "{{ v_attr_delay | float(1.0) }}"
+
+          - alias: "Read media player attributes"
+            variables:
+              v_entity: "{{ trigger.entity_id }}"
+              v_artist: "{{ state_attr(trigger.entity_id, 'media_artist') | default('', true) }}"
+              v_title: "{{ state_attr(trigger.entity_id, 'media_title') | default('', true) }}"
+              v_album: "{{ state_attr(trigger.entity_id, 'media_album_name') | default('', true) }}"
+              v_content_id: "{{ state_attr(trigger.entity_id, 'media_content_id') | default('', true) }}"
+              v_content_type: "{{ state_attr(trigger.entity_id, 'media_content_type') | default('', true) }}"
+
+          - alias: "Guard: skip if title is empty (debounce spurious updates)"
+            condition: template
+            value_template: "{{ v_title | length > 0 }}"
+
+          - alias: "Start new session (closes previous via pyscript)"
+            action: pyscript.listen_history_start
+            data:
+              entity_id: "{{ v_entity }}"
+              media_artist: "{{ v_artist }}"
+              media_title: "{{ v_title }}"
+              media_album: "{{ v_album }}"
+              media_content_id: "{{ v_content_id }}"
+              media_content_type: "{{ v_content_type }}"
+              recovered: false
+
+      # ── PLAY PAUSE ────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_pause
+        sequence:
+          - alias: "Mark session as paused"
+            action: pyscript.listen_history_pause
+            data:
+              entity_id: "{{ trigger.entity_id }}"
+
+      # ── PLAY STOP ─────────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: play_stop
+        sequence:
+          - alias: "End session, log if above threshold"
+            action: pyscript.listen_history_stop
+            data:
+              entity_id: "{{ trigger.entity_id }}"
+              min_duration: "{{ states(v_min_duration_entity) | int(60) }}"
+              retention_days: "{{ states(v_retention_entity) | int(30) }}"
+              summary_retention_days: "{{ v_summary_retention | int(2) }}"
+
+      # ── HA START (recovery) ───────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: ha_start
+        sequence:
+          - alias: "Wait for entities to settle after HA start"
+            delay:
+              seconds: 10
+
+          - alias: "Check each tracked player and recover if playing"
+            repeat:
+              for_each: "{{ v_players }}"
+              sequence:
+                - condition: template
+                  value_template: "{{ states(repeat.item) == 'playing' }}"
+
+                - alias: "Read media player attributes for recovery"
+                  variables:
+                    v_entity: "{{ repeat.item }}"
+                    v_artist: "{{ state_attr(repeat.item, 'media_artist') | default('', true) }}"
+                    v_title: "{{ state_attr(repeat.item, 'media_title') | default('', true) }}"
+                    v_album: "{{ state_attr(repeat.item, 'media_album_name') | default('', true) }}"
+                    v_content_id: "{{ state_attr(repeat.item, 'media_content_id') | default('', true) }}"
+                    v_content_type: "{{ state_attr(repeat.item, 'media_content_type') | default('', true) }}"
+
+                - alias: "Recover tracking session"
+                  action: pyscript.listen_history_start
+                  data:
+                    entity_id: "{{ v_entity }}"
+                    media_artist: "{{ v_artist }}"
+                    media_title: "{{ v_title }}"
+                    media_album: "{{ v_album }}"
+                    media_content_id: "{{ v_content_id }}"
+                    media_content_type: "{{ v_content_type }}"
+                    recovered: true

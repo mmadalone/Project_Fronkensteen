@@ -1646,7 +1646,7 @@ async def music_compose_batch(
 
     # Send persistent notification
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "persistent_notification", "create",
             title="Music Composition Batch Complete",
             message=(
@@ -1972,7 +1972,7 @@ async def music_library_play(
         except Exception:
             pass
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "media_player", "volume_set",
                 entity_id=player, volume_level=volume,
             )
@@ -1983,7 +1983,7 @@ async def music_library_play(
     # /config/www/music_cache/production/X.mp3 → /local/music_cache/production/X.mp3
     media_url = f"/local/music_cache/production/{target_file.name}"
     try:
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "media_player", "play_media",
             entity_id=player,
             media_content_id=media_url,
@@ -1997,7 +1997,7 @@ async def music_library_play(
     if saved_volume is not None:
         try:
             await asyncio.sleep(0.5)
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "media_player", "volume_set",
                 entity_id=player, volume_level=saved_volume,
             )

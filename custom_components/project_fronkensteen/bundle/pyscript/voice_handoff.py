@@ -155,7 +155,7 @@ async def _generate_llm_line(prompt: str, mode: str, agent_entity: str,
             )
             if instance:
                 kwargs["instance"] = instance
-            result = service.call(  # noqa: F821
+            result = await service.call(  # noqa: F821
                 "pyscript", "llm_task_call",
                 **kwargs,
             )
@@ -173,14 +173,14 @@ async def _generate_llm_line(prompt: str, mode: str, agent_entity: str,
             "Respond with a brief in-character greeting only.] " + prompt
         )
         try:
-            resolve_result = service.call(  # noqa: F821
+            resolve_result = await service.call(  # noqa: F821
                 "pyscript", "dispatcher_resolve_engine",
                 pipeline_name=pipeline_name,
                 return_response=True,
             )
             resolved = (resolve_result or {}).get("engine", "")
             if resolved:
-                result = service.call(  # noqa: F821
+                result = await service.call(  # noqa: F821
                     "conversation", "process",
                     agent_id=resolved,
                     text=safe_prompt,
@@ -203,7 +203,7 @@ async def _generate_llm_line(prompt: str, mode: str, agent_entity: str,
             "Respond with a brief in-character greeting only.] " + prompt
         )
         try:
-            result = service.call(  # noqa: F821
+            result = await service.call(  # noqa: F821
                 "conversation", "process",
                 agent_id=agent_entity,
                 text=safe_prompt,
@@ -232,7 +232,7 @@ async def _restore_pipeline(satellite: str, pipeline_select: str,
         if state.get(satellite) in ("idle", None, "unavailable"):  # noqa: F821
             break
         await asyncio.sleep(0.5)
-    service.call(  # noqa: F821
+    await service.call(  # noqa: F821
         "select", "select_option",
         entity_id=pipeline_select,
         option=saved_pipeline,
@@ -481,7 +481,7 @@ async def voice_handoff(
     if is_self:
         log.info(f"voice_handoff: self-handoff to {target}, reopening mic")  # noqa: F821
         await _wait_for_audio_done(satellite)
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "start_conversation",
             entity_id=satellite,
             start_media_id=sid,
@@ -529,7 +529,7 @@ async def voice_handoff(
             instance=resolved_instance,
             pipeline_name=current_pipeline,
         )
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "announce",
             entity_id=satellite,
             message=farewell_line,
@@ -538,7 +538,7 @@ async def voice_handoff(
         await _wait_for_audio_done(satellite)
 
     # ── Switch pipeline ──────────────────────────────────────────────────
-    service.call(  # noqa: F821
+    await service.call(  # noqa: F821
         "select", "select_option",
         entity_id=pipeline_select,
         option=target_option,
@@ -573,7 +573,7 @@ async def voice_handoff(
     # ── Announce greeting (mic stays closed) ──────────────────────────────
     if greeting:
         await _wait_for_audio_done(satellite)
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "announce",
             entity_id=satellite,
             message=greeting_text,
@@ -583,7 +583,7 @@ async def voice_handoff(
     # ── Open mic (seamless mode) ─────────────────────────────────────────
     if seamless:
         await _wait_for_audio_done(satellite)
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "assist_satellite", "start_conversation",
             entity_id=satellite,
             start_media_id=sid,
@@ -662,7 +662,7 @@ async def voice_handoff(
             # needed here.
             # Record time + start new multi-turn session
             mic_open = time.monotonic()
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "assist_satellite", "start_conversation",
                 entity_id=satellite,
                 start_media_id=sid,
@@ -778,7 +778,7 @@ async def voice_handoff_restore_now():
         fut.cancel()
     restored = []
     for sat, (ps, target_option) in snapshot_info.items():
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "select", "select_option",
             entity_id=ps, option=target_option,
         )
@@ -831,7 +831,7 @@ async def _run_discovery():
     """Fetch satellite device mappings from dispatcher cache."""
     global _select_map, _speaker_map
     try:
-        result = service.call(  # noqa: F821
+        result = await service.call(  # noqa: F821
             "pyscript", "dispatcher_get_satellite_maps",
             return_response=True,
         )

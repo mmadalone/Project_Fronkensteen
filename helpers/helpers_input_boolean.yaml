@@ -710,3 +710,11 @@ ai_watch_history_enabled:
   name: "AI Watch History"
   icon: mdi:television-play
   initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_listen_history — Music Listen History Tracker
+# ═══════════════════════════════════════════════════════════════════
+ai_listen_history_enabled:
+  name: "AI Listen History"
+  icon: mdi:music-note
+  initial: true

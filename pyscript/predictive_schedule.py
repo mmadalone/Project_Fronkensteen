@@ -662,7 +662,7 @@ async def _update_helpers(result: dict, test_mode: bool) -> None:
     routine_start = result.get("target_routine_start", "")
     if routine_start and ":" in routine_start:
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_predicted_routine_start",
                 time=routine_start + ":00",
@@ -674,7 +674,7 @@ async def _update_helpers(result: dict, test_mode: bool) -> None:
     wake_time = result.get("required_wake_time", "")
     if wake_time and ":" in wake_time:
         try:
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "input_datetime", "set_datetime",
                 entity_id="input_datetime.ai_predicted_wake_time",
                 time=wake_time + ":00" if wake_time.count(":") == 1 else wake_time,

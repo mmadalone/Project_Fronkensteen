@@ -901,7 +901,7 @@ def _get_imap_sensor() -> str:
     return cfg.get("imap_sensor") or "sensor.gmail_messages"
 
 
-def _check_imap_health() -> None:
+async def _check_imap_health() -> None:
     """Check IMAP sensor availability and notify on failure."""
     try:
         imap_sensor = _get_imap_sensor()
@@ -912,7 +912,7 @@ def _check_imap_health() -> None:
                 f"{imap_state or 'missing'} — email processing may fail"
             )
             _set_email_stale(True)
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "persistent_notification", "create",
                 title="Email Integration: IMAP Unavailable",
                 message=(
@@ -925,7 +925,7 @@ def _check_imap_health() -> None:
         else:
             # IMAP healthy — dismiss any lingering alert
             _set_email_stale(False)
-            service.call(  # noqa: F821
+            await service.call(  # noqa: F821
                 "persistent_notification", "dismiss",
                 notification_id="ai_imap_failure",
             )
@@ -942,7 +942,7 @@ async def email_promote_startup():
     _set_result("idle", op="startup")
     # Delay to let IMAP sensor load
     await task.sleep(30)  # noqa: F821
-    _check_imap_health()
+    await _check_imap_health()
 
     # Gap 4: Reload IMAP config entry to re-fire events for unread messages.
     # Fixes startup race condition where IMAP events fire before automations are ready.
@@ -950,7 +950,7 @@ async def email_promote_startup():
     try:
         imap_sensor = _get_imap_sensor()
         log.info(f"email_promote: requesting IMAP reload for {imap_sensor}")  # noqa: F821
-        service.call(  # noqa: F821
+        await service.call(  # noqa: F821
             "homeassistant", "reload_config_entry",
             entity_id=imap_sensor,
             blocking=False,
@@ -976,7 +976,7 @@ async def email_promote_midnight():
             tags=f"email {person} count", scope="user", expiration_days=1,
         )
 
-    _check_imap_health()
+    await _check_imap_health()
     log.info("email_promote: midnight reset — counter cleared")  # noqa: F821
 
 
