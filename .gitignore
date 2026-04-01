@@ -22,3 +22,4 @@ pipeline_tts_backup.json
 /archive
 *.2026-03-19
 style-guide/violations_report_2026-03-26_full_audit.md
+configuration.yaml
