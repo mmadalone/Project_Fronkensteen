@@ -106,6 +106,7 @@ _SOURCE_PREFIX_MAP = [
     ("plugin://plugin.video.movistar", "Movistar+"),
     ("plugin://plugin.video.disney", "Disney+"),
     ("plugin://plugin.video.hbomax", "HBO Max"),
+    ("plugin://plugin.video.filmin", "Filmin"),
     ("pvr://", "PVR"),
 ]
 # Fallback keyword detection for non-plugin:// URLs (e.g., YouTube via inputstream)
@@ -115,6 +116,7 @@ _SOURCE_KEYWORD_MAP = [
     ("amazon", "Prime Video"),
     ("movistar", "Movistar+"),
     ("disney", "Disney+"),
+    ("filmin", "Filmin"),
 ]
 
 
@@ -728,16 +730,46 @@ async def watch_history_start(
     kodi_meta = await _fetch_kodi_metadata(entity_id)
     media_source = kodi_meta.get("media_source", "")
 
-    # Build session — EPG data enriches PVR entries with season/episode
-    _season = _safe_str(season)
-    _episode = _safe_str(episode)
-    _series = _safe_str(series_title)
+    # Read media_player entity directly — ground truth for library content,
+    # avoids circular dependency with template sensor (which may pass stale data)
+    mp_series = ""
+    mp_season = ""
+    mp_episode = ""
+    mp_title = ""
+    mp_category = ""
+    try:
+        mp_attrs = state.getattr(entity_id) or {}  # noqa: F821
+        mp_series = _safe_str(mp_attrs.get("media_series_title", ""))
+        mp_season = _safe_str(mp_attrs.get("media_season", ""))
+        mp_episode = _safe_str(mp_attrs.get("media_episode", ""))
+        mp_title = _safe_str(mp_attrs.get("media_title", ""))
+        # Map media_content_type → category, using series_title presence
+        # to detect streaming series (addons report "video" for everything)
+        _ctype = _safe_str(mp_attrs.get("media_content_type", "")).lower()
+        if _ctype == "tvshow":
+            mp_category = "series"
+        elif _ctype == "movie":
+            mp_category = "movie"
+        elif _ctype == "video" and mp_series:
+            mp_category = "series"
+        elif _ctype == "video":
+            mp_category = "video"
+        elif _ctype:
+            mp_category = _ctype
+    except Exception:
+        pass
+
+    # Build session — priority: media_player > blueprint params (may be stale)
+    _season = mp_season or _safe_str(season)
+    _episode = mp_episode or _safe_str(episode)
+    _series = mp_series or _safe_str(series_title)
+    _title = mp_title or _safe_str(media_title)
     epg_season = kodi_meta.get("epg_season")
     epg_episode = kodi_meta.get("epg_episode")
     epg_ep_name = kodi_meta.get("epg_episode_name", "")
     epg_show = kodi_meta.get("epg_show_title", "")
 
-    # Prefer EPG data over HA attributes for PVR
+    # EPG data overrides all for PVR (JSON-RPC is most accurate for live TV)
     if epg_season is not None and epg_season > 0:
         _season = str(epg_season)
     if epg_episode is not None and epg_episode > 0:
@@ -745,11 +777,19 @@ async def watch_history_start(
     if epg_show:
         _series = epg_show
     epg_name = epg_ep_name
+    # For library series, episode name = media_title (EPG only exists for PVR)
+    if not epg_name and _series and _title:
+        epg_name = _title
+
+    # Refine category: PVR source → live_tv
+    _category = mp_category or _safe_str(media_category)
+    if _category == "video" and media_source == "PVR":
+        _category = "live_tv"
 
     session = {
         "start_time": time.time(),
-        "media_category": _safe_str(media_category),
-        "media_title": _safe_str(media_title),
+        "media_category": _category,
+        "media_title": _title,
         "series_title": _series,
         "season": _season,
         "episode": _episode,
