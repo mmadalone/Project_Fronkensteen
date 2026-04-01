@@ -14,16 +14,22 @@
 # =============================================================================
 
 # ── Shell command: install fluidsynth if missing (survives HA Core updates) ──
+# Installs both the apk binary and the pyfluidsynth Python module.
+# numpy is pre-installed in HA Core so pip only downloads pyfluidsynth (~22KB).
 shell_command:
   ai_music_install_fluidsynth: >-
-    which fluidsynth > /dev/null 2>&1 || apk add --no-cache fluidsynth > /dev/null 2>&1
+    (which fluidsynth > /dev/null 2>&1 || apk add --no-cache fluidsynth) ;
+    python3 -c "import fluidsynth" 2>/dev/null ||
+    pip3 install --break-system-packages --no-deps pyfluidsynth ;
+    python3 -c "import midiutil" 2>/dev/null ||
+    pip3 install --break-system-packages midiutil
 
 automation:
   - id: ai_music_install_deps
     alias: "AI Music — Install FluidSynth on Startup"
     description: >
-      Reinstalls fluidsynth binary after HA Core updates (apk packages
-      are wiped on container rebuild). Python deps handled by pyscript requirements.
+      Reinstalls fluidsynth binary and pyfluidsynth Python module after HA
+      Core updates (apk packages and pip packages are wiped on container rebuild).
     mode: single
     triggers:
       - trigger: homeassistant
@@ -32,10 +38,11 @@ automation:
       - alias: "Install fluidsynth if missing"
         action: shell_command.ai_music_install_fluidsynth
         continue_on_error: true
-      - alias: "Reload pyscript to pick up fluidsynth"
+      - alias: "Wait for apk + pip install to complete"
         delay:
-          seconds: 10
-      - action: pyscript.reload
+          seconds: 60
+      - alias: "Reload pyscript to pick up fluidsynth"
+        action: pyscript.reload
         continue_on_error: true
 
   - id: ai_music_midnight_reset
