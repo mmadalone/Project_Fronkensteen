@@ -1,5 +1,5 @@
 # =============================================================================
-# Assist TTS Reroute (v1.2.1)
+# Assist TTS Reroute (v1.3.0)
 # =============================================================================
 # Intercepts Assist pipeline conversations from a voice device with a weak
 # speaker (e.g., Unfolded Circle Remote 3), re-processes the user's question
@@ -21,7 +21,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Assist TTS Reroute (v1.2.1)"
+  name: "Assist TTS Reroute (v1.3.0)"
   author: madalone
   description: >
     # Assist TTS Reroute
@@ -46,8 +46,9 @@ blueprint:
       excluded_pipelines in the dispatcher profile
 
     ### Filtering
-    - **Excludes ESPHome satellites** — they pass `satellite_id` in the
-      conversation input; this automation only fires when absent.
+    - **Satellite-excluded** — only fires when no `device_id` is present
+      (WebSocket clients like UC3). Voice PE satellites pass device_id and
+      are excluded. Programmatic calls filtered by `[MARKER]` prefix.
 
     ### Requirements
     - `pyscript.agent_dispatch` service (agent dispatcher)
@@ -55,6 +56,12 @@ blueprint:
     - FP2 presence sensors (for presence mode auto-room detection)
 
     ### Recent changes
+    - **v1.3.0:** Satellite-exclusion guard — replaces broken `satellite_id`
+      check with `device_id` presence check. Voice PE satellites pass
+      device_id → excluded. UC3 WebSocket pipelines pass null → allowed.
+      Programmatic calls (also null device_id) caught by `[MARKER]` guard.
+      Fixes Voice PE conversations being rerouted (double LLM + wrong agent).
+      Davis pipeline added to dispatcher exclusion list.
     - **v1.2.1:** Fix double-trigger — programmatic `conversation.process`
       calls from other automations (NFM, Email, Charge Reminder) also fire
       `eoc_finished` without a `satellite_id`, causing double LLM + double
@@ -147,7 +154,7 @@ blueprint:
     # ② SAFETY
     # =========================================================================
     safety_section:
-      name: "② Safety"
+      name: "③ Safety"
       icon: mdi:shield-check
       description: Kill switch.
       collapsed: true
@@ -188,27 +195,30 @@ conditions:
       {{ last is none or (now() - last).total_seconds() > 5 }}
 
 actions:
-  # ── §1: Extract user question from conversation event ──────────────────────
+  # ── §1: Extract user question + device from conversation event ─────────────
   - variables:
       _user_text: >-
         {{ trigger.event.data.user_input.text | default('') | trim }}
-      _satellite_id: >-
-        {{ trigger.event.data.user_input.satellite_id | default(none) }}
+      _event_device_id: >-
+        {{ trigger.event.data.user_input.device_id | default('') }}
 
   # ── §2: Guard — user text must exist ───────────────────────────────────────
   - condition: template
     value_template: "{{ _user_text | length > 0 }}"
 
-  # ── §3: Guard — exclude ESPHome satellites (they have their own speakers) ──
+  # ── §3: Guard — exclude satellite devices (they have their own speakers) ───
+  # Voice PE satellites pass a device_id in the conversation input.
+  # UC3 WebSocket-initiated pipelines pass device_id = null.
+  # Only fire when device_id is empty (UC3 / headless device).
   - condition: template
-    value_template: "{{ _satellite_id in [none, '', 'None'] }}"
+    value_template: "{{ _event_device_id in [none, '', 'None', 'null'] }}"
 
   # ── §3b: Guard — exclude programmatic calls from other automations ─────────
   # All blueprints that call conversation.process prefix their text with a
   # [MARKER] tag ([NOTIFICATION], [REMINDER ...], [ALARM ...], [BEDTIME ...],
   # [ESCALATION ...]). Real UC3 voice commands are plain STT speech — they
-  # never start with '['. Without this guard, every programmatic LLM call
-  # fires eoc_finished → reroute catches it → double LLM + double TTS.
+  # never start with '['. This is the key discriminator between UC3 voice
+  # and automation-initiated conversation.process calls (both have no device_id).
   - condition: template
     value_template: "{{ not _user_text.startswith('[') }}"
 
@@ -231,6 +241,15 @@ actions:
   # ── §5: Guard — dispatcher must return a valid agent ───────────────────────
   - condition: template
     value_template: "{{ _dispatch_agent | length > 0 and _tts_engine | length > 0 }}"
+
+  # ── §5b: Clear last-satellite so banter Gate 2 doesn't false-match ────────
+  # UC3 is not a satellite — if we don't clear this, banter fires against
+  # whichever satellite was last active (stale value).
+  - action: pyscript.set_sensor_value
+    data:
+      entity_id: sensor.ai_last_satellite
+      value: ""
+    continue_on_error: true
 
   # ── §6: Re-process user question with dispatcher's agent ───────────────────
   - action: conversation.process
