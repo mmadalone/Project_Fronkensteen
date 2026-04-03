@@ -1,8 +1,8 @@
-![Phone charge reminder -- persona-aware battery nudges](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/phone_charge_reminder-header.jpeg)
+![Charge reminder -- persona-aware battery nudges](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/phone_charge_reminder-header.jpeg)
 
-# Phone charge reminder -- persona-aware battery nudges
+# Charge reminder -- persona-aware battery nudges
 
-Escalating TTS reminders when phone battery drops below configurable thresholds. Supports three delivery styles -- prompt (LLM-generated, persona-aware), factual (static, no LLM), or silent (no TTS). Congratulates on plug-in when battery was low. Each escalation tier (low, critical, urgent) has its own editable prompt/factual message, reminder count, and inter-reminder delay.
+Escalating TTS reminders when a device's battery drops below configurable thresholds. Works with any device that has a battery sensor and charging binary sensor -- phones, remotes, tablets, etc. Supports three delivery styles -- prompt (LLM-generated, persona-aware), factual (static, no LLM), or silent (no TTS). Congratulates on plug-in when battery was low. Each escalation tier (low, critical, urgent) has its own editable prompt/factual message, reminder count, and inter-reminder delay.
 
 ## How It Works
 
@@ -37,7 +37,8 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 - Three escalation tiers: casual (low), critical, urgent -- each with configurable thresholds
 - Three delivery styles: prompt (LLM persona), factual (static), silent (no TTS)
 - Per-tier configurable prompts, factual messages, and reminder counts
-- Congratulation message when phone is plugged in while battery was low
+- **Generic device support** -- configurable `device_name` input and `{device}` placeholder in prompts
+- Congratulation message when device is plugged in while battery was low
 - Optional "fully charged" announcement at 100% while still charging
 - Agent dispatcher support with manual pipeline fallback
 - TTS delivery priority: Assist Satellite > explicit media player > TTS queue default
@@ -47,7 +48,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 - Presence sensor gating (suppress when nobody home)
 - Privacy gate with per-person tier suppression
 - HA restart catch-up check
-- `{battery}` placeholder in all prompts and messages
+- `{battery}` and `{device}` placeholders in all prompts and messages
 
 ## Prerequisites
 
@@ -66,10 +67,11 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 ## Configuration
 
 <details>
-<summary><strong>① Phone sensors</strong></summary>
+<summary><strong>① Device</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
+| `device_name` | `phone` | Name of the device (e.g., "phone", "remote control", "tablet"). Used in prompts and dispatcher intent. Use `{device}` in custom prompts. |
 | `battery_sensor` | *(required)* | Battery level sensor (device_class: battery) |
 | `charging_sensor` | *(required)* | Binary sensor for charging state (on = charging) |
 
@@ -83,7 +85,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 | `low_threshold` | `20` | Low tier threshold (%) |
 | `low_reminder_count` | `2` | Number of low-tier reminders (30 min apart) |
 | `low_prompt` | *(casual LLM prompt)* | LLM prompt for low tier |
-| `low_factual` | `Phone battery at {battery}%...` | Static message for low tier |
+| `low_factual` | `{device} battery at {battery}%...` | Static message for low tier |
 | `critical_threshold` | `10` | Critical tier threshold (%) |
 | `critical_reminder_count` | `2` | Number of critical reminders (15 min apart) |
 | `critical_prompt` | *(urgent LLM prompt)* | LLM prompt for critical tier |
@@ -91,7 +93,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 | `urgent_threshold` | `5` | Urgent tier threshold (%) |
 | `urgent_reminder_count` | `2` | Number of urgent reminders (5 min apart) |
 | `urgent_prompt` | *(emergency LLM prompt)* | LLM prompt for urgent tier |
-| `urgent_factual` | `{battery}%! Your phone is about to die!...` | Static message for urgent tier |
+| `urgent_factual` | `{battery}%! Your {device} is about to die!...` | Static message for urgent tier |
 
 </details>
 
@@ -140,7 +142,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 | `enable_congrats` | `true` | Congratulate when phone is plugged in while battery was low |
 | `enable_fully_charged` | `true` | Announce when battery reaches 100% while charging |
 | `fully_charged_prompt` | *(friendly LLM prompt)* | LLM prompt for fully charged announcement |
-| `fully_charged_factual` | `Phone is fully charged...` | Static fully charged message |
+| `fully_charged_factual` | `{device} is fully charged...` | Static fully charged message |
 | `presence_sensor` | *(empty)* | Binary sensor for occupancy (suppress TTS when off) |
 
 </details>
@@ -180,7 +182,7 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 ## Technical Notes
 
 - **Mode:** `restart` / `max_exceeded: silent`
-- Reminder loops stop early if the phone is plugged in (charging sensor checked each iteration)
+- Reminder loops stop early if the device is plugged in (charging sensor checked each iteration)
 - Inter-reminder delays: low = 30 min, critical = 15 min, urgent = 5 min
 - LLM failures fall back to factual messages automatically
 - TTS delivery uses a 3-tier priority: satellite announce > explicit player > default queue
@@ -189,7 +191,8 @@ Escalating TTS reminders when phone battery drops below configurable thresholds.
 
 ## Changelog
 
-- **v5:** Quiet hours & DND -- optional time-based quiet window and phone DND sensor gate
+- **v6:** Generic device support -- new `device_name` input and `{device}` placeholder. Works with phones, remotes, tablets, etc. Backwards compatible (defaults to "phone").
+- **v5:** Quiet hours & DND -- optional time-based quiet window and DND sensor gate
 - **v4:** Optional "fully charged" TTS announcement at 100% while charging
 - **v3:** Per-tier prompts and factual messages, reminder count with repeat loops, bypass follow-me and ducking, mode restart
 - **v2:** Dispatcher support, conversation-agent selector, editable prompts, presence sensor

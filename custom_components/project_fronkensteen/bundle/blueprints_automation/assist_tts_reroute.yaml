@@ -1,0 +1,269 @@
+# =============================================================================
+# Assist TTS Reroute (v1.2.1)
+# =============================================================================
+# Intercepts Assist pipeline conversations from a voice device with a weak
+# speaker (e.g., Unfolded Circle Remote 3), re-processes the user's question
+# with the dispatcher's selected agent, and plays the response on a nearby
+# room speaker via the TTS queue.
+#
+# Trigger: extended_openai_conversation.conversation.finished event — the only
+# event that fires on the HA event bus for WebSocket-initiated pipelines.
+# Pipeline-level events (assist_pipeline/run/end) only fire for native Assist
+# satellite platform devices (ESPHome).
+#
+# Flow: eoc_finished → capture user question → agent_dispatch (get current
+# agent + voice) → conversation.process (re-ask with dispatcher agent) →
+# tts_queue_speak (play on room speaker).
+#
+# Cost per interaction: 2 LLM calls (cheap) + 1 ElevenLabs TTS call.
+# The device's pipeline should use free TTS (HA Cloud/Piper) since its
+# speaker is inaudible — see excluded_pipelines in dispatcher_profile.
+# =============================================================================
+
+blueprint:
+  name: "Assist TTS Reroute (v1.2.1)"
+  author: madalone
+  description: >
+    # Assist TTS Reroute
+
+    Intercepts Assist pipeline conversations from a voice device with a weak
+    or inaudible speaker, re-processes the user's question with the
+    dispatcher's selected agent, and plays the response on a nearby room
+    speaker via the centralized TTS queue.
+
+    ### How it works
+    1. Voice device triggers Assist pipeline (wake word or button)
+    2. Pipeline runs STT → intent (LLM) → free TTS on device (inaudible)
+    3. On LLM response, this automation captures the original user question
+    4. Calls the agent dispatcher to get the current agent + TTS voice
+    5. Re-processes the question with the dispatcher's agent
+    6. Plays the response on the room speaker via `pyscript.tts_queue_speak`
+
+    ### Cost
+    - 2 LLM calls per interaction (device pipeline + dispatcher re-process)
+    - 1 ElevenLabs TTS call (room speaker only)
+    - Device pipeline should use free TTS (HA Cloud) — configure via
+      excluded_pipelines in the dispatcher profile
+
+    ### Filtering
+    - **Excludes ESPHome satellites** — they pass `satellite_id` in the
+      conversation input; this automation only fires when absent.
+
+    ### Requirements
+    - `pyscript.agent_dispatch` service (agent dispatcher)
+    - `pyscript.tts_queue_speak` service (TTS queue)
+    - FP2 presence sensors (for presence mode auto-room detection)
+
+    ### Recent changes
+    - **v1.2.1:** Fix double-trigger — programmatic `conversation.process`
+      calls from other automations (NFM, Email, Charge Reminder) also fire
+      `eoc_finished` without a `satellite_id`, causing double LLM + double
+      TTS. Now skips events where user text starts with `[` (all blueprints
+      use `[MARKER]` prefixes; real voice commands never do).
+    - **v1.2.0:** Re-process with dispatcher agent — captures user question,
+      calls dispatcher for agent + voice, re-asks with correct persona
+    - **v1.1.0:** Direct text capture with dispatcher voice (character mismatch)
+    - **v1.0.0:** Initial implementation (pipeline event — did not fire for UC3)
+
+  domain: automation
+  source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/assist_tts_reroute.yaml"
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # =========================================================================
+    # ① SPEAKER ROUTING
+    # =========================================================================
+    tts_routing:
+      name: "① Speaker routing"
+      icon: mdi:speaker-wireless
+      description: >
+        How and where to play the rerouted TTS audio.
+      collapsed: false
+      input:
+        target_mode:
+          name: Speaker target mode
+          description: >-
+            **Presence** — Auto-detect room via FP2 sensors and play on the
+            nearest speaker (uses `tts_speaker_config.json` zone mapping).
+
+
+            **Explicit speaker** — Always play on a specific speaker.
+
+
+            **Broadcast** — Play on all configured speakers simultaneously.
+          default: "presence"
+          selector:
+            select:
+              options:
+                - label: "Presence (auto room)"
+                  value: "presence"
+                - label: "Explicit speaker"
+                  value: "explicit"
+                - label: "Broadcast (all speakers)"
+                  value: "broadcast"
+
+        explicit_speaker:
+          name: Explicit speaker
+          description: >-
+            Only used when target mode is **Explicit speaker**. Select the
+            media_player entity to play TTS on.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+
+        priority:
+          name: Queue priority
+          description: >-
+            TTS queue priority level. 0 = emergency, 1 = alert, 2 = normal,
+            3 = low, 4 = ambient.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 4
+              mode: slider
+
+        announce:
+          name: Use announce mode
+          description: >-
+            When enabled, speakers with announce support (e.g., Sonos) will
+            briefly interrupt current audio, play the TTS, and auto-resume.
+          default: true
+          selector:
+            boolean: {}
+
+        duck:
+          name: Duck background audio
+          description: >-
+            When enabled, reduces background audio volume on other speakers
+            during TTS playback via the duck manager.
+          default: true
+          selector:
+            boolean: {}
+
+    # =========================================================================
+    # ② SAFETY
+    # =========================================================================
+    safety_section:
+      name: "② Safety"
+      icon: mdi:shield-check
+      description: Kill switch.
+      collapsed: true
+      input:
+        kill_switch:
+          name: Kill switch
+          description: >-
+            Input boolean that enables/disables this reroute. When OFF,
+            pipeline TTS plays only on the source device.
+          default: input_boolean.assist_tts_reroute_enabled
+          selector:
+            entity:
+              domain: input_boolean
+
+# =============================================================================
+# AUTOMATION BODY
+# =============================================================================
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: event
+    event_type: extended_openai_conversation.conversation.finished
+    id: eoc_finished
+
+conditions:
+  # Kill switch must be ON
+  - condition: state
+    entity_id: !input kill_switch
+    state: "on"
+  # Re-entry guard — blocks recursive triggers from our own conversation.process
+  # call (which fires another eoc_finished). Real UC3 interactions are always
+  # >5 seconds apart; recursive triggers fire within milliseconds.
+  - condition: template
+    value_template: >-
+      {% set last = this.attributes.last_triggered %}
+      {{ last is none or (now() - last).total_seconds() > 5 }}
+
+actions:
+  # ── §1: Extract user question from conversation event ──────────────────────
+  - variables:
+      _user_text: >-
+        {{ trigger.event.data.user_input.text | default('') | trim }}
+      _satellite_id: >-
+        {{ trigger.event.data.user_input.satellite_id | default(none) }}
+
+  # ── §2: Guard — user text must exist ───────────────────────────────────────
+  - condition: template
+    value_template: "{{ _user_text | length > 0 }}"
+
+  # ── §3: Guard — exclude ESPHome satellites (they have their own speakers) ──
+  - condition: template
+    value_template: "{{ _satellite_id in [none, '', 'None'] }}"
+
+  # ── §3b: Guard — exclude programmatic calls from other automations ─────────
+  # All blueprints that call conversation.process prefix their text with a
+  # [MARKER] tag ([NOTIFICATION], [REMINDER ...], [ALARM ...], [BEDTIME ...],
+  # [ESCALATION ...]). Real UC3 voice commands are plain STT speech — they
+  # never start with '['. Without this guard, every programmatic LLM call
+  # fires eoc_finished → reroute catches it → double LLM + double TTS.
+  - condition: template
+    value_template: "{{ not _user_text.startswith('[') }}"
+
+  # ── §4: Get dispatcher agent + TTS voice ───────────────────────────────────
+  - action: pyscript.agent_dispatch
+    response_variable: _dispatch
+    data:
+      intent_text: "{{ _user_text }}"
+      wake_word: ""
+    continue_on_error: true
+
+  - variables:
+      _dispatch_agent: >-
+        {{ (_dispatch | default({})).get('agent', '') }}
+      _tts_engine: >-
+        {{ (_dispatch | default({})).get('tts_engine', '') }}
+      _tts_voice_id: >-
+        {{ (_dispatch | default({})).get('tts_voice', '') }}
+
+  # ── §5: Guard — dispatcher must return a valid agent ───────────────────────
+  - condition: template
+    value_template: "{{ _dispatch_agent | length > 0 and _tts_engine | length > 0 }}"
+
+  # ── §6: Re-process user question with dispatcher's agent ───────────────────
+  - action: conversation.process
+    data:
+      agent_id: "{{ _dispatch_agent }}"
+      text: "{{ _user_text }}"
+    response_variable: _conv_result
+    continue_on_error: true
+
+  - variables:
+      _response_text: >-
+        {{ (_conv_result | default({}))
+            .get('response', {})
+            .get('speech', {})
+            .get('plain', {})
+            .get('speech', '') | trim }}
+
+  # ── §7: Guard — conversation must return a response ────────────────────────
+  - condition: template
+    value_template: "{{ _response_text | length > 0 }}"
+
+  # ── §8: Play TTS on room speaker via queue ─────────────────────────────────
+  - action: pyscript.tts_queue_speak
+    data:
+      text: "{{ _response_text }}"
+      voice: "{{ _tts_engine }}"
+      voice_id: "{{ _tts_voice_id }}"
+      target_mode: !input target_mode
+      target: !input explicit_speaker
+      priority: !input priority
+      announce: !input announce
+      duck: !input duck
+      metadata:
+        source: "assist_tts_reroute"
+        agent: "{{ _dispatch_agent }}"
+    response_variable: _tts_result

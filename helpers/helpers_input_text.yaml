@@ -151,6 +151,10 @@ ai_dispatcher_agent_pool:
   name: "AI Dispatcher - Agent Pool"
   max: 255
   icon: mdi:account-group
+ai_dispatcher_excluded_pipelines:
+  name: "AI Dispatcher - Excluded Pipelines"
+  max: 255
+  icon: mdi:playlist-remove
 ai_keyword_add:
   name: "Keyword to Add"
   max: 50

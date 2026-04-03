@@ -6,6 +6,9 @@ homeassistant:
 # Loads default set of integrations. Do not remove.
 default_config:
 
+# WebSocket API — required for Unfolded Circle Remote 3 integration
+websocket_api:
+
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
@@ -41,6 +44,7 @@ sensor:
       - "date_time_iso"
       - "time_date"
       - "time_utc"
+  - platform: websocket_api
 
 rest_command:
   ping_localhost:

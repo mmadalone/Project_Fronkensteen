@@ -271,6 +271,17 @@ blueprint:
           selector:
             boolean: {}
 
+        excluded_pipelines:
+          name: Excluded Pipelines
+          description: >-
+            Pipeline names to exclude from dispatcher discovery. These won't
+            appear in persona routing, era selectors, or wake-word maps. Use
+            for device-specific pipelines with degraded TTS (e.g., a UC3
+            pipeline using free HA Cloud TTS). Comma-separated.
+          default: ""
+          selector:
+            text: {}
+
         budget_fallback_agent:
           name: Budget Fallback Agent
           description: >-
@@ -393,6 +404,15 @@ blueprint:
               filter:
                 domain: input_select
 
+        excluded_pipelines_entity:
+          name: "Excluded pipelines entity"
+          description: "input_text storing comma-separated pipeline names to exclude from discovery."
+          default: input_text.ai_dispatcher_excluded_pipelines
+          selector:
+            entity:
+              filter:
+                domain: input_text
+
         budget_fallback_entity:
           name: "Budget fallback agent entity"
           description: "input_text storing the budget fallback agent name."
@@ -469,6 +489,7 @@ variables:
   _era_evening: !input era_evening_entity
   _continuity_window: !input continuity_window_entity
   _expertise_routing: !input expertise_routing_entity
+  _excluded_pipelines: !input excluded_pipelines_entity
   _budget_fallback: !input budget_fallback_entity
 
 triggers:
@@ -615,7 +636,15 @@ actions:
     data:
       value: !input budget_fallback_agent
 
-  # ── Step 8b: Push strip stage directions ─────────────────────────
+  # ── Step 8b: Push excluded pipelines ────────────────────────────
+  - alias: "Set excluded pipelines for dispatcher discovery"
+    action: input_text.set_value
+    target:
+      entity_id: !input excluded_pipelines_entity
+    data:
+      value: !input excluded_pipelines
+
+  # ── Step 8c: Push strip stage directions ─────────────────────────
   - alias: "Set strip dirs"
     variables:
       strip_dirs: !input strip_stage_directions
@@ -649,6 +678,7 @@ actions:
         handoff={{ states(v_handoff_enabled) }},
         expertise={{ states(_expertise_routing) }},
         fallback={{ states(_budget_fallback) }},
+        excluded={{ states(_excluded_pipelines) }},
         strip_dirs={{ states(v_tts_strip) }}
       level: info
       logger: dispatcher_profile

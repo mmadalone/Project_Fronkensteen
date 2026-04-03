@@ -9,7 +9,7 @@ How the pieces fit together.
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     TIER 2 — BLUEPRINTS (Features)                      │
-│  78 automation + 34 script blueprints                                   │
+│  79 automation + 34 script blueprints                                   │
 │  User-facing features: bedtime, wake-up, notifications, banter,         │
 │  briefings, music, calendar, theatrical debates, therapy, privacy       │
 │                                                                         │
@@ -372,7 +372,7 @@ L1 is injected into every agent system prompt via the `ai_context_hot.yaml` pack
 │   └── budget_state.json             Budget persistence (auto-generated)
 ├── packages/
 │   └── ai_*.yaml                     44 packages (glue layer)
-├── automation/*.yaml                  78 automation blueprints (features)
+├── automation/*.yaml                  79 automation blueprints (features)
 ├── script/*.yaml                      34 script blueprints (features)
 ├── helpers_input_*.yaml              7 helper definition files (215 entities)
 ├── helpers_counter.yaml              Counter helpers

@@ -45,7 +45,7 @@ Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, Y
 - **Channel surfing detection** -- below-threshold PVR entries counted as "flips", not logged individually.
 - **L2 memory logging** -- watch sessions stored with structured tags (`media,watch_history,{category},{source}`) for agent search.
 - **Hot context integration** -- "Now watching" and "Recently watched" lines injected into `ai_context_hot.yaml`.
-- **Template sensor enrichment** -- `sensor.madteevee_now_playing` reads `media_source` and `episode_name` from watch history sensor; `series_title`/`season`/`episode` read from media_player first, EPG fallback for PVR only.
+- **Template sensor enrichment** -- `sensor.madteevee_now_playing` reads `media_source` and `episode_name` from watch history sensor. `series_title`/`season`/`episode` read from `media_player` only (no pyscript fallback — avoids circular dependency AP-78). PVR show name available via `pvr_programme` attribute (from `sensor.madteevee_pvr_channel`).
 - **PVR channel switch handling** -- `content_change` trigger on `sensor.madteevee_now_playing` catches channel switches that don't transition through idle.
 - **Privacy gate** -- tier-based suppression.
 
@@ -101,6 +101,7 @@ Tracks what is watched on Kodi and logs it to L2 memory. Supports PVR live TV, Y
 
 - **v1:** Initial implementation.
 - **v1.1:** Descriptive sensor state — logbook shows "watching Seinfeld S03E10" instead of generic "watching".
+- **v1.2:** Removed circular dependency in template sensor — `series_title`/`season`/`episode` no longer fall back to pyscript sensor (AP-78). PVR show name via `pvr_programme` attribute.
 
 ## Author
 

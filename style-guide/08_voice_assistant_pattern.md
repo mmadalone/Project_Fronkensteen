@@ -931,6 +931,36 @@ For blueprints that need timeout protection on LLM calls, use the pyscript wrapp
 
 **When to use:** Any proactive or automated flow where a stuck LLM call would block the entire automation. Interactive flows (where the user is actively waiting) can use direct `conversation.process` since the pipeline has its own timeout.
 
+#### Pattern 7b: `[MARKER]` Prefix for Programmatic `conversation.process` (MANDATORY)
+
+Every blueprint that calls `conversation.process` **MUST** prefix the `text:` field with a `[MARKER]` tag — a bracketed label that identifies the call source. This is a **load-bearing architectural convention**, not just a style preference.
+
+```yaml
+# ✅ CORRECT — prefixed with source marker
+- action: conversation.process
+  data:
+    agent_id: "{{ dispatch_agent }}"
+    text: "[NOTIFICATION] {{ notification_prompt }}"
+
+# ✅ CORRECT — safety prefix includes marker
+- action: conversation.process
+  data:
+    agent_id: "{{ dispatch_agent }}"
+    text: "{{ v_safety_prefix }}{{ prompt_text }}"
+# Where v_safety_prefix defaults to:
+#   "[BEDTIME — do NOT call any functions or tools. ...]"
+
+# ❌ WRONG — bare text with no prefix
+- action: conversation.process
+  data:
+    agent_id: "{{ dispatch_agent }}"
+    text: "The user's phone battery is at {{ battery }}%."
+```
+
+**Established prefixes:** `[NOTIFICATION]`, `[REMINDER — ...]`, `[ALARM — ...]`, `[BEDTIME — ...]`, `[ESCALATION — ...]`. The exact label after `[` doesn't matter — the convention is that programmatic calls start with `[` and real voice commands never do.
+
+**Why this matters:** The `assist_tts_reroute` blueprint (v1.2.1+) triggers on `eoc_finished` events from ALL `conversation.process` calls — not just the target device. It filters programmatic calls by checking `user_input.text.startswith('[')`. Without the prefix, every blueprint LLM call would be re-processed by the reroute (double LLM + double TTS + double speaker playback).
+
 #### Pattern 8: No Blueprint-Level Ducking (MANDATORY — delegate to infrastructure)
 
 Blueprints MUST NOT implement manual duck/restore volume cycles. Ducking is handled by:

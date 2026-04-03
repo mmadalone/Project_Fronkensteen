@@ -35,7 +35,8 @@ Centralized Agent Dispatcher configuration blueprint. Exposes all routing knobs 
 │  6. Push handoff enabled/disabled                      │
 │  7. Push expertise routing mode (off/suggest/auto)     │
 │  8. Push budget fallback agent                         │
-│  8b. Push strip stage directions on/off                │
+│  8b. Push excluded pipelines (dispatcher discovery)    │
+│  8c. Push strip stage directions on/off                │
 │  9. Log completion to system_log                       │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -51,6 +52,7 @@ Centralized Agent Dispatcher configuration blueprint. Exposes all routing knobs 
 - **Expertise routing** -- off, suggest (agent recommends handoff), or auto (agent hands off automatically).
 - **TTS stage direction stripping** -- remove `[bracketed]` stage directions from LLM output before TTS.
 - **Budget fallback agent** -- which local agent to fall back to when LLM budget is exhausted.
+- **Excluded pipelines** -- comma-separated pipeline names to hide from dispatcher discovery (e.g., device-specific pipelines with degraded TTS).
 - **Privacy gate** -- tier-based suppression with per-person, per-tier override controls.
 - **Multi-profile support** -- create multiple instances (Daytime, Guest, etc.) with different configs; last-write-wins.
 
@@ -110,6 +112,7 @@ Options per era: None (skip), Rotate, Rick, Quark, Kramer, Deadpool, Doctor Port
 | `handoff_enabled` | `true` | Allow voice handoff commands |
 | `expertise_routing` | `suggest` | Out-of-domain behavior: off, suggest, or auto |
 | `strip_stage_directions` | `true` | Remove `[bracketed]` stage directions from TTS output |
+| `excluded_pipelines` | *(empty)* | Comma-separated pipeline names to exclude from dispatcher discovery |
 | `budget_fallback_agent` | `homeassistant` | Local agent for budget exhaustion fallback |
 
 </details>
@@ -142,6 +145,7 @@ Options per era: None (skip), Rotate, Rick, Quark, Kramer, Deadpool, Doctor Port
 | `era_evening_entity` | `input_select.ai_dispatcher_era_evening` | Input select for the evening persona |
 | `continuity_window_entity` | `input_number.ai_conversation_continuity_window` | Input number for continuity window in minutes |
 | `expertise_routing_entity` | `input_select.ai_expertise_routing_mode` | Input select controlling expertise routing mode |
+| `excluded_pipelines_entity` | `input_text.ai_dispatcher_excluded_pipelines` | Input text storing comma-separated excluded pipeline names |
 | `budget_fallback_entity` | `input_text.ai_budget_fallback_agent` | Input text storing the budget fallback agent name |
 
 </details>
@@ -156,6 +160,7 @@ Options per era: None (skip), Rotate, Rick, Quark, Kramer, Deadpool, Doctor Port
 
 ## Changelog
 
+- **v1.1.0:** Added `excluded_pipelines` input -- comma-separated pipeline names excluded from dispatcher discovery. Pushed to `input_text.ai_dispatcher_excluded_pipelines` on apply.
 - **v1.0.0:** Initial release -- centralized dispatcher configuration via blueprint inputs.
 
 ## Author

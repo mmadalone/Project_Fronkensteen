@@ -108,25 +108,19 @@
         series_title: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}
-            {% set ha = state_attr('media_player.madteevee', 'media_series_title') | default('') %}
-            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_series') | default('', true) %}
-            {{ ha if ha else epg }}
+            {{ state_attr('media_player.madteevee', 'media_series_title') | default('') }}
           {% endif %}
         season: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}
-            {% set ha = state_attr('media_player.madteevee', 'media_season') | default('') %}
-            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_season') | default('', true) %}
-            {% set val = ha if ha not in ['', None] else epg %}
-            {{ '' if val in ['', -1, '-1'] else val }}
+            {% set val = state_attr('media_player.madteevee', 'media_season') | default('') %}
+            {{ '' if val in ['', None, -1, '-1'] else val }}
           {% endif %}
         episode: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}
-            {% set ha = state_attr('media_player.madteevee', 'media_episode') | default('') %}
-            {% set epg = state_attr('sensor.ai_watch_history_status', 'current_episode') | default('', true) %}
-            {% set val = ha if ha not in ['', None] else epg %}
-            {{ '' if val in ['', -1, '-1'] else val }}
+            {% set val = state_attr('media_player.madteevee', 'media_episode') | default('') %}
+            {{ '' if val in ['', None, -1, '-1'] else val }}
           {% endif %}
         player_state: >-
           {{ states('media_player.madteevee') }}

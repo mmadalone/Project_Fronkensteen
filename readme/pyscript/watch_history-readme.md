@@ -39,7 +39,7 @@ Pairs with `packages/ai_watch_history.yaml` (thin doc package). All triggers and
 
 - **watch_history.yaml (blueprint)** -- sole caller. The blueprint handles Kodi state triggers and PVR channel-switch detection (`content_change` trigger on `sensor.madteevee_now_playing`).
 - **ai_context_hot.yaml** -- reads `sensor.ai_watch_history_status` for "Now watching" / "Recently watched" hot context lines.
-- **template.yaml** -- `sensor.madteevee_now_playing` reads `media_source` and `episode_name` from the watch history sensor. Series/season/episode attributes read from `media_player` first, fall back to watch history sensor EPG data for PVR content only.
+- **template.yaml** -- `sensor.madteevee_now_playing` reads `media_source` and `episode_name` from the watch history sensor. `series_title`/`season`/`episode` read from `media_player` only (no pyscript fallback — AP-78). PVR show name carried by `pvr_programme` attribute instead.
 
 ## Notes
 
@@ -56,6 +56,7 @@ Pairs with `packages/ai_watch_history.yaml` (thin doc package). All triggers and
 ## Changelog
 
 - **v1:** Initial implementation.
+- **v1.1:** Template sensor circular dependency resolved — `series_title`/`season`/`episode` read from media_player only, no pyscript fallback (AP-78).
 
 ## Author
 

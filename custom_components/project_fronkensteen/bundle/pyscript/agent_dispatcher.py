@@ -233,6 +233,17 @@ def _build_from_pipelines(
     display_map = {}           # persona_key → "Display Name"
     persona_pipeline_map = {}  # (persona, variant) → pipeline record
 
+    # Load excluded pipelines from helper (comma-separated names)
+    _excluded = set()
+    try:
+        _raw = state.get("input_text.ai_dispatcher_excluded_pipelines") or ""  # noqa: F821
+        for name in _raw.split(","):
+            name = name.strip()
+            if name:
+                _excluded.add(name.lower())
+    except (NameError, Exception):
+        pass
+
     for item in items:
         engine = item.get("conversation_engine", "")
         pid = item.get("id", "")
@@ -246,6 +257,10 @@ def _build_from_pipelines(
             continue
 
         if not pname:
+            continue
+
+        # Skip pipelines in the exclusion list (e.g., UC3 with degraded TTS)
+        if pname.lower() in _excluded:
             continue
 
         # Derive persona and variant from the pipeline display name

@@ -1,20 +1,27 @@
 blueprint:
-  name: "Phone charge reminder – persona-aware battery nudges"
+  name: "Charge reminder – persona-aware battery nudges (v6)"
   author: madalone
   description: >
-    # Phone charge reminder – persona-aware battery nudges
+    # Charge Reminder – persona-aware battery nudges
 
-    Escalating TTS reminders when phone battery drops below configurable
+    Escalating TTS reminders when a device's battery drops below configurable
     thresholds. Supports three delivery styles — prompt (LLM-generated,
     persona-aware), factual (static, no LLM), or silent (no TTS).
     Congratulates on plug-in when battery was low.
+
+    Works with any device that has a battery sensor and charging binary
+    sensor — phones, remotes, tablets, etc. Set the **Device name** input
+    to customize prompts (e.g., "phone", "remote control", "tablet").
 
     Escalation: casual → critical → urgent. Each tier has its own
     editable prompt/factual message, reminder count, and dedup window.
 
     ### Recent changes
+    - **v6:** Generic device support — new `device_name` input replaces
+      hardcoded "phone" in all prompts, aliases, and dispatcher intent.
+      Use `{device}` placeholder in custom prompts alongside `{battery}`.
     - **v5:** Quiet hours & DND — optional time-based quiet window and
-      phone DND sensor gate suppress all announcements when active
+      DND sensor gate suppress all announcements when active
     - **v4:** Optional "fully charged" TTS announcement when battery
       reaches 100% while still charging — LLM prompt or static fallback
     - **v3:** Per-tier prompts & factual messages, reminder count with
@@ -31,17 +38,27 @@ blueprint:
     # ===========================================================================
     # ① PHONE SENSORS
     # ===========================================================================
-    phone_sensors:
-      name: "① Phone sensors"
-      icon: mdi:cellphone
-      description: Battery level sensor and charging state sensor.
+    device_section:
+      name: "① Device"
+      icon: mdi:devices
+      description: Device name, battery sensor, and charging sensor.
       collapsed: false
       input:
+        device_name:
+          name: Device name
+          description: >-
+            Name of the device (e.g., "phone", "remote control", "tablet").
+            Used in prompts, announcements, and dispatcher intent. Use
+            `{device}` placeholder in custom prompts to reference this name.
+          default: "phone"
+          selector:
+            text: {}
+
         battery_sensor:
           name: Battery level sensor
           description: >
             The sensor that reports battery percentage
-            (e.g. sensor.phone_battery_level).
+            (e.g. sensor.phone_battery_level, sensor.remote_battery).
           default: ""
           selector:
             entity:
@@ -51,7 +68,7 @@ blueprint:
         charging_sensor:
           name: Charging state sensor
           description: >
-            Binary sensor that reports whether the phone is charging
+            Binary sensor that reports whether the device is charging
             (on = charging, off = not charging).
           default: ""
           selector:
@@ -67,7 +84,7 @@ blueprint:
       description: >
         Battery percentage thresholds, reminder counts, and per-tier
         prompts/factual messages. Set thresholds in descending order
-        (low > critical > urgent). Use {battery} as placeholder.
+        (low > critical > urgent). Use {battery} and {device} as placeholders.
       collapsed: true
       input:
         # ── Low tier ──────────────────────────────────────────────────
@@ -87,7 +104,7 @@ blueprint:
           name: Low — reminder count
           description: >
             How many times the low-tier nudge repeats (with 30 min delay
-            between each). Stops early if the phone is plugged in.
+            between each). Stops early if the device is plugged in.
           default: 2
           selector:
             number:
@@ -101,9 +118,9 @@ blueprint:
             LLM prompt for the casual nudge. Use {battery} for percentage.
             Only used when delivery style is "prompt".
           default: >-
-            The user's phone battery is at {battery}%. This is a casual,
+            The user's {device} battery is at {battery}%. This is a casual,
             low-priority reminder. Say ONE short, in-character sentence
-            nudging them to charge their phone. Keep it playful and
+            nudging them to charge their {device}. Keep it playful and
             light-hearted. No quotation marks, no special formatting.
           selector:
             text:
@@ -115,7 +132,7 @@ blueprint:
             Static message for the casual nudge. Use {battery} for
             percentage. Only used when delivery style is "factual".
           default: >-
-            Phone battery at {battery}%. Consider charging soon.
+            {device} battery at {battery}%. Consider charging soon.
           selector:
             text:
               multiline: true
@@ -137,7 +154,7 @@ blueprint:
           name: Critical — reminder count
           description: >
             How many times the critical nudge repeats (with 15 min delay
-            between each). Stops early if the phone is plugged in.
+            between each). Stops early if the device is plugged in.
           default: 2
           selector:
             number:
@@ -151,7 +168,7 @@ blueprint:
             LLM prompt for the critical nudge. Use {battery} for
             percentage. Only used when delivery style is "prompt".
           default: >-
-            The user's phone battery is at {battery}%. This is a critical
+            The user's {device} battery is at {battery}%. This is a critical
             warning — battery is getting dangerously low. Say ONE short,
             firm, in-character sentence urging them to charge NOW. Be
             serious, not playful. No quotation marks, no special formatting.
@@ -187,7 +204,7 @@ blueprint:
           name: Urgent — reminder count
           description: >
             How many times the urgent warning repeats (with 5 min delay
-            between each). Stops early if the phone is plugged in.
+            between each). Stops early if the device is plugged in.
           default: 2
           selector:
             number:
@@ -201,8 +218,8 @@ blueprint:
             LLM prompt for the emergency warning. Use {battery} for
             percentage. Only used when delivery style is "prompt".
           default: >-
-            The user's phone battery is at {battery}%! This is an
-            EMERGENCY — the phone is about to die. Say ONE short,
+            The user's {device} battery is at {battery}%! This is an
+            EMERGENCY — the {device} is about to die. Say ONE short,
             alarming, in-character sentence demanding they plug in
             IMMEDIATELY. Maximum urgency. No quotation marks, no
             special formatting.
@@ -216,7 +233,7 @@ blueprint:
             Static message for the emergency warning. Use {battery} for
             percentage. Only used when delivery style is "factual".
           default: >-
-            {battery}%! Your phone is about to die! Plug it in right now!
+            {battery}%! Your {device} is about to die! Plug it in right now!
           selector:
             text:
               multiline: true
@@ -273,7 +290,7 @@ blueprint:
             for the percentage when they plugged in. Only used when delivery
             style is "prompt".
           default: >-
-            The user just plugged in their phone at {battery}% battery.
+            The user just plugged in their {device} at {battery}% battery.
             Congratulate them in ONE short, in-character sentence. Be
             playful — they were cutting it close. No quotation marks, no
             special formatting.
@@ -360,7 +377,7 @@ blueprint:
         dnd_sensor:
           name: Do Not Disturb sensor
           description: >-
-            Phone DND sensor from the Companion App. When state is
+            DND sensor (e.g., phone Companion App). When state is
             anything other than "off" or "unavailable", announcements
             are suppressed. Leave empty to skip DND checking.
           default: ""
@@ -408,7 +425,7 @@ blueprint:
         enable_congrats:
           name: Congratulate on plug-in
           description: >
-            Send a celebratory TTS when the phone is plugged in
+            Send a celebratory TTS when the device is plugged in
             while battery was below the low threshold.
           default: true
           selector:
@@ -430,7 +447,7 @@ blueprint:
             Used when style is "prompt". Keep it short — the agent
             should return a single sentence.
           default: >-
-            The phone is fully charged at 100%. Generate a short,
+            The {device} is fully charged at 100%. Generate a short,
             friendly message letting the user know they can unplug it.
             One sentence only.
           selector:
@@ -441,7 +458,7 @@ blueprint:
           name: Fully charged — static message
           description: >
             Fallback message when style is "factual" or LLM is unavailable.
-          default: "Phone is fully charged. You can unplug it."
+          default: "{device} is fully charged. You can unplug it."
           selector:
             text:
               multiline: true
@@ -566,6 +583,7 @@ blueprint:
               domain: input_boolean
 
 variables:
+  _device_name: !input device_name
   battery_sensor: !input battery_sensor
   charging_sensor: !input charging_sensor
   low_threshold: !input low_threshold
@@ -632,14 +650,14 @@ triggers:
     entity_id: !input battery_sensor
     below: !input urgent_threshold
 
-  - alias: "Phone plugged in"
+  - alias: "Device plugged in"
     id: plugged_in
     trigger: state
     entity_id: !input charging_sensor
     from: "off"
     to: "on"
 
-  - alias: "Phone fully charged"
+  - alias: "Device fully charged"
     id: fully_charged
     trigger: numeric_state
     entity_id: !input battery_sensor
@@ -737,12 +755,12 @@ actions:
               {{ style == 'prompt' and use_dispatcher
                  and is_state(v_dispatcher_enabled, 'on') }}
         sequence:
-          - alias: "Dispatch agent for phone charge reminder"
+          - alias: "Dispatch agent for charge reminder"
             action: pyscript.agent_dispatch
             response_variable: dispatch
             data:
               wake_word: ""
-              intent_text: "phone charge reminder"
+              intent_text: "{{ _device_name }} charge reminder"
               skip_continuity: true
             continue_on_error: true
 
@@ -806,7 +824,7 @@ actions:
             repeat:
               count: "{{ low_reminder_count | int(2) }}"
               sequence:
-                - alias: "Stop if phone was plugged in"
+                - alias: "Stop if device was plugged in"
                   condition: state
                   entity_id: !input charging_sensor
                   state: "off"
@@ -826,7 +844,7 @@ actions:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
                               {{ _pfx }}{{ low_prompt
-                                 | replace('{battery}', _battery | string) }}
+                                 | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
                           response_variable: llm_result
                           continue_on_error: true
                         - alias: "Set message"
@@ -834,12 +852,12 @@ actions:
                             _message: >-
                               {{ (llm_result | default({})).get('response', {})
                                  .get('speech', {}).get('plain', {}).get('speech',
-                                 low_factual | replace('{battery}', _battery | string)) }}
+                                 low_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name)) }}
                   default:
                     - alias: "Set message"
                       variables:
                         _message: >-
-                          {{ low_factual | replace('{battery}', _battery | string) }}
+                          {{ low_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
                 - alias: "Deliver casual nudge — satellite > player > default"
                   choose:
@@ -907,7 +925,7 @@ actions:
             repeat:
               count: "{{ critical_reminder_count | int(2) }}"
               sequence:
-                - alias: "Stop if phone was plugged in"
+                - alias: "Stop if device was plugged in"
                   condition: state
                   entity_id: !input charging_sensor
                   state: "off"
@@ -927,7 +945,7 @@ actions:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
                               {{ _pfx }}{{ critical_prompt
-                                 | replace('{battery}', _battery | string) }}
+                                 | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
                           response_variable: llm_result
                           continue_on_error: true
                         - alias: "Set message"
@@ -935,12 +953,12 @@ actions:
                             _message: >-
                               {{ (llm_result | default({})).get('response', {})
                                  .get('speech', {}).get('plain', {}).get('speech',
-                                 critical_factual | replace('{battery}', _battery | string)) }}
+                                 critical_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name)) }}
                   default:
                     - alias: "Set message"
                       variables:
                         _message: >-
-                          {{ critical_factual | replace('{battery}', _battery | string) }}
+                          {{ critical_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
                 - alias: "Deliver critical nudge — satellite > player > default"
                   choose:
@@ -1008,7 +1026,7 @@ actions:
             repeat:
               count: "{{ urgent_reminder_count | int(2) }}"
               sequence:
-                - alias: "Stop if phone was plugged in"
+                - alias: "Stop if device was plugged in"
                   condition: state
                   entity_id: !input charging_sensor
                   state: "off"
@@ -1028,7 +1046,7 @@ actions:
                             agent_id: "{{ dispatch_agent }}"
                             text: >-
                               {{ _pfx }}{{ urgent_prompt
-                                 | replace('{battery}', _battery | string) }}
+                                 | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
                           response_variable: llm_result
                           continue_on_error: true
                         - alias: "Set message"
@@ -1036,12 +1054,12 @@ actions:
                             _message: >-
                               {{ (llm_result | default({})).get('response', {})
                                  .get('speech', {}).get('plain', {}).get('speech',
-                                 urgent_factual | replace('{battery}', _battery | string)) }}
+                                 urgent_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name)) }}
                   default:
                     - alias: "Set message"
                       variables:
                         _message: >-
-                          {{ urgent_factual | replace('{battery}', _battery | string) }}
+                          {{ urgent_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
                 - alias: "Deliver emergency warning — satellite > player > default"
                   choose:
@@ -1121,7 +1139,7 @@ actions:
                       agent_id: "{{ dispatch_agent }}"
                       text: >-
                         {{ _pfx }}{{ congrats_prompt
-                           | replace('{battery}', _battery | string) }}
+                           | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
                     response_variable: llm_result
                     continue_on_error: true
                   - alias: "Set message"
@@ -1129,12 +1147,12 @@ actions:
                       _message: >-
                         {{ (llm_result | default({})).get('response', {})
                            .get('speech', {}).get('plain', {}).get('speech',
-                           congrats_factual | replace('{battery}', _battery | string)) }}
+                           congrats_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name)) }}
             default:
               - alias: "Set message"
                 variables:
                   _message: >-
-                    {{ congrats_factual | replace('{battery}', _battery | string) }}
+                    {{ congrats_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
           - alias: "Deliver congrats — satellite > player > default"
             choose:
               - alias: "Via Assist Satellite"
@@ -1190,6 +1208,12 @@ actions:
           - condition: state
             entity_id: !input charging_sensor
             state: "on"
+          # Suppress if congrats already fired recently (prevents double
+          # announcement when plugging in at near-full battery)
+          - condition: template
+            value_template: >-
+              {% set last = this.attributes.last_triggered %}
+              {{ last is none or (now() - last).total_seconds() > 60 }}
         sequence:
           - alias: "Generate fully-charged message"
             choose:
@@ -1204,7 +1228,7 @@ actions:
                     action: conversation.process
                     data:
                       agent_id: "{{ dispatch_agent }}"
-                      text: "{{ _pfx }}{{ fully_charged_prompt }}"
+                      text: "{{ _pfx }}{{ fully_charged_prompt | replace('{device}', _device_name) }}"
                     response_variable: llm_result
                     continue_on_error: true
                   - alias: "Set message"
@@ -1212,11 +1236,11 @@ actions:
                       _message: >-
                         {{ (llm_result | default({})).get('response', {})
                            .get('speech', {}).get('plain', {}).get('speech',
-                           fully_charged_factual) }}
+                           fully_charged_factual | replace('{device}', _device_name)) }}
             default:
               - alias: "Set message"
                 variables:
-                  _message: "{{ fully_charged_factual }}"
+                  _message: "{{ fully_charged_factual | replace('{device}', _device_name) }}"
           - alias: "Deliver fully-charged — satellite > player > default"
             choose:
               - alias: "Via Assist Satellite"
@@ -1308,7 +1332,7 @@ actions:
         repeat:
           count: "{{ _tier_count | int(2) }}"
           sequence:
-            - alias: "Stop if phone was plugged in"
+            - alias: "Stop if device was plugged in"
               condition: state
               entity_id: !input charging_sensor
               state: "off"
@@ -1328,7 +1352,7 @@ actions:
                         agent_id: "{{ dispatch_agent }}"
                         text: >-
                           {{ _pfx }}{{ _tier_prompt
-                             | replace('{battery}', _battery | string) }}
+                             | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
                       response_variable: llm_result
                       continue_on_error: true
                     - alias: "Set message"
@@ -1336,12 +1360,12 @@ actions:
                         _message: >-
                           {{ (llm_result | default({})).get('response', {})
                              .get('speech', {}).get('plain', {}).get('speech',
-                             _tier_factual | replace('{battery}', _battery | string)) }}
+                             _tier_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name)) }}
               default:
                 - alias: "Set message"
                   variables:
                     _message: >-
-                      {{ _tier_factual | replace('{battery}', _battery | string) }}
+                      {{ _tier_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
             - alias: "Deliver nudge — satellite > player > default"
               choose:
