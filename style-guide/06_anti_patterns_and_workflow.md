@@ -264,6 +264,36 @@ For daily call budgets, pair with a `counter` helper that resets at midnight via
 68. **Never call a `@pyscript_executor` function without a `callable()` guard.** Executor registration can silently fail during pyscript module load — import errors, timing issues, or partial re-registration leave the function name bound to `None`. Calling `None(...)` produces `'<function>' is not callable (got None)` — a confusing crash with no pointer to the root cause. **Before every `await executor_fn(...)` call**, check `if not callable(executor_fn):` — log an actionable error naming the function and return a safe default (empty dict, empty list, etc.). This is especially critical for modules with 3+ executor functions where partial registration failure has higher surface area. Single-executor modules with simple imports are lower risk but still benefit from the guard. **Reference pattern:** `theatrical_mode.py` `_ensure_cache()` — returns a safe cache dict with `"error": "executor_not_registered"` key. **Detection:** any `await _xxx_sync(...)` call where `_xxx_sync` is decorated with `@pyscript_executor` and there is no preceding `callable(_xxx_sync)` check.
 74. **Never create `input_*` helpers for runtime state — use `state.set()` sensors instead.** After Phase 3 Runtime State Migration (2026-03-29), all runtime state (code-written flags, counters, state tracking) uses pyscript `state.set()` sensors. `input_boolean`/`input_text`/`input_number`/`input_select` helpers are reserved exclusively for user-configured values (preferences, thresholds, toggles, schedules). For pyscript modules: call `state.set()` directly. For YAML automations/blueprints: use the `pyscript.set_sensor_value` bridge service (`state_bridge.py`) with parameters `entity_id`, `value`, `attrs_json`, `icon`, `friendly_name`. Sensors do not persist across restarts — they're rebuilt by pyscript startup handlers (this is by design; runtime values are transient). **Detection:** any new `input_*` helper definition where the value is only written by code and never configured by users through the UI or dashboard.
 
+### 10.1 Known HA Issues & Workarounds
+
+#### WA-01: HA 2026.4 WebAwesome Form Fix (white form fields on dark themes)
+
+**Issue:** HA 2026.4 migrated form components to WebAwesome/Material 3. These render inside shadow DOM boundaries that theme YAML variables (`mdc-text-field-fill-color`, etc.) cannot cross. Result: white input fields with black text on any dark theme — unreadable in Settings, Automations, Blueprints, and More Info dialogs.
+
+**Root cause:** HA theme variables are set as CSS custom properties on the document root. Shadow DOM encapsulation prevents these from cascading into WebAwesome component internals. The `var()` references resolve to browser defaults (#f5f5f5 fill, rgba(0,0,0,0.87) ink).
+
+**Fix — two layers:**
+
+1. **Theme YAML (`lcars.yaml` `&base` block):**
+   ```yaml
+   color-scheme: dark
+   ```
+   Tells the browser to use dark-mode native form styling. Single line, broad coverage, no shadow DOM piercing needed.
+
+2. **Shadow DOM JS injector (`www/lcars-form-fix.js`):**
+   Polls DOM every 2s, recursively walks all shadow roots, injects a `<style class="lcars-form-fix">` element into each. Covers `:host` variables, `.mdc-text-field` variants, floating labels, notched outlines, line ripples, list/menu items, and selected states. Registered via `configuration.yaml`:
+   ```yaml
+   frontend:
+     extra_module_url:
+       - /local/lcars-form-fix.js
+   ```
+
+**Color tokens:** `#1a1a2e` (field bg), `#d3d3d3` (text/labels), `#555` (borders), `#2a2a4e` (selected items), `#ffffff` (selected text).
+
+**Repo:** `github.com/mmadalone/madalone-lcars-theme-patches` (private). Source of truth for both files.
+
+**Scope:** Affects ALL dark themes, not just LCARS. The JS injector is theme-agnostic — any dark theme can use it by registering the module URL and adjusting color tokens.
+
 ---
 
 ## 11. WORKFLOW

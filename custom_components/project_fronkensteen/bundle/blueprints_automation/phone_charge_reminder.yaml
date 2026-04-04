@@ -1,5 +1,5 @@
 blueprint:
-  name: "Charge reminder – persona-aware battery nudges (v6)"
+  name: "Charge reminder – persona-aware battery nudges (v7)"
   author: madalone
   description: >
     # Charge Reminder – persona-aware battery nudges
@@ -17,6 +17,14 @@ blueprint:
     editable prompt/factual message, reminder count, and dedup window.
 
     ### Recent changes
+    - **v7:** Charge control — optional wireless charging switch
+      (`charge_control_switch`) with configurable full-charge ceiling
+      (`full_charge_threshold`, default 100) and resume floor
+      (`charge_resume_threshold`, default 60). When set, charging is
+      disabled at the ceiling and re-enabled at the floor. Separate
+      `charge_limit_*` and `charge_resumed_*` prompt/factual pairs
+      with `{full_charge_threshold}` placeholder. Fully backward-
+      compatible — leave switch empty for phone-style behavior.
     - **v6:** Generic device support — new `device_name` input replaces
       hardcoded "phone" in all prompts, aliases, and dispatcher intent.
       Use `{device}` placeholder in custom prompts alongside `{battery}`.
@@ -582,6 +590,128 @@ blueprint:
             entity:
               domain: input_boolean
 
+    # ===========================================================================
+    # ⑩ CHARGE CONTROL
+    # ===========================================================================
+    charge_control:
+      name: "⑩ Charge control"
+      icon: mdi:battery-charging-wireless
+      description: >
+        Optional wireless charging switch and thresholds for battery
+        preservation. Leave switch empty to disable (default phone
+        behavior). When set, charging is cut at the ceiling and
+        re-enabled at the floor.
+      collapsed: true
+      input:
+        charge_control_switch:
+          name: Charge control switch
+          description: >
+            Switch entity that controls wireless charging (e.g.,
+            switch.remote_3_wireless_charging from hass-unfoldedcircle).
+            Leave empty to disable charge control — the blueprint
+            behaves exactly like v6.
+          default: ""
+          selector:
+            entity:
+              domain: switch
+
+        full_charge_threshold:
+          name: Full charge threshold (%)
+          description: >
+            Battery percentage at which the "fully charged" announcement
+            fires and (if a charge control switch is set) charging is
+            disabled. Set to 100 for phones, 80 for battery preservation.
+          default: 100
+          selector:
+            number:
+              min: 50
+              max: 100
+              step: 5
+              unit_of_measurement: "%"
+
+        charge_resume_threshold:
+          name: Charge resume threshold (%)
+          description: >
+            Battery percentage at which charging is re-enabled via the
+            charge control switch. Only used when a charge control
+            switch is configured.
+          default: 60
+          selector:
+            number:
+              min: 20
+              max: 80
+              step: 5
+              unit_of_measurement: "%"
+
+        charge_limit_prompt:
+          name: Charge limit reached — LLM prompt
+          description: >
+            LLM prompt when battery hits the full charge threshold and
+            charging is disabled. Use {battery}, {device}, and
+            {full_charge_threshold} as placeholders. Only used when
+            delivery style is "prompt" and a charge control switch
+            is configured.
+          default: >-
+            The user's {device} has reached {battery}%, hitting the
+            configured charge limit of {full_charge_threshold}%.
+            Wireless charging has been disabled to preserve battery
+            health. Say ONE short, in-character sentence letting them
+            know. Keep it casual and informative. No quotation marks,
+            no special formatting.
+          selector:
+            text:
+              multiline: true
+
+        charge_limit_factual:
+          name: Charge limit reached — static message
+          description: >
+            Static message when battery hits the full charge threshold
+            and charging is disabled. Use {battery}, {device}, and
+            {full_charge_threshold} as placeholders.
+          default: >-
+            {device} at {battery}%. Charge limit of {full_charge_threshold}%
+            reached — wireless charging disabled.
+          selector:
+            text:
+              multiline: true
+
+        enable_charge_resumed:
+          name: Announce charge resumed
+          description: >
+            Send a TTS announcement when battery drops below the
+            resume threshold and charging is re-enabled. Only used
+            when a charge control switch is configured.
+          default: false
+          selector:
+            boolean: {}
+
+        charge_resumed_prompt:
+          name: Charge resumed — LLM prompt
+          description: >
+            LLM prompt when battery drops below the resume threshold
+            and charging is re-enabled. Use {battery}, {device}, and
+            {charge_resume_threshold} as placeholders.
+          default: >-
+            The user's {device} battery dropped to {battery}%, below
+            the {charge_resume_threshold}% threshold. Wireless charging
+            has been re-enabled. Say ONE short, in-character sentence.
+            Keep it brief and informative. No quotation marks, no
+            special formatting.
+          selector:
+            text:
+              multiline: true
+
+        charge_resumed_factual:
+          name: Charge resumed — static message
+          description: >
+            Static message when charging is re-enabled. Use {battery},
+            {device}, and {charge_resume_threshold} as placeholders.
+          default: >-
+            {device} at {battery}%. Charging re-enabled.
+          selector:
+            text:
+              multiline: true
+
 variables:
   _device_name: !input device_name
   battery_sensor: !input battery_sensor
@@ -627,6 +757,15 @@ variables:
   quiet_start_val: !input quiet_start
   quiet_end_val: !input quiet_end
   _pfx: "[REMINDER — do NOT call any functions or tools. Respond only with speech text, no actions.] "
+  # ── charge control ─────────────────────────────────────────────────────
+  v_charge_switch: !input charge_control_switch
+  full_charge_threshold: !input full_charge_threshold
+  charge_resume_threshold: !input charge_resume_threshold
+  charge_limit_prompt: !input charge_limit_prompt
+  charge_limit_factual: !input charge_limit_factual
+  enable_charge_resumed: !input enable_charge_resumed
+  charge_resumed_prompt: !input charge_resumed_prompt
+  charge_resumed_factual: !input charge_resumed_factual
 
 mode: restart
 max_exceeded: silent
@@ -662,6 +801,18 @@ triggers:
     trigger: numeric_state
     entity_id: !input battery_sensor
     above: 99
+
+  - alias: "Charge ceiling reached"
+    id: charge_ceiling
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    above: !input full_charge_threshold
+
+  - alias: "Battery dropped to charge resume level"
+    id: charge_resume
+    trigger: numeric_state
+    entity_id: !input battery_sensor
+    below: !input charge_resume_threshold
 
   - alias: "HA restart — catch-up check"
     id: ha_restart
@@ -1285,6 +1436,235 @@ actions:
                   duck: "{{ not v_bypass_ducking }}"
                 response_variable: tts_result
                 continue_on_error: true
+
+          - alias: "Disable charging switch at 100% (if configured)"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ (v_charge_switch | default('')) | length > 0 }}
+                sequence:
+                  - alias: "Turn off wireless charging switch"
+                    action: switch.turn_off
+                    target:
+                      entity_id: "{{ v_charge_switch }}"
+                    continue_on_error: true
+
+      # ── CHARGE CEILING — preservation cutoff ────────────────────────
+      - alias: "Charge ceiling — preservation cutoff"
+        conditions:
+          - condition: trigger
+            id: charge_ceiling
+          - condition: template
+            value_template: >-
+              {{ (v_charge_switch | default('')) | length > 0
+                 and (full_charge_threshold | int(100)) < 100 }}
+          - condition: state
+            entity_id: !input charging_sensor
+            state: "on"
+          - condition: template
+            value_template: >-
+              {% set last = this.attributes.last_triggered %}
+              {{ last is none or (now() - last).total_seconds() > 60 }}
+        sequence:
+          - alias: "Disable wireless charging"
+            action: switch.turn_off
+            target:
+              entity_id: "{{ v_charge_switch }}"
+            continue_on_error: true
+
+          - alias: "Skip announcement if style is silent"
+            condition: template
+            value_template: "{{ style != 'silent' }}"
+
+          - alias: "Generate charge-limit message"
+            choose:
+              - alias: "Prompt mode — LLM-generated charge-limit"
+                conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ style == 'prompt'
+                         and (dispatch_agent | default('') | length > 0) }}
+                sequence:
+                  - alias: "LLM-generate charge-limit announcement"
+                    action: conversation.process
+                    data:
+                      agent_id: "{{ dispatch_agent }}"
+                      text: >-
+                        {{ _pfx }}{{ charge_limit_prompt
+                           | replace('{battery}', _battery | string)
+                           | replace('{device}', _device_name)
+                           | replace('{full_charge_threshold}', full_charge_threshold | string) }}
+                    response_variable: llm_result
+                    continue_on_error: true
+                  - alias: "Set message"
+                    variables:
+                      _message: >-
+                        {{ (llm_result | default({})).get('response', {})
+                           .get('speech', {}).get('plain', {}).get('speech',
+                           charge_limit_factual
+                           | replace('{battery}', _battery | string)
+                           | replace('{device}', _device_name)
+                           | replace('{full_charge_threshold}', full_charge_threshold | string)) }}
+            default:
+              - alias: "Set message"
+                variables:
+                  _message: >-
+                    {{ charge_limit_factual
+                       | replace('{battery}', _battery | string)
+                       | replace('{device}', _device_name)
+                       | replace('{full_charge_threshold}', full_charge_threshold | string) }}
+
+          - alias: "Deliver charge-limit — satellite > player > default"
+            choose:
+              - alias: "Via Assist Satellite"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Announce charge-limit via satellite"
+                    action: assist_satellite.announce
+                    target:
+                      entity_id: "{{ v_satellite_entity }}"
+                    data:
+                      message: "{{ _message }}"
+                    continue_on_error: true
+              - alias: "Via TTS queue — explicit player"
+                conditions:
+                  - condition: template
+                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                sequence:
+                  - alias: "Speak charge-limit on explicit player"
+                    action: pyscript.tts_queue_speak
+                    data:
+                      text: "{{ _message }}"
+                      voice: "{{ dispatch_voice | default('') }}"
+                      voice_id: "{{ dispatch_tts_voice }}"
+                      volume_level: "{{ v_tts_volume }}"
+                      priority: 3
+                      duck: "{{ not v_bypass_ducking }}"
+                      target_mode: explicit
+                      target: "{{ v_tts_output_player }}"
+                    response_variable: tts_result
+                    continue_on_error: true
+            default:
+              - alias: "Speak charge-limit on default player"
+                action: pyscript.tts_queue_speak
+                data:
+                  text: "{{ _message }}"
+                  voice: "{{ dispatch_voice | default('') }}"
+                  voice_id: "{{ dispatch_tts_voice }}"
+                  volume_level: "{{ v_tts_volume }}"
+                  priority: 3
+                  duck: "{{ not v_bypass_ducking }}"
+                response_variable: tts_result
+                continue_on_error: true
+
+      # ── CHARGE RESUME — re-enable charging ──────────────────────────
+      - alias: "Charge resume — re-enable charging"
+        conditions:
+          - condition: trigger
+            id: charge_resume
+          - condition: template
+            value_template: >-
+              {{ (v_charge_switch | default('')) | length > 0 }}
+        sequence:
+          - alias: "Re-enable wireless charging"
+            action: switch.turn_on
+            target:
+              entity_id: "{{ v_charge_switch }}"
+            continue_on_error: true
+
+          - alias: "Announce charge resumed (if enabled)"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ enable_charge_resumed | bool(false)
+                         and style != 'silent' }}
+                sequence:
+                  - alias: "Generate charge-resumed message"
+                    choose:
+                      - alias: "Prompt mode — LLM-generated charge-resumed"
+                        conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ style == 'prompt'
+                                 and (dispatch_agent | default('') | length > 0) }}
+                        sequence:
+                          - alias: "LLM-generate charge-resumed announcement"
+                            action: conversation.process
+                            data:
+                              agent_id: "{{ dispatch_agent }}"
+                              text: >-
+                                {{ _pfx }}{{ charge_resumed_prompt
+                                   | replace('{battery}', _battery | string)
+                                   | replace('{device}', _device_name)
+                                   | replace('{charge_resume_threshold}', charge_resume_threshold | string) }}
+                            response_variable: llm_result
+                            continue_on_error: true
+                          - alias: "Set message"
+                            variables:
+                              _message: >-
+                                {{ (llm_result | default({})).get('response', {})
+                                   .get('speech', {}).get('plain', {}).get('speech',
+                                   charge_resumed_factual
+                                   | replace('{battery}', _battery | string)
+                                   | replace('{device}', _device_name)
+                                   | replace('{charge_resume_threshold}', charge_resume_threshold | string)) }}
+                    default:
+                      - alias: "Set message"
+                        variables:
+                          _message: >-
+                            {{ charge_resumed_factual
+                               | replace('{battery}', _battery | string)
+                               | replace('{device}', _device_name)
+                               | replace('{charge_resume_threshold}', charge_resume_threshold | string) }}
+
+                  - alias: "Deliver charge-resumed — satellite > player > default"
+                    choose:
+                      - alias: "Via Assist Satellite"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Announce charge-resumed via satellite"
+                            action: assist_satellite.announce
+                            target:
+                              entity_id: "{{ v_satellite_entity }}"
+                            data:
+                              message: "{{ _message }}"
+                            continue_on_error: true
+                      - alias: "Via TTS queue — explicit player"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Speak charge-resumed on explicit player"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              text: "{{ _message }}"
+                              voice: "{{ dispatch_voice | default('') }}"
+                              voice_id: "{{ dispatch_tts_voice }}"
+                              volume_level: "{{ v_tts_volume }}"
+                              priority: 3
+                              duck: "{{ not v_bypass_ducking }}"
+                              target_mode: explicit
+                              target: "{{ v_tts_output_player }}"
+                            response_variable: tts_result
+                            continue_on_error: true
+                    default:
+                      - alias: "Speak charge-resumed on default player"
+                        action: pyscript.tts_queue_speak
+                        data:
+                          text: "{{ _message }}"
+                          voice: "{{ dispatch_voice | default('') }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
+                          volume_level: "{{ v_tts_volume }}"
+                          priority: 3
+                          duck: "{{ not v_bypass_ducking }}"
+                        response_variable: tts_result
+                        continue_on_error: true
 
     # ── FALLBACK — null-trigger (reload/restart/manual) ──────────────
     default:
