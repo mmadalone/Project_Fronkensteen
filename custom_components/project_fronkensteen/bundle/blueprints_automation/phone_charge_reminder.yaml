@@ -1,5 +1,5 @@
 blueprint:
-  name: "Charge reminder – persona-aware battery nudges (v7)"
+  name: "Charge reminder – persona-aware battery nudges (v8)"
   author: madalone
   description: >
     # Charge Reminder – persona-aware battery nudges
@@ -17,6 +17,16 @@ blueprint:
     editable prompt/factual message, reminder count, and dedup window.
 
     ### Recent changes
+    - **v8:** Charge control fixes — (1) switch hardware actions
+      (turn_off at ceiling, turn_on at floor) now bypass all TTS
+      gates so charging control always works regardless of quiet
+      hours, DND, presence, or delivery style. TTS announcements
+      for these events still respect all gates as normal;
+      (2) switch.turn_off at 100% no longer gated behind "Announce
+      fully charged" toggle; (3) charge ceiling trigger uses `>=`
+      (template trigger) instead of `above:` (numeric_state) so the
+      switch disables at exactly the configured percentage, not 1%
+      above it.
     - **v7:** Charge control — optional wireless charging switch
       (`charge_control_switch`) with configurable full-charge ceiling
       (`full_charge_threshold`, default 100) and resume floor
@@ -804,9 +814,10 @@ triggers:
 
   - alias: "Charge ceiling reached"
     id: charge_ceiling
-    trigger: numeric_state
-    entity_id: !input battery_sensor
-    above: !input full_charge_threshold
+    trigger: template
+    value_template: >-
+      {{ (full_charge_threshold | int(100)) < 100
+         and states(battery_sensor) | int(0) >= (full_charge_threshold | int(100)) }}
 
   - alias: "Battery dropped to charge resume level"
     id: charge_resume
@@ -820,57 +831,66 @@ triggers:
     event: start
 
 conditions:
-  - alias: "Style is not silent"
-    condition: template
-    value_template: "{{ style != 'silent' }}"
+  - condition: or
+    conditions:
+      - alias: "Charge-control triggers bypass all TTS gates"
+        condition: template
+        value_template: "{{ trigger.id in ['charge_ceiling', 'charge_resume'] }}"
 
-  - alias: "Someone is home (or no presence sensor configured)"
-    condition: template
-    value_template: >-
-      {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
+      - alias: "All other triggers must pass TTS gates"
+        condition: and
+        conditions:
+          - alias: "Style is not silent"
+            condition: template
+            value_template: "{{ style != 'silent' }}"
 
-  - alias: "DND must not be active (skip if no sensor configured)"
-    condition: template
-    value_template: >-
-      {% set dnd = dnd_entity | default('') | string %}
-      {% if dnd | length == 0 %}
-        true
-      {% else %}
-        {{ states(dnd) | default('off') in ['off', 'unavailable', 'unknown'] }}
-      {% endif %}
+          - alias: "Someone is home (or no presence sensor configured)"
+            condition: template
+            value_template: >-
+              {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
 
-  - alias: "Quiet hours gate (skip if disabled)"
-    condition: template
-    value_template: >-
-      {% if not (enable_quiet | bool(false)) %}
-        true
-      {% else %}
-        {% set qs = today_at(quiet_start_val | default('23:00:00')) %}
-        {% set qe = today_at(quiet_end_val | default('07:00:00')) %}
-        {% if qs < qe %}
-          {{ not (qs <= now() < qe) }}
-        {% else %}
-          {{ qe <= now() < qs }}
-        {% endif %}
-      {% endif %}
+          - alias: "DND must not be active (skip if no sensor configured)"
+            condition: template
+            value_template: >-
+              {% set dnd = dnd_entity | default('') | string %}
+              {% if dnd | length == 0 %}
+                true
+              {% else %}
+                {{ states(dnd) | default('off') in ['off', 'unavailable', 'unknown'] }}
+              {% endif %}
 
-  - alias: "Privacy gate"
-    condition: template
-    value_template: >-
-      {%- set tier = privacy_tier -%}
-      {%- set mode = states(v_privacy_mode) | default('off') -%}
-      {%- set override = states('input_select.ai_privacy_gate_phone_charge_reminder') | default('off') -%}
-      {%- if tier == 'off'
-          or not is_state(v_privacy_enabled, 'on')
-          or mode == 'force_allow_all' or override == 'force_allow'
-          or override == 'off'
-          or v_privacy_slug | trim | length == 0 -%}
-        true
-      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
-        false
-      {%- else -%}
-        {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
-      {%- endif -%}
+          - alias: "Quiet hours gate (skip if disabled)"
+            condition: template
+            value_template: >-
+              {% if not (enable_quiet | bool(false)) %}
+                true
+              {% else %}
+                {% set qs = today_at(quiet_start_val | default('23:00:00')) %}
+                {% set qe = today_at(quiet_end_val | default('07:00:00')) %}
+                {% if qs < qe %}
+                  {{ not (qs <= now() < qe) }}
+                {% else %}
+                  {{ qe <= now() < qs }}
+                {% endif %}
+              {% endif %}
+
+          - alias: "Privacy gate"
+            condition: template
+            value_template: >-
+              {%- set tier = privacy_tier -%}
+              {%- set mode = states(v_privacy_mode) | default('off') -%}
+              {%- set override = states('input_select.ai_privacy_gate_phone_charge_reminder') | default('off') -%}
+              {%- if tier == 'off'
+                  or not is_state(v_privacy_enabled, 'on')
+                  or mode == 'force_allow_all' or override == 'force_allow'
+                  or override == 'off'
+                  or v_privacy_slug | trim | length == 0 -%}
+                true
+              {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}
+                false
+              {%- else -%}
+                {{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+              {%- endif -%}
 
 actions:
   - alias: "Set battery"
@@ -1349,94 +1369,21 @@ actions:
                 response_variable: tts_result
                 continue_on_error: true
 
-      # ── FULLY CHARGED — announcement ────────────────────────────────
-      - alias: "Fully charged — announcement"
+      # ── FULLY CHARGED — charge control + announcement ────────────────
+      - alias: "Fully charged — charge control + announcement"
         conditions:
           - condition: trigger
             id: fully_charged
-          - condition: template
-            value_template: "{{ enable_fully_charged }}"
           - condition: state
             entity_id: !input charging_sensor
             state: "on"
-          # Suppress if congrats already fired recently (prevents double
-          # announcement when plugging in at near-full battery)
+          # Suppress if already fired recently (prevents double fire
+          # when plugging in at near-full battery)
           - condition: template
             value_template: >-
               {% set last = this.attributes.last_triggered %}
               {{ last is none or (now() - last).total_seconds() > 60 }}
         sequence:
-          - alias: "Generate fully-charged message"
-            choose:
-              - alias: "Prompt mode — LLM-generated message"
-                conditions:
-                  - condition: template
-                    value_template: >-
-                      {{ style == 'prompt'
-                         and (dispatch_agent | default('') | length > 0) }}
-                sequence:
-                  - alias: "LLM-generate fully-charged announcement"
-                    action: conversation.process
-                    data:
-                      agent_id: "{{ dispatch_agent }}"
-                      text: "{{ _pfx }}{{ fully_charged_prompt | replace('{device}', _device_name) }}"
-                    response_variable: llm_result
-                    continue_on_error: true
-                  - alias: "Set message"
-                    variables:
-                      _message: >-
-                        {{ (llm_result | default({})).get('response', {})
-                           .get('speech', {}).get('plain', {}).get('speech',
-                           fully_charged_factual | replace('{device}', _device_name)) }}
-            default:
-              - alias: "Set message"
-                variables:
-                  _message: "{{ fully_charged_factual | replace('{device}', _device_name) }}"
-          - alias: "Deliver fully-charged — satellite > player > default"
-            choose:
-              - alias: "Via Assist Satellite"
-                conditions:
-                  - condition: template
-                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
-                sequence:
-                  - alias: "Announce fully-charged via satellite"
-                    action: assist_satellite.announce
-                    target:
-                      entity_id: "{{ v_satellite_entity }}"
-                    data:
-                      message: "{{ _message }}"
-                    continue_on_error: true
-              - alias: "Via TTS queue — explicit player"
-                conditions:
-                  - condition: template
-                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
-                sequence:
-                  - alias: "Speak fully-charged on explicit player"
-                    action: pyscript.tts_queue_speak
-                    data:
-                      text: "{{ _message }}"
-                      voice: "{{ dispatch_voice | default('') }}"
-                      voice_id: "{{ dispatch_tts_voice }}"
-                      volume_level: "{{ v_tts_volume }}"
-                      priority: 3
-                      duck: "{{ not v_bypass_ducking }}"
-                      target_mode: explicit
-                      target: "{{ v_tts_output_player }}"
-                    response_variable: tts_result
-                    continue_on_error: true
-            default:
-              - alias: "Speak fully-charged on default player"
-                action: pyscript.tts_queue_speak
-                data:
-                  text: "{{ _message }}"
-                  voice: "{{ dispatch_voice | default('') }}"
-                  voice_id: "{{ dispatch_tts_voice }}"
-                  volume_level: "{{ v_tts_volume }}"
-                  priority: 3
-                  duck: "{{ not v_bypass_ducking }}"
-                response_variable: tts_result
-                continue_on_error: true
-
           - alias: "Disable charging switch at 100% (if configured)"
             choose:
               - conditions:
@@ -1449,6 +1396,84 @@ actions:
                     target:
                       entity_id: "{{ v_charge_switch }}"
                     continue_on_error: true
+
+          - alias: "Announce fully charged (if enabled and not silent)"
+            choose:
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ enable_fully_charged and style != 'silent' }}
+                sequence:
+                  - alias: "Generate fully-charged message"
+                    choose:
+                      - alias: "Prompt mode — LLM-generated message"
+                        conditions:
+                          - condition: template
+                            value_template: >-
+                              {{ style == 'prompt'
+                                 and (dispatch_agent | default('') | length > 0) }}
+                        sequence:
+                          - alias: "LLM-generate fully-charged announcement"
+                            action: conversation.process
+                            data:
+                              agent_id: "{{ dispatch_agent }}"
+                              text: "{{ _pfx }}{{ fully_charged_prompt | replace('{device}', _device_name) }}"
+                            response_variable: llm_result
+                            continue_on_error: true
+                          - alias: "Set message"
+                            variables:
+                              _message: >-
+                                {{ (llm_result | default({})).get('response', {})
+                                   .get('speech', {}).get('plain', {}).get('speech',
+                                   fully_charged_factual | replace('{device}', _device_name)) }}
+                    default:
+                      - alias: "Set message"
+                        variables:
+                          _message: "{{ fully_charged_factual | replace('{device}', _device_name) }}"
+                  - alias: "Deliver fully-charged — satellite > player > default"
+                    choose:
+                      - alias: "Via Assist Satellite"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Announce fully-charged via satellite"
+                            action: assist_satellite.announce
+                            target:
+                              entity_id: "{{ v_satellite_entity }}"
+                            data:
+                              message: "{{ _message }}"
+                            continue_on_error: true
+                      - alias: "Via TTS queue — explicit player"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Speak fully-charged on explicit player"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              text: "{{ _message }}"
+                              voice: "{{ dispatch_voice | default('') }}"
+                              voice_id: "{{ dispatch_tts_voice }}"
+                              volume_level: "{{ v_tts_volume }}"
+                              priority: 3
+                              duck: "{{ not v_bypass_ducking }}"
+                              target_mode: explicit
+                              target: "{{ v_tts_output_player }}"
+                            response_variable: tts_result
+                            continue_on_error: true
+                    default:
+                      - alias: "Speak fully-charged on default player"
+                        action: pyscript.tts_queue_speak
+                        data:
+                          text: "{{ _message }}"
+                          voice: "{{ dispatch_voice | default('') }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
+                          volume_level: "{{ v_tts_volume }}"
+                          priority: 3
+                          duck: "{{ not v_bypass_ducking }}"
+                        response_variable: tts_result
+                        continue_on_error: true
 
       # ── CHARGE CEILING — preservation cutoff ────────────────────────
       - alias: "Charge ceiling — preservation cutoff"
@@ -1473,9 +1498,39 @@ actions:
               entity_id: "{{ v_charge_switch }}"
             continue_on_error: true
 
-          - alias: "Skip announcement if style is silent"
-            condition: template
-            value_template: "{{ style != 'silent' }}"
+          - alias: "TTS gate — skip announcement if suppressed"
+            condition: and
+            conditions:
+              - condition: template
+                value_template: "{{ style != 'silent' }}"
+              - condition: template
+                value_template: >-
+                  {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
+              - condition: template
+                value_template: >-
+                  {% set dnd = dnd_entity | default('') | string %}
+                  {% if dnd | length == 0 %}true
+                  {% else %}{{ states(dnd) | default('off') in ['off', 'unavailable', 'unknown'] }}{% endif %}
+              - condition: template
+                value_template: >-
+                  {% if not (enable_quiet | bool(false)) %}true
+                  {% else %}
+                    {% set qs = today_at(quiet_start_val | default('23:00:00')) %}
+                    {% set qe = today_at(quiet_end_val | default('07:00:00')) %}
+                    {% if qs < qe %}{{ not (qs <= now() < qe) }}
+                    {% else %}{{ qe <= now() < qs }}{% endif %}
+                  {% endif %}
+              - condition: template
+                value_template: >-
+                  {%- set tier = privacy_tier -%}
+                  {%- set mode = states(v_privacy_mode) | default('off') -%}
+                  {%- set override = states('input_select.ai_privacy_gate_phone_charge_reminder') | default('off') -%}
+                  {%- if tier == 'off' or not is_state(v_privacy_enabled, 'on')
+                      or mode == 'force_allow_all' or override == 'force_allow'
+                      or override == 'off' or v_privacy_slug | trim | length == 0 -%}true
+                  {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
+                  {%- else -%}{{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+                  {%- endif -%}
 
           - alias: "Generate charge-limit message"
             choose:
@@ -1575,13 +1630,41 @@ actions:
               entity_id: "{{ v_charge_switch }}"
             continue_on_error: true
 
-          - alias: "Announce charge resumed (if enabled)"
+          - alias: "Announce charge resumed (if enabled and TTS gates pass)"
             choose:
               - conditions:
                   - condition: template
                     value_template: >-
                       {{ enable_charge_resumed | bool(false)
                          and style != 'silent' }}
+                  - condition: template
+                    value_template: >-
+                      {{ presence_sensor == '' or is_state(presence_sensor, 'on') }}
+                  - condition: template
+                    value_template: >-
+                      {% set dnd = dnd_entity | default('') | string %}
+                      {% if dnd | length == 0 %}true
+                      {% else %}{{ states(dnd) | default('off') in ['off', 'unavailable', 'unknown'] }}{% endif %}
+                  - condition: template
+                    value_template: >-
+                      {% if not (enable_quiet | bool(false)) %}true
+                      {% else %}
+                        {% set qs = today_at(quiet_start_val | default('23:00:00')) %}
+                        {% set qe = today_at(quiet_end_val | default('07:00:00')) %}
+                        {% if qs < qe %}{{ not (qs <= now() < qe) }}
+                        {% else %}{{ qe <= now() < qs }}{% endif %}
+                      {% endif %}
+                  - condition: template
+                    value_template: >-
+                      {%- set tier = privacy_tier -%}
+                      {%- set mode = states(v_privacy_mode) | default('off') -%}
+                      {%- set override = states('input_select.ai_privacy_gate_phone_charge_reminder') | default('off') -%}
+                      {%- if tier == 'off' or not is_state(v_privacy_enabled, 'on')
+                          or mode == 'force_allow_all' or override == 'force_allow'
+                          or override == 'off' or v_privacy_slug | trim | length == 0 -%}true
+                      {%- elif mode == 'force_suppress_all' or override == 'force_suppress' -%}false
+                      {%- else -%}{{ is_state('input_boolean.ai_privacy_gate_' ~ v_privacy_slug ~ '_' ~ tier ~ '_suppressed', 'off') }}
+                      {%- endif -%}
                 sequence:
                   - alias: "Generate charge-resumed message"
                     choose:
