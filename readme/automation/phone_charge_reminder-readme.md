@@ -27,9 +27,15 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 │ Tier-specific reminder loop    │  └─────────────────────┘
 │  ├─ LLM prompt OR factual msg  │
 │  ├─ Satellite > Player > Queue │  ┌─────────────────────┐
-│  └─ Inter-tier delay           │  │ Fully charged (100%)│
-│ Bypass restore                 │  │ TTS announcement    │
-└─────────────────────────────────┘  └─────────────────────┘
+│  └─ Inter-tier delay           │  ┌─────────────────────────┐
+│ Bypass restore                 │  │ Fully charged / ceiling │
+└─────────────────────────────────┘  │ → switch off (always)   │
+                                     │ → TTS (if gates pass)   │
+┌─────────────────────────────────┐  └─────────────────────────┘
+│ Charge resume (floor)          │
+│ → switch on (always)           │
+│ → TTS (if enabled + gates)     │
+└─────────────────────────────────┘
 ```
 
 ## Features
@@ -40,6 +46,7 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 - **Generic device support** -- configurable `device_name` input and `{device}` placeholder in prompts
 - Congratulation message when device is plugged in while battery was low
 - Optional "fully charged" announcement at 100% while still charging
+- **Charge control** -- optional wireless charging switch with configurable ceiling and resume floor for battery preservation. Switch actions always fire; TTS announcements respect all gates.
 - Agent dispatcher support with manual pipeline fallback
 - TTS delivery priority: Assist Satellite > explicit media player > TTS queue default
 - Configurable TTS volume with automatic save/restore
@@ -179,6 +186,22 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 
 </details>
 
+<details>
+<summary><strong>⑩ Charge control</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `charge_control_switch` | *(empty)* | Switch entity for wireless charging (e.g., `switch.remote_3_wireless_charging`). Leave empty to disable. |
+| `full_charge_threshold` | `100` | Battery % at which charging is disabled. Set to 100 for phones, 80 for battery preservation. |
+| `charge_resume_threshold` | `60` | Battery % at which charging is re-enabled. |
+| `charge_limit_prompt` | *(informative LLM prompt)* | LLM prompt when charge limit is reached. Placeholders: `{battery}`, `{device}`, `{full_charge_threshold}`. |
+| `charge_limit_factual` | `{device} at {battery}%...` | Static message when charge limit is reached. |
+| `enable_charge_resumed` | `false` | Announce when battery drops below resume threshold and charging restarts. |
+| `charge_resumed_prompt` | *(informative LLM prompt)* | LLM prompt when charging resumes. Placeholders: `{battery}`, `{device}`, `{charge_resume_threshold}`. |
+| `charge_resumed_factual` | `{device} at {battery}%...` | Static message when charging resumes. |
+
+</details>
+
 ## Technical Notes
 
 - **Mode:** `restart` / `max_exceeded: silent`
@@ -188,9 +211,14 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 - TTS delivery uses a 3-tier priority: satellite announce > explicit player > default queue
 - HA restart trigger performs a catch-up battery check
 - Fully charged trigger fires when battery crosses above 99
+- **Charge control switch actions (turn_off/turn_on) always execute** regardless of delivery style, quiet hours, DND, presence, or privacy. TTS announcements for these events still respect all gates.
+- Charge ceiling uses a template trigger (`>=`) so it fires at exactly the configured threshold, not 1% above it
+- When `full_charge_threshold` is 100 (default), the fully-charged handler manages the switch. When < 100, the dedicated charge-ceiling handler takes over.
 
 ## Changelog
 
+- **v8:** Charge control fixes -- switch actions bypass all TTS gates (always fire); TTS announcements for charge events respect all gates. Switch.turn_off at 100% no longer gated behind "Announce fully charged" toggle. Charge ceiling trigger uses `>=` for exact threshold match. Charge resume only fires when the switch is currently OFF, preventing false announcements from normal battery drain while undocked.
+- **v7:** Charge control -- optional wireless charging switch with configurable ceiling and resume floor for battery preservation. Separate prompt/factual pairs for charge limit and charge resumed events.
 - **v6:** Generic device support -- new `device_name` input and `{device}` placeholder. Works with phones, remotes, tablets, etc. Backwards compatible (defaults to "phone").
 - **v5:** Quiet hours & DND -- optional time-based quiet window and DND sensor gate
 - **v4:** Optional "fully charged" TTS announcement at 100% while charging
