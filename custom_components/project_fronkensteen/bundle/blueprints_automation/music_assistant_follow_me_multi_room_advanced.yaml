@@ -13,6 +13,13 @@ blueprint:
 
     ### Recent changes
 
+    - **v13:** Source-cleared retry trigger — added a second trigger that
+      fires when a presence sensor turns OFF. When the source-occupied gate
+      blocks a transfer (because the source room still showed presence),
+      the automation now retries automatically once that room clears. The
+      target is resolved as the highest-priority room with current presence.
+      Fixes timing gap where FP2 sensors linger after departure.
+
     - **v12:** Consistency pass — added `| bool` filter to all six
       `{% if %}` flag checks in condition templates, matching the pattern
       already used in `choose` conditions throughout the blueprint.
@@ -490,6 +497,12 @@ triggers:
     to: "on"
     for: !input min_presence_on_time
 
+  - alias: "Presence sensor turned OFF — source room cleared, retry blocked transfers"
+    trigger: state
+    entity_id: !input presence_sensors
+    from: "on"
+    to: "off"
+
 conditions:
   - alias: "Global follow switch must be ON"
     condition: state
@@ -546,13 +559,23 @@ actions:
       trigger_entity: "{{ trigger.entity_id }}"
 
       target_index: >
-        {% set ns = namespace(idx=-1) %}
-        {% for s in presence_list %}
-          {% if s == trigger_entity and ns.idx == -1 %}
-            {% set ns.idx = loop.index0 %}
-          {% endif %}
-        {% endfor %}
-        {{ ns.idx }}
+        {% if trigger.to_state.state == 'on' %}
+          {% set ns = namespace(idx=-1) %}
+          {% for s in presence_list %}
+            {% if s == trigger_entity and ns.idx == -1 %}
+              {% set ns.idx = loop.index0 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.idx }}
+        {% else %}
+          {% set ns = namespace(idx=-1) %}
+          {% for s in presence_list %}
+            {% if states(s) | default('off') == 'on' and ns.idx == -1 %}
+              {% set ns.idx = loop.index0 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.idx }}
+        {% endif %}
 
       target_player: >
         {% set ti = target_index | int(-1) %}

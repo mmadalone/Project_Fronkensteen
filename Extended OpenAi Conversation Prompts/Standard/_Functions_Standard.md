@@ -96,6 +96,13 @@
       shut_up, or pause_media instead. IMPORTANT: pass the user's
       spoken title verbatim — never strip, rewrite, or substitute
       words even if the title resembles a previous request.
+      ROOM DISPATCH: Always pass the player parameter.
+      If the user names a room, use that room's player.
+      If no room named, use the player for "Speaking from" in context.
+      If neither available, omit player (falls back to default).
+      Room → player: workshop = media_player.workshop_ma,
+      living room = media_player.ha_voice_pe_living_room_quark_esp,
+      bathroom = media_player.bathroom_ma.
     parameters:
       type: object
       properties:
@@ -123,8 +130,9 @@
         player:
           type: string
           description: >-
-            Media player entity to play on (e.g. media_player.workshop_sonos).
-            If omitted, plays on the default speaker.
+            Media player entity for the target room. Use the room-to-player
+            map above. Always populate this when the user names a room or
+            when "Speaking from" appears in context.
       required:
         - title
         - media_type

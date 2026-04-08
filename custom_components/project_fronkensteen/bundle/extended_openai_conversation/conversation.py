@@ -108,6 +108,13 @@ _INLINE_TOOL_PARAMS = re.compile(
     + r'(?:\s*,\s*[a-z_]+=\s*' + _TOOL_ARG_VALUE + r')*\s*\)?\s*',
     re.IGNORECASE,
 )
+# Layer 5: JSON tool-call objects embedded in response text
+# Catches {"name": "web_search", "parameters": {"query": "..."}} patterns
+# that some models emit instead of function-call syntax
+_JSON_TOOL_OBJECT = re.compile(
+    r'\{\s*"name"\s*:\s*"[a-z_][a-z0-9_]*"[^}]*(?:\{[^}]*\}[^}]*)?\}',
+    re.IGNORECASE,
+)
 
 
 # Transient errors that warrant retrying with a fallback model
@@ -407,10 +414,12 @@ class ExtendedOpenAIAgentEntity(
                  key="value" sequences that look like tool parameters.
         Layer 4: Inline tool-param sequences (mid-sentence leaks) → strip
                  residual key="value" pairs left by earlier layers.
+        Layer 5: JSON tool-call objects → strip {"name": "...", "parameters": {...}}
+                 patterns emitted by some models instead of function-call syntax.
 
-        Layers 2–4 cascade: each cleans progressively so Layer 2 stripping a
+        Layers 2–5 cascade: each cleans progressively so Layer 2 stripping a
         function name exposes orphaned args for Layer 3, and any remaining
-        inline params are caught by Layer 4.
+        inline params are caught by Layers 4–5.
         """
         if not text:
             return text
@@ -448,7 +457,13 @@ class ExtendedOpenAIAgentEntity(
             cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
             cleaned = re.sub(r'[,;.\s]+$', '', cleaned).strip()
             cleaned = re.sub(r'^[,;.\s]+', '', cleaned).strip()
-        # Layer 5: Strip ElevenLabs [stage directions] when TTS test mode
+        # Layer 5: JSON tool-call objects (e.g. {"name": "func", "parameters": {...}})
+        if _JSON_TOOL_OBJECT.search(cleaned):
+            cleaned = _JSON_TOOL_OBJECT.sub('', cleaned)
+            cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+            cleaned = re.sub(r'[,;.\s]+$', '', cleaned).strip()
+            cleaned = re.sub(r'^[,;.\s]+', '', cleaned).strip()
+        # Layer 6: Strip ElevenLabs [stage directions] when TTS test mode
         # routes to HA Cloud (which reads them literally).
         try:
             if self.hass.states.get("input_boolean.ai_tts_test_mode").state == "on":

@@ -121,6 +121,18 @@ template:
               {%- endif -%}
             {%- endif -%}
 
+            {# ── SATELLITE ORIGIN — keep in sync with satellite_zones in entity_config.yaml
+                 and room-to-player map in _Functions_Standard.md play_media tool ── #}
+            {%- set _sat = states('sensor.ai_last_satellite') | default('', true) | trim -%}
+            {%- set _sat_room_map = {
+              'assist_satellite.home_assistant_voice_0905c5_assist_satellite': 'workshop',
+              'assist_satellite.home_assistant_voice_0a0109_assist_satellite': 'living_room'
+            } -%}
+            {%- set _speaking_room = _sat_room_map.get(_sat, '') -%}
+            {%- if _speaking_room -%}
+              {%- set ns.lines = ns.lines + ['Speaking from: ' ~ _speaking_room ~ '.'] -%}
+            {%- endif -%}
+
             {# ── OCCUPANCY (Task 22: dynamic from person.* entities) ── #}
             {%- set occ = states('sensor.occupancy_mode') -%}
             {%- if occ not in ['unavailable', 'unknown', 'none', ''] -%}

@@ -26,7 +26,10 @@ blueprint:
       fully charged" toggle; (3) charge ceiling trigger uses `>=`
       (template trigger) instead of `above:` (numeric_state) so the
       switch disables at exactly the configured percentage, not 1%
-      above it.
+      above it; (4) charge resume only fires when the switch is
+      currently OFF (i.e., we previously disabled it at the ceiling),
+      preventing false "charging resumed" announcements from normal
+      battery drain while undocked.
     - **v7:** Charge control — optional wireless charging switch
       (`charge_control_switch`) with configurable full-charge ceiling
       (`full_charge_threshold`, default 100) and resume floor
@@ -777,6 +780,10 @@ variables:
   charge_resumed_prompt: !input charge_resumed_prompt
   charge_resumed_factual: !input charge_resumed_factual
 
+trigger_variables:
+  _tv_battery_sensor: !input battery_sensor
+  _tv_full_charge_threshold: !input full_charge_threshold
+
 mode: restart
 max_exceeded: silent
 
@@ -816,8 +823,8 @@ triggers:
     id: charge_ceiling
     trigger: template
     value_template: >-
-      {{ (full_charge_threshold | int(100)) < 100
-         and states(battery_sensor) | int(0) >= (full_charge_threshold | int(100)) }}
+      {{ (_tv_full_charge_threshold | int(100)) < 100
+         and states(_tv_battery_sensor) | int(0) >= (_tv_full_charge_threshold | int(100)) }}
 
   - alias: "Battery dropped to charge resume level"
     id: charge_resume
@@ -1623,6 +1630,11 @@ actions:
           - condition: template
             value_template: >-
               {{ (v_charge_switch | default('')) | length > 0 }}
+          - alias: "Only resume if we previously disabled charging"
+            condition: template
+            value_template: >-
+              {{ (v_charge_switch | default('')) | length > 0
+                 and is_state(v_charge_switch, 'off') }}
         sequence:
           - alias: "Re-enable wireless charging"
             action: switch.turn_on
@@ -1753,6 +1765,22 @@ actions:
     default:
       - alias: "Wait for sensors to settle after restart"
         delay: "00:00:30"
+
+      - alias: "Charge ceiling catch-up — disable switch if battery already at/above threshold"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ (v_charge_switch | default('')) | length > 0
+                     and (full_charge_threshold | int(100)) < 100
+                     and states(battery_sensor) | int(0) >= (full_charge_threshold | int(100))
+                     and is_state(v_charge_switch, 'on') }}
+            sequence:
+              - alias: "Turn off wireless charging switch"
+                action: switch.turn_off
+                target:
+                  entity_id: "{{ v_charge_switch }}"
+                continue_on_error: true
 
       - alias: "Determine tier from battery level"
         variables:

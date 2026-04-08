@@ -1439,6 +1439,11 @@ actions:
           {{ proactive_mode }}
         {% endif %}
 
+  # ── 1b. Resolve area_name early — needed by dispatcher intent_text ─────
+  - alias: "Resolve area_name early for dispatcher"
+    variables:
+      area_name: !input area_name
+
   # ── 2. Agent selection — dispatcher > manual ────────────────────────────
   - alias: "Agent selection — dispatcher > manual"
     choose:
@@ -1478,10 +1483,8 @@ actions:
           dispatch_persona: "{{ (pipeline_resolve | default({})).get('persona', 'rick') }}"
 
   # ── 3. Resolve local variables ──────────────────────────────────────────
-  - alias: "Resolve area and time-of-day variables"
+  - alias: "Resolve time-of-day variables"
     variables:
-      area_name: !input area_name
-
       tod_label: >-
         {% if enable_bedtime_question %}
           evening

@@ -33,17 +33,21 @@ async def _get_era_display_name():
     if not era_persona or era_persona in ("rotate", "unknown", "unavailable", "none", ""):
         return None, era
 
+    # dispatcher_resolve_engine returns {engine, tts_voice, tts_engine}.
+    # A non-empty engine confirms the pipeline name is valid.
+    display_name = era_persona.replace("_", " ").title()
     try:
-        disp_result = await service.call(  # noqa: F821
-            "pyscript", "agent_dispatch",
-            pipeline_name=era_persona.capitalize(),
+        result = await service.call(  # noqa: F821
+            "pyscript", "dispatcher_resolve_engine",
+            pipeline_name=display_name,
             return_response=True,
         )
-        display_name = (disp_result or {}).get("pipeline_name", "")
+        if not (result or {}).get("engine", ""):
+            return None, era
     except Exception:
         return None, era
 
-    return display_name or None, era
+    return display_name, era
 
 
 async def _set_pipeline(select_entity, display_name):
@@ -70,6 +74,10 @@ def _idle_trigger_factory(sat_entity, select_entity):
 async def _handle_idle(var_name=None, old_value=None, select_entity=""):
     """Reset satellite pipeline to era-correct persona after conversation ends."""
     if state.get("input_boolean.ai_dispatcher_enabled") != "on":  # noqa: F821
+        return
+    if state.get("input_boolean.ai_budget_fallback_active") == "on":  # noqa: F821
+        return
+    if state.get("input_boolean.ai_handoff_processing") == "on":  # noqa: F821
         return
     if old_value in ("idle", "unknown", "unavailable", None, ""):
         return
@@ -111,6 +119,9 @@ async def _satellite_idle_startup():
     if state.get("input_boolean.ai_dispatcher_enabled") != "on":  # noqa: F821
         log.info("satellite_idle_reset: dispatcher disabled, skipping")  # noqa: F821
         return
+    if state.get("input_boolean.ai_budget_fallback_active") == "on":  # noqa: F821
+        log.info("satellite_idle_reset: startup skipped — budget fallback active")  # noqa: F821
+        return
 
     try:
         result = await service.call(  # noqa: F821
@@ -148,4 +159,49 @@ async def _satellite_idle_startup():
         "initial set %d to %s (%s)",
         len(_idle_triggers), set_count,
         display_name or "none", era,
+    )
+
+
+@time_trigger("cron(0 0 * * *)", "cron(0 6 * * *)", "cron(0 12 * * *)", "cron(0 18 * * *)")  # noqa: F821
+async def _satellite_era_boundary():
+    """Switch all satellites to the new era's pipeline at era boundaries."""
+    await asyncio.sleep(5)  # let era helpers settle
+
+    if state.get("input_boolean.ai_dispatcher_enabled") != "on":  # noqa: F821
+        return
+    if state.get("input_boolean.ai_budget_fallback_active") == "on":  # noqa: F821
+        log.info("satellite_idle_reset: era boundary skipped — budget fallback active")  # noqa: F821
+        return
+    if state.get("input_boolean.ai_handoff_processing") == "on":  # noqa: F821
+        log.info("satellite_idle_reset: era boundary skipped — handoff in progress")  # noqa: F821
+        return
+
+    try:
+        result = await service.call(  # noqa: F821
+            "pyscript", "dispatcher_get_satellite_maps",
+            return_response=True,
+        )
+    except Exception as exc:
+        log.warning("satellite_idle_reset: era boundary — dispatcher unavailable: %s", exc)  # noqa: F821
+        return
+
+    sat_map = (result or {}).get("satellite_select_map", {})
+    if not sat_map:
+        return
+
+    display_name, era = await _get_era_display_name()
+    if not display_name:
+        log.info("satellite_idle_reset: era boundary — %s has no fixed persona, skipping", era)  # noqa: F821
+        return
+
+    switched = 0
+    for sel in sat_map.values():
+        current = state.get(sel)  # noqa: F821
+        if current != display_name:
+            await _set_pipeline(sel, display_name)
+            switched += 1
+
+    log.info(  # noqa: F821
+        "satellite_idle_reset: era boundary → %s (%s), switched %d/%d satellites",
+        display_name, era, switched, len(sat_map),
     )

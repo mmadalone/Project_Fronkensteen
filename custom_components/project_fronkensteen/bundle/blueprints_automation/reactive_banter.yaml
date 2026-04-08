@@ -692,7 +692,11 @@ action:
         {% endif %}
       mood: "neutral"
       is_notification: "{{ trigger.id == 'notification' }}"
-      event_source: "{{ trigger.event.data.source | default('') }}"
+      event_source: >-
+        {% set raw = trigger.event.data.source | default('') | trim %}
+        {% if raw | length > 0 %}{{ raw }}
+        {% elif trigger.id == 'notification' %}automated announcement
+        {% endif %}
       raw_pool: >-
         {{ agent_pool_raw.split(',') | map('trim') | reject('eq', '') | list }}
 
@@ -756,6 +760,21 @@ action:
     then:
       - stop: "Could not resolve engine for {{ agent_b }}"
 
+  # ── Step 4e: Retrieve cross-agent whisper context for Agent B ──
+  - alias: "Step 4e — Retrieve whisper context"
+    action: pyscript.agent_whisper_context
+    response_variable: whisper_ctx
+    continue_on_error: true
+    data:
+      agent_name: "{{ agent_b }}"
+      max_entries: 3
+      lookback_hours: 2
+
+  - alias: "Step 4f — Extract whisper context"
+    variables:
+      whisper_context: >-
+        {{ (whisper_ctx | default({})).get('context', '') }}
+
   # ── Step 5: Build banter prompt (safety prefix + user template) ──
   - alias: "Step 5 — Render banter prompt"
     variables:
@@ -765,6 +784,9 @@ action:
         Use the user's name from your context — never say "the user".]
         {% if event_source | default('') | trim | length > 0 and source_context_prompt_raw | default('') | trim | length > 0 %}
         {{ source_context_prompt_raw | replace('{source}', event_source | replace('_', ' ')) }}
+        {% endif %}
+        {% if whisper_context | default('') | trim | length > 0 %}
+        Recent context: {{ whisper_context }}
         {% endif %}
         {{ banter_prompt_raw
            | replace('{agent_a}', agent_a_display)

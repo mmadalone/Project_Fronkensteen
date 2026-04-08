@@ -9,12 +9,12 @@ esphome:
   name: ${name}
   name_add_mac_suffix: false
   friendly_name: ${friendly_name}
-  on_boot:
-    priority: -100
-    then:
-      - lambda: |-
-          id(stop).set_probability_cutoff(191);
-          id(yo_rick).set_probability_cutoff(252);
+  # on_boot:
+  #   priority: -100
+  #   then:
+  #     - lambda: |-
+  #         id(stop).set_probability_cutoff(191);
+  #         id(yo_rick).set_probability_cutoff(252);
 
 api:
   encryption:
@@ -23,7 +23,7 @@ api:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  power_save_mode: light
+  power_save_mode: none
   fast_connect: true
 
 micro_wake_word:

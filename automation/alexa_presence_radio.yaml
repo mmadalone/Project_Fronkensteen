@@ -146,6 +146,27 @@ blueprint:
                     - media_player
               multiple: true
 
+        alexa_device_map:
+          name: Alexa device → player map (optional)
+          description: >
+            Maps Alexa media_player entities to target players. When one of
+            these devices has last_called=true, its mapped player takes
+            priority over presence detection — so radio plays where it was
+            requested, not just where presence is detected.
+
+
+            Format: comma-separated alexa_entity=player_entity pairs.
+
+            Example: media_player.alexa=media_player.living_room_ma,
+            media_player.echo_pop=media_player.workshop_ma
+
+
+            Leave empty to skip Alexa-based routing (presence-only).
+          default: ""
+          selector:
+            text:
+              multiline: true
+
         fallback_player:
           name: Fallback player (optional)
           description: >
@@ -726,6 +747,9 @@ variables:
   presence_list: "{{ primary_sensors + extra_pairs.sensors }}"
   player_list: "{{ primary_players + extra_pairs.players }}"
 
+  # Alexa last_called override
+  alexa_device_map: !input alexa_device_map
+
   # Other inputs
   fallback_player_entity: !input fallback_player
   media_id_value: !input media_id
@@ -771,15 +795,39 @@ variables:
     {% endfor %}
     {{ ns.idx }}
 
-  # Resolve target player from detected presence or fallback
-  target_player: >
-    {% set idx = detected_index | int(-1) %}
-    {% if idx >= 0 and idx < player_list | length %}
-      {{ player_list[idx] }}
-    {% elif fallback_player_entity %}
-      {{ fallback_player_entity }}
+  # Check which Alexa device was last called for room override
+  alexa_override_player: >
+    {% set map_raw = alexa_device_map | default('') %}
+    {% if map_raw | trim | length == 0 %}{{ '' }}
     {% else %}
-      {{ '' }}
+      {% set ns = namespace(player='') %}
+      {% for pair in map_raw.split(',') %}
+        {% set parts = pair.split('=') %}
+        {% if parts | length == 2 %}
+          {% set alexa_eid = parts[0] | trim %}
+          {% set target = parts[1] | trim %}
+          {% if state_attr(alexa_eid, 'last_called') == true and ns.player == '' %}
+            {% set ns.player = target %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.player }}
+    {% endif %}
+
+  # Resolve target player: Alexa override → presence → fallback
+  target_player: >
+    {% set alexa_p = alexa_override_player | trim %}
+    {% if alexa_p | length > 0 %}
+      {{ alexa_p }}
+    {% else %}
+      {% set idx = detected_index | int(-1) %}
+      {% if idx >= 0 and idx < player_list | length %}
+        {{ player_list[idx] }}
+      {% elif fallback_player_entity %}
+        {{ fallback_player_entity }}
+      {% else %}
+        {{ '' }}
+      {% endif %}
     {% endif %}
 
   # All other UNIQUE players (for optional stop — deduplicated)
