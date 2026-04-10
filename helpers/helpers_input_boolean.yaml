@@ -718,3 +718,21 @@ ai_listen_history_enabled:
   name: "AI Listen History"
   icon: mdi:music-note
   initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_radio_klara — Radio Klara Now-Playing Awareness
+# ═══════════════════════════════════════════════════════════════════
+# Master kill switch. When OFF: hot-context line is suppressed and the
+# auto-refresh cron is skipped. The cached schedule remains in memory and
+# the now-playing sensor still updates (so manual queries still work).
+ai_radio_klara_enabled:
+  name: "AI Radio Klara - Enabled"
+  icon: mdi:radio
+  initial: true
+
+# Set ON when the cached schedule is older than 2× the refresh interval.
+# Cleared automatically when the next refresh succeeds.
+ai_radio_klara_data_stale:
+  name: "AI Radio Klara - Data Stale"
+  icon: mdi:radio-off
+  initial: false

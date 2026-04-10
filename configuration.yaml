@@ -119,6 +119,7 @@ pyscript:
  hass_is_global: true
  requirements:
    - midiutil==1.2.1
+   - pypdf==4.3.1
 
 shell_command:
   install_openai: "pip install 'openai~=2.21.0'"

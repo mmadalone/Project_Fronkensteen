@@ -408,3 +408,19 @@ ai_listen_history_retention_days:
   mode: box
   unit_of_measurement: "days"
   icon: mdi:calendar-clock
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_radio_klara — Refresh interval
+# ═══════════════════════════════════════════════════════════════════
+# How often radio_klara.py re-fetches the schedule PDF and re-extracts
+# it via llm_task_call. Default 168 = weekly. The 15-min cron tick checks
+# this helper at runtime, so changes take effect on the next tick.
+ai_radio_klara_refresh_hours:
+  name: "AI Radio Klara — Refresh Hours"
+  min: 1
+  max: 720
+  step: 1
+  initial: 168
+  mode: box
+  unit_of_measurement: "h"
+  icon: mdi:radio-tower

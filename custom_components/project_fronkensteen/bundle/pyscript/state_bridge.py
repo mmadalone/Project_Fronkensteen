@@ -141,6 +141,9 @@ _STARTUP_SENSORS = [
     ("sensor.ai_watch_history_status", "idle", "mdi:television-classic", "AI Watch History"),
     # Listen history tracker
     ("sensor.ai_listen_history_status", "idle", "mdi:music-off", "AI Listen History"),
+    # Radio Klara now-playing awareness (radio_klara.py)
+    ("sensor.ai_radio_klara_status", "idle", "mdi:radio", "AI Radio Klara Status"),
+    ("sensor.ai_radio_klara_now_playing", "idle", "mdi:radio-tower", "AI Radio Klara Now Playing"),
 ]
 
 

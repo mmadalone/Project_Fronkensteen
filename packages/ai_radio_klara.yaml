@@ -1,0 +1,101 @@
+# ======================================================================
+# AI Radio Klara — Now-Playing Awareness
+# ======================================================================
+# Status: Active
+# Deployed: 2026-04-09
+# Source of truth: /config/data/radio_klara_schedule.json
+# Engine: pyscript/radio_klara.py
+#
+# Purpose: Inject "what's playing on Radio Klara right now" into hot
+# context and the music transfer announcement, so conversation agents
+# can comment intelligently when the user listens to Radio Klara.
+#
+# Pyscript sensors (state.set, seeded by state_bridge.py):
+#   sensor.ai_radio_klara_status
+#     States: idle, loaded, refreshing, refresh_failed, no_cache, disabled
+#     Attributes: show_count, fetched_at, source_url
+#   sensor.ai_radio_klara_now_playing
+#     State: current show title (or 'off_air' / 'idle' / 'no_schedule')
+#     Attributes: description, language, start_time, end_time, day_of_week,
+#                 next_show, source
+#
+# Services (pyscript):
+#   pyscript.radio_klara_refresh_schedule(force=False)
+#     Re-fetch the schedule PDF, parse via llm_task_call, write JSON cache.
+#     Honors ai_radio_klara_refresh_hours unless force=true.
+#   pyscript.radio_klara_now_playing()
+#     Returns the current show as a dict (for blueprint variables).
+#
+# Helpers (consolidated into helpers_input_*.yaml):
+#   - helpers_input_boolean.yaml:
+#       ai_radio_klara_enabled       — master kill switch (default: on)
+#       ai_radio_klara_data_stale    — set when cache > 2× refresh interval
+#   - helpers_input_number.yaml:
+#       ai_radio_klara_refresh_hours — refresh cadence (default: 168 = weekly)
+#   - helpers_input_datetime.yaml:
+#       ai_radio_klara_last_refresh  — last successful refresh stamp
+#
+# Configuration (pyscript/entity_config.yaml):
+#   radio_stations:
+#     radio_klara:
+#       name: ...
+#       match: { title_contains: [...], content_id_contains: [...] }
+#       schedule_source:
+#         type: pdf_via_page
+#         page_url: <station schedule page URL>
+#         pdf_link_pattern: <regex to find PDF link>
+#       timezone: Europe/Madrid
+#       enabled: true
+#
+# Dependencies:
+#   - pyscript.llm_task_call (common_utilities.py)
+#   - pypdf (declared in configuration.yaml pyscript: requirements:)
+#   - state_bridge.py (sensor seeding at boot)
+#   - shared_utils.load_entity_config()
+#
+# Context injection points:
+#   - packages/ai_context_hot.yaml — adds "On Radio Klara: <show>" line
+#     when the kill switch is on and the sensor has a real show.
+#   - blueprints/script/madalone/announce_music_follow_me_llm.yaml —
+#     extends the existing radio detection block with show context, and
+#     exposes a {radio_show} placeholder for user prompt templates.
+#
+# Architecture note: the module is structured for multi-station expansion.
+# Adding more stations (Catalunya Ràdio, etc.) requires only a new entry
+# under entity_config.yaml radio_stations: and a bootstrap JSON file —
+# zero code changes for stations that share the pdf_via_page parser type.
+# ======================================================================
+
+# ── Shell command: install pypdf if missing (survives HA Core updates) ──
+# pypdf is declared in configuration.yaml pyscript.requirements: but
+# pyscript only installs requirements on first setup, NOT on every restart.
+# HA Core container updates wipe pip packages in site-packages, so we need
+# a startup install to restore pypdf. Mirrors the fluidsynth install pattern
+# in packages/ai_music_composer.yaml (AP-81 precedent).
+shell_command:
+  ai_radio_klara_install_pypdf: >-
+    python3 -c "import pypdf" 2>/dev/null ||
+    pip3 install --break-system-packages pypdf==4.3.1
+
+automation:
+  - id: ai_radio_klara_install_deps
+    alias: "AI Radio Klara — Install pypdf on Startup"
+    description: >
+      Reinstalls pypdf after HA Core updates (pip packages are wiped on
+      container rebuild). Without this, the radio_klara auto-refresh path
+      silently fails with pdf_text_extract_failed and the cache goes stale.
+      Mirrors the FluidSynth install pattern in ai_music_composer.yaml.
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - alias: "Install pypdf if missing"
+        action: shell_command.ai_radio_klara_install_pypdf
+        continue_on_error: true
+      - alias: "Wait for pip install to complete"
+        delay:
+          seconds: 30
+      - alias: "Reload pyscript to pick up pypdf"
+        action: pyscript.reload
+        continue_on_error: true

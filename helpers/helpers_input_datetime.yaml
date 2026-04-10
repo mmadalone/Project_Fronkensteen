@@ -232,3 +232,14 @@ ai_interaction_summarizer_batch_time:
   icon: mdi:clock-time-eight
   has_date: false
   has_time: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_radio_klara — Last successful refresh
+# ═══════════════════════════════════════════════════════════════════
+# Stamped by radio_klara.py after each successful PDF fetch + LLM
+# extraction. Used by the staleness check (cache > 2× refresh interval).
+ai_radio_klara_last_refresh:
+  name: "AI Radio Klara — Last Refresh"
+  icon: mdi:clock-check
+  has_date: true
+  has_time: true

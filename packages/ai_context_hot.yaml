@@ -305,6 +305,21 @@ template:
               {%- endif -%}
             {%- endif -%}
 
+            {# ── RADIO KLARA NOW PLAYING (gated on kill switch + real show) ── #}
+            {%- if is_state('input_boolean.ai_radio_klara_enabled', 'on') -%}
+              {%- set rk = states('sensor.ai_radio_klara_now_playing') -%}
+              {%- if rk not in ['', 'unknown', 'unavailable', 'off_air', 'idle', 'no_schedule', 'none'] -%}
+                {%- set rk_desc = state_attr('sensor.ai_radio_klara_now_playing', 'description') | default('', true) -%}
+                {%- set rk_lang = state_attr('sensor.ai_radio_klara_now_playing', 'language') | default('', true) -%}
+                {%- set rk_ends = state_attr('sensor.ai_radio_klara_now_playing', 'end_time') | default('', true) -%}
+                {%- set rk_line = 'On Radio Klara: ' ~ rk -%}
+                {%- if rk_desc -%}{%- set rk_line = rk_line ~ ' (' ~ rk_desc ~ ')' -%}{%- endif -%}
+                {%- if rk_lang -%}{%- set rk_line = rk_line ~ ' [' ~ rk_lang ~ ']' -%}{%- endif -%}
+                {%- if rk_ends -%}{%- set rk_line = rk_line ~ ' — ends ' ~ rk_ends -%}{%- endif -%}
+                {%- set ns.lines = ns.lines + [rk_line] -%}
+              {%- endif -%}
+            {%- endif -%}
+
             {# ── Active music feedback session (I-56) ── #}
             {%- set mfc = states('sensor.ai_music_feedback_context') -%}
             {%- if mfc not in ['', 'unknown', 'unavailable', none] and '|' in mfc -%}

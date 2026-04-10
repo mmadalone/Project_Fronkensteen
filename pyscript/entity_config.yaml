@@ -48,6 +48,26 @@ music_players:
 # Used by: music_taste
 spotifyplus_entity: media_player.spotifyplus_miquel_angel_madalone
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Radio station schedule sources
+# ═══════════════════════════════════════════════════════════════════════════════
+# Used by: radio_klara.py (extensible to other stations)
+# Each station has match patterns for detecting it on MA players, plus a
+# schedule source descriptor for periodic fetching. Adding more stations
+# requires only a new entry here + a bootstrap JSON cache file.
+radio_stations:
+  radio_klara:
+    name: "Radio Klara"
+    match:
+      title_contains: ["radio klara", "klara"]
+      content_id_contains: ["radioklara"]
+    schedule_source:
+      type: pdf_via_page
+      page_url: "https://www.radioklara.org/radioklara/?page_id=2"
+      pdf_link_pattern: 'href=["\047]([^"\047]+triptic[^"\047]*\.pdf)["\047]'
+    timezone: "Europe/Madrid"
+    enabled: true
+
 # Outdoor temperature sensor (must report °C with unit_of_measurement)
 # Used by: packages/ai_history_context.yaml (statistics platform — update entity_id there)
 weather_temperature_entity: sensor.aemet_temperature

@@ -198,6 +198,36 @@ blueprint:
               step: 5
               unit_of_measurement: "%"
 
+        radio_now_playing_sensors:
+          name: Radio now-playing sensors (optional)
+          description: >
+            Pick one or more "now playing" sensors for radio stations the
+            user listens to. When the source `media_title` contains a
+            sensor's `station_name` attribute (case-insensitive substring
+            match), the blueprint reads the current show from that sensor
+            and makes it available to the LLM via the `{radio_show}`
+            placeholder (and the auto-appended radio detection block).
+
+            Each sensor should expose these attributes:
+              - station_name: human-readable name (matched against media_title)
+              - description (optional): short show description
+              - language (optional): broadcast language
+              - end_time (optional): "HH:MM" when the current show ends
+
+            The sensor state is treated as the current show title. Sensor
+            states of idle, off_air, no_schedule, none, unknown, and
+            unavailable are ignored. Leave empty to disable this feature —
+            non-radio announcements are unaffected.
+
+            Example: add `sensor.ai_radio_klara_now_playing` (the
+            Radio Klara schedule fetcher pyscript module already sets
+            `station_name: "Radio Klara"` on it).
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+
     # ─────────────────────────────────────────────────────────────
     composed_stinger:
       name: "④ Composed Stinger"
@@ -430,6 +460,7 @@ variables:
   v_banter_max_words: !input banter_max_words
   v_banter_delay: !input banter_delay
   v_llm_budget_entity: !input llm_budget_entity
+  v_radio_sensors: !input radio_now_playing_sensors
 
 sequence:
   # ── Infrastructure: Agent selection — dispatcher > manual ──────────────
@@ -503,6 +534,7 @@ sequence:
       media_title: "{{ state_attr(ctx_player, 'media_title') | default('', true) }}"
       media_artist: "{{ state_attr(ctx_player, 'media_artist') | default('', true) }}"
       media_content_type: "{{ state_attr(ctx_player, 'media_content_type') | default('', true) | lower }}"
+      media_content_id: "{{ state_attr(ctx_player, 'media_content_id') | default('', true) | lower }}"
       current_time: "{{ now().strftime('%H:%M') }}"
       time_of_day: >-
         {%- set h = now().hour -%}
@@ -510,6 +542,45 @@ sequence:
            else 'morning' if h < 12
            else 'afternoon' if h < 18
            else 'evening' }}
+      # Radio now-playing context — iterates through user-configured
+      # radio_now_playing_sensors. For each sensor, reads its
+      # `station_name` attribute (falling back to friendly_name) and
+      # matches that substring against media_title / media_content_id.
+      # First sensor with a match AND an active show wins. The sensor
+      # state is treated as the current show title; optional attributes
+      # description / language / end_time enrich the LLM context.
+      # Empty (no sensors configured, no match, or sensor idle) → no
+      # impact on non-radio playback.
+      radio_show_context: >-
+        {%- set sensors = v_radio_sensors | default([]) -%}
+        {%- set title_lc = media_title | lower -%}
+        {%- set content_id_lc = media_content_id | default('') | lower -%}
+        {%- set idle_states = ['', 'unknown', 'unavailable', 'off_air', 'idle', 'no_schedule', 'none'] -%}
+        {%- set ns = namespace(out='') -%}
+        {%- if sensors is iterable and sensors | length > 0 -%}
+          {%- for sensor in sensors -%}
+            {%- if ns.out == '' and sensor -%}
+              {%- set station = state_attr(sensor, 'station_name')
+                 | default(state_attr(sensor, 'friendly_name'), true)
+                 | default('', true) -%}
+              {%- set match_key = station | lower -%}
+              {%- if match_key and (match_key in title_lc or match_key in content_id_lc) -%}
+                {%- set rk_state = states(sensor) -%}
+                {%- if rk_state not in idle_states -%}
+                  {%- set rk_desc = state_attr(sensor, 'description') | default('', true) -%}
+                  {%- set rk_lang = state_attr(sensor, 'language') | default('', true) -%}
+                  {%- set rk_ends = state_attr(sensor, 'end_time') | default('', true) -%}
+                  {%- set line = 'The current show on ' ~ station ~ ' is "' ~ rk_state ~ '"' -%}
+                  {%- if rk_desc %}{%- set line = line ~ ' — ' ~ rk_desc -%}{%- endif -%}
+                  {%- if rk_lang %}{%- set line = line ~ ' (in ' ~ rk_lang ~ ')' -%}{%- endif -%}
+                  {%- if rk_ends %}{%- set line = line ~ ', ending at ' ~ rk_ends -%}{%- endif -%}
+                  {%- set ns.out = line ~ '.' -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.out }}
 
   - alias: "Decide announcement message — LLM, random pool, or default"
     choose:
@@ -536,12 +607,17 @@ sequence:
                   | replace('{player_name}', player_name)
                   | replace('{current_time}', current_time)
                   | replace('{time_of_day}', time_of_day)
+                  | replace('{radio_show}', radio_show_context)
                 }}
                 {%- if use_context and media_title %}
+                {# MA reports content_type='music' for radio streams — detect via content_id prefix
+                   (library://radio/) OR content_type hint OR keyword fallback on title/artist. #}
                 {%- set is_radio = media_content_type in ['channel', 'radio', 'tvshow']
-                   or (media_content_type == '' and ('radio' in media_title | lower or 'radio' in media_artist | lower)) %}
+                   or 'library://radio/' in media_content_id
+                   or 'radio' in media_title | lower
+                   or 'radio' in media_artist | lower %}
                 {%- if is_radio %}
-                currently tuned to the radio station "{{ media_title }}"{% if media_artist %} ({{ media_artist }}){% endif %}. this is a live radio stream, not a song or track.
+                currently tuned to the radio station "{{ media_title }}"{% if media_artist %} ({{ media_artist }}){% endif %}. this is a live radio stream, not a song or track. {{ radio_show_context }}
                 {%- else %}
                 currently playing the track "{{ media_title }}"{% if media_artist %} by {{ media_artist }}{% endif %}.
                 {%- endif %}
