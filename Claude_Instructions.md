@@ -1,18 +1,21 @@
 ## Project Paths
-- PROJECT_DIR: /Users/madalone/_Claude Projects/HA Master Style Guide/
-- HA_CONFIG: /Users/madalone/Library/Containers/nz.co.pixeleyes.AutoMounter/Data/Mounts/Home Assistant/SMB/config/
-- GIT_REPO: /Users/madalone/_Claude Projects/Project_Fronkensteen/
-- HEADER_IMG: /Users/madalone/_Claude Projects/Project_Fronkensteen/images/header/
-- README_AUTO_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/automation/
-- README_SCRI_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/script/
-- README_TEMPL_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/template/
-- GIT_REPO_URL: https://github.com/mmadalone/Project_Fronkensteen/
-- HEADER_IMG_RAW: https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/
-- IMG_PREMISES: Rick & Quark series episode premise based off the blueprint features; Rick & Morty (Adult Swim cartoon) episode premise based off the blueprint features
 
-These are the canonical paths used throughout the Rules of Acquisition. All edits
-happen in PROJECT_DIR and HA_CONFIG — never directly in GIT_REPO. The git repo
-is a publish-only mirror. If any path changes, update it here.
+These are the canonical variable names used throughout the Rules of Acquisition. The actual absolute paths live in the user's local `CLAUDE.md` — this file just documents the variable contract.
+
+| Variable | Purpose |
+|---|---|
+| `PROJECT_DIR` | Root of the HA Master Style Guide directory (where Rules of Acquisition and build logs live) |
+| `HA_CONFIG` | Home Assistant config directory (SMB mount or UNC share) |
+| `GIT_REPO` | Local clone of `Project_Fronkensteen` — publish-only mirror |
+| `HEADER_IMG` | Generated header images: `<GIT_REPO>/images/header/` |
+| `README_AUTO_DIR` | Automation blueprint READMEs: `<GIT_REPO>/readme/automation/` |
+| `README_SCRI_DIR` | Script blueprint READMEs: `<GIT_REPO>/readme/script/` |
+| `README_TEMPL_DIR` | Template blueprint READMEs: `<GIT_REPO>/readme/template/` |
+| `GIT_REPO_URL` | `https://github.com/mmadalone/Project_Fronkensteen/` |
+| `HEADER_IMG_RAW` | `https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/` |
+| `IMG_PREMISES` | Rick & Quark series episode premises for header image generation, based off the blueprint features (Rick & Morty / Adult Swim style) |
+
+All edits happen in `PROJECT_DIR` and `HA_CONFIG` — never directly in `GIT_REPO`. The git repo is a publish-only mirror. If any path changes, update the user's local `CLAUDE.md`, not this file.
 
 ## Rules of Acquisition — Index
 `ha_style_guide_project_instructions.md` in `PROJECT_DIR` is the master index
@@ -74,7 +77,7 @@ Claude has access to TWO filesystems. Confusing them wastes time and breaks thin
 
 | Filesystem | Access via | Use for |
 |---|---|---|
-| **User's machine** (macOS) | Desktop Commander / Filesystem MCP tools (`read_file`, `write_file`, `list_directory`, `edit_block`, etc.) | ALL reads/writes to HA config, project files, build logs, style guide docs. This is where real work happens. |
+| **User's machine** (Windows / macOS / Linux) | Desktop Commander / Filesystem MCP tools (`read_file`, `write_file`, `list_directory`, `edit_block`, etc.) | ALL reads/writes to HA config, project files, build logs, style guide docs. This is where real work happens. |
 | **Claude's container** (`/home/claude/`, `/mnt/`) | Claude's internal tools (`bash_tool`, `create_file`, `view`, `present_files`) | Temporary scratch work, generating artifacts for download, running scripts. Files here reset between sessions. |
 
 **Rules:**
@@ -110,7 +113,7 @@ rsync -av "<HA_CONFIG>/blueprints/script/madalone/" "<GIT_REPO>/script/"
 ```
 
 Expand `<PROJECT_DIR>`, `<HA_CONFIG>`, and `<GIT_REPO>` to their full canonical paths
-from the Project Paths table above. Quote all paths (spaces in directory names).
+from the user's local `CLAUDE.md`. Quote all paths (spaces in directory names).
 
 After sync completes, confirm success from rsync output before proceeding.
 
