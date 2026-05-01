@@ -212,12 +212,11 @@
       - condition: state
         entity_id: input_boolean.ai_handoff_processing
         state: "off"
-      - event: ai_handoff_request
-        event_data:
-          target: "{{ target }}"
-          reason: "{{ reason }}"
-          topic: "{{ topic | default('') }}"
-          variant: "{{ variant | default('') }}"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.ai_handoff_pending
+        data:
+          value: "{{ target }}"
 
 - spec:
     name: end_conversation
