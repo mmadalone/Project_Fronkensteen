@@ -456,7 +456,9 @@ async def voice_handoff(
     effective_esp = " ".join(parts) if parts else ""
 
     # ── Resolve pipeline option ──────────────────────────────────────────
-    options = state.getattr(pipeline_select).get("options", [])  # noqa: F821
+    # AP-82: state.getattr() can return None if entity is missing/unavailable;
+    # bare .get() would crash with AttributeError. Guard with (... or {}).
+    options = (state.getattr(pipeline_select) or {}).get("options", [])  # noqa: F821
     target_option = _find_pipeline_option(target, options)
     if not target_option:
         log.warning(  # noqa: F821

@@ -62,6 +62,18 @@ HTTP_TIMEOUT = 15  # seconds
 STALE_MULTIPLIER = 2  # cache stale if older than 2× refresh interval
 FAILURE_NOTIFY_THRESHOLD = 3
 
+# Identify ourselves as a real client. Default aiohttp UA ("Python/3.x aiohttp/x.x")
+# trips many WAFs and got us soft-banned on radioklara.org after 334 identical
+# hits during the LLM key-bug window (2026-04-09 → 2026-04-30).
+HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; HomeAssistant-RadioKlaraSchedule/1.0; "
+        "+https://github.com/mmadalone/Project_Fronkensteen)"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/pdf,*/*;q=0.8",
+    "Accept-Language": "ca,es;q=0.8,en;q=0.6",
+}
+
 DAY_NAMES = [
     "monday", "tuesday", "wednesday", "thursday",
     "friday", "saturday", "sunday",
@@ -73,6 +85,7 @@ DAY_NAMES = [
 
 _schedule_cache: dict = {}
 _last_refresh_ts: float = 0.0
+_last_failure_ts: float = 0.0
 _consecutive_failures: int = 0
 _station_config: dict = {}
 
@@ -279,7 +292,7 @@ async def _fetch_url(url, timeout=HTTP_TIMEOUT):
     try:
         from aiohttp import ClientSession, ClientTimeout
         ct = ClientTimeout(total=timeout)
-        session = ClientSession(timeout=ct)
+        session = ClientSession(timeout=ct, headers=HTTP_HEADERS)
         try:
             resp = await session.get(url)
             if resp.status != 200:
@@ -336,24 +349,46 @@ async def _llm_extract_schedule(text):
         )
         resp = await result
         if not resp or not isinstance(resp, dict):
+            log.warning("radio_klara: llm_task_call returned non-dict")  # noqa: F821
             return None
-        text_out = resp.get("text") or resp.get("response") or ""
+        if resp.get("status") != "ok":
+            log.warning(  # noqa: F821
+                "radio_klara: llm_task_call status=%s error=%s",
+                resp.get("status"), resp.get("error", ""),
+            )
+            return None
+        text_out = resp.get("response_text") or ""
         if not text_out:
+            log.warning("radio_klara: llm_task_call returned empty response_text")  # noqa: F821
             return None
         # Strip potential markdown fences
         text_out = text_out.strip()
         if text_out.startswith("```"):
             lines = text_out.split("\n")
-            text_out = "\n".join(lines[1:-1] if lines[-1].strip().startswith("```") else lines[1:])
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            text_out = "\n".join(lines[1:])
         import json as _json
-        parsed = _json.loads(text_out)
+        try:
+            parsed = _json.loads(text_out)
+        except ValueError as exc:
+            log.warning(  # noqa: F821
+                "radio_klara: JSON parse failed: %s — payload prefix=%r",
+                exc, text_out[:200],
+            )
+            return None
         if not isinstance(parsed, dict):
+            log.warning("radio_klara: parsed JSON not a dict")  # noqa: F821
             return None
         if not isinstance(parsed.get("weekly_schedule"), list):
+            log.warning(  # noqa: F821
+                "radio_klara: 'weekly_schedule' missing or not a list"
+            )
             return None
         if len(parsed["weekly_schedule"]) < 5:
             log.warning(  # noqa: F821
-                "radio_klara: LLM extraction returned suspiciously few shows"
+                "radio_klara: LLM extraction returned suspiciously few shows (got %d)",
+                len(parsed["weekly_schedule"]),
             )
             return None
         return parsed
@@ -499,6 +534,29 @@ def _check_stale():
         _set_stale(False)
 
 
+def _should_skip_for_backoff() -> bool:
+    """Skip cron-driven refresh if we're in a failure backoff window.
+
+    Tiered backoff to avoid retriggering WAF blocks after sustained failure:
+      < 3 failures → no backoff (every */15 cron tick is fine)
+      3–9 failures → retry at most once per hour
+      10–23        → retry at most once per 6 hours
+      24+          → retry at most once per day
+
+    Forced refreshes (force=true on the public service) bypass this gate.
+    """
+    if _consecutive_failures < 3 or _last_failure_ts <= 0:
+        return False
+    elapsed_hours = (time.time() - _last_failure_ts) / 3600.0
+    if _consecutive_failures < 10:
+        backoff_hours = 1
+    elif _consecutive_failures < 24:
+        backoff_hours = 6
+    else:
+        backoff_hours = 24
+    return elapsed_hours < backoff_hours
+
+
 # =============================================================================
 # Refresh pipeline — Phase 2
 # =============================================================================
@@ -518,8 +576,9 @@ def _set_status_loaded_from_cache():
 
 def _refresh_failure(reason: str) -> str:
     """Common failure path: increment counter, notify, restore status, return reason."""
-    global _consecutive_failures
+    global _consecutive_failures, _last_failure_ts
     _consecutive_failures += 1
+    _last_failure_ts = time.time()
     _maybe_notify_failure()
     # Status reflects failure but cache (if any) remains usable
     if _schedule_cache and isinstance(_schedule_cache.get("weekly_schedule"), list):
@@ -542,7 +601,7 @@ def _refresh_failure(reason: str) -> str:
 
 async def _do_refresh():
     """Run the full refresh pipeline. Returns status string."""
-    global _schedule_cache, _last_refresh_ts, _consecutive_failures
+    global _schedule_cache, _last_refresh_ts, _consecutive_failures, _last_failure_ts
 
     cfg = _station_config or {}
     src = cfg.get("schedule_source") or {}
@@ -608,6 +667,7 @@ async def _do_refresh():
     _schedule_cache = new_cache
     _last_refresh_ts = time.time()
     _consecutive_failures = 0
+    _last_failure_ts = 0.0
     _stamp_last_refresh()
     _set_stale(False)
     _update_now_playing_sensor()
@@ -753,6 +813,8 @@ async def radio_klara_periodic():
 
     # Check if a refresh is due
     if not _is_enabled():
+        return
+    if _should_skip_for_backoff():
         return
     refresh_hours = _get_refresh_hours()
     if _last_refresh_ts <= 0:

@@ -860,7 +860,7 @@ async def email_promote_process(
 
 
 @service(supports_response="only")  # noqa: F821
-async def email_clear_count():
+async def email_clear_count(current_count: int = -1):
     """
     yaml
     name: Email Clear Count
@@ -868,8 +868,50 @@ async def email_clear_count():
       Reset the priority email counter to zero. Call when user says "I've read
       my emails" or from morning briefing after reading the count. Also clears
       the rolling count in L2 memory.
+
+      Requires current_count parameter — the count the agent observed from
+      system context. If agent omits it (-1) or it mismatches the sensor,
+      a warning is logged but the clear still proceeds (the sensor value
+      may have changed since the agent read it). The mismatch log is useful
+      for detecting LLM tool-pretense (AP-82).
+    fields:
+      current_count:
+        name: Current count
+        description: The count the agent observed from context
+        required: false
+        default: -1
+        selector:
+          number:
+            min: -1
+            max: 9999
+            mode: box
     """
     t_start = time.monotonic()
+
+    # Read actual sensor value before clearing
+    try:
+        actual = int(float(state.get("sensor.ai_email_priority_count") or 0))  # noqa: F821
+    except Exception:
+        actual = -1
+
+    # Validate agent's claim (if provided)
+    count_verified = False
+    count_mismatch = False
+    if current_count is not None and int(current_count) >= 0:
+        if int(current_count) == actual:
+            count_verified = True
+        else:
+            count_mismatch = True
+            log.warning(  # noqa: F821
+                f"email_promote: agent passed current_count={current_count} but "
+                f"sensor shows {actual} — possible LLM tool-pretense or stale read "
+                f"(clear proceeding anyway)"
+            )
+    else:
+        log.warning(  # noqa: F821
+            "email_promote: email_clear_count called without current_count — "
+            "LLM may have fabricated the call (AP-82 tool pretense)"
+        )
 
     _set_email_count(0)
 
@@ -884,11 +926,18 @@ async def email_clear_count():
 
     result = {
         "status": "ok", "op": "email_clear_count",
-        "count": 0, "elapsed_ms": elapsed,
+        "count_before": actual, "count": 0,
+        "agent_claimed_count": int(current_count) if current_count is not None else -1,
+        "count_verified": count_verified,
+        "count_mismatch": count_mismatch,
+        "elapsed_ms": elapsed,
     }
 
     _set_result("ok", **result)
-    log.info(f"email_promote: counter cleared {elapsed}ms")  # noqa: F821
+    log.info(  # noqa: F821
+        f"email_promote: counter cleared ({actual}→0, "
+        f"verified={count_verified}) {elapsed}ms"
+    )
 
     return result
 

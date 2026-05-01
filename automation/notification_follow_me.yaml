@@ -1249,17 +1249,19 @@ blueprint:
             listener perspective (e.g. "your mum" not "my mum").
           default: >-
             Refer to them naturally by this name — do not use any
-            other name found in the message body.
-            PERSPECTIVE RULE: You are announcing TO the listener,
-            not about yourself. When the preferred name is a
-            relationship word (e.g. "Mum", "Dad", "babe"),
-            always frame it as the LISTENER's relationship —
-            say "your mum sent you a message", never "my mum".
-            If the preferred name is a longer relationship phrase
-            (e.g. "love of your life", "mi vida"), introduce them
-            with the article "the" — say "the love of your life
-            sent you a message". Use it as a natural reference,
-            not a quoted title.
+            other name found in the message body. If the preferred
+            name is a regular first name (like "Daniel" or "Sara"),
+            use it as-is — do NOT prepend relationship labels,
+            titles, or descriptors that are not part of the name.
+            PERSPECTIVE RULE (applies ONLY when the preferred name
+            IS itself a relationship term): When the preferred name
+            is a relationship word (e.g. "Mum", "Dad"), frame it
+            as the LISTENER's relationship — say "your mum sent
+            you a message", never "my mum". When the preferred
+            name is a multi-word relationship phrase, add the
+            article "the" before it. These relationship rules
+            ONLY apply when the name itself is a relationship
+            term, never for regular first names.
           selector:
             text:
               multiline: true
@@ -1274,10 +1276,10 @@ blueprint:
           default: >-
             IMPORTANT: You are speaking out loud through a speaker to
             {listener}. Use the sender's preferred name only to REFER
-            to them in the third person (e.g. "the love of your life
-            says…"). Do NOT use it as a greeting or form of address
-            toward your listener — your listener is {listener}, not
-            the sender.
+            to them in the third person (e.g. "Daniel says…" or, for
+            relationship names, "your mum says…"). Do NOT use it as
+            a greeting or form of address toward your listener —
+            your listener is {listener}, not the sender.
           selector:
             text:
               multiline: true
@@ -1755,7 +1757,7 @@ conditions:
         {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% elif occ == 'dual' %}{% set _u = (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default(_primary) %}
         {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = _notif_priority | int(3) %}

@@ -424,3 +424,17 @@ ai_radio_klara_refresh_hours:
   mode: box
   unit_of_measurement: "h"
   icon: mdi:radio-tower
+
+# AP-82 watchdog — lookback window for trace error scanning.
+# 24h default catches a full day of missed alarms. Bump to 168 (7d) for
+# weekly review, or 1-6 for tighter real-time alerting. Consumer:
+# pyscript/automation_trace_watchdog.py.
+ai_trace_watchdog_window_hours:
+  name: "AI Trace Watchdog — Window Hours"
+  min: 1
+  max: 720
+  step: 1
+  initial: 24
+  mode: box
+  unit_of_measurement: "h"
+  icon: mdi:clock-search-outline

@@ -17,6 +17,7 @@ pipeline_tts_backup.json
 # Temporary files
 *.tmp
 *.bak
+*.bak.*
 .smbdelete*
 /style-guide/_reference
 /archive
@@ -26,4 +27,11 @@ configuration.yaml
 
 # Personal Windows-local Claude Code directives
 CLAUDE.md
+
+# Claude Code memory + tool logs (personal, not for public repo)
+.claude-memory/
+logs/
+
+# One-off migration scripts in style-guide/ (run locally, not part of HACS dist)
+style-guide/update_*.py
 

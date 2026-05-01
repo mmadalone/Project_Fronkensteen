@@ -604,7 +604,7 @@ actions:
         {% else %}
           {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
           {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-          {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default('') }}
+          {% elif occ == 'dual' %}{{ (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default('') }}
           {% else %}{% endif %}
         {% endif %}
 

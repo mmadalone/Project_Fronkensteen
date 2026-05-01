@@ -330,8 +330,8 @@ async def _generate_llm_summary(slug: str, body: str) -> str:
             ),
         )
         resp = await result
-        if resp and isinstance(resp, dict):
-            summary = resp.get("text", "") or resp.get("response", "")
+        if resp and isinstance(resp, dict) and resp.get("status") == "ok":
+            summary = resp.get("response_text", "") or ""
             if summary:
                 summary = summary.strip()[:200]
                 _auto_summary_cache[slug] = (body_hash, summary)

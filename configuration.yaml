@@ -124,7 +124,7 @@ pyscript:
 shell_command:
   install_openai: "pip install 'openai~=2.21.0'"
   recompile_vec0: "bash /config/scripts/recompile_vec0.sh"
-
+       
 # Lovelace Dashboards
 lovelace:
   dashboards:

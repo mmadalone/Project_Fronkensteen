@@ -736,3 +736,12 @@ ai_radio_klara_data_stale:
   name: "AI Radio Klara - Data Stale"
   icon: mdi:radio-off
   initial: false
+
+# AP-82 watchdog kill switch — scans .storage/trace.saved_traces for silent
+# automation failures (variables/conditions crashes that leave zero logbook
+# entries). Published to sensor.ai_automation_trace_errors. Consumer:
+# pyscript/automation_trace_watchdog.py.
+ai_trace_watchdog_enabled:
+  name: "AI Trace Watchdog - Enabled"
+  icon: mdi:shield-search
+  initial: true

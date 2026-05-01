@@ -1139,7 +1139,7 @@ conditions:
         {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% elif occ == 'dual' %}{% set _u = (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default(_primary) %}
         {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = _email_priority | int(3) %}

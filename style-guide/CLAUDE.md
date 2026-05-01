@@ -1,23 +1,25 @@
-# CLI Claude — Base Project Instructions
+﻿# CLI Claude — Base Project Instructions
+
+IMPORTANT: DON'T BE SYCOPHANTIC
 
 > **!! ACTION ITEMS from 2026-03-16 deep audit (Grade: B-).** Read `_build_logs/2026-03-16_codebase_grade_action_items.md` before starting new features. Critical: run test plan, verify 4 untested deployments, address bedtime_routine divergence.
 
 ## Project Paths
-- PROJECT_DIR: /Users/madalone/_Claude Projects/HA Master Style Guide/
-- HA_CONFIG: /Users/madalone/Library/Containers/nz.co.pixeleyes.AutoMounter/Data/Mounts/Home Assistant/SMB/config/
-- GIT_REPO: /Users/madalone/_Claude Projects/Project_Fronkensteen/
+- PROJECT_DIR: C:\Users\mique\_Claude Projects\HA Master Style Guide/
+- HA_CONFIG: \\192.168.2.211\config\
+- GIT_REPO: C:\Users\mique\_Claude Projects\Project_Fronkensteen/
 - GIT_REPO_URL: https://github.com/mmadalone/Project_Fronkensteen/
-- HEADER_IMG: /Users/madalone/_Claude Projects/Project_Fronkensteen/images/header/
+- HEADER_IMG: C:\Users\mique\_Claude Projects\Project_Fronkensteen/images/header/
 - HEADER_IMG_RAW: https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/
-- README_AUTO_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/automation/
-- README_SCRI_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/script/
-- README_TEMPL_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/template/
+- README_AUTO_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/readme/automation/
+- README_SCRI_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/readme/script/
+- README_TEMPL_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/readme/template/
 - IMG_PREMISES: Rick & Quark series episode premise based off the blueprint features; Rick & Morty (Adult Swim cartoon) episode premise based off the blueprint features
 
-- HELPER_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/helpers/
-- README_PYSCrIPT_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/pyscript/
-- README_PACKAGES_DIR: /Users/madalone/_Claude Projects/Project_Fronkensteen/readme/packages/
-- Source of truth for Extended OpenAI conversation agent prompts: /Users/madalone/_Claude Projects/HA Master Style Guide/Extended OpenAi Conversation Prompts
+- HELPER_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/helpers/
+- README_PYSCrIPT_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/readme/pyscript/
+- README_PACKAGES_DIR: C:\Users\mique\_Claude Projects\Project_Fronkensteen/readme/packages/
+- Source of truth for Extended OpenAI conversation agent prompts: C:\Users\mique\_Claude Projects\HA Master Style Guide/Extended OpenAi Conversation Prompts
 
 All edits happen in PROJECT_DIR and HA_CONFIG — never directly in GIT_REPO.
 The git repo is a publish-only mirror.
@@ -95,3 +97,49 @@ Before creating a new helper, check the relevant file — it may already exist.
 ## Maintaining This File
 
 As you work through the codebase, **update this CLAUDE.md** with important discoveries that should persist across sessions — paths you found, architectural decisions confirmed, conventions detected, key file locations. This file is your memory between sessions. Keep it concise and factual.
+---
+
+## Historical Memory Archive (from Mac, migrated 2026-04-15)
+
+Detailed project history, decisions, and feedback from Mac-era Claude Code sessions:
+
+@.claude-memory/MEMORY.md
+
+Load when working on related topics â€” contains completion-state of past sessions, architectural decisions, and lessons learned not otherwise captured.
+
+---
+
+## Memory Management Directive
+
+### Memory hierarchy (in priority order)
+
+1. **Project context** (this CLAUDE.md + `@.claude-memory/MEMORY.md` auto-loaded) â€” primary source for anything specific to this project (architecture, decisions, gotchas, implementation state)
+2. **simple-memory MCP** â€” authoritative for CROSS-CUTTING facts only: infrastructure, home network, hardware specs, MCP setup, Pi/device connection details, and knowledge that spans multiple projects
+3. **memory_user_edits** (30-entry cap, visible in every conversation) â€” behavioral/steering rules only (naming conventions, CV padding rules, language preferences, etc.)
+
+### When to QUERY simple-memory (at task start)
+Only for cross-cutting topics **not covered by this project's CLAUDE.md / .claude-memory/**:
+- Network IPs, hostnames, reachability
+- Hardware specs outside this project's scope
+- MCP infrastructure / RPi4 mcp-server setup
+- Prior debugging notes that span projects
+- Tool/workflow configuration shared across projects
+
+Usage: `simple-memory:memory-graphql { memories(query: "...", summaryOnly: true) { hash title tags } }` then fetch by hash if relevant. **Do not re-invent facts already stored.**
+
+### When to STORE in simple-memory (proactively, end of session)
+- Infrastructure changes that affect multiple projects/devices
+- Cross-cutting debugging findings or gotchas
+- Hardware configuration changes
+- Network/service endpoint changes
+- Tool setup worth documenting across contexts
+
+Usage: `mutation { store(content: "...", tags: [...]) { hash } }` â€” structured markdown, meaningful tags (`infrastructure`, `hardware`, `network`, `mcp`, `debugging`, `reference`).
+
+### What does NOT go in simple-memory
+- Project-specific knowledge (lives in this project's `.claude-memory/` archive â€” reference by path, don't duplicate)
+- Behavioral/steering rules (use `memory_user_edits`)
+- Transient session state
+
+### Availability / failure mode
+simple-memory runs on the RPi4 at `192.168.2.216:9100` via mcp-proxy. If unavailable (Pi offline, LAN issue): note it, proceed without storing, and flag at end of session so the user can manually record any missed findings.

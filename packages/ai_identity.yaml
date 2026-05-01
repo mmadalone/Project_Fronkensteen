@@ -182,6 +182,24 @@ template:
           {%- else -%}dual
           {%- endif -%}
           {%- endif -%}
+        attributes:
+          persons: >-
+            {%- if is_state('input_boolean.ai_guest_mode', 'on') -%}
+            []
+            {%- else -%}
+            {%- set ns = namespace(home=[]) -%}
+            {%- for p in states.person -%}
+              {%- set slug = p.object_id -%}
+              {%- set is_home = (p.state == 'home') -%}
+              {%- if is_home and is_state('input_boolean.ai_wifi_stale_' ~ slug, 'on') -%}
+                {%- set is_home = false -%}
+              {%- endif -%}
+              {%- if is_home -%}
+                {%- set ns.home = ns.home + [slug] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.home }}
+            {%- endif -%}
 
 # ── SUSTAINED SOLO ZONE AUTOMATION ────────────────────────────────────────────
 

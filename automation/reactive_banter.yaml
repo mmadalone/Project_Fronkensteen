@@ -556,7 +556,7 @@ variables:
     {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% elif occ == 'dual' %}{{ (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default(_primary) }}
     {% else %}{{ _primary }}{% endif %}
   _user_humor: "{{ states('input_text.ai_context_user_humor_' ~ _resolved_user) | default('', true) }}"
   _user_off_limits: "{{ states('input_text.ai_context_user_off_limits_' ~ _resolved_user) | default('', true) }}"
@@ -648,7 +648,7 @@ conditions:
         {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
         {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
         {% if occ.startswith('solo_') %}{% set _u = occ.replace('solo_', '') %}
-        {% elif occ in ['dual', 'home'] %}{% set _u = state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) %}
+        {% elif occ == 'dual' %}{% set _u = (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default(_primary) %}
         {% else %}{% set _u = _primary %}{% endif %}
         {% set threshold = states('input_text.ai_context_user_notify_threshold_' ~ _u) | default('everything', true) | lower | trim %}
         {% set prio = tts_priority_val | int(2) %}

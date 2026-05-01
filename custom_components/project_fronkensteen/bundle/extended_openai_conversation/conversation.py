@@ -16,6 +16,10 @@ from openai._exceptions import (
 )
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.chat.chat_completion_message_tool_call import (
+    ChatCompletionMessageToolCall,
+    Function as _ToolCallFunction,
+)
 import yaml
 
 from homeassistant.components import conversation
@@ -405,6 +409,66 @@ class ExtendedOpenAIAgentEntity(
             )
         return exposed_entities
 
+    def _bridge_content_tool_calls(self, text: str) -> list | None:
+        """Parse JSON tool objects from content into synthetic tool_calls.
+
+        Some models (notably Llama 4 Maverick on OpenRouter) emit function
+        calls as ``{"name": "func", "parameters": {...}}`` JSON blobs inside
+        message.content instead of using the OpenAI tool_calls API field.
+        Returns a list of ChatCompletionMessageToolCall ready for
+        execute_tool_calls() — or None if nothing valid was found.
+
+        Validates each candidate against the registered function specs so we
+        never invent a call to a function that wasn't exposed to the model.
+        Tolerates `parameters`, `arguments`, and `args` as the kwargs key,
+        and accepts either dict or JSON-string params.
+        """
+        if not text:
+            return None
+        valid_names = {s["spec"]["name"] for s in self.get_functions()}
+        if not valid_names:
+            return None
+        bridged = []
+        for m in _JSON_TOOL_OBJECT.finditer(text):
+            try:
+                obj = json.loads(m.group(0))
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(obj, dict):
+                continue
+            name = obj.get("name") or obj.get("function") or obj.get("tool")
+            if not name or name not in valid_names:
+                continue
+            params = obj.get("parameters")
+            if params is None:
+                params = obj.get("arguments")
+            if params is None:
+                params = obj.get("args", {})
+            if isinstance(params, str):
+                try:
+                    params = json.loads(params)
+                except (json.JSONDecodeError, ValueError):
+                    params = {}
+            if not isinstance(params, dict):
+                params = {}
+            try:
+                bridged.append(
+                    ChatCompletionMessageToolCall(
+                        id=f"bridge_{len(bridged)}_{name}",
+                        type="function",
+                        function=_ToolCallFunction(
+                            name=name,
+                            arguments=json.dumps(params),
+                        ),
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning(
+                    "EOC bridge: failed to synthesize tool_call for %s: %s",
+                    name, exc,
+                )
+        return bridged or None
+
     def _sanitize_for_speech(self, text: str | None) -> str | None:
         """Strip raw tool-call syntax leaked into message.content.
 
@@ -416,10 +480,15 @@ class ExtendedOpenAIAgentEntity(
                  residual key="value" pairs left by earlier layers.
         Layer 5: JSON tool-call objects → strip {"name": "...", "parameters": {...}}
                  patterns emitted by some models instead of function-call syntax.
+        Layer 6: Pseudo-tool-call detection (AP-82) → strip [known_function_name]
+                 patterns emitted as text instead of real tool_calls. Logs a
+                 WARNING when detected so prompt issues can be surfaced.
+        Layer 7: ElevenLabs [stage directions] → strip all [tags] when TTS test
+                 mode is on (HA Cloud reads them literally).
 
-        Layers 2–5 cascade: each cleans progressively so Layer 2 stripping a
+        Layers 2–6 cascade: each cleans progressively so Layer 2 stripping a
         function name exposes orphaned args for Layer 3, and any remaining
-        inline params are caught by Layers 4–5.
+        inline params are caught by Layers 4–6.
         """
         if not text:
             return text
@@ -463,7 +532,34 @@ class ExtendedOpenAIAgentEntity(
             cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
             cleaned = re.sub(r'[,;.\s]+$', '', cleaned).strip()
             cleaned = re.sub(r'^[,;.\s]+', '', cleaned).strip()
-        # Layer 6: Strip ElevenLabs [stage directions] when TTS test mode
+        # Layer 6: Detect [known_function_name] pseudo-tool-calls (AP-82 LLM
+        # tool pretense). Some models (Llama 4 Maverick observed 2026-04-11)
+        # write the function name in brackets instead of emitting a real
+        # tool_call, then add a fake "done" confirmation. This layer strips
+        # the pseudo-calls from speech AND logs a WARNING so we can detect
+        # and fix prompt/tool-description issues. Scoped to known function
+        # names only — legitimate ElevenLabs tags like [sighs], [chuckles]
+        # are preserved (those are handled by Layer 7 in test mode).
+        if names:
+            pseudo_pattern = re.compile(
+                r'\[(' + '|'.join(re.escape(n) for n in names) + r')(?:\([^\]]*\))?\]',
+                re.IGNORECASE,
+            )
+            pseudo_matches = pseudo_pattern.findall(cleaned)
+            if pseudo_matches:
+                for fn_name in pseudo_matches:
+                    _LOGGER.warning(
+                        "EOC tool-pretense detected (AP-82): LLM wrote "
+                        "[%s] as text instead of emitting a real function "
+                        "call. Agent may be faking confirmations without "
+                        "actually calling the tool. Check prompt tool-call "
+                        "directives.", fn_name,
+                    )
+                cleaned = pseudo_pattern.sub('', cleaned)
+                cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+                cleaned = re.sub(r'[,;.\s]+$', '', cleaned).strip()
+                cleaned = re.sub(r'^[,;.\s]+', '', cleaned).strip()
+        # Layer 7: Strip ElevenLabs [stage directions] when TTS test mode
         # routes to HA Cloud (which reads them literally).
         try:
             if self.hass.states.get("input_boolean.ai_tts_test_mode").state == "on":
@@ -578,6 +674,35 @@ class ExtendedOpenAIAgentEntity(
                 user_input, messages, message, exposed_entities, n_requests + 1,
                 model_override=model_override,
             )
+        # Bridge: some models (Llama 4 Maverick on OpenRouter, etc.) emit
+        # function calls as JSON inside message.content rather than via the
+        # tool_calls API field. Without this bridge, EOC sees no tool_calls,
+        # treats the JSON as plain speech, the L5 sanitizer strips it, and
+        # the user hears the natural-language preamble while the function
+        # never dispatches. Detect those JSON objects, validate against
+        # registered function specs, and synthesize tool_calls so
+        # execute_tool_calls() can dispatch them normally.
+        if (
+            not message.tool_calls
+            and message.content
+            and choice.finish_reason in ("stop", "tool_calls")
+            and _JSON_TOOL_OBJECT.search(message.content)
+        ):
+            bridged = self._bridge_content_tool_calls(message.content)
+            if bridged:
+                cleaned = _JSON_TOOL_OBJECT.sub('', message.content)
+                cleaned = re.sub(r'\s+', ' ', cleaned).strip() or None
+                message = message.model_copy(
+                    update={"content": cleaned, "tool_calls": bridged}
+                )
+                _LOGGER.info(
+                    "EOC bridge: synthesized %d tool_calls from message.content "
+                    "(model=%s)", len(bridged), model
+                )
+                return await self.execute_tool_calls(
+                    user_input, messages, message, exposed_entities, n_requests + 1,
+                    model_override=model_override,
+                )
         # Some OpenAI servers returns tool_calls=[] on normal "stop" completions.
         # Only enter tool execution when tool_calls is present AND non-empty.
         if message.tool_calls and (

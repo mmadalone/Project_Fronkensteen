@@ -635,7 +635,7 @@ async def contact_history_summarize(
 
             summary_text = ""
             if resp and resp.get("status") == "ok":
-                summary_text = resp.get("response", "")
+                summary_text = resp.get("response_text", "") or ""
 
             if not summary_text:
                 log.warning(  # noqa: F821

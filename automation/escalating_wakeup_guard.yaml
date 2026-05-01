@@ -791,7 +791,7 @@ variables:
     {% set _primary = states('input_text.ai_primary_user') | default('', true) %}
     {% set occ = states('sensor.occupancy_mode') | default('unknown') %}
     {% if occ.startswith('solo_') %}{{ occ.replace('solo_', '') }}
-    {% elif occ in ['dual', 'home'] %}{{ state_attr('sensor.occupancy_mode', 'persons') | first | default(_primary) }}
+    {% elif occ == 'dual' %}{{ (state_attr('sensor.occupancy_mode', 'persons') or []) | first | default(_primary) }}
     {% else %}{{ _primary }}{% endif %}
   _user_prefs_block: >-
     {% set ns = namespace(lines=[]) %}
