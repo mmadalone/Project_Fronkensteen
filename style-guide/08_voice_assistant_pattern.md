@@ -607,30 +607,56 @@ target voice + reopens mic) → update self-awareness
 
 **Blueprint inputs:** satellite, pipeline_select, greeting_prompt, restore_after_seconds, tts_speaker, bypass_ducking, bypass_follow_me, enable_expertise_handoff, expertise_commentary_prompt, expertise_greeting_prompt.
 
-**Extended OpenAI tool function** (must be on ALL agents):
+**Extended OpenAI tool function** (on all 5 Standard + 5 Music Compose + 5 Music Transfer + 1 Therapy = 16 agents; Bedtime variants intentionally omitted):
 
 ```yaml
 - spec:
     name: handoff_agent
-    description: "Switch to another voice agent. reason: user_request if user asked, expertise if proactive routing."
+    description: >-
+      Hand the user to another agent. IMPORTANT: After calling this
+      function, you MUST still respond with a brief in-character
+      farewell message. Never return an empty response after this call.
     parameters:
       type: object
       properties:
         target:
           type: string
-          enum: [deadpool, quark, kramer, rick, doctor portuondo]
+          description: "Target persona name (e.g., quark, rick, deadpool, kramer, doctor portuondo)"
         reason:
           type: string
-          enum: [user_request, expertise]
-      required: [target, reason]
+          enum: ["user_request", "expertise"]
+        topic:
+          type: string
+          description: "Brief summary of current conversation topic (2-5 words)"
+        variant:
+          type: string
+          description: >-
+            Pipeline variant ("music compose", "music transfer", "therapy").
+            Leave empty for normal Standard handoff.
+      required: ["target", "reason"]
   function:
     type: script
     sequence:
-      - event: ai_handoff_request
-        event_data:
-          target: "{{target}}"
-          reason: "{{reason}}"
+      - condition: state
+        entity_id: input_boolean.ai_handoff_processing
+        state: "off"
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.ai_handoff_pending
+        data:
+          value: "{{ target }}"
 ```
+
+> **Tool body history (2026-05-01):** This used to be `event: ai_handoff_request` (with `target`, `reason`, `topic`, `variant` in event_data). The blueprint listened on both `flag_trigger` (state of `ai_handoff_pending`) and `event_trigger` (`ai_handoff_request` event); only flag_trigger was consistently received. Migrated the tool body to `service: input_text.set_value` for reliability. **Trade-off:** flag_trigger gets `target` only; `topic`/`variant`/`reason` default to empty/`user_request`. Music variant routing degrades to the persona's Standard pipeline. Encode `target|variant` in the helper if you need variant routing back.
+
+**Blueprint condition — race-tolerant:** the per-satellite blueprint instance gates on `sensor.ai_last_satellite == satellite_entity` to disambiguate which instance handles the handoff. That sensor is updated AFTER the LLM response (~2s post-tool-fire), so for voice triggers the canonical condition fails and the watchdog (`for: "00:00:30"`) silently eats the trigger. Mitigation (added 2026-05-01): an OR clause that accepts the live satellite state.
+
+```jinja
+{{ states('sensor.ai_last_satellite') == satellite_entity
+   or states(satellite_entity) in ['listening', 'processing', 'responding'] }}
+```
+
+**Fallback model warning (AP-82):** When EOC's primary model 404s ("No endpoints found that support tool use" — common with Maverick on OpenRouter), the per-turn fallback model MUST also be tool-capable. Models like `meta-llama/llama-3.3-70b-instruct` return `finish_reason: stop` with the tool call leaked as JSON in `content` instead of structured `tool_calls`. The 6-layer speech sanitizer Layer 5 silently strips the JSON from TTS, hiding the failure entirely. Use `openai/gpt-4.1-mini`, `claude-haiku-4-5`, or similar known tool-capable models for fallback.
 
 **Agent system prompt additions** (all 10 Standard + Bedtime agents):
 
