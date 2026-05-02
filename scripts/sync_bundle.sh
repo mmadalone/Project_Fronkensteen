@@ -14,7 +14,11 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-REPO="${1:-.}"
+# Resolve REPO to an absolute path. The patched-component zip step does
+# `cd "$src"` before invoking zip, so a relative $BUNDLE would resolve
+# to the wrong location and zip exits 15 ("cannot open output file").
+REPO_ARG="${1:-.}"
+REPO="$(cd "$REPO_ARG" && pwd -P)"
 BUNDLE="$REPO/custom_components/project_fronkensteen/bundle"
 
 if [[ ! -d "$REPO/custom_components/project_fronkensteen" ]]; then
