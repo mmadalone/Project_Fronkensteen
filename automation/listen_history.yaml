@@ -246,9 +246,10 @@ triggers:
       - "off"
       - "standby"
 
-  # 5. HA restart — recover sessions for any playing players
-  - trigger: homeassistant
-    event: start
+  # 5. HA restart — recover sessions for any playing players (fires
+  # after all integrations finish setup so pyscript services are ready).
+  - trigger: event
+    event_type: homeassistant_started
     id: ha_start
 
 # ── Conditions ──────────────────────────────────────────────────────────────

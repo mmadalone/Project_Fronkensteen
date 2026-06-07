@@ -1688,9 +1688,11 @@ triggers:
     minutes: "/5"
 
   - alias: "HA restart — clear stale reminder state"
+    # Use homeassistant_started (late) instead of homeassistant.start (early)
+    # — the latter fires before pyscript registers services.
     id: ha_startup
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 # =============================================================================
 # CONDITIONS

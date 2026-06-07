@@ -117,10 +117,11 @@ triggers:
     entity_id: !input manual_trigger
     to: "on"
 
-  # ── 3. Startup ──
+  # ── 3. Startup (fires after all integrations finish setup so pyscript
+  # services are guaranteed registered) ──
   - id: startup
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 conditions:
   - condition: template

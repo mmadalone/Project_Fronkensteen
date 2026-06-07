@@ -62,10 +62,17 @@ radio_stations:
       title_contains: ["radio klara", "klara"]
       content_id_contains: ["radioklara"]
     schedule_source:
-      type: pdf_via_page
+      # The radioklara.org tríptic is image-only (page 1 = intro text,
+      # page 2 = schedule rendered as graphics). pypdf can't read the
+      # grid — uses vision LLM via OpenRouter on the parrilla JPEG.
+      # Vision model is selected via input_text.ai_radio_klara_vision_model
+      # (dashboard helper). Override per-station here only if you want a
+      # different model for a specific station.
+      type: image_via_page
       page_url: "https://www.radioklara.org/radioklara/?page_id=2"
-      pdf_link_pattern: 'href=["\047]([^"\047]+triptic[^"\047]*\.pdf)["\047]'
-    timezone: "Europe/Madrid"
+      image_link_pattern: 'src=["\047]([^"\047]+parrilla[^"\047]*\.jpe?g)["\047]'
+    # timezone uses HA's system setting (`hass.config.time_zone`) via
+    # `datetime.now()` — no per-station override needed.
     enabled: true
 
 # Outdoor temperature sensor (must report °C with unit_of_measurement)

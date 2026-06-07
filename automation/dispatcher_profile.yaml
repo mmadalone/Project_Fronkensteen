@@ -493,8 +493,10 @@ variables:
   _budget_fallback: !input budget_fallback_entity
 
 triggers:
-  - trigger: homeassistant
-    event: start
+  # Fires after all integrations finish setup. `homeassistant: event: start`
+  # fires too early — pyscript services may not be registered yet.
+  - trigger: event
+    event_type: homeassistant_started
     id: startup
   - trigger: state
     entity_id: !input apply_button

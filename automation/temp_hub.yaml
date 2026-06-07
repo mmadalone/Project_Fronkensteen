@@ -107,8 +107,11 @@ triggers:
     entity_id: !input temp_sensor
 
   - alias: "HA restarted — sync fan to current temperature"
-    trigger: homeassistant
-    event: start
+    # Use homeassistant_started (late) — temp sensor is guaranteed
+    # available by then. `homeassistant.start` (early) can fire while
+    # the sensor is still loading.
+    trigger: event
+    event_type: homeassistant_started
 
 conditions: []
 

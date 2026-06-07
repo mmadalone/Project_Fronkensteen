@@ -1,5 +1,5 @@
 blueprint:
-  name: "Charge reminder – persona-aware battery nudges (v8)"
+  name: "Charge reminder – persona-aware battery nudges (v12)"
   author: madalone
   description: >
     # Charge Reminder – persona-aware battery nudges
@@ -17,6 +17,45 @@ blueprint:
     editable prompt/factual message, reminder count, and dedup window.
 
     ### Recent changes
+    - **v12:** The `tts_speak` delivery backend can now speak with a
+      chosen Home Assistant Cloud (Azure neural) voice. Two new inputs
+      under section ④: `tts_voice` — a dropdown of common
+      en-US/es-ES/ca-ES voices that also accepts any custom Azure ID
+      (e.g. `AriaNeural` or `AriaNeural||cheerful`) — and
+      `tts_voice_language`, the paired language code. The language is
+      required for non-English voices: HA Cloud defaults to its
+      configured language (en-US here) and silently swaps a mismatched
+      voice for that language's default. Both apply ONLY to the
+      `tts_speak` backend and only when set; the voice rides in
+      `tts.speak` `options.voice`, and `options` is attached only when a
+      voice is chosen so non-cloud engines never get an unsupported
+      option. Existing instances and the pyscript_queue / assist_satellite
+      / notify backends are unchanged (blank voice = identical behavior).
+    - **v11:** New `congrats_cooldown_minutes` slider (5–120 min,
+      default 30) under section ⑥. The plug-in celebration is now
+      gated by how long the device was unplugged — rapid re-plugs
+      at low battery no longer spam congratulations. Implemented via
+      `trigger.from_state.last_changed` so it works without pyscript
+      and respects the v10 delivery_backend abstraction.
+    - **v10:** Delivery backend is now user-configurable via the new
+      `delivery_backend` selector. Choose between
+      `pyscript_queue` (Project Fronkensteen TTS queue with
+      satellite → media-player → default cascade — current behavior,
+      still the default), `tts_speak` (generic HA `tts.speak` with a
+      configurable TTS engine + media player), `assist_satellite`
+      (always announce via Assist Satellite), or `notify` (text-only
+      notification — for users with no TTS setup at all). Two new
+      fields support these backends: `tts_engine` (TTS entity for
+      `tts_speak`) and `notify_service` (e.g.,
+      `notify.mobile_app_pixel` for `notify`). Existing instances
+      keep their exact current behavior — no migration needed.
+    - **v9:** Charge control switch input now accepts multiple
+      entities — useful when more than one wireless charging device
+      shares the same thresholds. The same ceiling/resume logic is
+      applied to every selected switch in lockstep. Templates handle
+      both the new list value and legacy single-string values from
+      pre-v9 instances, so existing automations keep working without
+      migration.
     - **v8:** Charge control fixes — (1) switch hardware actions
       (turn_off at ceiling, turn_on at floor) now bypass all TTS
       gates so charging control always works regardless of quiet
@@ -337,16 +376,43 @@ blueprint:
       name: "④ TTS & speaker output"
       icon: mdi:speaker
       description: >
-        Where TTS plays. Satellite takes priority over media player.
-        Leave both empty to use the TTS queue default target.
+        How and where announcements are delivered. Pick the delivery
+        backend first, then fill in the fields it needs. The other
+        fields are ignored.
       collapsed: true
       input:
+        delivery_backend:
+          name: Delivery backend
+          description: >
+            How announcements are delivered.
+            • `pyscript_queue` — Project Fronkensteen TTS queue (default).
+              Cascade: Assist Satellite → explicit media player → TTS
+              queue default. Requires the `pyscript.tts_queue_speak`
+              service.
+            • `tts_speak` — Generic HA `tts.speak`. Requires a TTS
+              engine entity and a media player.
+            • `assist_satellite` — Assist Satellite only. Requires the
+              Assist Satellite entity below.
+            • `notify` — Plain text notification (no TTS). Requires a
+              notify service name (e.g., `notify.mobile_app_pixel`).
+          default: pyscript_queue
+          selector:
+            select:
+              options:
+                - value: pyscript_queue
+                  label: "pyscript.tts_queue_speak (Project Fronkensteen)"
+                - value: tts_speak
+                  label: "tts.speak (generic HA TTS)"
+                - value: assist_satellite
+                  label: "Assist Satellite only"
+                - value: notify
+                  label: "notify service (no TTS)"
+
         satellite_entity:
           name: Assist Satellite
           description: >
-            Assist Satellite entity for TTS announcements. When set,
-            announcements play via assist_satellite.announce instead of
-            the TTS queue.
+            Assist Satellite entity for TTS announcements. Used by the
+            `pyscript_queue` cascade and the `assist_satellite` backend.
           default: ""
           selector:
             entity:
@@ -355,12 +421,91 @@ blueprint:
         tts_output_player:
           name: Media player for TTS
           description: >
-            Speaker or speaker group where TTS will play via the TTS
-            queue. Ignored when an Assist Satellite is configured above.
+            Speaker or speaker group where TTS will play. Used by the
+            `pyscript_queue` and `tts_speak` backends.
           default: ""
           selector:
             entity:
               domain: media_player
+
+        tts_engine:
+          name: TTS engine (for `tts_speak` backend)
+          description: >
+            TTS engine entity (e.g., `tts.cloud`,
+            `tts.google_translate_say`, `tts.piper`). Only used when
+            delivery backend is `tts_speak`. Ignored otherwise.
+          default: ""
+          selector:
+            entity:
+              domain: tts
+
+        tts_voice:
+          name: TTS voice (for `tts_speak` backend)
+          description: >
+            Cloud / Azure neural voice for the `tts_speak` backend. Pick a
+            common voice from the list or type any full Azure neural ID (it
+            must end in `Neural`, e.g. `AriaNeural`). Add an emotion/style
+            with the `||` separator, e.g. `AriaNeural||cheerful` — only
+            en-US voices (and es-ES `AlvaroNeural`) support styles. Only
+            used when the delivery backend is `tts_speak` and the engine is
+            Home Assistant Cloud; ignored by other backends and by
+            non-cloud engines. Leave blank for the engine's default voice.
+            Tip: test a voice in Developer Tools → Actions → `tts.speak`
+            before pasting it here.
+          default: ""
+          selector:
+            select:
+              custom_value: true
+              options:
+                - label: "(engine default)"
+                  value: ""
+                - label: "en-US · Jenny (HA default)"
+                  value: "JennyNeural"
+                - label: "en-US · Aria"
+                  value: "AriaNeural"
+                - label: "en-US · Aria (cheerful)"
+                  value: "AriaNeural||cheerful"
+                - label: "en-US · Guy"
+                  value: "GuyNeural"
+                - label: "en-US · Davis (current system default)"
+                  value: "DavisNeural||unfriendly"
+                - label: "es-ES · Elvira (HA default)"
+                  value: "ElviraNeural"
+                - label: "es-ES · Alvaro"
+                  value: "AlvaroNeural"
+                - label: "es-ES · Alvaro (cheerful)"
+                  value: "AlvaroNeural||cheerful"
+                - label: "ca-ES · Joana (HA default)"
+                  value: "JoanaNeural"
+                - label: "ca-ES · Enric"
+                  value: "EnricNeural"
+
+        tts_voice_language:
+          name: TTS voice language (for `tts_speak` backend)
+          description: >
+            Language code paired with the voice above, e.g. `en-US`,
+            `es-ES`, `ca-ES`. Required for any non-English voice: Home
+            Assistant Cloud defaults to its configured language (en-US on
+            this system), and a voice that does not match the resolved
+            language is silently swapped for that language's default voice
+            with no error (HA issue #158435). Leave blank for en-US voices
+            or to use the engine default. Only used when the delivery
+            backend is `tts_speak` and a voice is set above; ignored
+            otherwise.
+          default: ""
+          selector:
+            text: {}
+
+        notify_service:
+          name: Notify service (for `notify` backend)
+          description: >
+            Notify service name to call (e.g.,
+            `notify.mobile_app_pixel`, `notify.persistent_notification`).
+            Only used when delivery backend is `notify`. Ignored
+            otherwise.
+          default: ""
+          selector:
+            text: {}
 
         tts_volume:
           name: TTS volume
@@ -451,6 +596,24 @@ blueprint:
           default: true
           selector:
             boolean: {}
+
+        congrats_cooldown_minutes:
+          name: Congratulate on plug-in — cooldown (minutes)
+          description: >
+            Minimum duration the device must have been unplugged before
+            another plug-in celebration is allowed. Suppresses the
+            congrats when the cable is jiggled or briefly disconnected
+            at low battery (rapid re-plug guard). Measured against the
+            previous "off" state of the charging sensor — works without
+            external state.
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 120
+              step: 5
+              unit_of_measurement: minutes
+              mode: slider
 
         enable_fully_charged:
           name: Announce fully charged
@@ -610,23 +773,29 @@ blueprint:
       name: "⑩ Charge control"
       icon: mdi:battery-charging-wireless
       description: >
-        Optional wireless charging switch and thresholds for battery
-        preservation. Leave switch empty to disable (default phone
-        behavior). When set, charging is cut at the ceiling and
-        re-enabled at the floor.
+        Optional wireless charging switch(es) and thresholds for
+        battery preservation. Select one or more switches to control
+        more than one charging device with the same thresholds. Leave
+        empty to disable (default phone behavior). When set, charging
+        is cut at the ceiling and re-enabled at the floor on every
+        selected switch.
       collapsed: true
       input:
         charge_control_switch:
-          name: Charge control switch
+          name: Charge control switch(es)
           description: >
-            Switch entity that controls wireless charging (e.g.,
-            switch.remote_3_wireless_charging from hass-unfoldedcircle).
+            One or more switch entities that control wireless charging
+            (e.g., switch.remote_3_wireless_charging from
+            hass-unfoldedcircle). Select multiple to control more than
+            one device with the same thresholds — the ceiling/resume
+            logic is applied to every selected switch in lockstep.
             Leave empty to disable charge control — the blueprint
             behaves exactly like v6.
-          default: ""
+          default: []
           selector:
             entity:
               domain: switch
+              multiple: true
 
         full_charge_threshold:
           name: Full charge threshold (%)
@@ -748,12 +917,18 @@ variables:
   congrats_prompt: !input congrats_prompt
   congrats_factual: !input congrats_factual
   enable_congrats: !input enable_congrats
+  congrats_cooldown_minutes: !input congrats_cooldown_minutes
   enable_fully_charged: !input enable_fully_charged
   fully_charged_prompt: !input fully_charged_prompt
   fully_charged_factual: !input fully_charged_factual
   presence_sensor: !input presence_sensor
   v_satellite_entity: !input satellite_entity
   v_tts_output_player: !input tts_output_player
+  v_delivery_backend: !input delivery_backend
+  v_tts_engine: !input tts_engine
+  v_tts_voice: !input tts_voice
+  v_tts_voice_language: !input tts_voice_language
+  v_notify_service: !input notify_service
   v_tts_volume: !input tts_volume
   v_bypass_ducking: !input bypass_ducking
   v_bypass_follow_me: !input bypass_follow_me
@@ -772,6 +947,13 @@ variables:
   _pfx: "[REMINDER — do NOT call any functions or tools. Respond only with speech text, no actions.] "
   # ── charge control ─────────────────────────────────────────────────────
   v_charge_switch: !input charge_control_switch
+  # Normalize charge switch input to a list. Handles three formats:
+  #   - new (multiple: true) value:    ['switch.a', 'switch.b']
+  #   - legacy single-string value:    'switch.a'
+  #   - empty/unset:                   '' or [] -> []
+  _charge_switches: >-
+    {{ ([v_charge_switch] if (v_charge_switch is string and v_charge_switch | length > 0)
+        else (v_charge_switch | default([]))) | reject('eq', '') | list }}
   full_charge_threshold: !input full_charge_threshold
   charge_resume_threshold: !input charge_resume_threshold
   charge_limit_prompt: !input charge_limit_prompt
@@ -833,9 +1015,11 @@ triggers:
     below: !input charge_resume_threshold
 
   - alias: "HA restart — catch-up check"
+    # Use homeassistant_started (late) instead of homeassistant.start (early)
+    # — the latter fires before pyscript registers services.
     id: ha_restart
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 conditions:
   - condition: or
@@ -1037,50 +1221,117 @@ actions:
                         _message: >-
                           {{ low_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
-                - alias: "Deliver casual nudge — satellite > player > default"
+                - alias: "Deliver casual nudge"
                   choose:
-                    - alias: "Via Assist Satellite"
+                    - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'pyscript_queue' }}"
                       sequence:
-                        - alias: "Announce casual nudge via satellite"
+                        - choose:
+                            - alias: "Via Assist Satellite"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Announce casual nudge via satellite"
+                                  action: assist_satellite.announce
+                                  target:
+                                    entity_id: "{{ v_satellite_entity }}"
+                                  data:
+                                    message: "{{ _message }}"
+                                  continue_on_error: true
+                            - alias: "Via TTS queue — explicit player"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Speak casual nudge on explicit player"
+                                  action: pyscript.tts_queue_speak
+                                  data:
+                                    text: "{{ _message }}"
+                                    voice: "{{ dispatch_voice | default('') }}"
+                                    voice_id: "{{ dispatch_tts_voice }}"
+                                    volume_level: "{{ v_tts_volume }}"
+                                    priority: 3
+                                    duck: "{{ not v_bypass_ducking }}"
+                                    target_mode: explicit
+                                    target: "{{ v_tts_output_player }}"
+                                  response_variable: tts_result
+                                  continue_on_error: true
+                          default:
+                            - alias: "Speak casual nudge on default player"
+                              action: pyscript.tts_queue_speak
+                              data:
+                                text: "{{ _message }}"
+                                voice: "{{ dispatch_voice | default('') }}"
+                                voice_id: "{{ dispatch_tts_voice }}"
+                                volume_level: "{{ v_tts_volume }}"
+                                priority: 3
+                                duck: "{{ not v_bypass_ducking }}"
+                              response_variable: tts_result
+                              continue_on_error: true
+                    - alias: "Backend tts_speak"
+                      conditions:
+                        - "{{ v_delivery_backend == 'tts_speak' }}"
+                      sequence:
+                        - alias: "Speak casual nudge via tts.speak"
+                          choose:
+                            - alias: "Cloud voice + explicit language"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    language: "{{ v_tts_voice_language }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                            - alias: "Cloud voice (engine default language)"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                          default:
+                            - action: tts.speak
+                              target:
+                                entity_id: "{{ v_tts_engine }}"
+                              data:
+                                media_player_entity_id: "{{ v_tts_output_player }}"
+                                message: "{{ _message }}"
+                              continue_on_error: true
+                    - alias: "Backend assist_satellite"
+                      conditions:
+                        - "{{ v_delivery_backend == 'assist_satellite' }}"
+                      sequence:
+                        - alias: "Announce casual nudge via Assist Satellite"
                           action: assist_satellite.announce
                           target:
                             entity_id: "{{ v_satellite_entity }}"
                           data:
                             message: "{{ _message }}"
                           continue_on_error: true
-                    - alias: "Via TTS queue — explicit player"
+                    - alias: "Backend notify"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'notify' }}"
                       sequence:
-                        - alias: "Speak casual nudge on explicit player"
-                          action: pyscript.tts_queue_speak
+                        - alias: "Send casual nudge via notify"
+                          action: "{{ v_notify_service }}"
                           data:
-                            text: "{{ _message }}"
-                            voice: "{{ dispatch_voice | default('') }}"
-                            voice_id: "{{ dispatch_tts_voice }}"
-                            volume_level: "{{ v_tts_volume }}"
-                            priority: 3
-                            duck: "{{ not v_bypass_ducking }}"
-                            target_mode: explicit
-                            target: "{{ v_tts_output_player }}"
-                          response_variable: tts_result
+                            title: "{{ _device_name | title }} — battery"
+                            message: "{{ _message }}"
                           continue_on_error: true
-                  default:
-                    - alias: "Speak casual nudge on default player"
-                      action: pyscript.tts_queue_speak
-                      data:
-                        text: "{{ _message }}"
-                        voice: "{{ dispatch_voice | default('') }}"
-                        voice_id: "{{ dispatch_tts_voice }}"
-                        volume_level: "{{ v_tts_volume }}"
-                        priority: 3
-                        duck: "{{ not v_bypass_ducking }}"
-                      response_variable: tts_result
-                      continue_on_error: true
 
                 - alias: "Delay between reminders (skip on last)"
                   if:
@@ -1138,50 +1389,117 @@ actions:
                         _message: >-
                           {{ critical_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
-                - alias: "Deliver critical nudge — satellite > player > default"
+                - alias: "Deliver critical nudge"
                   choose:
-                    - alias: "Via Assist Satellite"
+                    - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'pyscript_queue' }}"
                       sequence:
-                        - alias: "Announce critical nudge via satellite"
+                        - choose:
+                            - alias: "Via Assist Satellite"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Announce critical nudge via satellite"
+                                  action: assist_satellite.announce
+                                  target:
+                                    entity_id: "{{ v_satellite_entity }}"
+                                  data:
+                                    message: "{{ _message }}"
+                                  continue_on_error: true
+                            - alias: "Via TTS queue — explicit player"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Speak critical nudge on explicit player"
+                                  action: pyscript.tts_queue_speak
+                                  data:
+                                    text: "{{ _message }}"
+                                    voice: "{{ dispatch_voice | default('') }}"
+                                    voice_id: "{{ dispatch_tts_voice }}"
+                                    volume_level: "{{ v_tts_volume }}"
+                                    priority: 2
+                                    duck: "{{ not v_bypass_ducking }}"
+                                    target_mode: explicit
+                                    target: "{{ v_tts_output_player }}"
+                                  response_variable: tts_result
+                                  continue_on_error: true
+                          default:
+                            - alias: "Speak critical nudge on default player"
+                              action: pyscript.tts_queue_speak
+                              data:
+                                text: "{{ _message }}"
+                                voice: "{{ dispatch_voice | default('') }}"
+                                voice_id: "{{ dispatch_tts_voice }}"
+                                volume_level: "{{ v_tts_volume }}"
+                                priority: 2
+                                duck: "{{ not v_bypass_ducking }}"
+                              response_variable: tts_result
+                              continue_on_error: true
+                    - alias: "Backend tts_speak"
+                      conditions:
+                        - "{{ v_delivery_backend == 'tts_speak' }}"
+                      sequence:
+                        - alias: "Speak critical nudge via tts.speak"
+                          choose:
+                            - alias: "Cloud voice + explicit language"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    language: "{{ v_tts_voice_language }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                            - alias: "Cloud voice (engine default language)"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                          default:
+                            - action: tts.speak
+                              target:
+                                entity_id: "{{ v_tts_engine }}"
+                              data:
+                                media_player_entity_id: "{{ v_tts_output_player }}"
+                                message: "{{ _message }}"
+                              continue_on_error: true
+                    - alias: "Backend assist_satellite"
+                      conditions:
+                        - "{{ v_delivery_backend == 'assist_satellite' }}"
+                      sequence:
+                        - alias: "Announce critical nudge via Assist Satellite"
                           action: assist_satellite.announce
                           target:
                             entity_id: "{{ v_satellite_entity }}"
                           data:
                             message: "{{ _message }}"
                           continue_on_error: true
-                    - alias: "Via TTS queue — explicit player"
+                    - alias: "Backend notify"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'notify' }}"
                       sequence:
-                        - alias: "Speak critical nudge on explicit player"
-                          action: pyscript.tts_queue_speak
+                        - alias: "Send critical nudge via notify"
+                          action: "{{ v_notify_service }}"
                           data:
-                            text: "{{ _message }}"
-                            voice: "{{ dispatch_voice | default('') }}"
-                            voice_id: "{{ dispatch_tts_voice }}"
-                            volume_level: "{{ v_tts_volume }}"
-                            priority: 2
-                            duck: "{{ not v_bypass_ducking }}"
-                            target_mode: explicit
-                            target: "{{ v_tts_output_player }}"
-                          response_variable: tts_result
+                            title: "{{ _device_name | title }} — battery"
+                            message: "{{ _message }}"
                           continue_on_error: true
-                  default:
-                    - alias: "Speak critical nudge on default player"
-                      action: pyscript.tts_queue_speak
-                      data:
-                        text: "{{ _message }}"
-                        voice: "{{ dispatch_voice | default('') }}"
-                        voice_id: "{{ dispatch_tts_voice }}"
-                        volume_level: "{{ v_tts_volume }}"
-                        priority: 2
-                        duck: "{{ not v_bypass_ducking }}"
-                      response_variable: tts_result
-                      continue_on_error: true
 
                 - alias: "Delay between reminders (skip on last)"
                   if:
@@ -1239,50 +1557,117 @@ actions:
                         _message: >-
                           {{ urgent_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
-                - alias: "Deliver emergency warning — satellite > player > default"
+                - alias: "Deliver emergency warning"
                   choose:
-                    - alias: "Via Assist Satellite"
+                    - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'pyscript_queue' }}"
                       sequence:
-                        - alias: "Announce urgent warning via satellite"
+                        - choose:
+                            - alias: "Via Assist Satellite"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Announce urgent warning via satellite"
+                                  action: assist_satellite.announce
+                                  target:
+                                    entity_id: "{{ v_satellite_entity }}"
+                                  data:
+                                    message: "{{ _message }}"
+                                  continue_on_error: true
+                            - alias: "Via TTS queue — explicit player"
+                              conditions:
+                                - condition: template
+                                  value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                              sequence:
+                                - alias: "Speak urgent warning on explicit player"
+                                  action: pyscript.tts_queue_speak
+                                  data:
+                                    text: "{{ _message }}"
+                                    voice: "{{ dispatch_voice | default('') }}"
+                                    voice_id: "{{ dispatch_tts_voice }}"
+                                    volume_level: "{{ v_tts_volume }}"
+                                    priority: 1
+                                    duck: "{{ not v_bypass_ducking }}"
+                                    target_mode: explicit
+                                    target: "{{ v_tts_output_player }}"
+                                  response_variable: tts_result
+                                  continue_on_error: true
+                          default:
+                            - alias: "Speak urgent warning on default player"
+                              action: pyscript.tts_queue_speak
+                              data:
+                                text: "{{ _message }}"
+                                voice: "{{ dispatch_voice | default('') }}"
+                                voice_id: "{{ dispatch_tts_voice }}"
+                                volume_level: "{{ v_tts_volume }}"
+                                priority: 1
+                                duck: "{{ not v_bypass_ducking }}"
+                              response_variable: tts_result
+                              continue_on_error: true
+                    - alias: "Backend tts_speak"
+                      conditions:
+                        - "{{ v_delivery_backend == 'tts_speak' }}"
+                      sequence:
+                        - alias: "Speak urgent warning via tts.speak"
+                          choose:
+                            - alias: "Cloud voice + explicit language"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    language: "{{ v_tts_voice_language }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                            - alias: "Cloud voice (engine default language)"
+                              conditions:
+                                - "{{ v_tts_voice | trim | length > 0 }}"
+                              sequence:
+                                - action: tts.speak
+                                  target:
+                                    entity_id: "{{ v_tts_engine }}"
+                                  data:
+                                    media_player_entity_id: "{{ v_tts_output_player }}"
+                                    message: "{{ _message }}"
+                                    options:
+                                      voice: "{{ v_tts_voice }}"
+                                  continue_on_error: true
+                          default:
+                            - action: tts.speak
+                              target:
+                                entity_id: "{{ v_tts_engine }}"
+                              data:
+                                media_player_entity_id: "{{ v_tts_output_player }}"
+                                message: "{{ _message }}"
+                              continue_on_error: true
+                    - alias: "Backend assist_satellite"
+                      conditions:
+                        - "{{ v_delivery_backend == 'assist_satellite' }}"
+                      sequence:
+                        - alias: "Announce urgent warning via Assist Satellite"
                           action: assist_satellite.announce
                           target:
                             entity_id: "{{ v_satellite_entity }}"
                           data:
                             message: "{{ _message }}"
                           continue_on_error: true
-                    - alias: "Via TTS queue — explicit player"
+                    - alias: "Backend notify"
                       conditions:
-                        - condition: template
-                          value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        - "{{ v_delivery_backend == 'notify' }}"
                       sequence:
-                        - alias: "Speak urgent warning on explicit player"
-                          action: pyscript.tts_queue_speak
+                        - alias: "Send urgent warning via notify"
+                          action: "{{ v_notify_service }}"
                           data:
-                            text: "{{ _message }}"
-                            voice: "{{ dispatch_voice | default('') }}"
-                            voice_id: "{{ dispatch_tts_voice }}"
-                            volume_level: "{{ v_tts_volume }}"
-                            priority: 1
-                            duck: "{{ not v_bypass_ducking }}"
-                            target_mode: explicit
-                            target: "{{ v_tts_output_player }}"
-                          response_variable: tts_result
+                            title: "{{ _device_name | title }} — battery"
+                            message: "{{ _message }}"
                           continue_on_error: true
-                  default:
-                    - alias: "Speak urgent warning on default player"
-                      action: pyscript.tts_queue_speak
-                      data:
-                        text: "{{ _message }}"
-                        voice: "{{ dispatch_voice | default('') }}"
-                        voice_id: "{{ dispatch_tts_voice }}"
-                        volume_level: "{{ v_tts_volume }}"
-                        priority: 1
-                        duck: "{{ not v_bypass_ducking }}"
-                      response_variable: tts_result
-                      continue_on_error: true
 
                 - alias: "Delay between reminders (skip on last)"
                   if:
@@ -1301,6 +1686,13 @@ actions:
             value_template: "{{ enable_congrats }}"
           - condition: template
             value_template: "{{ _battery < (low_threshold | int(20)) }}"
+          - alias: "Cooldown — suppress if device was unplugged less than the configured window (rapid re-plug guard)"
+            condition: template
+            value_template: >-
+              {% set cooldown_sec = (congrats_cooldown_minutes | int(30)) * 60 %}
+              {% set last_off = trigger.from_state.last_changed if trigger.from_state else none %}
+              {{ last_off is none
+                 or (now() - last_off).total_seconds() >= cooldown_sec }}
         sequence:
           - alias: "Generate congrats message"
             choose:
@@ -1331,50 +1723,117 @@ actions:
                 variables:
                   _message: >-
                     {{ congrats_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
-          - alias: "Deliver congrats — satellite > player > default"
+          - alias: "Deliver congrats"
             choose:
-              - alias: "Via Assist Satellite"
+              - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                 conditions:
-                  - condition: template
-                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                  - "{{ v_delivery_backend == 'pyscript_queue' }}"
                 sequence:
-                  - alias: "Announce plug-in congrats via satellite"
+                  - choose:
+                      - alias: "Via Assist Satellite"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Announce plug-in congrats via satellite"
+                            action: assist_satellite.announce
+                            target:
+                              entity_id: "{{ v_satellite_entity }}"
+                            data:
+                              message: "{{ _message }}"
+                            continue_on_error: true
+                      - alias: "Via TTS queue — explicit player"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Speak congrats on explicit player"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              text: "{{ _message }}"
+                              voice: "{{ dispatch_voice | default('') }}"
+                              voice_id: "{{ dispatch_tts_voice }}"
+                              volume_level: "{{ v_tts_volume }}"
+                              priority: 3
+                              duck: "{{ not v_bypass_ducking }}"
+                              target_mode: explicit
+                              target: "{{ v_tts_output_player }}"
+                            response_variable: tts_result
+                            continue_on_error: true
+                    default:
+                      - alias: "Speak congrats on default player"
+                        action: pyscript.tts_queue_speak
+                        data:
+                          text: "{{ _message }}"
+                          voice: "{{ dispatch_voice | default('') }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
+                          volume_level: "{{ v_tts_volume }}"
+                          priority: 3
+                          duck: "{{ not v_bypass_ducking }}"
+                        response_variable: tts_result
+                        continue_on_error: true
+              - alias: "Backend tts_speak"
+                conditions:
+                  - "{{ v_delivery_backend == 'tts_speak' }}"
+                sequence:
+                  - alias: "Speak congrats via tts.speak"
+                    choose:
+                      - alias: "Cloud voice + explicit language"
+                        conditions:
+                          - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                        sequence:
+                          - action: tts.speak
+                            target:
+                              entity_id: "{{ v_tts_engine }}"
+                            data:
+                              media_player_entity_id: "{{ v_tts_output_player }}"
+                              message: "{{ _message }}"
+                              language: "{{ v_tts_voice_language }}"
+                              options:
+                                voice: "{{ v_tts_voice }}"
+                            continue_on_error: true
+                      - alias: "Cloud voice (engine default language)"
+                        conditions:
+                          - "{{ v_tts_voice | trim | length > 0 }}"
+                        sequence:
+                          - action: tts.speak
+                            target:
+                              entity_id: "{{ v_tts_engine }}"
+                            data:
+                              media_player_entity_id: "{{ v_tts_output_player }}"
+                              message: "{{ _message }}"
+                              options:
+                                voice: "{{ v_tts_voice }}"
+                            continue_on_error: true
+                    default:
+                      - action: tts.speak
+                        target:
+                          entity_id: "{{ v_tts_engine }}"
+                        data:
+                          media_player_entity_id: "{{ v_tts_output_player }}"
+                          message: "{{ _message }}"
+                        continue_on_error: true
+              - alias: "Backend assist_satellite"
+                conditions:
+                  - "{{ v_delivery_backend == 'assist_satellite' }}"
+                sequence:
+                  - alias: "Announce congrats via Assist Satellite"
                     action: assist_satellite.announce
                     target:
                       entity_id: "{{ v_satellite_entity }}"
                     data:
                       message: "{{ _message }}"
                     continue_on_error: true
-              - alias: "Via TTS queue — explicit player"
+              - alias: "Backend notify"
                 conditions:
-                  - condition: template
-                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                  - "{{ v_delivery_backend == 'notify' }}"
                 sequence:
-                  - alias: "Speak congrats on explicit player"
-                    action: pyscript.tts_queue_speak
+                  - alias: "Send congrats via notify"
+                    action: "{{ v_notify_service }}"
                     data:
-                      text: "{{ _message }}"
-                      voice: "{{ dispatch_voice | default('') }}"
-                      voice_id: "{{ dispatch_tts_voice }}"
-                      volume_level: "{{ v_tts_volume }}"
-                      priority: 3
-                      duck: "{{ not v_bypass_ducking }}"
-                      target_mode: explicit
-                      target: "{{ v_tts_output_player }}"
-                    response_variable: tts_result
+                      title: "{{ _device_name | title }} — battery"
+                      message: "{{ _message }}"
                     continue_on_error: true
-            default:
-              - alias: "Speak congrats on default player"
-                action: pyscript.tts_queue_speak
-                data:
-                  text: "{{ _message }}"
-                  voice: "{{ dispatch_voice | default('') }}"
-                  voice_id: "{{ dispatch_tts_voice }}"
-                  volume_level: "{{ v_tts_volume }}"
-                  priority: 3
-                  duck: "{{ not v_bypass_ducking }}"
-                response_variable: tts_result
-                continue_on_error: true
 
       # ── FULLY CHARGED — charge control + announcement ────────────────
       - alias: "Fully charged — charge control + announcement"
@@ -1395,14 +1854,16 @@ actions:
             choose:
               - conditions:
                   - condition: template
-                    value_template: >-
-                      {{ (v_charge_switch | default('')) | length > 0 }}
+                    value_template: "{{ _charge_switches | length > 0 }}"
                 sequence:
-                  - alias: "Turn off wireless charging switch"
-                    action: switch.turn_off
-                    target:
-                      entity_id: "{{ v_charge_switch }}"
-                    continue_on_error: true
+                  - alias: "Turn off wireless charging switch(es)"
+                    repeat:
+                      for_each: "{{ _charge_switches }}"
+                      sequence:
+                        - action: switch.turn_off
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          continue_on_error: true
 
           - alias: "Announce fully charged (if enabled and not silent)"
             choose:
@@ -1437,50 +1898,117 @@ actions:
                       - alias: "Set message"
                         variables:
                           _message: "{{ fully_charged_factual | replace('{device}', _device_name) }}"
-                  - alias: "Deliver fully-charged — satellite > player > default"
+                  - alias: "Deliver fully-charged"
                     choose:
-                      - alias: "Via Assist Satellite"
+                      - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                         conditions:
-                          - condition: template
-                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                          - "{{ v_delivery_backend == 'pyscript_queue' }}"
                         sequence:
-                          - alias: "Announce fully-charged via satellite"
+                          - choose:
+                              - alias: "Via Assist Satellite"
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                                sequence:
+                                  - alias: "Announce fully-charged via satellite"
+                                    action: assist_satellite.announce
+                                    target:
+                                      entity_id: "{{ v_satellite_entity }}"
+                                    data:
+                                      message: "{{ _message }}"
+                                    continue_on_error: true
+                              - alias: "Via TTS queue — explicit player"
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                                sequence:
+                                  - alias: "Speak fully-charged on explicit player"
+                                    action: pyscript.tts_queue_speak
+                                    data:
+                                      text: "{{ _message }}"
+                                      voice: "{{ dispatch_voice | default('') }}"
+                                      voice_id: "{{ dispatch_tts_voice }}"
+                                      volume_level: "{{ v_tts_volume }}"
+                                      priority: 3
+                                      duck: "{{ not v_bypass_ducking }}"
+                                      target_mode: explicit
+                                      target: "{{ v_tts_output_player }}"
+                                    response_variable: tts_result
+                                    continue_on_error: true
+                            default:
+                              - alias: "Speak fully-charged on default player"
+                                action: pyscript.tts_queue_speak
+                                data:
+                                  text: "{{ _message }}"
+                                  voice: "{{ dispatch_voice | default('') }}"
+                                  voice_id: "{{ dispatch_tts_voice }}"
+                                  volume_level: "{{ v_tts_volume }}"
+                                  priority: 3
+                                  duck: "{{ not v_bypass_ducking }}"
+                                response_variable: tts_result
+                                continue_on_error: true
+                      - alias: "Backend tts_speak"
+                        conditions:
+                          - "{{ v_delivery_backend == 'tts_speak' }}"
+                        sequence:
+                          - alias: "Speak fully-charged via tts.speak"
+                            choose:
+                              - alias: "Cloud voice + explicit language"
+                                conditions:
+                                  - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                                sequence:
+                                  - action: tts.speak
+                                    target:
+                                      entity_id: "{{ v_tts_engine }}"
+                                    data:
+                                      media_player_entity_id: "{{ v_tts_output_player }}"
+                                      message: "{{ _message }}"
+                                      language: "{{ v_tts_voice_language }}"
+                                      options:
+                                        voice: "{{ v_tts_voice }}"
+                                    continue_on_error: true
+                              - alias: "Cloud voice (engine default language)"
+                                conditions:
+                                  - "{{ v_tts_voice | trim | length > 0 }}"
+                                sequence:
+                                  - action: tts.speak
+                                    target:
+                                      entity_id: "{{ v_tts_engine }}"
+                                    data:
+                                      media_player_entity_id: "{{ v_tts_output_player }}"
+                                      message: "{{ _message }}"
+                                      options:
+                                        voice: "{{ v_tts_voice }}"
+                                    continue_on_error: true
+                            default:
+                              - action: tts.speak
+                                target:
+                                  entity_id: "{{ v_tts_engine }}"
+                                data:
+                                  media_player_entity_id: "{{ v_tts_output_player }}"
+                                  message: "{{ _message }}"
+                                continue_on_error: true
+                      - alias: "Backend assist_satellite"
+                        conditions:
+                          - "{{ v_delivery_backend == 'assist_satellite' }}"
+                        sequence:
+                          - alias: "Announce fully-charged via Assist Satellite"
                             action: assist_satellite.announce
                             target:
                               entity_id: "{{ v_satellite_entity }}"
                             data:
                               message: "{{ _message }}"
                             continue_on_error: true
-                      - alias: "Via TTS queue — explicit player"
+                      - alias: "Backend notify"
                         conditions:
-                          - condition: template
-                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                          - "{{ v_delivery_backend == 'notify' }}"
                         sequence:
-                          - alias: "Speak fully-charged on explicit player"
-                            action: pyscript.tts_queue_speak
+                          - alias: "Send fully-charged via notify"
+                            action: "{{ v_notify_service }}"
                             data:
-                              text: "{{ _message }}"
-                              voice: "{{ dispatch_voice | default('') }}"
-                              voice_id: "{{ dispatch_tts_voice }}"
-                              volume_level: "{{ v_tts_volume }}"
-                              priority: 3
-                              duck: "{{ not v_bypass_ducking }}"
-                              target_mode: explicit
-                              target: "{{ v_tts_output_player }}"
-                            response_variable: tts_result
+                              title: "{{ _device_name | title }} — battery"
+                              message: "{{ _message }}"
                             continue_on_error: true
-                    default:
-                      - alias: "Speak fully-charged on default player"
-                        action: pyscript.tts_queue_speak
-                        data:
-                          text: "{{ _message }}"
-                          voice: "{{ dispatch_voice | default('') }}"
-                          voice_id: "{{ dispatch_tts_voice }}"
-                          volume_level: "{{ v_tts_volume }}"
-                          priority: 3
-                          duck: "{{ not v_bypass_ducking }}"
-                        response_variable: tts_result
-                        continue_on_error: true
 
       # ── CHARGE CEILING — preservation cutoff ────────────────────────
       - alias: "Charge ceiling — preservation cutoff"
@@ -1489,7 +2017,7 @@ actions:
             id: charge_ceiling
           - condition: template
             value_template: >-
-              {{ (v_charge_switch | default('')) | length > 0
+              {{ _charge_switches | length > 0
                  and (full_charge_threshold | int(100)) < 100 }}
           - condition: state
             entity_id: !input charging_sensor
@@ -1500,10 +2028,13 @@ actions:
               {{ last is none or (now() - last).total_seconds() > 60 }}
         sequence:
           - alias: "Disable wireless charging"
-            action: switch.turn_off
-            target:
-              entity_id: "{{ v_charge_switch }}"
-            continue_on_error: true
+            repeat:
+              for_each: "{{ _charge_switches }}"
+              sequence:
+                - action: switch.turn_off
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  continue_on_error: true
 
           - alias: "TTS gate — skip announcement if suppressed"
             condition: and
@@ -1577,50 +2108,117 @@ actions:
                        | replace('{device}', _device_name)
                        | replace('{full_charge_threshold}', full_charge_threshold | string) }}
 
-          - alias: "Deliver charge-limit — satellite > player > default"
+          - alias: "Deliver charge-limit"
             choose:
-              - alias: "Via Assist Satellite"
+              - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                 conditions:
-                  - condition: template
-                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                  - "{{ v_delivery_backend == 'pyscript_queue' }}"
                 sequence:
-                  - alias: "Announce charge-limit via satellite"
+                  - choose:
+                      - alias: "Via Assist Satellite"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Announce charge-limit via satellite"
+                            action: assist_satellite.announce
+                            target:
+                              entity_id: "{{ v_satellite_entity }}"
+                            data:
+                              message: "{{ _message }}"
+                            continue_on_error: true
+                      - alias: "Via TTS queue — explicit player"
+                        conditions:
+                          - condition: template
+                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                        sequence:
+                          - alias: "Speak charge-limit on explicit player"
+                            action: pyscript.tts_queue_speak
+                            data:
+                              text: "{{ _message }}"
+                              voice: "{{ dispatch_voice | default('') }}"
+                              voice_id: "{{ dispatch_tts_voice }}"
+                              volume_level: "{{ v_tts_volume }}"
+                              priority: 3
+                              duck: "{{ not v_bypass_ducking }}"
+                              target_mode: explicit
+                              target: "{{ v_tts_output_player }}"
+                            response_variable: tts_result
+                            continue_on_error: true
+                    default:
+                      - alias: "Speak charge-limit on default player"
+                        action: pyscript.tts_queue_speak
+                        data:
+                          text: "{{ _message }}"
+                          voice: "{{ dispatch_voice | default('') }}"
+                          voice_id: "{{ dispatch_tts_voice }}"
+                          volume_level: "{{ v_tts_volume }}"
+                          priority: 3
+                          duck: "{{ not v_bypass_ducking }}"
+                        response_variable: tts_result
+                        continue_on_error: true
+              - alias: "Backend tts_speak"
+                conditions:
+                  - "{{ v_delivery_backend == 'tts_speak' }}"
+                sequence:
+                  - alias: "Speak charge-limit via tts.speak"
+                    choose:
+                      - alias: "Cloud voice + explicit language"
+                        conditions:
+                          - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                        sequence:
+                          - action: tts.speak
+                            target:
+                              entity_id: "{{ v_tts_engine }}"
+                            data:
+                              media_player_entity_id: "{{ v_tts_output_player }}"
+                              message: "{{ _message }}"
+                              language: "{{ v_tts_voice_language }}"
+                              options:
+                                voice: "{{ v_tts_voice }}"
+                            continue_on_error: true
+                      - alias: "Cloud voice (engine default language)"
+                        conditions:
+                          - "{{ v_tts_voice | trim | length > 0 }}"
+                        sequence:
+                          - action: tts.speak
+                            target:
+                              entity_id: "{{ v_tts_engine }}"
+                            data:
+                              media_player_entity_id: "{{ v_tts_output_player }}"
+                              message: "{{ _message }}"
+                              options:
+                                voice: "{{ v_tts_voice }}"
+                            continue_on_error: true
+                    default:
+                      - action: tts.speak
+                        target:
+                          entity_id: "{{ v_tts_engine }}"
+                        data:
+                          media_player_entity_id: "{{ v_tts_output_player }}"
+                          message: "{{ _message }}"
+                        continue_on_error: true
+              - alias: "Backend assist_satellite"
+                conditions:
+                  - "{{ v_delivery_backend == 'assist_satellite' }}"
+                sequence:
+                  - alias: "Announce charge-limit via Assist Satellite"
                     action: assist_satellite.announce
                     target:
                       entity_id: "{{ v_satellite_entity }}"
                     data:
                       message: "{{ _message }}"
                     continue_on_error: true
-              - alias: "Via TTS queue — explicit player"
+              - alias: "Backend notify"
                 conditions:
-                  - condition: template
-                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                  - "{{ v_delivery_backend == 'notify' }}"
                 sequence:
-                  - alias: "Speak charge-limit on explicit player"
-                    action: pyscript.tts_queue_speak
+                  - alias: "Send charge-limit via notify"
+                    action: "{{ v_notify_service }}"
                     data:
-                      text: "{{ _message }}"
-                      voice: "{{ dispatch_voice | default('') }}"
-                      voice_id: "{{ dispatch_tts_voice }}"
-                      volume_level: "{{ v_tts_volume }}"
-                      priority: 3
-                      duck: "{{ not v_bypass_ducking }}"
-                      target_mode: explicit
-                      target: "{{ v_tts_output_player }}"
-                    response_variable: tts_result
+                      title: "{{ _device_name | title }} — battery"
+                      message: "{{ _message }}"
                     continue_on_error: true
-            default:
-              - alias: "Speak charge-limit on default player"
-                action: pyscript.tts_queue_speak
-                data:
-                  text: "{{ _message }}"
-                  voice: "{{ dispatch_voice | default('') }}"
-                  voice_id: "{{ dispatch_tts_voice }}"
-                  volume_level: "{{ v_tts_volume }}"
-                  priority: 3
-                  duck: "{{ not v_bypass_ducking }}"
-                response_variable: tts_result
-                continue_on_error: true
 
       # ── CHARGE RESUME — re-enable charging ──────────────────────────
       - alias: "Charge resume — re-enable charging"
@@ -1628,19 +2226,22 @@ actions:
           - condition: trigger
             id: charge_resume
           - condition: template
-            value_template: >-
-              {{ (v_charge_switch | default('')) | length > 0 }}
-          - alias: "Only resume if we previously disabled charging"
+            value_template: "{{ _charge_switches | length > 0 }}"
+          - alias: "Only resume if we previously disabled charging (any switch off)"
             condition: template
             value_template: >-
-              {{ (v_charge_switch | default('')) | length > 0
-                 and is_state(v_charge_switch, 'off') }}
+              {{ _charge_switches | length > 0
+                 and (expand(_charge_switches) | selectattr('state', 'eq', 'off')
+                      | list | length > 0) }}
         sequence:
           - alias: "Re-enable wireless charging"
-            action: switch.turn_on
-            target:
-              entity_id: "{{ v_charge_switch }}"
-            continue_on_error: true
+            repeat:
+              for_each: "{{ _charge_switches }}"
+              sequence:
+                - action: switch.turn_on
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  continue_on_error: true
 
           - alias: "Announce charge resumed (if enabled and TTS gates pass)"
             choose:
@@ -1716,50 +2317,117 @@ actions:
                                | replace('{device}', _device_name)
                                | replace('{charge_resume_threshold}', charge_resume_threshold | string) }}
 
-                  - alias: "Deliver charge-resumed — satellite > player > default"
+                  - alias: "Deliver charge-resumed"
                     choose:
-                      - alias: "Via Assist Satellite"
+                      - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                         conditions:
-                          - condition: template
-                            value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                          - "{{ v_delivery_backend == 'pyscript_queue' }}"
                         sequence:
-                          - alias: "Announce charge-resumed via satellite"
+                          - choose:
+                              - alias: "Via Assist Satellite"
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                                sequence:
+                                  - alias: "Announce charge-resumed via satellite"
+                                    action: assist_satellite.announce
+                                    target:
+                                      entity_id: "{{ v_satellite_entity }}"
+                                    data:
+                                      message: "{{ _message }}"
+                                    continue_on_error: true
+                              - alias: "Via TTS queue — explicit player"
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                                sequence:
+                                  - alias: "Speak charge-resumed on explicit player"
+                                    action: pyscript.tts_queue_speak
+                                    data:
+                                      text: "{{ _message }}"
+                                      voice: "{{ dispatch_voice | default('') }}"
+                                      voice_id: "{{ dispatch_tts_voice }}"
+                                      volume_level: "{{ v_tts_volume }}"
+                                      priority: 3
+                                      duck: "{{ not v_bypass_ducking }}"
+                                      target_mode: explicit
+                                      target: "{{ v_tts_output_player }}"
+                                    response_variable: tts_result
+                                    continue_on_error: true
+                            default:
+                              - alias: "Speak charge-resumed on default player"
+                                action: pyscript.tts_queue_speak
+                                data:
+                                  text: "{{ _message }}"
+                                  voice: "{{ dispatch_voice | default('') }}"
+                                  voice_id: "{{ dispatch_tts_voice }}"
+                                  volume_level: "{{ v_tts_volume }}"
+                                  priority: 3
+                                  duck: "{{ not v_bypass_ducking }}"
+                                response_variable: tts_result
+                                continue_on_error: true
+                      - alias: "Backend tts_speak"
+                        conditions:
+                          - "{{ v_delivery_backend == 'tts_speak' }}"
+                        sequence:
+                          - alias: "Speak charge-resumed via tts.speak"
+                            choose:
+                              - alias: "Cloud voice + explicit language"
+                                conditions:
+                                  - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                                sequence:
+                                  - action: tts.speak
+                                    target:
+                                      entity_id: "{{ v_tts_engine }}"
+                                    data:
+                                      media_player_entity_id: "{{ v_tts_output_player }}"
+                                      message: "{{ _message }}"
+                                      language: "{{ v_tts_voice_language }}"
+                                      options:
+                                        voice: "{{ v_tts_voice }}"
+                                    continue_on_error: true
+                              - alias: "Cloud voice (engine default language)"
+                                conditions:
+                                  - "{{ v_tts_voice | trim | length > 0 }}"
+                                sequence:
+                                  - action: tts.speak
+                                    target:
+                                      entity_id: "{{ v_tts_engine }}"
+                                    data:
+                                      media_player_entity_id: "{{ v_tts_output_player }}"
+                                      message: "{{ _message }}"
+                                      options:
+                                        voice: "{{ v_tts_voice }}"
+                                    continue_on_error: true
+                            default:
+                              - action: tts.speak
+                                target:
+                                  entity_id: "{{ v_tts_engine }}"
+                                data:
+                                  media_player_entity_id: "{{ v_tts_output_player }}"
+                                  message: "{{ _message }}"
+                                continue_on_error: true
+                      - alias: "Backend assist_satellite"
+                        conditions:
+                          - "{{ v_delivery_backend == 'assist_satellite' }}"
+                        sequence:
+                          - alias: "Announce charge-resumed via Assist Satellite"
                             action: assist_satellite.announce
                             target:
                               entity_id: "{{ v_satellite_entity }}"
                             data:
                               message: "{{ _message }}"
                             continue_on_error: true
-                      - alias: "Via TTS queue — explicit player"
+                      - alias: "Backend notify"
                         conditions:
-                          - condition: template
-                            value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                          - "{{ v_delivery_backend == 'notify' }}"
                         sequence:
-                          - alias: "Speak charge-resumed on explicit player"
-                            action: pyscript.tts_queue_speak
+                          - alias: "Send charge-resumed via notify"
+                            action: "{{ v_notify_service }}"
                             data:
-                              text: "{{ _message }}"
-                              voice: "{{ dispatch_voice | default('') }}"
-                              voice_id: "{{ dispatch_tts_voice }}"
-                              volume_level: "{{ v_tts_volume }}"
-                              priority: 3
-                              duck: "{{ not v_bypass_ducking }}"
-                              target_mode: explicit
-                              target: "{{ v_tts_output_player }}"
-                            response_variable: tts_result
+                              title: "{{ _device_name | title }} — battery"
+                              message: "{{ _message }}"
                             continue_on_error: true
-                    default:
-                      - alias: "Speak charge-resumed on default player"
-                        action: pyscript.tts_queue_speak
-                        data:
-                          text: "{{ _message }}"
-                          voice: "{{ dispatch_voice | default('') }}"
-                          voice_id: "{{ dispatch_tts_voice }}"
-                          volume_level: "{{ v_tts_volume }}"
-                          priority: 3
-                          duck: "{{ not v_bypass_ducking }}"
-                        response_variable: tts_result
-                        continue_on_error: true
 
     # ── FALLBACK — null-trigger (reload/restart/manual) ──────────────
     default:
@@ -1771,16 +2439,22 @@ actions:
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ (v_charge_switch | default('')) | length > 0
+                  {{ _charge_switches | length > 0
                      and (full_charge_threshold | int(100)) < 100
                      and states(battery_sensor) | int(0) >= (full_charge_threshold | int(100))
-                     and is_state(v_charge_switch, 'on') }}
+                     and (expand(_charge_switches) | selectattr('state', 'eq', 'on')
+                          | list | length > 0) }}
             sequence:
-              - alias: "Turn off wireless charging switch"
-                action: switch.turn_off
-                target:
-                  entity_id: "{{ v_charge_switch }}"
-                continue_on_error: true
+              - alias: "Turn off wireless charging switch(es) currently on"
+                repeat:
+                  for_each: >-
+                    {{ expand(_charge_switches) | selectattr('state', 'eq', 'on')
+                       | map(attribute='entity_id') | list }}
+                  sequence:
+                    - action: switch.turn_off
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      continue_on_error: true
 
       - alias: "Determine tier from battery level"
         variables:
@@ -1858,50 +2532,117 @@ actions:
                     _message: >-
                       {{ _tier_factual | replace('{battery}', _battery | string) | replace('{device}', _device_name) }}
 
-            - alias: "Deliver nudge — satellite > player > default"
+            - alias: "Deliver fallback nudge"
               choose:
-                - alias: "Via Assist Satellite"
+                - alias: "Backend pyscript_queue (Project Fronkensteen cascade)"
                   conditions:
-                    - condition: template
-                      value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                    - "{{ v_delivery_backend == 'pyscript_queue' }}"
                   sequence:
-                    - alias: "Announce fallback nudge via satellite"
+                    - choose:
+                        - alias: "Via Assist Satellite"
+                          conditions:
+                            - condition: template
+                              value_template: "{{ (v_satellite_entity | default('')) | length > 0 }}"
+                          sequence:
+                            - alias: "Announce fallback nudge via satellite"
+                              action: assist_satellite.announce
+                              target:
+                                entity_id: "{{ v_satellite_entity }}"
+                              data:
+                                message: "{{ _message }}"
+                              continue_on_error: true
+                        - alias: "Via TTS queue — explicit player"
+                          conditions:
+                            - condition: template
+                              value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                          sequence:
+                            - alias: "Speak fallback nudge on explicit player"
+                              action: pyscript.tts_queue_speak
+                              data:
+                                text: "{{ _message }}"
+                                voice: "{{ dispatch_voice | default('') }}"
+                                voice_id: "{{ dispatch_tts_voice }}"
+                                volume_level: "{{ v_tts_volume }}"
+                                priority: "{{ _tier_priority | int(3) }}"
+                                duck: "{{ not v_bypass_ducking }}"
+                                target_mode: explicit
+                                target: "{{ v_tts_output_player }}"
+                              response_variable: tts_result
+                              continue_on_error: true
+                      default:
+                        - alias: "Speak fallback nudge on default player"
+                          action: pyscript.tts_queue_speak
+                          data:
+                            text: "{{ _message }}"
+                            voice: "{{ dispatch_voice | default('') }}"
+                            voice_id: "{{ dispatch_tts_voice }}"
+                            volume_level: "{{ v_tts_volume }}"
+                            priority: "{{ _tier_priority | int(3) }}"
+                            duck: "{{ not v_bypass_ducking }}"
+                          response_variable: tts_result
+                          continue_on_error: true
+                - alias: "Backend tts_speak"
+                  conditions:
+                    - "{{ v_delivery_backend == 'tts_speak' }}"
+                  sequence:
+                    - alias: "Speak fallback nudge via tts.speak"
+                      choose:
+                        - alias: "Cloud voice + explicit language"
+                          conditions:
+                            - "{{ v_tts_voice | trim | length > 0 and v_tts_voice_language | trim | length > 0 }}"
+                          sequence:
+                            - action: tts.speak
+                              target:
+                                entity_id: "{{ v_tts_engine }}"
+                              data:
+                                media_player_entity_id: "{{ v_tts_output_player }}"
+                                message: "{{ _message }}"
+                                language: "{{ v_tts_voice_language }}"
+                                options:
+                                  voice: "{{ v_tts_voice }}"
+                              continue_on_error: true
+                        - alias: "Cloud voice (engine default language)"
+                          conditions:
+                            - "{{ v_tts_voice | trim | length > 0 }}"
+                          sequence:
+                            - action: tts.speak
+                              target:
+                                entity_id: "{{ v_tts_engine }}"
+                              data:
+                                media_player_entity_id: "{{ v_tts_output_player }}"
+                                message: "{{ _message }}"
+                                options:
+                                  voice: "{{ v_tts_voice }}"
+                              continue_on_error: true
+                      default:
+                        - action: tts.speak
+                          target:
+                            entity_id: "{{ v_tts_engine }}"
+                          data:
+                            media_player_entity_id: "{{ v_tts_output_player }}"
+                            message: "{{ _message }}"
+                          continue_on_error: true
+                - alias: "Backend assist_satellite"
+                  conditions:
+                    - "{{ v_delivery_backend == 'assist_satellite' }}"
+                  sequence:
+                    - alias: "Announce fallback nudge via Assist Satellite"
                       action: assist_satellite.announce
                       target:
                         entity_id: "{{ v_satellite_entity }}"
                       data:
                         message: "{{ _message }}"
                       continue_on_error: true
-                - alias: "Via TTS queue — explicit player"
+                - alias: "Backend notify"
                   conditions:
-                    - condition: template
-                      value_template: "{{ (v_tts_output_player | default('')) | length > 0 }}"
+                    - "{{ v_delivery_backend == 'notify' }}"
                   sequence:
-                    - alias: "Speak fallback nudge on explicit player"
-                      action: pyscript.tts_queue_speak
+                    - alias: "Send fallback nudge via notify"
+                      action: "{{ v_notify_service }}"
                       data:
-                        text: "{{ _message }}"
-                        voice: "{{ dispatch_voice | default('') }}"
-                        voice_id: "{{ dispatch_tts_voice }}"
-                        volume_level: "{{ v_tts_volume }}"
-                        priority: "{{ _tier_priority | int(3) }}"
-                        duck: "{{ not v_bypass_ducking }}"
-                        target_mode: explicit
-                        target: "{{ v_tts_output_player }}"
-                      response_variable: tts_result
+                        title: "{{ _device_name | title }} — battery"
+                        message: "{{ _message }}"
                       continue_on_error: true
-              default:
-                - alias: "Speak fallback nudge on default player"
-                  action: pyscript.tts_queue_speak
-                  data:
-                    text: "{{ _message }}"
-                    voice: "{{ dispatch_voice | default('') }}"
-                    voice_id: "{{ dispatch_tts_voice }}"
-                    volume_level: "{{ v_tts_volume }}"
-                    priority: "{{ _tier_priority | int(3) }}"
-                    duck: "{{ not v_bypass_ducking }}"
-                  response_variable: tts_result
-                  continue_on_error: true
 
             - alias: "Delay between reminders (skip on last)"
               if:

@@ -851,6 +851,16 @@ actions:
           message: "Wait timed out for {{ target_entity }}"
 ```
 
+### 3.10 Delivery backend pattern (for shareable TTS blueprints)
+
+Blueprints that speak announcements should expose a **`delivery_backend`** input rather than hard-wiring `pyscript.tts_queue_speak`. Four options: `pyscript_queue` (Project Fronkensteen cascade — default), `tts_speak` (generic HA), `assist_satellite`, `notify`. Each delivery site in the action block becomes a single `choose:` over the four backends. Default to `pyscript_queue` so existing instances behave identically; outside users picking up the blueprint pick what fits their stack.
+
+**When to use:** Any blueprint that announces TTS *and* could plausibly be used outside Project Fronkensteen. ~40 existing blueprints are candidates (see audit in `.claude-memory/project_blueprint_shareability_audit.md`).
+
+**When to skip:** Satellite-only blueprints (e.g. `va_confirmation_dialog`), silent blueprints (e.g. `smart-bathroom`), or blueprints where the cascade is semantically required (e.g. `theatrical_mode` multi-agent timing depends on `tts_queue` priority).
+
+**Drop-in YAML, migration recipe, and worked example:** [`_reference/delivery_backend_pattern.md`](_reference/delivery_backend_pattern.md). Canonical implementation: `blueprints/automation/madalone/phone_charge_reminder.yaml` v10.
+
 ---
 
 ## 4. SCRIPT STANDARDS

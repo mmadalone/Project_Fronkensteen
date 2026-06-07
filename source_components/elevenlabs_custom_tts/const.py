@@ -31,7 +31,7 @@ ATTR_SEARCH_TEXT = "search_text"
 ATTR_MEDIA_PLAYER_ENTITY = "media_player_entity"
 
 # Defaults
-DEFAULT_MODEL = "eleven_v3"
+DEFAULT_MODEL = "eleven_multilingual_v2"
 DEFAULT_STABILITY = 0.5
 DEFAULT_SIMILARITY_BOOST = 0.75
 DEFAULT_STYLE = 0.0

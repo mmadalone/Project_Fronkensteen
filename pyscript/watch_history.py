@@ -581,7 +581,7 @@ def _update_sensor(state_val: str, **extra_attrs: Any) -> None:
 
 async def _check_daily_rollover() -> None:
     """Reset daily entries at midnight, write yesterday's summary to L2."""
-    global _daily_entries, _last_summary_date, _daily_index
+    global _daily_entries, _last_summary_date, _daily_index, _daily_channel_flips, _daily_flip_details
     today = datetime.now().strftime("%Y-%m-%d")
     if today == _last_summary_date:
         return
@@ -633,7 +633,7 @@ async def _close_session(
 
     Returns dict with logged (bool), duration_s, reason.
     """
-    global _daily_index
+    global _daily_index, _daily_channel_flips, _daily_flip_details
 
     session = _active_sessions.pop(entity_id, None)
     if not session:
@@ -647,7 +647,6 @@ async def _close_session(
     if duration_s < threshold:
         # Track channel flips for PVR
         if cat == "live_tv":
-            global _daily_channel_flips, _daily_flip_details
             _daily_channel_flips += 1
             _daily_flip_details.append({
                 "channel": session.get("pvr_channel", ""),

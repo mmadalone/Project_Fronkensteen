@@ -242,6 +242,21 @@ ai_embedding_model:
   icon: mdi:cube-outline
   max: 100
 
+# ═══════════════════════════════════════════════════════════════════
+# ai_radio_klara — Vision LLM model (image_via_page parser type)
+# ═══════════════════════════════════════════════════════════════════
+# OpenRouter model used by radio_klara.py to OCR the schedule grid
+# image. Must be a vision-capable model. Switch from the dashboard
+# without a code edit. Examples:
+#   google/gemini-2.5-flash      — fast, cheap, excellent OCR (default)
+#   openai/gpt-4o-mini           — slightly better tabular layout
+#   anthropic/claude-haiku-4-5   — strong fallback
+ai_radio_klara_vision_model:
+  name: "AI Radio Klara - Vision Model"
+  initial: "google/gemini-2.5-flash"
+  icon: mdi:eye-outline
+  max: 100
+
 # ── Auto-archive (I-42 Phase 2) ──
 # Space-separated list of tags that protect entries from archiving.
 ai_memory_archive_protection_tags:

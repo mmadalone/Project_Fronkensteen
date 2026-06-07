@@ -58,6 +58,7 @@ When a troubleshooting session requires editing YAML to fix the issue, escalate 
 | Edit an existing file | `06_anti_patterns_and_workflow.md` (§11.3) + the relevant pattern doc | |
 | Generate/update a README | `06_anti_patterns_and_workflow.md` (§11.14) + the relevant pattern doc for context | |
 | Add privacy gate to a blueprint | `Readme/privacy_gate.md` (developer guide section) | |
+| Make a TTS blueprint shareable / refactor for community publish | `01_blueprint_patterns.md` (§3.10) + `_reference/delivery_backend_pattern.md` | |
 
 **Task-specific routing (TROUBLESHOOT mode):**
 
@@ -165,6 +166,7 @@ The section numbers are preserved across files for cross-referencing.
   - §3.7 — YAML formatting
   - §3.8 — HA 2024.10+ syntax (MANDATORY)
   - §3.9 — Minimal complete blueprint (copy-paste-ready reference)
+  - §3.10 — Delivery backend pattern (for shareable TTS blueprints) → `_reference/delivery_backend_pattern.md`
 - **§4** — Script Standards
   - §4.1 — Required fields
   - §4.2 — Inline explanations

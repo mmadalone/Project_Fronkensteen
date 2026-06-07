@@ -197,8 +197,10 @@ triggers:
     minutes: !input poll_interval_minutes
     id: poll
 
-  - trigger: homeassistant
-    event: start
+  # Use homeassistant_started (late) instead of homeassistant.start (early)
+  # — entities used by the cleanup logic are guaranteed available.
+  - trigger: event
+    event_type: homeassistant_started
     id: startup
 
   - trigger: event

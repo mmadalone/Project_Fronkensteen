@@ -209,9 +209,8 @@ class ElevenLabsOptionsFlow(OptionsFlow):
                 vol.Required(PROFILE_NAME_KEY): str,
                 vol.Required(VOICE_ID_KEY): str,
                 vol.Optional(MODEL_KEY, default=DEFAULT_MODEL): vol.In([
-                    "eleven_v3",
                     "eleven_turbo_v2_5",
-                    "eleven_multilingual_v2",
+                    "eleven_multilingual_v2", 
                     "eleven_monolingual_v1",
                     "eleven_turbo_v2"
                 ]),
@@ -258,9 +257,8 @@ class ElevenLabsOptionsFlow(OptionsFlow):
                         vol.Required(PROFILE_NAME_KEY, default=form_data[PROFILE_NAME_KEY]): str,
                         vol.Required(VOICE_ID_KEY, default=form_data[VOICE_ID_KEY]): str,
                         vol.Optional(MODEL_KEY, default=form_data[MODEL_KEY]): vol.In([
-                            "eleven_v3",
                             "eleven_turbo_v2_5",
-                            "eleven_multilingual_v2",
+                            "eleven_multilingual_v2", 
                             "eleven_monolingual_v1",
                             "eleven_turbo_v2"
                         ]),

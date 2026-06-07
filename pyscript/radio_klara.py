@@ -21,9 +21,10 @@ Services:
     No-op if last refresh < refresh_hours ago and force=False.
 
 Triggers:
-  startup            → load cache, seed sensors
-  cron(*/15 * * * *) → recompute now-playing, check refresh due
-  state_trigger      → MA media_title change → recompute now-playing
+  startup              → load cache, seed sensors
+  cron(0,30 * * * *)   → tick now-playing sensor (every 30 min)
+  cron(7 * * * *)      → staleness + refresh-due check (hourly at :07)
+  state_trigger        → MA media_title change → recompute now-playing
 
 Config (entity_config.yaml radio_stations: section):
   Per-station match patterns + schedule source descriptor. Currently only
@@ -46,7 +47,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from shared_utils import load_entity_config
+from shared_utils import load_entity_config, reload_entity_config
 
 # =============================================================================
 # Constants
@@ -145,6 +146,45 @@ def _pdf_to_text(pdf_bytes):
         return "\n".join(out)
     except Exception:
         return None
+
+
+@pyscript_executor  # noqa: F821
+def _read_secret(key: str) -> str:
+    """Read a value from /config/secrets.yaml by key. Returns '' on failure.
+
+    Flat parser — secrets.yaml is `key: value` (or `key: "value"`).
+    Avoids a yaml dependency and side-steps pyscript's ALLOWED_IMPORTS.
+    """
+    try:
+        with open("/config/secrets.yaml", "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if ":" not in stripped:
+                    continue
+                k, _sep, v = stripped.partition(":")
+                if k.strip() != key:
+                    continue
+                v = v.strip()
+                if v.startswith('"') and v.endswith('"'):
+                    v = v[1:-1]
+                elif v.startswith("'") and v.endswith("'"):
+                    v = v[1:-1]
+                return v
+        return ""
+    except OSError:
+        return ""
+
+
+@pyscript_executor  # noqa: F821
+def _b64_image_data_url(image_bytes, mime: str = "image/jpeg") -> str:
+    """Encode raw image bytes as a base64 data URL for vision LLM payloads."""
+    try:
+        import base64 as _b64
+        return f"data:{mime};base64,{_b64.b64encode(image_bytes).decode('ascii')}"
+    except Exception:
+        return ""
 
 
 # =============================================================================
@@ -264,6 +304,34 @@ def _extract_pdf_link(html, base_url):
     if not match:
         return None
     href = match.group(1)
+    return _normalize_url(href, base_url)
+
+
+@pyscript_compile  # noqa: F821
+def _extract_image_url(html, base_url, pattern=None):
+    """Find a schedule grid image URL via configurable regex.
+
+    Used by the `image_via_page` parser type for stations that publish
+    their schedule as a flyer/image (no extractable PDF text).
+    """
+    import re as _re
+    if not html:
+        return None
+    if not pattern:
+        # Default: match Radio Klara's "parrilla" schedule image
+        pattern = r'src=["\']([^"\']+parrilla[^"\']*\.jpe?g)["\']'
+    match = _re.search(pattern, html, _re.IGNORECASE)
+    if not match:
+        return None
+    href = match.group(1)
+    return _normalize_url(href, base_url)
+
+
+@pyscript_compile  # noqa: F821
+def _normalize_url(href, base_url):
+    """Normalize a relative/protocol-relative href to absolute URL."""
+    if not href:
+        return None
     if href.startswith("http://") or href.startswith("https://"):
         return href
     if href.startswith("//"):
@@ -395,6 +463,171 @@ async def _llm_extract_schedule(text):
     except Exception as exc:
         log.warning(f"radio_klara: LLM extraction failed: {exc}")  # noqa: F821
         return None
+
+
+async def _vision_extract_schedule(image_bytes, station_name, model):
+    """Send a schedule grid image to OpenRouter's vision API and parse the response.
+
+    Used by the `image_via_page` parser type — bypasses ha_text_ai.ask_question
+    (text-only) and calls OpenRouter's chat/completions endpoint directly with
+    a vision payload. Returns dict {weekly_schedule: [...]} or None on failure.
+
+    `model` must be supplied by caller (resolved from helper / config — never
+    hardcoded). `station_name` defaults to the cached config name.
+    """
+    if not image_bytes:
+        return None
+    if not model:
+        log.warning(  # noqa: F821
+            "radio_klara: vision model not configured. Set "
+            "input_text.ai_radio_klara_vision_model or "
+            "radio_stations.<slug>.schedule_source.vision_model in entity_config.yaml."
+        )
+        return None
+
+    api_key = _read_secret("openrouter_api_key")
+    if not api_key:
+        log.warning(  # noqa: F821
+            "radio_klara: openrouter_api_key not found in /config/secrets.yaml"
+        )
+        return None
+
+    data_url = _b64_image_data_url(image_bytes, "image/jpeg")
+    if not data_url:
+        return None
+
+    system_prompt = (
+        f"You extract {station_name} weekly programming schedules from a "
+        "schedule grid image. Output STRICTLY valid JSON with no markdown "
+        "fences and no commentary. "
+        "Schema: {\"weekly_schedule\": [{\"day_of_week\": "
+        "\"monday|tuesday|wednesday|thursday|friday|saturday|sunday\", "
+        "\"start_time\": \"HH:MM\", \"end_time\": \"HH:MM\", "
+        "\"title\": \"...\", "
+        "\"language\": \"catalan|spanish|other\", "
+        "\"description\": \"short EN description\"}]}. "
+        "Cover ALL 7 days. Use 24-hour times. End-of-day uses end_time \"24:00\"."
+    )
+    user_text = (
+        "Extract the complete weekly schedule grid from this radio station "
+        "schedule image. Be exhaustive — every time slot for all 7 days. "
+        "Return ONLY the JSON object, no preamble or trailing prose."
+    )
+
+    # 8000 tokens fits a typical 93-show, 7-day schedule with verbose
+    # descriptions. 4000 was empirically too tight (truncated mid-Friday
+    # on Radio Klara's schedule).
+    payload = {
+        "model": model,
+        "max_tokens": 8000,
+        "temperature": 0.1,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": user_text},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ]},
+        ],
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/mmadalone/Project_Fronkensteen",
+        "X-Title": "Radio Klara Schedule Refresh",
+    }
+
+    try:
+        from aiohttp import ClientSession, ClientTimeout
+        ct = ClientTimeout(total=120)
+        session = ClientSession(timeout=ct)
+        try:
+            resp = await session.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            if resp.status != 200:
+                err_text = await resp.text()
+                log.warning(  # noqa: F821
+                    "radio_klara: vision LLM HTTP %s — %s",
+                    resp.status, err_text[:300],
+                )
+                return None
+            response = await resp.json()
+        finally:
+            await session.close()
+    except Exception as exc:
+        log.warning(f"radio_klara: vision LLM request failed: {exc}")  # noqa: F821
+        return None
+
+    # Extract the message content from OpenAI-shaped response
+    try:
+        choice = response["choices"][0]
+        content = choice["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError):
+        log.warning(  # noqa: F821
+            "radio_klara: vision LLM unexpected response shape: %r",
+            str(response)[:300],
+        )
+        return None
+
+    # Flag length-truncation explicitly so the next failure log is actionable
+    finish_reason = choice.get("finish_reason", "")
+    if finish_reason == "length":
+        log.warning(  # noqa: F821
+            "radio_klara: vision response truncated (finish_reason=length, "
+            "completion_tokens=%s). Bump max_tokens in radio_klara.py.",
+            (response.get("usage") or {}).get("completion_tokens", "?"),
+        )
+
+    content = content.strip()
+    # Strip markdown fences if any
+    if content.startswith("```"):
+        lines = content.split("\n")
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines[1:])
+
+    import json as _json
+    parsed = None
+    try:
+        parsed = _json.loads(content)
+    except ValueError:
+        # Fallback: extract first balanced { ... } block
+        first = content.find("{")
+        last = content.rfind("}")
+        if first >= 0 and last > first:
+            try:
+                parsed = _json.loads(content[first:last + 1])
+            except ValueError as exc:
+                log.warning(  # noqa: F821
+                    "radio_klara: vision JSON parse failed: %s — prefix=%r",
+                    exc, content[:300],
+                )
+                return None
+        else:
+            log.warning(  # noqa: F821
+                "radio_klara: vision response had no JSON: %r",
+                content[:300],
+            )
+            return None
+
+    if not isinstance(parsed, dict) or not isinstance(
+        parsed.get("weekly_schedule"), list
+    ):
+        log.warning(  # noqa: F821
+            "radio_klara: vision response missing weekly_schedule list"
+        )
+        return None
+    if len(parsed["weekly_schedule"]) < 5:
+        log.warning(  # noqa: F821
+            "radio_klara: vision returned suspiciously few shows (got %d) "
+            "— prefix=%r",
+            len(parsed["weekly_schedule"]), content[:300],
+        )
+        return None
+    return parsed
 
 
 # =============================================================================
@@ -600,7 +833,12 @@ def _refresh_failure(reason: str) -> str:
 
 
 async def _do_refresh():
-    """Run the full refresh pipeline. Returns status string."""
+    """Run the full refresh pipeline. Returns status string.
+
+    Dispatches on `schedule_source.type` from entity_config.yaml:
+      - `pdf_via_page`   → fetch page → PDF link → pypdf text → text LLM
+      - `image_via_page` → fetch page → image link → vision LLM
+    """
     global _schedule_cache, _last_refresh_ts, _consecutive_failures, _last_failure_ts
 
     cfg = _station_config or {}
@@ -609,50 +847,86 @@ async def _do_refresh():
     if not page_url:
         return _refresh_failure("no_page_url")
 
+    source_type = src.get("type", "pdf_via_page")
     _set_status("refreshing")
 
-    # Step 1: fetch page
+    # Step 1: fetch page (common to both types)
     page_bytes = await _fetch_url(page_url)
     if not page_bytes:
         return _refresh_failure("page_fetch_failed")
-
     try:
         page_html = page_bytes.decode("utf-8", errors="replace")
     except Exception:
         return _refresh_failure("page_decode_failed")
 
-    # Step 2: extract PDF link
-    pdf_url = _extract_pdf_link(page_html, page_url)
-    if not pdf_url:
-        return _refresh_failure("pdf_link_not_found")
+    log.info(  # noqa: F821
+        f"radio_klara: refresh starting — source_type={source_type!r}, "
+        f"page_url={page_url}"
+    )
 
-    log.info(f"radio_klara: discovered PDF URL: {pdf_url}")  # noqa: F821
+    # Steps 2–5: dispatch on source type
+    if source_type == "image_via_page":
+        # ── Image-based extraction (vision LLM) ──
+        image_pattern = src.get("image_link_pattern")
+        image_url = _extract_image_url(page_html, page_url, image_pattern)
+        if not image_url:
+            return _refresh_failure("image_link_not_found")
+        log.info(f"radio_klara: discovered image URL: {image_url}")  # noqa: F821
 
-    # Step 3: download PDF
-    pdf_bytes = await _fetch_url(pdf_url)
-    if not pdf_bytes:
-        return _refresh_failure("pdf_download_failed")
+        image_bytes = await _fetch_url(image_url)
+        if not image_bytes:
+            return _refresh_failure("image_download_failed")
 
-    # Step 4: extract text
-    text = _pdf_to_text(pdf_bytes)
-    if not text:
-        log.error(  # noqa: F821
-            "radio_klara: PDF→text failed. Verify pypdf is installed: "
-            "configuration.yaml → pyscript: requirements: - pypdf, then restart HA."
+        # Resolve vision model: helper first, entity_config fallback.
+        # No hardcoded default — refresh fails fast if neither is set.
+        vision_model = ""
+        try:
+            helper_val = state.get("input_text.ai_radio_klara_vision_model")  # noqa: F821
+            if helper_val and helper_val not in ("unknown", "unavailable", ""):
+                vision_model = str(helper_val).strip()
+        except (NameError, TypeError, AttributeError):
+            pass
+        if not vision_model:
+            vision_model = (src.get("vision_model") or "").strip()
+
+        parsed = await _vision_extract_schedule(
+            image_bytes,
+            station_name=cfg.get("name", "Radio Klara"),
+            model=vision_model,
         )
-        return _refresh_failure("pdf_text_extract_failed")
+        if not parsed:
+            return _refresh_failure("vision_extract_failed")
+        source_url_for_cache = image_url
+    else:
+        # ── Default: pdf_via_page (text-extractable PDFs only) ──
+        pdf_url = _extract_pdf_link(page_html, page_url)
+        if not pdf_url:
+            return _refresh_failure("pdf_link_not_found")
+        log.info(f"radio_klara: discovered PDF URL: {pdf_url}")  # noqa: F821
 
-    # Step 5: LLM structured extraction
-    parsed = await _llm_extract_schedule(text)
-    if not parsed:
-        return _refresh_failure("llm_extract_failed")
+        pdf_bytes = await _fetch_url(pdf_url)
+        if not pdf_bytes:
+            return _refresh_failure("pdf_download_failed")
 
-    # Step 6: validate + assemble cache
+        text = _pdf_to_text(pdf_bytes)
+        if not text:
+            log.error(  # noqa: F821
+                "radio_klara: PDF→text failed. Verify pypdf is installed: "
+                "configuration.yaml → pyscript: requirements: - pypdf, then restart HA."
+            )
+            return _refresh_failure("pdf_text_extract_failed")
+
+        parsed = await _llm_extract_schedule(text)
+        if not parsed:
+            return _refresh_failure("llm_extract_failed")
+        source_url_for_cache = pdf_url
+
+    # Step 6: validate + assemble cache (common)
     new_cache = {
         "station_slug": STATION_SLUG,
         "station_name": cfg.get("name", "Radio Klara"),
         "fetched_at": datetime.now().isoformat(),  # noqa: F821
-        "source_url": pdf_url,
+        "source_url": source_url_for_cache,
         "schedule_version_hint": datetime.now().strftime("%Y-%m"),  # noqa: F821
         "weekly_schedule": parsed["weekly_schedule"],
     }
@@ -672,7 +946,7 @@ async def _do_refresh():
     _set_stale(False)
     _update_now_playing_sensor()
     _set_status("loaded", show_count=len(new_cache["weekly_schedule"]),
-                source_url=pdf_url)
+                source_url=source_url_for_cache)
     return "ok"
 
 
@@ -763,10 +1037,16 @@ def radio_klara_startup():
     """Load cache from disk, seed sensors, schedule refresh check."""
     global _schedule_cache, _last_refresh_ts, _station_config
 
-    # Load station config
-    cfg = load_entity_config()
+    # Load station config — force re-read since shared_utils._config_cache
+    # in pyscript modules/ folder can survive `pyscript.reload`.
+    cfg = reload_entity_config()
     stations = (cfg or {}).get("radio_stations") or {}
     _station_config = stations.get(STATION_SLUG) or {}
+    log.info(  # noqa: F821
+        f"radio_klara: startup loaded station config — "
+        f"type={(_station_config.get('schedule_source') or {}).get('type', '?')}, "
+        f"enabled={_station_config.get('enabled', True)}"
+    )
     if not _station_config.get("enabled", True):
         log.info("radio_klara: station disabled in entity_config.yaml")  # noqa: F821
         _set_status("disabled")
@@ -805,20 +1085,37 @@ def radio_klara_startup():
     _check_stale()
 
 
-@time_trigger("cron(*/15 * * * *)")  # noqa: F821
-async def radio_klara_periodic():
-    """Every 15 min: refresh sensor + check refresh due."""
+@time_trigger("cron(0,30 * * * *)")  # noqa: F821
+async def radio_klara_tick_now_playing():
+    """Every 30 min on :00/:30: tick the now-playing sensor.
+
+    Most radio shows are ≥30 minutes long, so a half-hour cadence is
+    enough to keep the sensor accurate without churning state. Aligns
+    on the half-hour to match the boundaries shows actually start/end on.
+    The state_trigger on Music Assistant covers immediate transitions
+    when the user starts/stops listening.
+    """
     _update_now_playing_sensor()
+
+
+@time_trigger("cron(7 * * * *)")  # noqa: F821
+async def radio_klara_check_refresh():
+    """Hourly at :07 — staleness check + fire scheduled refresh if due.
+
+    The actual refresh interval is user-tunable
+    (input_number.ai_radio_klara_refresh_hours, default 168 = weekly).
+    Hourly is plenty: at most 1h lag from threshold cross to refresh fire,
+    which is 0.6% of a weekly interval. Offset to :07 to avoid the
+    top-of-hour task herd.
+    """
     _check_stale()
 
-    # Check if a refresh is due
     if not _is_enabled():
         return
     if _should_skip_for_backoff():
         return
     refresh_hours = _get_refresh_hours()
     if _last_refresh_ts <= 0:
-        # Never refreshed — try once
         log.info("radio_klara: bootstrap refresh attempt")  # noqa: F821
         await _do_refresh()
         return

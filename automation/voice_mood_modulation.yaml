@@ -245,8 +245,10 @@ mode: single
 triggers:
   - trigger: time_pattern
     hours: "/1"
-  - trigger: homeassistant
-    event: start
+  # Use homeassistant_started (late) instead of homeassistant.start (early)
+  # — the latter fires before pyscript registers services.
+  - trigger: event
+    event_type: homeassistant_started
 
 variables:
   v_agent: !input agent_name

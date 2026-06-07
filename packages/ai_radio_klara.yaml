@@ -87,8 +87,13 @@ automation:
       Mirrors the FluidSynth install pattern in ai_music_composer.yaml.
     mode: single
     triggers:
-      - trigger: homeassistant
-        event: start
+      # Fire AFTER all integrations (incl. pyscript) finish setup —
+      # `homeassistant: event: start` fires too early and pyscript.reload
+      # is not yet registered when the action runs. Per pyscript docs:
+      # "Startup occurs when the EVENT_HOMEASSISTANT_STARTED event is
+      # fired, which is after everything else is initialized and ready."
+      - trigger: event
+        event_type: homeassistant_started
     actions:
       - alias: "Install pypdf if missing"
         action: shell_command.ai_radio_klara_install_pypdf

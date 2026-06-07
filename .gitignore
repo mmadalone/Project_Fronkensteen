@@ -35,3 +35,4 @@ logs/
 # One-off migration scripts in style-guide/ (run locally, not part of HACS dist)
 style-guide/update_*.py
 
+custom_components/project_fronkensteen/bundle/

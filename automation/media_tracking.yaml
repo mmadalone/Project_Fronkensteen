@@ -325,9 +325,10 @@ triggers:
     entity_id: !input tracking_enabled_entity
     to: "on"
 
-  # 6. HA start
-  - trigger: homeassistant
-    event: start
+  # 6. HA start (fires after all integrations finish setup so pyscript
+  # services are guaranteed registered).
+  - trigger: event
+    event_type: homeassistant_started
     id: ha_start
 
 # ── Conditions ──────────────────────────────────────────────────────────────

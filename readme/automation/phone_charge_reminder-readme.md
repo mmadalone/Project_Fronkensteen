@@ -48,7 +48,8 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 - Optional "fully charged" announcement at 100% while still charging
 - **Charge control** -- optional wireless charging switch with configurable ceiling and resume floor for battery preservation. Switch actions always fire; TTS announcements respect all gates.
 - Agent dispatcher support with manual pipeline fallback
-- TTS delivery priority: Assist Satellite > explicit media player > TTS queue default
+- **Pluggable delivery backend** (v10) -- choose how announcements are delivered: `pyscript_queue` (Project Fronkensteen TTS queue with Assist Satellite > media player > queue cascade), `tts_speak` (generic HA `tts.speak`), `assist_satellite` (announce only), or `notify` (text-only push)
+- **Pickable HA Cloud voice** (v12) -- choose a specific Azure neural voice (+ paired language) for the `tts_speak` backend
 - Configurable TTS volume with automatic save/restore
 - Follow-me bypass via refcount system
 - Ducking bypass with save/restore
@@ -62,7 +63,8 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 - Home Assistant 2024.10.0+
 - Battery level sensor (device_class: battery)
 - Charging state binary sensor
-- Pyscript integration with `tts_queue_speak` and `agent_dispatch` services
+- A delivery target matching your chosen `delivery_backend`: pyscript `tts_queue_speak` (for `pyscript_queue`), a `tts` engine + media player (for `tts_speak`), an Assist Satellite (for `assist_satellite`), or a notify service (for `notify`)
+- Pyscript `agent_dispatch` service (only for `prompt` delivery style with the dispatcher)
 - Optional: Assist Satellite for satellite-based announcements
 - Optional: Refcount bypass scripts for follow-me management
 
@@ -122,10 +124,15 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `satellite_entity` | *(empty)* | Assist Satellite for announcements (priority over media player) |
-| `tts_output_player` | *(empty)* | Media player for TTS via queue |
-| `tts_volume` | `0.0` | TTS volume (0 = don't change) |
-| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS |
+| `delivery_backend` | `pyscript_queue` | How announcements are delivered: `pyscript_queue` (PF TTS queue cascade), `tts_speak` (generic HA `tts.speak`), `assist_satellite` (announce only), `notify` (text-only). |
+| `satellite_entity` | *(empty)* | Assist Satellite for announcements (priority over media player). Used by `pyscript_queue` and `assist_satellite`. |
+| `tts_output_player` | *(empty)* | Media player for TTS. Used by `pyscript_queue` and `tts_speak`. |
+| `tts_engine` | *(empty)* | TTS engine entity (e.g. `tts.home_assistant_cloud`, `tts.piper`). Used by the `tts_speak` backend. |
+| `tts_voice` | *(empty)* | **(v12)** HA Cloud / Azure neural voice for the `tts_speak` backend. Pick a common voice or type any full `…Neural` ID (add a style with `\|\|`, e.g. `AriaNeural\|\|cheerful`). Blank = engine default. Cloud-only; ignored by other engines/backends. |
+| `tts_voice_language` | *(empty)* | **(v12)** Language code paired with `tts_voice` (e.g. `en-US`, `es-ES`, `ca-ES`). Required for non-English voices — HA Cloud otherwise silently falls back to its default-language voice. Blank = engine default. |
+| `notify_service` | *(empty)* | Notify service name (e.g. `notify.mobile_app_pixel`). Used by the `notify` backend. |
+| `tts_volume` | `0.0` | TTS volume (0 = don't change). Used by the `pyscript_queue` backend. |
+| `bypass_ducking` | `false` | Skip volume ducking on other speakers during TTS. Used by the `pyscript_queue` backend. |
 
 </details>
 
@@ -208,7 +215,7 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 - Reminder loops stop early if the device is plugged in (charging sensor checked each iteration)
 - Inter-reminder delays: low = 30 min, critical = 15 min, urgent = 5 min
 - LLM failures fall back to factual messages automatically
-- TTS delivery uses a 3-tier priority: satellite announce > explicit player > default queue
+- TTS delivery is chosen by `delivery_backend`. The `pyscript_queue` backend (default) uses a 3-tier priority: satellite announce > explicit player > default queue. The `tts_speak` backend calls `tts.speak` directly; when a `tts_voice` is set it rides in `tts.speak` `options.voice` (with `language` when `tts_voice_language` is also set), and `options` is attached **only** when a voice is set so non-cloud engines never receive an unsupported option.
 - HA restart trigger performs a catch-up battery check
 - Fully charged trigger fires when battery crosses above 99
 - **Charge control switch actions (turn_off/turn_on) always execute** regardless of delivery style, quiet hours, DND, presence, or privacy. TTS announcements for these events still respect all gates.
@@ -217,6 +224,10 @@ Escalating TTS reminders when a device's battery drops below configurable thresh
 
 ## Changelog
 
+- **v12:** The `tts_speak` delivery backend can now use a specific HA Cloud (Azure neural) voice. New inputs `tts_voice` (a dropdown of common en-US/es-ES/ca-ES voices that also accepts any custom Azure ID, e.g. `AriaNeural||cheerful`) and `tts_voice_language` (the paired language code, required for non-English voices). The voice rides in `tts.speak` `options.voice`; `options` is attached only when a voice is set, so non-cloud engines and existing instances are unaffected.
+- **v11:** New `congrats_cooldown_minutes` slider (5--120 min, default 30). The plug-in celebration is gated by how long the device was unplugged, so rapid re-plugs at low battery no longer spam congratulations.
+- **v10:** Pluggable `delivery_backend` selector -- `pyscript_queue` (default, current behavior), `tts_speak` (generic HA `tts.speak`), `assist_satellite`, or `notify` (text-only). New `tts_engine` and `notify_service` inputs support the new backends. Existing instances keep their exact behavior (default `pyscript_queue`).
+- **v9:** Charge control switch input now accepts multiple entities -- the same ceiling/resume logic is applied to every selected switch in lockstep. Handles both list and legacy single-string values, so pre-v9 instances keep working.
 - **v8:** Charge control fixes -- switch actions bypass all TTS gates (always fire); TTS announcements for charge events respect all gates. Switch.turn_off at 100% no longer gated behind "Announce fully charged" toggle. Charge ceiling trigger uses `>=` for exact threshold match. Charge resume only fires when the switch is currently OFF, preventing false announcements from normal battery drain while undocked.
 - **v7:** Charge control -- optional wireless charging switch with configurable ceiling and resume floor for battery preservation. Separate prompt/factual pairs for charge limit and charge resumed events.
 - **v6:** Generic device support -- new `device_name` input and `{device}` placeholder. Works with phones, remotes, tablets, etc. Backwards compatible (defaults to "phone").
