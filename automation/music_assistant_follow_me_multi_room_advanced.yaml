@@ -13,6 +13,48 @@ blueprint:
 
     ### Recent changes
 
+    - **v15:** Arrival transfer (phone → home). New §⑧ adds a
+      `person not_home → home` trigger: when you arrive with music playing on
+      your phone, it continues on whichever room you walk into. Arrival is
+      confirmed by three signals — the person entity (which Home Assistant
+      already computes from BOTH the WiFi/router tracker and the GPS tracker,
+      a non-GPS "home" outranking a GPS "not_home") plus an FP2 sensor
+      claiming a room. At the door no room sensor has fired, so the branch
+      waits for one (`arrival_wait_timeout`, default 3 min) and then falls
+      through to the existing target resolution and backend dispatch — no
+      duplicated transfer logic. Handles both phone sources: a Spotify session
+      (detected via the SpotifyPlus entity, which is also used as the source to
+      pause, since a phone is not an HA media_player) and a Music Assistant
+      player (`arrival_source_players`, which registers only while the MA app
+      is open). GPS-bounce cooldown mirrors `coming_home.yaml`.
+      **All new inputs default empty — existing automations are unaffected.**
+
+    - **v14:** Spotify Connect transfer backend. New §⑦ adds a per-room
+      `transfer_backend` abstraction: `ma_native` (unchanged) or
+      `spotify_connect`, which hands a live Spotify Connect session to the
+      target speaker via `spotifyplus.player_transfer_playback` instead of
+      moving a Music Assistant queue. Needed when music starts on an
+      Echo/Alexa that plays out through a Connect speaker — MA only *mirrors*
+      such a session (`active_queue: None`) and cannot move it. Backend and
+      device ID are parallel arrays to `presence_sensors`, matching the
+      existing `target_players` idiom. Falls back to `ma_native` automatically
+      whenever no live Spotify session exists, so radio and local-library
+      playback are unaffected. **All new inputs default empty — existing
+      automations behave exactly as before.**
+      New in §④: **`stop_when_all_empty`** (default OFF) pauses music once
+      every configured presence sensor is clear — you left the house rather
+      than moved rooms — after a re-checked `empty_grace_period` (default 2
+      min) so a brief FP2 dropout does not silence the room you are stood in.
+      Previously music played on indefinitely to an empty house, because with
+      nobody home the target resolves to none and the automation bailed out
+      before doing anything.
+
+      Also: failure announcements no longer require `announcements_enabled`,
+      so you can stay silent on success but be told out loud when a transfer
+      breaks (previously `announce_transfer_failure` could never fire while
+      `announcements_enabled` was off), and `failure_reason` is now
+      backend-aware.
+
     - **v13:** Source-cleared retry trigger — added a second trigger that
       fires when a presence sensor turns OFF. When the source-occupied gate
       blocks a transfer (because the source room still showed presence),
@@ -311,6 +353,33 @@ blueprint:
           selector:
             duration: {}
 
+        stop_when_all_empty:
+          name: Stop music when every room is empty (optional)
+          description: >
+            When ON, music is paused once ALL configured presence sensors are
+            clear — i.e. you have left the house or gone somewhere without a
+            sensor. Moving between rooms is unaffected: the destination sensor
+            turns ON and a normal transfer happens instead.
+
+
+            Default OFF, so existing automations keep their current behaviour
+            of leaving music playing in the last room.
+          default: false
+          selector:
+            boolean: {}
+
+        empty_grace_period:
+          name: Grace period before stopping
+          description: >
+            How long every sensor must stay clear before music is paused.
+            Guards against FP2 sensors briefly dropping while you are still in
+            the room. Re-checked after the wait — if anyone is detected again,
+            nothing is stopped.
+          default:
+            minutes: 2
+          selector:
+            duration: {}
+
         delay_seconds:
           name: Delay before transfer (seconds)
           description: >
@@ -454,12 +523,233 @@ blueprint:
                 - binary_sensor
               multiple: false
 
+    # ===========================================================================
+    # ⑦ SPOTIFY CONNECT
+    # ===========================================================================
+    spotify_connect:
+      name: "⑦ Spotify Connect transfer"
+      icon: mdi:spotify
+      collapsed: true
+      description: >
+        Optional. Move a live Spotify Connect session between speakers instead
+        of transferring a Music Assistant queue.
+
+
+        Use this when music is started on an Echo/Alexa that plays out through a
+        Spotify Connect speaker (Sonos). Music Assistant only *mirrors* such a
+        session and cannot move it, but SpotifyPlus can hand the session to
+        another Connect device.
+
+
+        Leave everything here empty to keep the original Music Assistant
+        behaviour — existing automations are unaffected.
+      input:
+        spotifyplus_entity:
+          name: SpotifyPlus media player (optional)
+          description: >
+            The SpotifyPlus media_player entity for your account. Required for
+            the Spotify Connect backend. Leave empty to disable it entirely.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+              multiple: false
+
+        transfer_backend_list:
+          name: Transfer backend per room (optional)
+          description: >
+            Parallel array to "Presence sensors" — one entry per sensor, same
+            order:
+
+
+            • `spotify_connect` — the room's speaker IS a Spotify Connect
+            device (e.g. Sonos). Needs its 40-char device ID below.
+
+
+            • `ma_spotify` — the room's speaker is a Music Assistant player
+            that is NOT a Connect endpoint (e.g. an ESPHome Voice PE). MA
+            streams the tracks itself. Requires MA >= 2.9.13.
+
+
+            • `ma_native` — original behaviour, transfers a Music Assistant
+            queue. Note this cannot move a session that MA is only
+            *mirroring* (an Alexa-driven Sonos has no MA queue to transfer).
+
+
+            Both Spotify backends fall back to `ma_native` automatically when
+            no live Spotify session exists, so radio and local-library
+            playback are unaffected.
+
+
+            Leave empty to use `ma_native` for every room.
+          default: []
+          selector:
+            select:
+              multiple: true
+              custom_value: true
+              options:
+                - ma_native
+                - spotify_connect
+                - ma_spotify
+
+        spotify_connect_device_ids:
+          name: Spotify Connect device IDs (optional)
+          description: >
+            Parallel array to "Presence sensors" — one entry per sensor, same
+            order. The 40-character Spotify Connect device ID of that room's
+            speaker. Use an empty string for `ma_native` rooms.
+
+
+            Get them from the `spotifyplus.get_spotify_connect_devices` service
+            response. IDs are 40 characters for Sonos — do not truncate them.
+          default: []
+          selector:
+            text:
+              multiple: true
+
+    # ===========================================================================
+    # ⑧ ARRIVAL (phone → home)
+    # ===========================================================================
+    arrival:
+      name: "⑧ Arrival — continue phone music at home"
+      icon: mdi:home-import-outline
+      collapsed: true
+      description: >
+        Optional. When you arrive home with music playing on your phone, move it
+        to whichever room you walk into.
+
+
+        Arrival is confirmed by three signals: the person entity (which Home
+        Assistant already computes from BOTH your WiFi/router tracker and your
+        GPS tracker), plus an FP2 presence sensor claiming a room. At the front
+        door no room sensor has fired yet, so the automation waits for one.
+
+
+        Leave "Arrival persons" empty to disable this entirely — existing
+        automations are unaffected.
+      input:
+        arrival_persons:
+          name: Arrival persons (optional)
+          description: >
+            Person entities to watch for not_home → home. Empty disables arrival
+            handling.
+
+
+            NOTE: this relies on the person entity having BOTH a WiFi/router
+            device_tracker and a GPS device_tracker attached. A non-GPS tracker
+            reporting "home" outranks a GPS tracker reporting "not_home", which
+            is what makes this reliable indoors.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+
+        arrival_source_players:
+          name: Phone media players (optional)
+          description: >
+            Music Assistant players that represent your phone. Needed because
+            the normal source scan only looks at the target players, which never
+            include the phone.
+
+
+            These register only while the Music Assistant app is open, so they
+            are often absent — that is expected and handled.
+
+
+            Not needed for Spotify: a Spotify session on the phone is detected
+            through the SpotifyPlus entity instead.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+
+        arrival_phone_media_sensor:
+          name: Phone media session sensor (optional)
+          description: >
+            The Home Assistant companion app's "Media session" sensor, e.g.
+            `sensor.<phone>_media_session`. When set, arrival only proceeds if
+            it reports Playing or Buffering — so walking in to silence does
+            nothing at all.
+
+
+            Its attributes are namespaced per app
+            (`playback_state_com.spotify.music`,
+            `title_io.music_assistant.client`, …), which also lets the
+            automation tell WHICH app is playing instead of guessing. It even
+            carries the Spotify track URI in `media_id_com.spotify.music`.
+
+
+            Leave empty to skip this check.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+              multiple: false
+
+        arrival_spotify_package:
+          name: Spotify app package
+          description: >
+            Android package name for Spotify, used to read the per-app
+            attributes on the media session sensor.
+          default: com.spotify.music
+          selector:
+            text:
+
+        arrival_ma_package:
+          name: Music Assistant app package
+          description: >
+            Android package name for the Music Assistant companion app. When
+            THIS app is the one playing, the queue is moved by asking the
+            Music Assistant server directly, because HA has no entity for the
+            phone's MA player.
+          default: io.music_assistant.client
+          selector:
+            text:
+
+        arrival_wait_timeout:
+          name: Wait for a room to claim you
+          description: >
+            How long to wait after arriving for a presence sensor to turn on.
+            If nothing does, nothing is transferred and nothing is announced.
+          default:
+            minutes: 3
+          selector:
+            duration: {}
+
+        arrival_cooldown_seconds:
+          name: Arrival cooldown (seconds)
+          description: >
+            Ignore repeat arrivals within this window. Guards against GPS
+            bouncing between home and not_home.
+          default: 900
+          selector:
+            number:
+              min: 0
+              max: 7200
+              step: 30
+              unit_of_measurement: seconds
+              mode: box
+
 mode: restart
 max_exceeded: silent
 
 variables:
   presence_list: !input presence_sensors
   player_list: !input target_players
+  arrival_person_list: !input arrival_persons
+  arrival_source_list: !input arrival_source_players
+  arrival_media_sensor: !input arrival_phone_media_sensor
+  arrival_spotify_pkg: !input arrival_spotify_package
+  arrival_ma_pkg: !input arrival_ma_package
+  arrival_wait_timeout_value: !input arrival_wait_timeout
+  arrival_cooldown_value: !input arrival_cooldown_seconds
+  stop_when_all_empty_flag: !input stop_when_all_empty
+  empty_grace_period_value: !input empty_grace_period
+  spotifyplus_entity_id: !input spotifyplus_entity
+  transfer_backend_list_raw: !input transfer_backend_list
+  spotify_device_id_list: !input spotify_connect_device_ids
   tts_pre_player_list: !input tts_pre_players
   tts_post_player_list: !input tts_post_players
   person_list: !input persons
@@ -491,6 +781,7 @@ variables:
 
 triggers:
   - alias: "Presence sensor turned ON — zone occupancy detected after minimum hold time"
+    id: presence_on
     trigger: state
     entity_id: !input presence_sensors
     from: "off"
@@ -498,10 +789,40 @@ triggers:
     for: !input min_presence_on_time
 
   - alias: "Presence sensor turned OFF — source room cleared, retry blocked transfers"
+    id: presence_off
     trigger: state
     entity_id: !input presence_sensors
     from: "on"
     to: "off"
+
+  # Arrival: person goes not_home -> home. HA's person entity already merges
+  # the WiFi/router tracker and the GPS tracker (a non-GPS "home" outranks a
+  # GPS "not_home"), so this single trigger carries both signals. The FP2 wait
+  # in the arrival branch supplies the third and tells us WHICH room.
+  # No persons configured -> entity_id is empty -> this never fires.
+  - alias: "Person arrived home — continue phone music indoors"
+    id: person_arrived
+    trigger: state
+    entity_id: !input arrival_persons
+    from: not_home
+    to: home
+
+  # Fires only once EVERY sensor has been clear for the whole grace period.
+  # Must be a `for:` trigger, not a delay inside the action: moving between
+  # rooms leaves a brief gap where no sensor is on (observed: 3 s between the
+  # workshop clearing and the bathroom detecting), and a delay-then-check
+  # approach grabs the run in that gap and — with mode: restart — swallows the
+  # real transfer.
+  - alias: "Every room clear for the grace period — nobody home"
+    id: all_rooms_clear
+    trigger: template
+    value_template: >-
+      {%- set ns = namespace(any=false) -%}
+      {%- for s in presence_list -%}
+        {%- if is_state(s, 'on') -%}{%- set ns.any = true -%}{%- endif -%}
+      {%- endfor -%}
+      {{ not ns.any }}
+    for: !input empty_grace_period
 
 conditions:
   - alias: "Global follow switch must be ON"
@@ -554,6 +875,68 @@ conditions:
       {% endif %}
 
 actions:
+  # ---------------------------------------------------------------------------
+  # ARRIVAL — must run BEFORE the resolve step.
+  #
+  # At the front door no FP2 sensor has fired, so target_index would resolve to
+  # -1 and the automation would bail out. This waits for a room to claim you
+  # first; the existing target_index logic then picks it up for free, because
+  # an arrival trigger's to_state is 'home' (not 'on') and so falls into the
+  # "first room with presence" branch that already exists for presence-OFF.
+  # ---------------------------------------------------------------------------
+  - alias: "Arrival — wait for a room to claim you, then fall through"
+    if:
+      - alias: "Fired by the arrival trigger"
+        condition: template
+        value_template: >
+          {{ trigger.id is defined and trigger.id == 'person_arrived' }}
+    then:
+      - alias: "GPS-bounce cooldown — ignore repeat arrivals"
+        condition: template
+        value_template: >
+          {{ (now() - (this.attributes.last_triggered
+             | default(as_datetime('2000-01-01'), true))).total_seconds()
+             > (arrival_cooldown_value | int(900)) }}
+
+      - alias: "Wake SpotifyPlus — it reports 'off' while music is playing"
+        if:
+          - condition: template
+            value_template: >
+              {{ spotifyplus_entity_id | default('') | string | length > 0 }}
+        then:
+          - alias: "Turn on the SpotifyPlus media player"
+            continue_on_error: true
+            action: media_player.turn_on
+            target:
+              entity_id: "{{ spotifyplus_entity_id }}"
+          - delay:
+              seconds: 6
+
+      # Fail fast when the phone isn't playing anything. The companion app's
+      # media-session sensor is the reliable signal here: the MA player itself
+      # has no HA entity, and binary_sensor.*_music_active was observed reading
+      # "off" while a session was actively Playing.
+      # Skipped entirely when no sensor is configured.
+      - alias: "Phone must actually be playing something (if a sensor is configured)"
+        condition: template
+        value_template: >
+          {%- set s = arrival_media_sensor | default('') | string | trim -%}
+          {%- if s | length == 0 -%}
+            true
+          {%- else -%}
+            {{ states(s) | default('unknown') in ['Playing', 'Buffering'] }}
+          {%- endif -%}
+
+      - alias: "Wait for any room to register presence"
+        wait_template: >
+          {%- set ns = namespace(any=false) -%}
+          {%- for s in presence_list -%}
+            {%- if is_state(s, 'on') -%}{%- set ns.any = true -%}{%- endif -%}
+          {%- endfor -%}
+          {{ ns.any }}
+        timeout: "{{ arrival_wait_timeout_value }}"
+        continue_on_timeout: false
+
   - alias: "Resolve target player, music source, playback state, and priority indices"
     variables:
       trigger_entity: "{{ trigger.entity_id }}"
@@ -603,22 +986,53 @@ actions:
 
       min_music_duration: "{{ min_music_duration_value | int(0) }}"
 
+      # Everything that may legitimately be the SOURCE of music.
+      # Phone sources come AFTER player_list so a room player always wins when
+      # both are playing. Both extras default to empty, so this is identical to
+      # player_list for existing instances.
+      # The SpotifyPlus entity is included last: when Spotify plays on the
+      # PHONE nothing in player_list is playing, but that entity is — which both
+      # satisfies the source gates and gives us something to pause, since a
+      # phone is not an HA media_player.
+      # NOTE: the same list is rebuilt inline in music_source_player,
+      # any_music_playing AND any_music_active. It is deliberately NOT hoisted
+      # into a shared variable: HA renders a template producing a list as a
+      # NATIVE list, so passing it between templates via to_json/from_json
+      # raises "Template error: from_json".
+      # source_index and other_active_players keep using player_list, since
+      # those are about ROOMS, not sources.
+      # TWO PASSES, and the order matters. A room speaker left PAUSED with old
+      # content would otherwise be picked as the source purely because
+      # player_list is scanned first — shadowing a phone that is actively
+      # playing, and then failing the "target != source" gate when that same
+      # room is also the target. Actively playing always wins; paused is only
+      # a fallback (which is what follow_paused_music is really for).
       music_source_player: >
-        {% set ns = namespace(src='') %}
-        {% for p in player_list %}
-          {% if states(p) | default('unknown') in ['playing', 'paused', 'buffering'] and ns.src == '' %}
+        {% set _sp = spotifyplus_entity_id | default('') | string | trim %}
+        {% set scan = (player_list + (arrival_source_list | default([], true))
+                       + ([_sp] if _sp | length > 0 else [])) %}
+        {% set ns = namespace(playing='', paused='') %}
+        {% for p in scan %}
+          {% set st = states(p) | default('unknown') %}
+          {% if st in ['playing', 'paused', 'buffering'] %}
             {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
             {% if (dur == 0 and treat_unknown_duration_as_music_flag)
                   or (dur > 0 and dur >= min_music_duration) %}
-              {% set ns.src = p %}
+              {% if st in ['playing', 'buffering'] and ns.playing == '' %}
+                {% set ns.playing = p %}
+              {% elif st == 'paused' and ns.paused == '' %}
+                {% set ns.paused = p %}
+              {% endif %}
             {% endif %}
           {% endif %}
         {% endfor %}
-        {{ ns.src }}
+        {{ ns.playing if ns.playing != '' else ns.paused }}
 
       any_music_playing: >
+        {% set _sp = spotifyplus_entity_id | default('') | string | trim %}
         {% set ns = namespace(any=false) %}
-        {% for p in player_list %}
+        {% for p in (player_list + (arrival_source_list | default([], true))
+                     + ([_sp] if _sp | length > 0 else [])) %}
           {% if states(p) | default('unknown') == 'playing' %}
             {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
             {% if (dur == 0 and treat_unknown_duration_as_music_flag)
@@ -634,8 +1048,10 @@ actions:
         {% if follow_paused_music_flag | bool %}
           {% set valid_states = ['playing', 'paused'] %}
         {% endif %}
+        {% set _sp = spotifyplus_entity_id | default('') | string | trim %}
         {% set ns = namespace(any=false) %}
-        {% for p in player_list %}
+        {% for p in (player_list + (arrival_source_list | default([], true))
+                     + ([_sp] if _sp | length > 0 else [])) %}
           {% if states(p) | default('unknown') in valid_states %}
             {% set dur = state_attr(p, 'media_duration') | default(0) | float(0) %}
             {% if (dur == 0 and treat_unknown_duration_as_music_flag)
@@ -666,6 +1082,159 @@ actions:
         {{ ns.others | to_json }}
 
       target_state: "{{ states(target_player) | default('unknown') }}"
+
+      # ── Spotify Connect backend resolution ────────────────────────────────
+      # Same parallel-array idiom as target_player / tts_pre_player above.
+      target_backend: >
+        {%- set ti = target_index | int(-1) -%}
+        {%- if ti >= 0 and transfer_backend_list_raw | length > ti -%}
+          {{ transfer_backend_list_raw[ti] | default('ma_native', true) }}
+        {%- else -%}
+          ma_native
+        {%- endif -%}
+
+      target_connect_device_id: >
+        {%- set ti = target_index | int(-1) -%}
+        {%- if ti >= 0 and spotify_device_id_list | length > ti -%}
+          {{ spotify_device_id_list[ti] | default('', true) | trim }}
+        {%- else -%}
+          {{ '' }}
+        {%- endif -%}
+
+      # True only when a live Spotify Connect session actually exists. When the
+      # source is radio / local library instead, this is false and the room
+      # transparently falls back to the Music Assistant queue transfer.
+      #
+      # Two independent signals, because the SpotifyPlus entity is known to go
+      # stale and report 'off' while music is audibly playing (its poller
+      # sleeps; toggling the entity revives it). Relying on it alone would
+      # silently drop us to ma_native, which cannot move a mirrored session.
+      #   1. SpotifyPlus says it is playing, OR
+      #   2. the source MA player is MIRRORING Spotify — app_id 'spotify' with
+      #      no active_queue is exactly the Alexa/Sonos virtual-line-in case.
+      spotify_is_source: >
+        {%- set sp = spotifyplus_entity_id | default('') | string | trim -%}
+        {%- set sp_playing = sp | length > 0
+              and states(sp) | default('unknown') == 'playing' -%}
+        {%- set src = music_source_player | default('') | string | trim -%}
+        {%- set mirroring = src | length > 0
+              and (state_attr(src, 'app_id') | default('') | string | lower) == 'spotify'
+              and state_attr(src, 'active_queue') in [none, '', 'None'] -%}
+        {{ sp_playing or mirroring }}
+
+      # Which app on the phone is playing, read straight from the companion
+      # app's media-session sensor rather than inferred. Attributes are
+      # namespaced per package, e.g. playback_state_com.spotify.music.
+      # '' when no sensor is configured or neither app is active.
+      arrival_phone_app: >
+        {%- set s = arrival_media_sensor | default('') | string | trim -%}
+        {%- if s | length == 0 -%}
+          {{ '' }}
+        {%- else -%}
+          {%- set spot = state_attr(s, 'playback_state_' ~ arrival_spotify_pkg) -%}
+          {%- set ma = state_attr(s, 'playback_state_' ~ arrival_ma_pkg) -%}
+          {%- if spot in ['Playing', 'Buffering'] -%}
+            spotify
+          {%- elif ma in ['Playing', 'Buffering'] -%}
+            ma
+          {%- else -%}
+            {{ '' }}
+          {%- endif -%}
+        {%- endif -%}
+
+      effective_backend: >
+        {%- if target_backend == 'spotify_connect'
+               and spotify_is_source | bool
+               and target_connect_device_id | length > 0 -%}
+          spotify_connect
+        {%- elif target_backend == 'ma_spotify' and spotify_is_source | bool -%}
+          ma_spotify
+        {%- else -%}
+          ma_native
+        {%- endif -%}
+
+  # ---------------------------------------------------------------------------
+  # All rooms empty — pause and stop. Runs BEFORE the target gates, because
+  # when nobody is home target_index resolves to -1 and the automation would
+  # otherwise bail out silently, leaving music playing to an empty house.
+  #
+  # Only fires on the presence-OFF trigger. Walking room to room is unaffected:
+  # the destination sensor is ON, so the "nobody anywhere" check is false and a
+  # normal transfer happens instead.
+  # ---------------------------------------------------------------------------
+  - alias: "All rooms empty — pause music and stop (optional)"
+    if:
+      - alias: "Fired by the all-rooms-clear trigger, and the option is enabled"
+        condition: template
+        value_template: >
+          {{ stop_when_all_empty_flag | bool
+             and trigger.id is defined
+             and trigger.id == 'all_rooms_clear' }}
+      - alias: "Still nobody home at the moment we act"
+        condition: template
+        value_template: >
+          {%- set ns = namespace(any=false) -%}
+          {%- for s in presence_list -%}
+            {%- if is_state(s, 'on') -%}{%- set ns.any = true -%}{%- endif -%}
+          {%- endfor -%}
+          {{ not ns.any }}
+    then:
+      - alias: "Collect configured players that are still making noise"
+        variables:
+          empty_stop_targets: >
+            {%- set ns = namespace(p=[]) -%}
+            {%- for p in player_list -%}
+              {%- if states(p) in ['playing', 'buffering'] -%}
+                {%- set ns.p = ns.p + [p] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.p }}
+
+      - alias: "Pause them"
+        if:
+          - condition: template
+            value_template: "{{ empty_stop_targets | count > 0 }}"
+        then:
+          - alias: "Pause every configured player still playing"
+            continue_on_error: true
+            action: media_player.media_pause
+            target:
+              entity_id: "{{ empty_stop_targets }}"
+
+      - alias: "Stop — nothing further to do with an empty house"
+        stop: "All rooms empty — music paused"
+
+  # ---------------------------------------------------------------------------
+  # Arrival, Music Assistant source. Runs AFTER the resolve step because it
+  # needs target_player, and BEFORE the normal gates because those all assume
+  # an HA source entity — which a phone running the MA app does not have.
+  #
+  # music_assistant.transfer_queue cannot be used: it takes HA entity_ids.
+  # pyscript.ma_phone_transfer talks to the MA server directly and matches the
+  # target by its registry unique_id, which IS the MA player_id.
+  # ---------------------------------------------------------------------------
+  - alias: "Arrival — phone is on Music Assistant rather than Spotify"
+    if:
+      - condition: template
+        value_template: >
+          {#- Prefer the media-session sensor's verdict when we have one; fall
+              back to "Spotify isn't the source" only when it is unconfigured. -#}
+          {{ trigger.id is defined
+             and trigger.id == 'person_arrived'
+             and target_player | default('') | string | length > 0
+             and (arrival_phone_app == 'ma'
+                  if (arrival_media_sensor | default('') | string | trim | length > 0)
+                  else not (spotify_is_source | bool)) }}
+    then:
+      - alias: "Ask Music Assistant to move the phone's queue to this room"
+        continue_on_error: true
+        action: pyscript.ma_phone_transfer
+        data:
+          target_player: "{{ target_player }}"
+          room_players: "{{ player_list }}"
+          auto_play: true
+      - alias: "Stop — arrival handled (or nothing was playing)"
+        stop: "Arrival handled via Music Assistant phone transfer"
 
   - alias: "Gate — only follow when music is playing or paused (optional)"
     condition: template
@@ -768,34 +1337,111 @@ actions:
     delay:
       seconds: "{{ delay_seconds_value | int(0) }}"
 
-  - alias: "Transfer queue via Music Assistant — continue_on_error prevents crash on MA failures"
+  - alias: "Transfer — dispatch on backend (Spotify Connect or Music Assistant)"
     choose:
-      - alias: "Music is actively playing (not just paused) — transfer with auto_play true"
+      # -----------------------------------------------------------------------
+      # Spotify Connect: hand the live Connect session to the target device.
+      # Used when the source is an Echo/Alexa playing out through a Connect
+      # speaker — Music Assistant only mirrors that and cannot move it.
+      # continue_on_error is required: player_transfer_playback raises
+      # ServiceValidationError when the Spotify desktop token is missing or the
+      # target speaker is unreachable, and the failure path must still run.
+      # -----------------------------------------------------------------------
+      - alias: "Spotify Connect — move the Connect session to the target device"
         conditions:
           - condition: template
-            value_template: "{{ any_music_playing | bool }}"
+            value_template: "{{ effective_backend == 'spotify_connect' }}"
         sequence:
-          - alias: "Transfer queue to target player (auto_play: true)"
+          # Deliberately NOT spotifyplus.player_transfer_playback: on a Sonos
+          # that wakes the device and resumes its OWN local queue, so you get
+          # whatever was last played in that room instead of what you were
+          # listening to. Verified in the field — walking into the bathroom
+          # started a track from hours earlier.
+          #
+          # pyscript.spotify_follow_me_transfer instead wakes SpotifyPlus (a
+          # transfer while its entity is 'off' silently no-ops), reads the live
+          # track + position + upcoming queue, seeds the target with the real
+          # content, and pauses the source so it is a move, not a duplicate.
+          - alias: "Move Spotify session to target device (track + position + queue)"
+            continue_on_error: true
+            action: pyscript.spotify_follow_me_transfer
+            data:
+              spotifyplus_entity: "{{ spotifyplus_entity_id }}"
+              target_device_id: "{{ target_connect_device_id }}"
+              source_player: "{{ music_source_player }}"
+              source_ma_player: "{{ music_source_player }}"
+              # target_player lets the service VERIFY playback started before
+              # pausing the source. Without it, a failed transfer silences
+              # every room — which is exactly what happened in testing.
+              target_player: "{{ target_player }}"
+              # 10, not 20: at 20 SpotifyPlus hit
+              # GetPlayerPlaybackStateSonos -> GetTrack on an unresolvable
+              # queued URI and the target never started.
+              queue_depth: 10
+
+      # -----------------------------------------------------------------------
+      # Music Assistant target that is NOT a Spotify Connect endpoint — e.g. an
+      # ESPHome Voice PE. Same service, no device_id: it plays the tracks on the
+      # MA player directly and MA streams them.
+      #
+      # music_assistant.transfer_queue is NOT usable here: it moves an MA queue
+      # between MA players, and a source that is merely MIRRORING an Alexa
+      # session has no queue to move — verified, returns HTTP 500.
+      # Requires MA >= 2.9.13 (#5601 fixed Spotify playback authorization).
+      # -----------------------------------------------------------------------
+      - alias: "Spotify via Music Assistant — play on a non-Connect MA player"
+        conditions:
+          - condition: template
+            value_template: "{{ effective_backend == 'ma_spotify' }}"
+        sequence:
+          - alias: "Play the Spotify session on the target MA player"
+            continue_on_error: true
+            action: pyscript.spotify_follow_me_transfer
+            data:
+              spotifyplus_entity: "{{ spotifyplus_entity_id }}"
+              target_device_id: ""
+              target_player: "{{ target_player }}"
+              source_player: "{{ music_source_player }}"
+              source_ma_player: "{{ music_source_player }}"
+              queue_depth: 10
+
+    default:
+      - alias: "Music Assistant queue transfer — original behaviour"
+        choose:
+          - alias: "Music is actively playing (not just paused) — transfer with auto_play true"
+            conditions:
+              - condition: template
+                value_template: "{{ any_music_playing | bool }}"
+            sequence:
+              - alias: "Transfer queue to target player (auto_play: true)"
+                continue_on_error: true
+                action: music_assistant.transfer_queue
+                target:
+                  entity_id: "{{ target_player }}"
+                data:
+                  source_player: "{{ music_source_player }}"
+                  auto_play: true
+        default:
+          - alias: "Transfer queue to target player (auto_play: false) — source was paused or idle"
             continue_on_error: true
             action: music_assistant.transfer_queue
             target:
               entity_id: "{{ target_player }}"
             data:
               source_player: "{{ music_source_player }}"
-              auto_play: true
-    default:
-      - alias: "Transfer queue to target player (auto_play: false) — source was paused or idle"
-        continue_on_error: true
-        action: music_assistant.transfer_queue
-        target:
-          entity_id: "{{ target_player }}"
-        data:
-          source_player: "{{ music_source_player }}"
-          auto_play: false
+              auto_play: false
 
-  - alias: "Post-transfer settling delay — let MA propagate state before checking success"
-    delay:
+  # Poll rather than sleep. A fixed delay has to be long enough for the SLOWEST
+  # backend, which makes every fast transfer wait for no reason — and if it is
+  # too short (the default 2s is, for Spotify Connect) the success check runs
+  # before the target has started and a FALSE failure gets announced while the
+  # music is in fact on its way. This returns the instant the target starts.
+  - alias: "Post-transfer settling — wait for the target to actually start"
+    wait_template: >
+      {{ states(target_player) | default('unknown') in ['playing', 'buffering'] }}
+    timeout:
       seconds: "{{ post_transfer_settle_seconds_value | int(2) }}"
+    continue_on_timeout: true
 
   - alias: "Evaluate transfer success — target must now be playing/paused/buffering"
     variables:
@@ -804,7 +1450,11 @@ actions:
         {{ post_state in ['playing', 'paused', 'buffering'] }}
       failure_reason: >
         {% if not transfer_succeeded | bool %}
-          Music Assistant could not move the queue — the source player may be stuck or the queue may have been lost
+          {%- if effective_backend == 'spotify_connect' -%}
+            Spotify Connect transfer failed — the target speaker may be unreachable, or the Spotify desktop token may need regenerating
+          {%- else -%}
+            Music Assistant could not move the queue — the source player may be stuck or the queue may have been lost
+          {%- endif -%}
         {% endif %}
 
   - alias: "On success — stamp cooldown, silence others, announce arrival"
@@ -876,11 +1526,15 @@ actions:
     choose:
       - alias: "Transfer failed and failure announcements are enabled"
         conditions:
+          # NOTE: deliberately NOT gated on announcements_enabled_flag. Failure
+          # announcements are a separate opt-in: you may want silence on every
+          # successful move but still be told out loud when a transfer breaks.
+          # Previously this required both flags, so announce_transfer_failure
+          # could never fire while announcements_enabled was off.
           - condition: template
             value_template: >
               {{ not (transfer_succeeded | bool)
                  and announce_transfer_failure_flag | bool
-                 and announcements_enabled_flag | bool
                  and announcement_script_entity is not none
                  and announcement_script_entity != '' }}
         sequence:

@@ -59,6 +59,31 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         self._attr_name = "ElevenLabs Custom TTS"
         self._friendly_name = "ElevenLabs Custom TTS"
 
+        # ── Voice mood profile map (profile name → agent identifier) ──
+        self._mood_profile_map = {}
+
+    async def async_added_to_hass(self) -> None:
+        """Load mood profile map asynchronously when entity is added."""
+        self._mood_profile_map = await self.hass.async_add_executor_job(
+            self._load_mood_profile_map_sync
+        )
+
+    @staticmethod
+    def _load_mood_profile_map_sync() -> dict:
+        """Load profile→agent map from JSON config (runs in executor thread)."""
+        import json as _json
+        try:
+            with open("/config/pyscript/voice_mood_profile_map.json", "r") as f:
+                data = _json.load(f)
+            _LOGGER.debug("Loaded mood profile map: %s", list(data.keys()))
+            return data
+        except FileNotFoundError:
+            _LOGGER.debug("No mood profile map found — mood modulation disabled")
+            return {}
+        except Exception as exc:
+            _LOGGER.warning("Failed to load mood profile map: %s", exc)
+            return {}
+
     @property
     def name(self) -> str:
         """Return the name of the entity (for entity ID)."""
@@ -97,8 +122,11 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
     @property
     def default_options(self) -> dict[str, Any]:
         """Return dict of default options."""
+        voice_profiles = self._config_entry.options.get("voice_profiles", {})
+        first_profile = next(iter(voice_profiles.values()), None)
+        default_voice = first_profile.get("voice", "21m00Tcm4TlvDq8ikWAM") if first_profile else "21m00Tcm4TlvDq8ikWAM"
         return {
-            "voice": "21m00Tcm4TlvDq8ikWAM",  # Default Rachel voice
+            "voice": default_voice,  # First configured profile; Rachel as final fallback
             "model_id": DEFAULT_MODEL,
             "stability": DEFAULT_STABILITY,
             "similarity_boost": DEFAULT_SIMILARITY_BOOST,
@@ -109,80 +137,129 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         }
 
     @callback
-    def async_get_supported_voices(self, language: str) -> list[Voice]:
+    def async_get_supported_voices(self, language: str) -> list[Voice] | None:
         """Return list of supported voices for Assist pipeline."""
-        voices = []
-        
-        # Get voice profiles from config entry
         voice_profiles = self._config_entry.options.get("voice_profiles", {})
-        
-        _LOGGER.debug("Getting supported voices for language %s, found %d voice profiles", 
-                     language, len(voice_profiles))
-        
-        # Add each configured voice profile as a selectable voice
+
+        if not voice_profiles:
+            _LOGGER.debug("No voice profiles configured, hiding voice picker")
+            return None  # None hides picker; [] shows empty picker and triggers clearing
+
+        voices = []
         for profile_name, profile_data in voice_profiles.items():
             voice_id = profile_data.get("voice", "")
-            
-            # Create a Voice object for this profile
-            # The voice_id in Voice() becomes the identifier used in the Assist pipeline
-            # When selected, it will be passed as the "voice" option to async_get_tts_audio
             voices.append(
                 Voice(
-                    voice_id=profile_name,  # Use profile name as the voice identifier
-                    name=profile_name,  # Display name in UI
+                    voice_id=profile_name,
+                    name=profile_name,
                 )
             )
-            _LOGGER.debug("Added voice profile '%s' (ElevenLabs voice: %s) to supported voices", 
+            _LOGGER.debug("Added voice profile '%s' (ElevenLabs voice: %s) to supported voices",
                          profile_name, voice_id)
-        
-        # If no profiles configured, return empty list to use default
-        if not voices:
-            _LOGGER.debug("No voice profiles configured, Assist will use default voice")
-        
+
         return voices
 
     async def async_get_tts_audio(
         self, message: str, language: str, options: dict[str, Any] | None = None
     ) -> TtsAudioType:
         """Load TTS audio file from ElevenLabs."""
-        _LOGGER.debug("TTS request received for message length: %d", len(message))
-        _LOGGER.debug("Language: %s", language) 
-        _LOGGER.debug("Options: %s", options)
-        
         if options is None:
             options = {}
-        
+
         # Get voice profiles from config entry
         voice_profiles = self._config_entry.options.get("voice_profiles", {})
-        
-        # Check if voice_profile is explicitly provided
+
+        _LOGGER.debug(
+            "ElevenLabs Custom TTS: options=%s, available_profiles=%s",
+            {k: v for k, v in options.items() if k != "message"},
+            list(voice_profiles.keys()),
+        )
+
+        # --- Profile resolution ---
+        # Priority: explicit voice_profile > voice matching profile name > raw voice ID
+        profile_options = None
         voice_profile_name = options.get("voice_profile")
-        
-        # If no explicit voice_profile but "voice" is provided, check if it matches a profile name
-        # This handles when Assist pipeline passes the selected voice
+
+        # If no explicit voice_profile, check if "voice" matches a profile name
         if not voice_profile_name and "voice" in options:
-            potential_profile = options["voice"]
-            if potential_profile in voice_profiles:
-                voice_profile_name = potential_profile
-                _LOGGER.debug("Voice '%s' matches a voice profile, using profile settings", potential_profile)
-        
-        _LOGGER.debug("Voice profile requested: %s", voice_profile_name)
-        
-        if voice_profile_name:
-            _LOGGER.debug("Available voice profiles: %s", list(voice_profiles.keys()))
+            voice_profile_name = options["voice"]
+
+        # Look up profile (exact match first, then case-insensitive)
+        if voice_profile_name and voice_profiles:
             if voice_profile_name in voice_profiles:
-                # Use voice profile settings directly - these are the user's intended settings
                 profile_options = voice_profiles[voice_profile_name].copy()
-                merged_options = {**self.default_options, **profile_options}
-                _LOGGER.debug("Using voice profile '%s' with settings: %s", voice_profile_name, profile_options)
             else:
-                _LOGGER.warning("Voice profile '%s' not found in profiles %s, using default options", 
-                              voice_profile_name, list(voice_profiles.keys()))
-                merged_options = {**self.default_options, **options}
+                # Case-insensitive fallback
+                for pname, pdata in voice_profiles.items():
+                    if pname.lower().strip() == voice_profile_name.lower().strip():
+                        profile_options = pdata.copy()
+                        voice_profile_name = pname
+                        break
+
+            if profile_options:
+                _LOGGER.info("Using voice profile '%s' (voice_id=%s)",
+                            voice_profile_name, profile_options.get("voice", "?"))
+            else:
+                _LOGGER.warning(
+                    "Voice '%s' did not match any profile %s — treating as raw voice ID",
+                    voice_profile_name, list(voice_profiles.keys()),
+                )
+
+        # ── Voice mood modulation (v3): stability + tag prefix ──
+        mood_options = {}
+        mood_tag_prefix = ""
+        if profile_options and voice_profile_name and self._mood_profile_map:
+            try:
+                kill_switch = self.hass.states.get(
+                    "input_boolean.ai_voice_mood_enabled"
+                )
+                if kill_switch and kill_switch.state == "on":
+                    _agent = self._mood_profile_map.get(voice_profile_name.lower().strip())
+                    if _agent:
+                        # Stability — the one VoiceSettings param v3 respects
+                        _st = self.hass.states.get(
+                            f"input_number.ai_voice_mood_{_agent}_stability"
+                        )
+                        if _st and _st.state not in ("unknown", "unavailable", ""):
+                            mood_options["stability"] = float(_st.state)
+                        # Tag prefix — for non-agent text (notifications, announcements)
+                        _tags = self.hass.states.get(
+                            f"sensor.ai_voice_mood_{_agent}_tags"
+                        )
+                        if _tags and _tags.state not in ("unknown", "unavailable", ""):
+                            mood_tag_prefix = _tags.state.strip()
+                        if mood_options or mood_tag_prefix:
+                            _LOGGER.debug(
+                                "Voice mood for '%s' (agent=%s): opts=%s tags='%s'",
+                                voice_profile_name, _agent, mood_options, mood_tag_prefix,
+                            )
+            except Exception as exc:
+                _LOGGER.warning("Voice mood failed: %s", exc)
+
+        # Build merged options: defaults < profile < mood < per-request overrides
+        # When "voice" was used to select a profile, exclude it from overrides
+        # so the profile's actual voice UUID isn't overwritten by the profile name
+        exclude_keys = {"voice_profile"}
+        if profile_options and "voice_profile" not in options:
+            # voice was used for profile matching — don't let it override the UUID
+            exclude_keys.add("voice")
+        api_options = {k: v for k, v in options.items() if k not in exclude_keys}
+        if profile_options:
+            # HA's TTS layer merges this entity's default_options INTO `options`
+            # before calling us, so `api_options` arrives carrying the defaults
+            # (notably model_id=DEFAULT_MODEL) as if they were deliberate
+            # per-request overrides. Merged last, they silently beat the voice
+            # profile — which forced every profile onto eleven_multilingual_v2
+            # and made v3 audio tags like [exhales] get read aloud as words.
+            # Keep only values that genuinely differ from the defaults, so real
+            # per-request overrides still win but HA-injected defaults do not.
+            _defaults = self.default_options
+            api_options = {
+                k: v for k, v in api_options.items() if _defaults.get(k) != v
+            }
+            merged_options = {**self.default_options, **profile_options, **mood_options, **api_options}
         else:
-            # Merge provided options with defaults
-            merged_options = {**self.default_options, **options}
-            _LOGGER.debug("No voice profile specified, using merged options")
+            merged_options = {**self.default_options, **api_options}
         
         voice_id = merged_options["voice"]
         model_id = merged_options["model_id"]
@@ -192,7 +269,12 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         speed = merged_options["speed"]
         use_speaker_boost = merged_options["use_speaker_boost"]
         apply_text_normalization = merged_options["apply_text_normalization"]
-        
+
+        # Inject mood tag prefix for non-tagged text (notifications, announcements).
+        # Agent conversation responses already contain tags — skip those.
+        if mood_tag_prefix and "[" not in message:
+            message = f"{mood_tag_prefix} {message}"
+
         voice_settings = VoiceSettings(
             stability=stability,
             similarity_boost=similarity_boost,

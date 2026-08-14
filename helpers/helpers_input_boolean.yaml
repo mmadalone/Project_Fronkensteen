@@ -745,3 +745,36 @@ ai_trace_watchdog_enabled:
   name: "AI Trace Watchdog - Enabled"
   icon: mdi:shield-search
   initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# lcars_* — LCARS theme control helpers
+# ═══════════════════════════════════════════════════════════════════
+# The LCARS theme (themes/lcars/lcars.yaml) gates its decorative sidebar
+# + header texture behind {% if not is_state('input_boolean.lcars_texture',
+# 'off') %}. The helper was never created, so the guard was always true and
+# the texture (diagonal gloss gradient + noise PNG over the 256px drawer
+# width) rendered unconditionally — the "band next to the sidebar".
+# Created with initial: false so the texture starts OFF; flip ON to enable.
+lcars_texture:
+  name: "LCARS Texture"
+  icon: mdi:gradient-vertical
+  initial: false
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_echo_guard — Satellite self-hearing guard (patched EOC)
+# ═══════════════════════════════════════════════════════════════════
+ai_echo_guard_enabled:
+  name: "AI Echo Guard - Enabled"
+  icon: mdi:ear-hearing-off
+  initial: true
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_eoc_disable_reasoning — strip reasoning tokens on OpenRouter
+# Reasoning models burn max_tokens on chain-of-thought, causing
+# finish_reason="length" truncation and 20s+ latency. Some endpoints
+# refuse to disable it (HTTP 400) — EOC falls back automatically.
+# ═══════════════════════════════════════════════════════════════════
+ai_eoc_disable_reasoning:
+  name: "AI EOC - Disable Reasoning Tokens (OpenRouter)"
+  icon: mdi:brain
+  initial: true

@@ -495,8 +495,8 @@ variables:
 triggers:
   # Fires after all integrations finish setup. `homeassistant: event: start`
   # fires too early — pyscript services may not be registered yet.
-  - trigger: event
-    event_type: homeassistant_started
+  - trigger: homeassistant
+    event: start
     id: startup
   - trigger: state
     entity_id: !input apply_button
@@ -528,9 +528,13 @@ actions:
       - condition: trigger
         id: startup
     then:
-      - alias: "Wait 15 seconds"
-        delay:
-          seconds: 15
+      - alias: "Wait for state_bridge seed (pyscript ready)"
+        # Was a blind 15s delay; pyscript needs 30-60s to load ~40 modules, so
+        # 15s could expire before the services below exist.
+        wait_template: >-
+          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+        timeout: "00:03:00"
+        continue_on_timeout: true
 
   # ── Step 1: Reload dispatcher cache (populates era helper options) ──
   - alias: "Reload dispatcher cache to refresh agent registry"

@@ -199,8 +199,8 @@ triggers:
 
   # Use homeassistant_started (late) instead of homeassistant.start (early)
   # — entities used by the cleanup logic are guaranteed available.
-  - trigger: event
-    event_type: homeassistant_started
+  - trigger: homeassistant
+    event: start
     id: startup
 
   - trigger: event

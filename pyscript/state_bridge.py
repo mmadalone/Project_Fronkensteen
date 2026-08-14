@@ -44,6 +44,34 @@ def _write_budget_state(data_json):
     _os.replace(tmp, "/config/pyscript/budget_state.json")
 
 
+# ── Last-Satellite Persistence ────────────────────────────────────────────────
+# sensor.ai_last_satellite is runtime state (state.set) so it does NOT survive a
+# restart. Seeding it to "" leaves voice_handoff.yaml's satellite-match condition
+# unsatisfiable (both clauses false: last_satellite=="" and satellite idle), so
+# the FIRST handoff after every reboot is silently dropped. Persist it instead.
+
+@pyscript_executor  # noqa: F821
+def _read_last_satellite():
+    """Read last_satellite.json — native Python, file I/O allowed (AP-55)."""
+    import json as _json
+    try:
+        with open("/config/pyscript/last_satellite.json", "r") as f:
+            return _json.load(f).get("entity_id") or ""
+    except (FileNotFoundError, ValueError, OSError, AttributeError):
+        return ""
+
+
+@pyscript_executor  # noqa: F821
+def _write_last_satellite(entity_id):
+    """Write last_satellite.json atomically — native Python."""
+    import json as _json
+    import os as _os
+    tmp = "/config/pyscript/last_satellite.json.tmp"
+    with open(tmp, "w") as f:
+        f.write(_json.dumps({"entity_id": entity_id}))
+    _os.replace(tmp, "/config/pyscript/last_satellite.json")
+
+
 # ── Budget Entity Lists ───────────────────────────────────────────────────────
 
 _BUDGET_COUNTER_ENTITIES = [
@@ -164,9 +192,14 @@ def _seed_migrated_sensors():
         )
 
     # ── Seed all sensors (use restored values for budget entities) ──
+    # Restore last-satellite so the first handoff after a reboot is not dropped.
+    last_sat = _read_last_satellite() or ""
+
     seeded = 0
     for entity_id, default, icon, fname in _STARTUP_SENSORS:
         restored_val = budget_counters.get(entity_id)
+        if entity_id == "sensor.ai_last_satellite" and last_sat:
+            restored_val = last_sat
         seed_val = str(restored_val) if restored_val is not None else default
         try:
             current = state.get(entity_id)  # noqa: F821
@@ -421,3 +454,13 @@ def _budget_shutdown_save():
         )
     except Exception:
         pass  # Best-effort — 15-min cron JSON is the primary safety net
+
+
+# ── Persist last-satellite on every change ────────────────────────────────────
+
+@state_trigger("sensor.ai_last_satellite")  # noqa: F821
+def _persist_last_satellite(**kwargs):
+    """Mirror sensor.ai_last_satellite to disk so it survives a restart."""
+    val = kwargs.get("value")
+    if val and val not in ("unknown", "unavailable", ""):
+        _write_last_satellite(val)

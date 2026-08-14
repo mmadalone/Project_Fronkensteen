@@ -245,10 +245,15 @@ mode: single
 triggers:
   - trigger: time_pattern
     hours: "/1"
-  # Use homeassistant_started (late) instead of homeassistant.start (early)
-  # — the latter fires before pyscript registers services.
-  - trigger: event
-    event_type: homeassistant_started
+  # Startup. MUST be the `homeassistant` trigger platform, NOT a generic event
+  # trigger on `homeassistant_started`: HA attaches automation triggers AT that
+  # event, so a generic event trigger misses the very event that arms it —
+  # verified 2026-08-14 (manual event fire worked, boot did not).
+  # The `homeassistant`/start platform is special-cased and fires reliably.
+  # It fires EARLY though, before pyscript registers services — which is what the
+  # `wait_template` readiness guard in `actions:` below exists to absorb.
+  - trigger: homeassistant
+    event: start
 
 variables:
   v_agent: !input agent_name
@@ -295,6 +300,20 @@ conditions:
     state: "on"
 
 actions:
+  # Startup race guard. On `homeassistant_started` this automation can fire
+  # before pyscript has registered `pyscript.set_sensor_value` (~40 modules,
+  # 30-60s to load), so the tag write silently fails and the personas stay flat
+  # until the next hourly tick. state_bridge seeds the tags sensor during its own
+  # pyscript startup, so waiting for it to leave unknown/unavailable proves
+  # pyscript is up. On the hourly trigger the sensor already exists -> passes
+  # instantly. See CLAUDE.md "Pyscript Startup Race".
+  - alias: "Wait for pyscript to be ready (startup race guard)"
+    wait_template: >-
+      {{ states('sensor.ai_voice_mood_' ~ v_agent ~ '_tags')
+         not in ['unknown', 'unavailable'] }}
+    timeout: "00:03:00"
+    continue_on_timeout: true
+
   - service: input_number.set_value
     target:
       entity_id: "input_number.ai_voice_mood_{{ v_agent }}_stability"

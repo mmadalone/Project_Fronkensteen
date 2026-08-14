@@ -534,8 +534,8 @@ triggers:
   # ── HA restart — auto-import interview files (fires after all
   # integrations finish setup so pyscript services are registered) ──
   - id: ha_start
-    trigger: event
-    event_type: homeassistant_started
+    trigger: homeassistant
+    event: start
 
 conditions:
   - condition: template
@@ -590,6 +590,18 @@ actions:
       - condition: template
         value_template: "{{ trigger.id == 'ha_start' and v_auto_import }}"
     then:
+      # Startup race guard: the `homeassistant`/start trigger fires before
+      # pyscript has registered its services (~40 modules, 30-60s). Verified
+      # 2026-08-14: this branch errored with "Action pyscript.user_interview_
+      # auto_import not found" while pyscript was still loading. continue_on_error
+      # does NOT catch a missing service — it aborts the whole if-block.
+      # state_bridge seeds sensor.ai_last_satellite during its own pyscript
+      # startup, so waiting on it is a direct readiness signal.
+      - alias: "Wait for pyscript to be ready"
+        wait_template: >-
+          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+        timeout: "00:03:00"
+        continue_on_timeout: true
       - action: pyscript.user_interview_auto_import
         continue_on_error: true
       - stop: "Auto-import complete"

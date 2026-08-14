@@ -124,8 +124,8 @@ triggers:
     id: scheduled
   # Use homeassistant_started (late) instead of homeassistant.start (early)
   # — the latter fires before pyscript registers services.
-  - trigger: event
-    event_type: homeassistant_started
+  - trigger: homeassistant
+    event: start
     id: ha_start
 
 conditions:
@@ -134,6 +134,15 @@ conditions:
       {{ trigger.id != 'ha_start' or v_run_on_start }}
 
 actions:
+  # Readiness guard. The existing "Startup delay" input below is a SEMANTIC delay
+  # (music_taste's own startup handler restores a profile ~15s in and would
+  # overwrite a rebuild), not a pyscript-readiness wait — and 30s can expire
+  # before pyscript finishes loading ~40 modules. Both are needed.
+  - alias: "0 · Wait for pyscript to be ready"
+    wait_template: >-
+      {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+    timeout: "00:03:00"
+    continue_on_timeout: true
   - alias: "Startup delay — let pyscript finish initializing"
     if:
       - condition: template

@@ -1,16 +1,31 @@
 blueprint:
-  name: "🚽💡 Smart Bathroom Occupancy Light Control (Door + Shower Zone Optional)"
+  name: "🚽💡 Smart Bathroom Occupancy Light (multi-zone, dropout-proof)"
   author: Murat Çeşmecioğlu (modified by Madalone & Miquel)
   description: '![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/smart-bathroom-header.jpeg)
 
     # Smart Bathroom Occupancy Light Control
 
-    Occupancy-aware bathroom light with optional door sensor and shower zone
-    support. Enable toggles to activate optional sensors — disabled sensors
-    are ignored. When shower zone is active (e.g. Aqara FP2 zone), the light
-    stays on even if the main motion sensor clears behind a glass shower door.
+    Occupancy-aware bathroom light built to survive flaky mmWave presence
+    sensors (e.g. Aqara FP2) that briefly drop presence while you are still in
+    the room. Occupancy = the logical OR of every configured presence zone
+    (primary + optional shower + optional extra zones). The light turns ON the
+    instant ANY zone reports presence, and only turns OFF once ALL zones have
+    been continuously clear for the configurable grace period — so momentary
+    radar dropouts never kill the light mid-use. Optional door welcome, daylight
+    (lux) gate, light-appearance overrides, and a safety max-on cap. Every
+    behavioural value is an exposed input — nothing is hardcoded.
 
     ### Recent changes
+
+    - **v7:** Rewrite — occupancy = OR(primary, shower, extra zones); single
+      grace-period off via template trigger `for:` that auto-resets on any
+      dropout pulse (rides out FP2 false-offs); mode: restart; collapsed the
+      7-branch state machine to 3 branches. New inputs: extra_presence_sensors,
+      presence_grace, on_confirm_delay, safety_max_on, light-appearance
+      overrides (brightness/color temp/transition), daylight lux gate,
+      welcome_on_door. All prior input keys preserved (instances migrate with no
+      edits); helper is now an optional status mirror; delay_before_motion_check
+      and exit_wait_timeout retained as legacy/no-op. Zero hardcoded values.
 
     - **v6:** AP-08 audit exemption note (accepted complexity), Branch 6 continue_on_error consistency fix
 
@@ -36,19 +51,61 @@ blueprint:
       name: "① Sensors & detection"
       icon: mdi:motion-sensor
       collapsed: false
-      description: Configure motion, door, and shower zone sensors.
+      description: >-
+        Configure the presence zones (occupancy = OR of all of them), plus
+        optional door and shower sensors.
       input:
         motion_sensor:
-          name: Motion Sensor
+          name: Primary presence sensor
           description: >-
-            Primary motion/occupancy sensor for the bathroom. Detects entry
-            and ongoing presence.
+            Main motion/occupancy sensor for the bathroom (e.g. the Aqara FP2
+            bathroom zone). Detects entry and ongoing presence.
           selector:
             entity:
               domain:
                 - binary_sensor
               multiple: false
           default: ""
+
+        extra_presence_sensors:
+          name: Extra presence zones (optional)
+          description: >-
+            Additional presence zones to OR into occupancy (e.g. FP2 sink/toilet
+            zones). ANY of these being "on" keeps the room occupied. Leave empty
+            if you only have one zone.
+          default: []
+          selector:
+            entity:
+              domain:
+                - binary_sensor
+              multiple: true
+
+        use_shower_zone:
+          name: Use Shower Zone Sensor?
+          description: >-
+            Enable if you have a dedicated presence zone covering the shower
+            (e.g. an Aqara FP2 shower zone). It is OR-ed into occupancy so the
+            light stays on while showering behind a glass door.
+          default: false
+          selector:
+            boolean: {}
+
+        shower_zone_sensor:
+          name: Shower Zone Sensor
+          description: >-
+            Presence zone sensor for the shower area. Only evaluated when
+            "Use Shower Zone Sensor?" is enabled — safe to leave empty
+            if disabled.
+          default: ""
+          selector:
+            entity:
+              domain:
+                - binary_sensor
+              device_class:
+                - occupancy
+                - presence
+                - motion
+              multiple: false
 
         use_door_sensor:
           name: Use Door Sensor?
@@ -74,41 +131,14 @@ blueprint:
                 - opening
               multiple: false
 
-        use_shower_zone:
-          name: Use Shower Zone Sensor?
-          description: >-
-            Enable if you have a dedicated presence zone covering the shower
-            (e.g. Aqara FP2 zone). Prevents premature light-off while
-            showering behind a glass door.
-          default: false
-          selector:
-            boolean: {}
-
-        shower_zone_sensor:
-          name: Shower Zone Sensor
-          description: >-
-            Presence zone sensor for the shower area. Only evaluated when
-            "Use Shower Zone Sensor?" is enabled — safe to leave empty
-            if disabled.
-          default: ""
-          selector:
-            entity:
-              domain:
-                - binary_sensor
-              device_class:
-                - occupancy
-                - presence
-                - motion
-              multiple: false
-
     # ===========================================================================
-    # ② LIGHTS & HELPERS
+    # ② LIGHTS & HELPER
     # ===========================================================================
     lights_helpers:
-      name: "② Lights & helpers"
+      name: "② Lights & helper"
       icon: mdi:lightbulb-outline
       collapsed: true
-      description: Target light and occupancy tracking helper.
+      description: Target light/switch and the optional occupancy status helper.
       input:
         light_entity:
           name: Bathroom Light
@@ -126,11 +156,11 @@ blueprint:
               multiple: false
 
         helper_entity:
-          name: Occupancy Helper
+          name: Occupancy Helper (optional)
           description: >-
-            An input_boolean that tracks whether the bathroom is currently
-            occupied. Must be a dedicated helper — create one in
-            Settings → Helpers if you don't have one.
+            Optional input_boolean that mirrors whether the bathroom is occupied
+            (handy for other automations/dashboards). The light logic no longer
+            depends on it — leave blank to disable mirroring.
           default: ""
           selector:
             entity:
@@ -139,19 +169,126 @@ blueprint:
               multiple: false
 
     # ===========================================================================
-    # ③ TIMING
+    # ③ LIGHT APPEARANCE (only applies when the target is a light)
+    # ===========================================================================
+    appearance:
+      name: "③ Light appearance"
+      icon: mdi:brightness-6
+      collapsed: true
+      description: >-
+        Optional on/off appearance overrides. Only applied when the target is a
+        light entity; switches/input_booleans ignore them. Leave at 0 to use the
+        device default (plain on/off).
+      input:
+        turn_on_brightness_pct:
+          name: Turn-on brightness (%)
+          description: "Brightness to set on turn-on. 0 = don't set (device default)."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              unit_of_measurement: "%"
+              mode: slider
+
+        turn_on_color_temp_kelvin:
+          name: Turn-on color temperature (K)
+          description: "Color temperature to set on turn-on. 0 = don't set."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 6500
+              step: 50
+              unit_of_measurement: K
+              mode: slider
+
+        on_transition:
+          name: On transition (s)
+          description: "Fade-in time on turn-on. 0 = instant."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 1
+              unit_of_measurement: s
+              mode: slider
+
+        off_transition:
+          name: Off transition (s)
+          description: "Fade-out time on turn-off. 0 = instant."
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 1
+              unit_of_measurement: s
+              mode: slider
+
+    # ===========================================================================
+    # ④ TIMING
     # ===========================================================================
     timing:
-      name: "③ Timing"
+      name: "④ Timing"
       icon: mdi:clock-outline
       collapsed: true
-      description: Motion sensor delay and exit wait timeout.
+      description: Grace period, on-confirm delay, and safety cap.
       input:
-        delay_before_motion_check:
-          name: Motion Sensor Delay
+        presence_grace:
+          name: Occupancy Grace Period
           description: >-
-            How long after the motion sensor clears before treating it as
-            "no motion." Accounts for sensor cooldown time. Default 2s.
+            How long ALL presence zones must stay continuously clear before the
+            room is treated as empty and the light turns off. Set this LONGER
+            than your sensor's worst-case presence dropout (the Aqara FP2 can
+            drop to "off" for ~5 min while you are still present). Default 360s
+            (6 min). Each presence pulse resets this timer, so dropouts never
+            trigger an off.
+          default: 360
+          selector:
+            number:
+              min: 30
+              max: 900
+              step: 10
+              unit_of_measurement: s
+              mode: slider
+
+        on_confirm_delay:
+          name: On-confirm Delay
+          description: >-
+            How long presence must persist before turning the light on. 0 =
+            instant (recommended for a bathroom). Raise slightly only if a single
+            stray pulse falsely turns the light on.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 60
+              step: 1
+              unit_of_measurement: s
+              mode: slider
+
+        safety_max_on:
+          name: Safety Max-on Cap
+          description: >-
+            Failsafe: force the light off after it has been on continuously for
+            this long, even if presence appears stuck on. 0 = disabled.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 240
+              step: 5
+              unit_of_measurement: min
+              mode: slider
+
+        delay_before_motion_check:
+          name: "Motion Sensor Delay (legacy — unused)"
+          description: >-
+            Legacy input retained for backward compatibility. No longer used —
+            superseded by the Occupancy Grace Period.
           default: 2
           selector:
             number:
@@ -162,11 +299,10 @@ blueprint:
               mode: slider
 
         exit_wait_timeout:
-          name: Exit Wait Timeout
+          name: "Exit Wait Timeout (legacy — unused)"
           description: >-
-            Maximum time to wait for motion to stop and shower zone to clear
-            after the door opens (branch 3). Prevents the automation from
-            hanging indefinitely if a sensor fails. Default 30 minutes.
+            Legacy input retained for backward compatibility. No longer used —
+            superseded by the Occupancy Grace Period.
           default: 30
           selector:
             number:
@@ -176,299 +312,246 @@ blueprint:
               unit_of_measurement: min
               mode: slider
 
-mode: single
+    # ===========================================================================
+    # ⑤ DAYLIGHT GATE (optional)
+    # ===========================================================================
+    daylight:
+      name: "⑤ Daylight gate"
+      icon: mdi:white-balance-sunny
+      collapsed: true
+      description: >-
+        Optionally only auto-turn-on when the room is dark. Never blocks turn-off,
+        and fails open (turns on anyway) if the lux sensor is unavailable.
+      input:
+        use_lux_gate:
+          name: Use daylight (lux) gate?
+          description: Only turn the light on when measured illuminance is below the threshold.
+          default: false
+          selector:
+            boolean: {}
+
+        lux_sensor:
+          name: Illuminance sensor
+          description: >-
+            Lux sensor used for the daylight gate (e.g. the FP2 light-level
+            sensor). Only evaluated when the gate is enabled.
+          default: ""
+          selector:
+            entity:
+              domain:
+                - sensor
+              device_class:
+                - illuminance
+              multiple: false
+
+        lux_threshold:
+          name: Lux threshold
+          description: "Only turn on when illuminance is below this value (lx)."
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 1000
+              step: 5
+              unit_of_measurement: lx
+              mode: slider
+
+    # ===========================================================================
+    # ⑥ BEHAVIOR
+    # ===========================================================================
+    behavior:
+      name: "⑥ Behavior"
+      icon: mdi:tune
+      collapsed: true
+      description: Optional behavioral toggles.
+      input:
+        welcome_on_door:
+          name: Welcome light on door open
+          description: >-
+            When a door sensor is enabled, turn the light on the moment the door
+            opens while the room is empty (before the radar catches you).
+          default: true
+          selector:
+            boolean: {}
+
+# mode: restart is an invariant — a new presence event must pre-empt any in-flight
+# run; the grace lives in the trigger layer so this never resets the off-timer.
+mode: restart
+max_exceeded: silent
 
 trigger_variables:
+  primary: !input motion_sensor
+  has_shower: !input use_shower_zone
+  shower: !input shower_zone_sensor
+  extras: !input extra_presence_sensors
   has_door: !input use_door_sensor
-  door_entity: !input door_sensor
-  has_shower_zone: !input use_shower_zone
-  shower_zone: !input shower_zone_sensor
+  door: !input door_sensor
+  safety_minutes: !input safety_max_on
 
 variables:
+  primary: !input motion_sensor
+  has_shower: !input use_shower_zone
+  shower: !input shower_zone_sensor
+  extras: !input extra_presence_sensors
   has_door: !input use_door_sensor
-  door_entity: !input door_sensor
-  has_shower_zone: !input use_shower_zone
-  shower_zone: !input shower_zone_sensor
-  exit_timeout: !input exit_wait_timeout
+  door: !input door_sensor
+  light: !input light_entity
+  helper: !input helper_entity
+  br: !input turn_on_brightness_pct
+  ctk: !input turn_on_color_temp_kelvin
+  on_tr: !input on_transition
+  off_tr: !input off_transition
+  use_lux: !input use_lux_gate
+  lux: !input lux_sensor
+  lux_threshold: !input lux_threshold
+  welcome_door: !input welcome_on_door
+  safety_minutes: !input safety_max_on
+  is_light: "{{ (light | string).startswith('light.') }}"
+  helper_set: "{{ helper not in [none, '', {}] }}"
+  any_present: >-
+    {{ (([primary] if primary not in [none, '', {}] else [])
+        + ([shower] if (has_shower and shower not in [none, '', {}]) else [])
+        + (extras if (extras is iterable and extras is not string) else []))
+       | select('is_state', 'on') | list | count > 0 }}
+  on_appearance_set: >-
+    {{ is_light and ((br | int(0)) > 0 or (ctk | int(0)) > 0 or (on_tr | int(0)) > 0) }}
+  off_appearance_set: "{{ is_light and (off_tr | int(0)) > 0 }}"
+  on_service: "{{ 'light.turn_on' if on_appearance_set else 'homeassistant.turn_on' }}"
+  off_service: "{{ 'light.turn_off' if off_appearance_set else 'homeassistant.turn_off' }}"
+  turn_on_data: >-
+    {{ ({}
+        | combine({'brightness_pct': (br | int)} if (br | int(0)) > 0 else {})
+        | combine({'color_temp_kelvin': (ctk | int)} if (ctk | int(0)) > 0 else {})
+        | combine({'transition': (on_tr | int)} if (on_tr | int(0)) > 0 else {})) if is_light else {} }}
+  turn_off_data: "{{ {'transition': (off_tr | int)} if off_appearance_set else {} }}"
+  lux_ok: >-
+    {{ (not use_lux)
+       or (lux in [none, '', {}])
+       or (states(lux) in ['unknown', 'unavailable'])
+       or ((states(lux) | float(0)) < (lux_threshold | float(0))) }}
 
 triggers:
-  - alias: "Door opened — template trigger, only active when door sensor enabled"
+  - alias: "Presence detected in any configured zone — turn on"
     trigger: template
-    id: door_opened
+    id: presence_on
     value_template: >-
-      {{ has_door and door_entity not in [none, '', {}]
-         and is_state(door_entity, 'on') }}
+      {{ (([primary] if primary not in [none, '', {}] else [])
+          + ([shower] if (has_shower and shower not in [none, '', {}]) else [])
+          + (extras if (extras is iterable and extras is not string) else []))
+         | select('is_state', 'on') | list | count > 0 }}
+    for:
+      seconds: !input on_confirm_delay
 
-  - alias: "Door closed — template trigger, only active when door sensor enabled"
-    trigger: template
-    id: door_closed
-    value_template: >-
-      {{ has_door and door_entity not in [none, '', {}]
-         and is_state(door_entity, 'off') }}
-
-  - alias: "Motion detected in bathroom"
+  - alias: "Primary zone on (state trigger — guarantees entity tracking)"
     trigger: state
     entity_id: !input motion_sensor
     to: "on"
-    id: motion_detected
-
-  - alias: "Motion stopped — cleared after configurable delay"
-    trigger: state
-    entity_id: !input motion_sensor
-    to: "off"
     for:
-      seconds: !input delay_before_motion_check
-    id: motion_stopped
+      seconds: !input on_confirm_delay
+    id: presence_on
 
-  - alias: "Shower zone cleared — only active when shower zone enabled"
+  - alias: "All presence zones clear for the grace period — turn off (the fix)"
     trigger: template
-    id: shower_zone_cleared
+    id: all_clear
     value_template: >-
-      {{ has_shower_zone and shower_zone not in [none, '', {}]
-         and is_state(shower_zone, 'off') }}
+      {{ (([primary] if primary not in [none, '', {}] else [])
+          + ([shower] if (has_shower and shower not in [none, '', {}]) else [])
+          + (extras if (extras is iterable and extras is not string) else []))
+         | select('is_state', 'on') | list | count == 0 }}
     for:
-      seconds: 5
+      seconds: !input presence_grace
+
+  - alias: "Door opened — welcome light (only active when door enabled)"
+    trigger: template
+    id: door_opened
+    value_template: >-
+      {{ has_door and door not in [none, '', {}] and is_state(door, 'on') }}
+
+  - alias: "Light on past the safety cap — force off (disabled when cap = 0)"
+    trigger: state
+    entity_id: !input light_entity
+    to: "on"
+    for:
+      minutes: "{{ safety_minutes if (safety_minutes | int(0)) > 0 else 100000 }}"
+    id: safety_cap
 
 conditions: []
 
 actions:
-  # AP-08 exemption (audited 2026-02-19): actions block exceeds 200-line /
-  # 4-level nesting thresholds. Accepted — complexity is intrinsic to
-  # 7-branch door/motion/shower state machine. Branch 3 is deepest at ~5-6
-  # levels due to sequential wait cascades with timeout handling.
-  - alias: "State machine — choose branch by trigger + conditions"
+  - alias: "Route by trigger id"
     choose:
-      # ── Branch 1: Motion stopped, room empty, no shower → lights off ────────
-      - alias: "Motion stopped + (no door or door open) + occupied + no shower → turn off"
+      # ── Turn ON: any presence detected, or welcome-on-door while empty ──────
+      - alias: "Turn light ON (presence, or door welcome while empty)"
         conditions:
-          - condition: trigger
-            id: motion_stopped
           - condition: template
             value_template: >-
-              {{ not has_door
-                 or (door_entity not in [none, '', {}]
-                     and is_state(door_entity, 'on')) }}
-          - condition: state
-            entity_id: !input helper_entity
-            state: "on"
+              {{ (trigger.id == 'presence_on')
+                 or (trigger.id == 'door_opened' and welcome_door and not any_present) }}
           - condition: template
-            value_template: >-
-              {{ not (has_shower_zone
-                 and shower_zone not in [none, '', {}]
-                 and is_state(shower_zone, 'on')) }}
+            value_template: "{{ not is_state(light, 'on') }}"
+          - condition: template
+            value_template: "{{ lux_ok }}"
         sequence:
-          - alias: "Turn off bathroom light — room is empty"
-            action: homeassistant.turn_off
+          - alias: "Turn on bathroom light (appearance-aware service + data)"
+            action: "{{ on_service }}"
             target:
               entity_id: !input light_entity
+            data: "{{ turn_on_data }}"
             continue_on_error: true
-
-          - alias: "Clear occupancy helper"
-            action: input_boolean.turn_off
-            target:
-              entity_id: !input helper_entity
-
-      # ── Branch 2: Door opened, nobody inside → welcome light ────────────────
-      - alias: "Door opened + not occupied → turn on light (someone entering)"
-        conditions:
-          - condition: trigger
-            id: door_opened
-          - condition: template
-            value_template: "{{ has_door }}"
-          - condition: state
-            entity_id: !input helper_entity
-            state: "off"
-        sequence:
-          - alias: "Turn on bathroom light — door opened, new entry"
-            action: homeassistant.turn_on
-            target:
-              entity_id: !input light_entity
-            continue_on_error: true
-
-      # ── Branch 3: Door opened while occupied → wait for exit ────────────────
-      # (before Branches 4/5 — door_opened trigger must match here first when
-      #  helper is on, otherwise Branch 4's motion_detected would never conflict)
-      - alias: "Door opened + occupied → wait for exit (motion stop + shower clear)"
-        conditions:
-          - condition: trigger
-            id: door_opened
-          - condition: template
-            value_template: "{{ has_door }}"
-          - condition: state
-            entity_id: !input helper_entity
-            state: "on"
-        sequence:
-          - alias: "Wait for motion to clear (skip if sensor already off)"
+          - alias: "Mirror occupancy helper on (optional)"
             if:
-              - condition: state
-                entity_id: !input motion_sensor
-                state: "on"
+              - condition: template
+                value_template: "{{ helper_set }}"
             then:
-              - alias: "Wait for motion to stop — person leaving bathroom"
-                wait_for_trigger:
-                  - trigger: state
-                    entity_id: !input motion_sensor
-                    to: "off"
-                    for:
-                      seconds: !input delay_before_motion_check
-                timeout:
-                  minutes: "{{ exit_timeout }}"
-                continue_on_timeout: true
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: !input helper_entity
 
-              - alias: "Handle motion wait timeout — clean up if sensor never cleared"
-                if:
-                  - condition: template
-                    value_template: "{{ not wait.completed }}"
-                then:
-                  - alias: "Turn off light — motion wait timed out, forcing cleanup"
-                    action: homeassistant.turn_off
-                    target:
-                      entity_id: !input light_entity
-                    continue_on_error: true
-
-                  - alias: "Clear occupancy helper — timeout cleanup"
-                    action: input_boolean.turn_off
-                    target:
-                      entity_id: !input helper_entity
-
-                  - alias: "Stop: Motion sensor timed out after door opened — forced cleanup."
-                    stop: "Motion sensor timed out after door opened — forced cleanup."
-
-          - alias: "Check if shower zone needs to clear before turning off"
-            choose:
-              - alias: "Shower zone still active — wait for it to clear"
-                conditions:
-                  # Live is_state() check — NOT a pre-computed variable (§3.4 caveat:
-                  # state may have changed during the preceding motion wait)
-                  - condition: template
-                    value_template: >-
-                      {{ has_shower_zone
-                         and shower_zone not in [none, '', {}]
-                         and is_state(shower_zone, 'on') }}
-                sequence:
-                  - alias: "Wait for shower zone to clear"
-                    wait_for_trigger:
-                      - trigger: template
-                        value_template: >-
-                          {{ not (has_shower_zone
-                             and shower_zone not in [none, '', {}]
-                             and is_state(shower_zone, 'on')) }}
-                    timeout:
-                      minutes: "{{ exit_timeout }}"
-                    continue_on_timeout: true
-
-                  - alias: "Handle shower zone wait timeout — clean up if zone never cleared"
-                    if:
-                      - condition: template
-                        value_template: "{{ not wait.completed }}"
-                    then:
-                      - alias: "Turn off light — shower zone wait timed out"
-                        action: homeassistant.turn_off
-                        target:
-                          entity_id: !input light_entity
-                        continue_on_error: true
-
-                      - alias: "Clear occupancy helper — shower timeout cleanup"
-                        action: input_boolean.turn_off
-                        target:
-                          entity_id: !input helper_entity
-
-                      - alias: "Stop: Shower zone timed out — forced cleanup."
-                        stop: "Shower zone timed out — forced cleanup."
-
-          - alias: "Turn off bathroom light — person has left"
-            action: homeassistant.turn_off
-            target:
-              entity_id: !input light_entity
-            continue_on_error: true
-
-          - alias: "Clear occupancy helper — exit complete"
-            action: input_boolean.turn_off
-            target:
-              entity_id: !input helper_entity
-
-      # ── Branch 4: Motion + door open/no door → light on + mark occupied ─────
-      # (before Branch 5 — more specific: handles light AND helper. Branch 5
-      #  only fires when this doesn't match, i.e. door is closed)
-      - alias: "Motion detected + (no door or door open) → light on and mark occupied"
+      # ── Turn OFF: all zones clear for the full grace period ─────────────────
+      - alias: "Turn light OFF — room truly empty (all zones clear for grace)"
         conditions:
           - condition: trigger
-            id: motion_detected
+            id: all_clear
           - condition: template
-            value_template: >-
-              {{ not has_door
-                 or (door_entity not in [none, '', {}]
-                     and is_state(door_entity, 'on')) }}
+            value_template: "{{ not any_present }}"
         sequence:
-          - alias: "Turn on bathroom light — motion confirmed with open/no door"
-            action: homeassistant.turn_on
+          - alias: "Turn off bathroom light (appearance-aware service + data)"
+            action: "{{ off_service }}"
             target:
               entity_id: !input light_entity
+            data: "{{ turn_off_data }}"
             continue_on_error: true
+          - alias: "Mirror occupancy helper off (optional)"
+            if:
+              - condition: template
+                value_template: "{{ helper_set }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: !input helper_entity
 
-          - alias: "Set occupancy helper on"
-            action: input_boolean.turn_on
-            target:
-              entity_id: !input helper_entity
-
-      # ── Branch 5: Motion + helper off → mark occupied (door closed case) ────
-      - alias: "Motion detected + helper off → mark room as occupied"
+      # ── Safety cap: force off after max-on time ─────────────────────────────
+      - alias: "Safety cap — light on too long, force off"
         conditions:
           - condition: trigger
-            id: motion_detected
-          - condition: state
-            entity_id: !input helper_entity
-            state: "off"
-        sequence:
-          - alias: "Set occupancy helper on — someone is in the bathroom"
-            action: input_boolean.turn_on
-            target:
-              entity_id: !input helper_entity
-
-      # ── Branch 6: Door closed while not occupied → light off ────────────────
-      - alias: "Door closed + not occupied → turn off light"
-        conditions:
-          - condition: trigger
-            id: door_closed
+            id: safety_cap
           - condition: template
-            value_template: "{{ has_door }}"
-          - condition: state
-            entity_id: !input helper_entity
-            state: "off"
+            value_template: "{{ (safety_minutes | int(0)) > 0 }}"
         sequence:
-          - alias: "Turn off bathroom light — door closed, nobody inside"
-            action: homeassistant.turn_off
+          - alias: "Force off bathroom light — safety cap exceeded"
+            action: "{{ off_service }}"
             target:
               entity_id: !input light_entity
+            data: "{{ turn_off_data }}"
             continue_on_error: true
-
-      # ── Branch 7: Shower cleared + occupied + motion off → turn off ─────────
-      - alias: "Shower zone cleared + occupied + motion off + (no door or door open) → turn off"
-        conditions:
-          - condition: trigger
-            id: shower_zone_cleared
-          - condition: state
-            entity_id: !input helper_entity
-            state: "on"
-          - condition: state
-            entity_id: !input motion_sensor
-            state: "off"
-          - condition: template
-            value_template: >-
-              {{ not has_door
-                 or (door_entity not in [none, '', {}]
-                     and is_state(door_entity, 'on')) }}
-        sequence:
-          - alias: "Turn off bathroom light — shower zone cleared, motion already off"
-            action: homeassistant.turn_off
-            target:
-              entity_id: !input light_entity
-            continue_on_error: true
-
-          - alias: "Clear occupancy helper — shower exit complete"
-            action: input_boolean.turn_off
-            target:
-              entity_id: !input helper_entity
+          - alias: "Mirror occupancy helper off — safety cap"
+            if:
+              - condition: template
+                value_template: "{{ helper_set }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: !input helper_entity
 
     default:
       - alias: "No matching branch — no action needed"

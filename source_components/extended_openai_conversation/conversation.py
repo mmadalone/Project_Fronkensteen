@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from openai._exceptions import (
     APITimeoutError,
+    BadRequestError,
     InternalServerError,
     NotFoundError,
     OpenAIError,
@@ -124,6 +125,11 @@ _JSON_TOOL_OBJECT = re.compile(
 # Transient errors that warrant retrying with a fallback model
 _FALLBACK_ELIGIBLE_ERRORS = (APITimeoutError, RateLimitError, InternalServerError, NotFoundError)
 
+# Models whose endpoint refuses reasoning control ("Reasoning is mandatory for this
+# endpoint and cannot be disabled" -> HTTP 400). Learned at runtime, then skipped.
+# Without this, the reasoning flag silently 400s a whole class of models.
+_REASONING_LOCKED_MODELS: set[str] = set()
+
 
 def _token_kwargs_for_model(model: str, max_tokens: int) -> dict:
     """Return the correct token parameter dict for the given model."""
@@ -171,6 +177,8 @@ class ExtendedOpenAIAgentEntity(
         self.entry = entry
         self.subentry = subentry
         self.history: dict[str, list[dict]] = {}
+        # Echo guard: conversation_id -> (normalised reply words, monotonic ts)
+        self._last_reply: dict[str, tuple[list[str], float]] = {}
 
         self.options = subentry.data
         self._attr_unique_id = subentry.subentry_id
@@ -201,6 +209,96 @@ class ExtendedOpenAIAgentEntity(
         ):
             return await self._async_handle_message(user_input, chat_log)
 
+    def _reasoning_extra_body(self, model: str) -> dict:
+        """Build the OpenRouter `reasoning` override, if it applies.
+
+        Gated on input_boolean.ai_eoc_disable_reasoning (user-config, not
+        hardcoded) and skipped for models known to reject it.
+        """
+        if model in _REASONING_LOCKED_MODELS:
+            return {}
+        try:
+            if "openrouter" not in str(self.client.base_url).lower():
+                return {}
+        except AttributeError:
+            return {}
+        try:
+            st = self.hass.states.get("input_boolean.ai_eoc_disable_reasoning")
+            if st is not None and st.state == "off":
+                return {}
+        except AttributeError:
+            pass
+        return {"reasoning": {"enabled": False}}
+
+    def _echo_guard_cfg(self) -> tuple[bool, float, int, float]:
+        """Read echo-guard tuning from helpers — user-config, not hardcoded.
+
+        Mirrors the house convention (input_number.ai_tts_* for playback tuning).
+        Falls back to safe defaults if a helper is missing so the component still
+        works on a fresh install before helpers are merged.
+        """
+        def _num(entity_id: str, default: float) -> float:
+            try:
+                st = self.hass.states.get(entity_id)
+                if st is not None and st.state not in ("unknown", "unavailable", ""):
+                    return float(st.state)
+            except (ValueError, TypeError, AttributeError):
+                pass
+            return default
+
+        enabled = True
+        try:
+            st = self.hass.states.get("input_boolean.ai_echo_guard_enabled")
+            if st is not None and st.state in ("on", "off"):
+                enabled = st.state == "on"
+        except AttributeError:
+            pass
+        return (
+            enabled,
+            _num("input_number.ai_echo_guard_overlap", 0.8),
+            int(_num("input_number.ai_echo_guard_min_words", 5)),
+            _num("input_number.ai_echo_guard_window_s", 60),
+        )
+
+    @staticmethod
+    def _echo_words(text: str) -> list[str]:
+        """Normalise to a word list for echo comparison."""
+        import re as _re
+        return _re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split()
+
+    def _is_self_echo(self, conversation_id: str, text: str) -> bool:
+        """True if `text` is the satellite mic re-hearing our own last reply.
+
+        The Voice PE reopens its mic on continue_conversation while the TTS is
+        still playing, so STT transcribes the agent's own speech as the next user
+        turn. Captured live 2026-08-14:
+            user turn 1: "Who am I talking to?"
+            user turn 2: "McQuell, you're talking to Cosmo Kramer, your neigh..."
+        A real follow-up is short and paraphrased; an echo is a long CONTIGUOUS
+        run of our own words. Require >=5 words and an exact sub-sequence match
+        within 60s to avoid blocking genuine replies.
+        """
+        import time as _time
+        enabled, min_overlap, min_words, window_s = self._echo_guard_cfg()
+        if not enabled:
+            return False
+        prev = self._last_reply.get(conversation_id)
+        if not prev:
+            return False
+        prev_words, ts = prev
+        if _time.monotonic() - ts > window_s:
+            return False
+        words = self._echo_words(text)
+        if len(words) < min_words or not prev_words:
+            return False
+        # STT never transcribes TTS verbatim ("Miquel" came back as "McQuell"),
+        # so exact sub-sequence matching would never fire. Use word overlap:
+        # an echo reuses almost all of our vocabulary; a genuine follow-up does
+        # not. Threshold and word floor come from helpers, not hardcoded here.
+        uniq = set(words)
+        overlap = len(uniq & set(prev_words)) / len(uniq)
+        return overlap >= min_overlap
+
     async def _async_handle_message(
         self,
         user_input: ConversationInput,
@@ -210,6 +308,19 @@ class ExtendedOpenAIAgentEntity(
         exposed_entities = self.get_exposed_entities()
 
         conversation_id = chat_log.conversation_id
+        if self._is_self_echo(conversation_id, user_input.text):
+            _LOGGER.warning(
+                "Echo guard: dropped self-heard utterance %r (satellite mic "
+                "transcribed our own TTS)", (user_input.text or "")[:80],
+            )
+            intent_response = intent.IntentResponse(language=user_input.language)
+            intent_response.async_set_speech("")
+            return conversation.ConversationResult(
+                response=intent_response,
+                conversation_id=conversation_id,
+                continue_conversation=False,
+            )
+
         if conversation_id in self.history:
             messages = self.history[conversation_id]
         else:
@@ -324,6 +435,10 @@ class ExtendedOpenAIAgentEntity(
         # Detect if LLM is asking a follow-up question to enable continued conversation
         response_text = self._sanitize_for_speech(query_response.message.content) or ""
         response_lower = response_text.lower()
+        import time as _time_mod
+        self._last_reply[conversation_id] = (
+            self._echo_words(response_text), _time_mod.monotonic(),
+        )
 
         is_farewell = any(
             phrase in response_lower
@@ -353,6 +468,16 @@ class ExtendedOpenAIAgentEntity(
                 ]
             )
         )
+
+        # NOTE (2026-08-14): continue_conversation was briefly forced OFF here after
+        # the satellite mic transcribed the agent's own TTS as the next user turn.
+        # Root causes have since been fixed: reasoning tokens disabled (replies are
+        # now ~35 tokens instead of truncating at 1500) and finished_speaking_detection
+        # moved relaxed -> aggressive. Re-enabled deliberately: the user wants the mic
+        # to reopen when a persona asks a question.
+        # If self-hearing returns, do NOT just disable this again -- the fix is either
+        # lower speaker volume (AEC headroom) or an echo guard comparing the incoming
+        # utterance against the previous response for the same conversation_id.
 
         return conversation.ConversationResult(
             response=intent_response,
@@ -648,7 +773,15 @@ class ExtendedOpenAIAgentEntity(
 
         token_kwargs = _token_kwargs_for_model(model, max_tokens)
 
-        response = await self.client.chat.completions.create(
+        # PATCH: OpenRouter free-tier models are reasoning models. Reasoning tokens
+        # count against max_tokens -> finish_reason="length" truncation (the persona
+        # speaks "token length exceeded") and 20s+ latency. Measured on
+        # nvidia/nemotron-3-super-120b-a12b:free -- 96 completion tokens baseline vs
+        # 33 with reasoning disabled. effort=low is WORSE (135); exclude=true hides
+        # reasoning but still consumes it (105). Only applied to OpenRouter.
+        extra_body = self._reasoning_extra_body(model)
+
+        create_kwargs = dict(
             model=model,
             messages=messages,
             top_p=top_p,
@@ -658,6 +791,21 @@ class ExtendedOpenAIAgentEntity(
             **token_kwargs,
             **tool_kwargs,
         )
+        try:
+            response = await self.client.chat.completions.create(
+                extra_body=extra_body, **create_kwargs
+            )
+        except BadRequestError as err:
+            # Some endpoints mandate reasoning and 400 the flag. Remember and retry
+            # clean, so one provider quirk can't disqualify a model entirely.
+            if not extra_body or "reasoning" not in str(err).lower():
+                raise
+            _LOGGER.warning(
+                "Model %s rejects reasoning control (%s) — retrying without it "
+                "and disabling the flag for this model", model, str(err)[:120],
+            )
+            _REASONING_LOCKED_MODELS.add(model)
+            response = await self.client.chat.completions.create(**create_kwargs)
 
         _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
 

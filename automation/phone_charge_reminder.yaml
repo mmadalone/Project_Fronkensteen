@@ -1018,8 +1018,8 @@ triggers:
     # Use homeassistant_started (late) instead of homeassistant.start (early)
     # — the latter fires before pyscript registers services.
     id: ha_restart
-    trigger: event
-    event_type: homeassistant_started
+    trigger: homeassistant
+    event: start
 
 conditions:
   - condition: or
@@ -1084,6 +1084,22 @@ conditions:
               {%- endif -%}
 
 actions:
+  # ── Step 0: startup readiness guard ────────────────────────────────
+  # The `homeassistant`/start trigger fires BEFORE pyscript has registered its
+  # services (~40 modules, 30-60s). state_bridge seeds sensor.ai_last_satellite
+  # as part of its own pyscript startup, so waiting for it to leave
+  # unknown/unavailable is a direct readiness signal. Passes instantly on every
+  # non-startup trigger, so it is inert the rest of the time.
+  - alias: "0 · Startup — wait for pyscript to be ready"
+    if:
+      - condition: trigger
+        id: ha_restart
+    then:
+      - alias: "Wait for state_bridge seed (pyscript ready)"
+        wait_template: >-
+          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+        timeout: "00:03:00"
+        continue_on_timeout: true
   - alias: "Set battery"
     variables:
       _battery: "{{ states(battery_sensor) | int(0) }}"
@@ -2452,6 +2468,37 @@ actions:
                        | map(attribute='entity_id') | list }}
                   sequence:
                     - action: switch.turn_off
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      continue_on_error: true
+
+      # Mirror of the ceiling catch-up above. `charge_resume` is a numeric_state
+      # trigger, so it only fires on the 60→below edge — if HA restarts while the
+      # battery is already under the resume floor, that edge is gone and charging
+      # can never be switched back on (it would have to climb above the floor
+      # first, which needs the charging this step enables). Level-based check.
+      - alias: "Charge resume catch-up — enable switch if battery already below resume floor"
+        choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ _charge_switches | length > 0
+                     and states(battery_sensor) | int(100) < (charge_resume_threshold | int(60))
+                     and states(battery_sensor) | int(100) < (full_charge_threshold | int(100))
+                     and (expand(_charge_switches) | selectattr('state', 'eq', 'off')
+                          | list | length > 0) }}
+              - alias: "Skip if the device is already charging"
+                condition: state
+                entity_id: !input charging_sensor
+                state: "off"
+            sequence:
+              - alias: "Turn on wireless charging switch(es) currently off"
+                repeat:
+                  for_each: >-
+                    {{ expand(_charge_switches) | selectattr('state', 'eq', 'off')
+                       | map(attribute='entity_id') | list }}
+                  sequence:
+                    - action: switch.turn_on
                       target:
                         entity_id: "{{ repeat.item }}"
                       continue_on_error: true

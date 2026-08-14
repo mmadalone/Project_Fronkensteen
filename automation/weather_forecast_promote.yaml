@@ -156,8 +156,8 @@ triggers:
     id: manual
   # Use homeassistant_started (late) instead of homeassistant.start (early)
   # — the latter fires before pyscript registers services.
-  - trigger: event
-    event_type: homeassistant_started
+  - trigger: homeassistant
+    event: start
     id: ha_start
 
 conditions:
@@ -166,6 +166,22 @@ conditions:
       {{ trigger.id != 'ha_start' or v_run_on_start }}
 
 actions:
+  # ── Step 0: startup readiness guard ────────────────────────────────
+  # The `homeassistant`/start trigger fires BEFORE pyscript has registered its
+  # services (~40 modules, 30-60s). state_bridge seeds sensor.ai_last_satellite
+  # as part of its own pyscript startup, so waiting for it to leave
+  # unknown/unavailable is a direct readiness signal. Passes instantly on every
+  # non-startup trigger, so it is inert the rest of the time.
+  - alias: "0 · Startup — wait for pyscript to be ready"
+    if:
+      - condition: trigger
+        id: ha_start
+    then:
+      - alias: "Wait for state_bridge seed (pyscript ready)"
+        wait_template: >-
+          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+        timeout: "00:03:00"
+        continue_on_timeout: true
   # 1. Gather raw data from all selected sensors + optional weather entity
   - alias: "Set summary max chars and 5 more variables"
     variables:

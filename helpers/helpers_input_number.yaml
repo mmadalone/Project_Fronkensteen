@@ -438,3 +438,36 @@ ai_trace_watchdog_window_hours:
   mode: box
   unit_of_measurement: "h"
   icon: mdi:clock-search-outline
+
+# ═══════════════════════════════════════════════════════════════════
+# ai_echo_guard — Satellite self-hearing guard (read by patched EOC)
+# Drops an incoming utterance that is really the mic re-hearing our own
+# TTS while continue_conversation has the mic open.
+# ═══════════════════════════════════════════════════════════════════
+ai_echo_guard_overlap:
+  name: "AI Echo Guard - Word Overlap Threshold"
+  min: 0.5
+  max: 1.0
+  step: 0.05
+  initial: 0.8
+  mode: box
+  icon: mdi:ear-hearing-off
+
+ai_echo_guard_min_words:
+  name: "AI Echo Guard - Minimum Words"
+  min: 3
+  max: 20
+  step: 1
+  initial: 5
+  mode: box
+  icon: mdi:format-letter-case
+
+ai_echo_guard_window_s:
+  name: "AI Echo Guard - Window (seconds)"
+  min: 10
+  max: 300
+  step: 5
+  initial: 60
+  mode: box
+  unit_of_measurement: "s"
+  icon: mdi:timer-outline

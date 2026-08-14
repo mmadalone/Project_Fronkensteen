@@ -442,7 +442,34 @@ fields:
       entity:
         domain: media_player
 
+  transfer_failed:
+    name: Transfer failed
+    description: >
+      Set true by the follow-me automation when the transfer did NOT
+      succeed. The announcement then says so instead of cheerfully
+      reporting a move that never happened.
+    required: false
+    default: false
+    selector:
+      boolean: {}
+
+  failure_reason:
+    name: Failure reason
+    description: >
+      Short human-readable explanation of why the transfer failed.
+      Passed to the agent so it can say something useful.
+    required: false
+    default: ""
+    selector:
+      text:
+
 variables:
+  # Callers may omit these entirely, so normalise once here rather than
+  # sprinkling `is defined` guards through every downstream template.
+  v_transfer_failed: >-
+    {{ transfer_failed | default(false) | bool }}
+  v_failure_reason: >-
+    {{ failure_reason | default('', true) | string | trim }}
   use_dispatcher: !input use_dispatcher
   v_dispatcher_enabled: !input dispatcher_enabled
   v_pipeline_name: !input llm_agent_id
@@ -602,6 +629,14 @@ sequence:
                 agent_interaction_log, end_conversation, music_library, or
                 any other tools except web_search. Respond with ONLY the
                 spoken announcement text.]
+                {%- if v_transfer_failed %}
+                [TRANSFER FAILED — the music did NOT move to {{ player_name }}.
+                Tell the user, in character and in one short sentence, that you
+                could not move the music there. Do NOT say it worked, do NOT
+                welcome them to the room, do NOT describe the music as now
+                playing there.
+                {%- if v_failure_reason %} Reason: {{ v_failure_reason }}.{% endif %}]
+                {%- else %}
                 {{
                   prompt_tpl
                   | replace('{player_name}', player_name)
@@ -620,6 +655,7 @@ sequence:
                 currently tuned to the radio station "{{ media_title }}"{% if media_artist %} ({{ media_artist }}){% endif %}. this is a live radio stream, not a song or track. {{ radio_show_context }}
                 {%- else %}
                 currently playing the track "{{ media_title }}"{% if media_artist %} by {{ media_artist }}{% endif %}.
+                {%- endif %}
                 {%- endif %}
                 {%- endif %}
             response_variable: llm_response
@@ -673,6 +709,29 @@ sequence:
         variables:
           tts_message: >-
             {{ default_msg_tpl | replace('{player_name}', player_name) }}
+
+  # ---------------------------------------------------------------------------
+  # Failure override. The LLM path is already failure-aware (the prompt tells it
+  # the move did not happen), but the random-pool and default paths would still
+  # cheerfully announce a transfer that never occurred — which is exactly what
+  # was heard in the field. Replace their text here.
+  # Uses a new variable rather than reassigning tts_message, so nothing depends
+  # on self-referential template evaluation.
+  # ---------------------------------------------------------------------------
+  - alias: "Failure override — never announce a move that did not happen"
+    variables:
+      tts_message_final: >-
+        {%- set llm_used = (_raw_llm_text is defined)
+              and (_raw_llm_text | default('') | trim | length > 0) -%}
+        {%- if v_transfer_failed and not llm_used -%}
+          {%- if v_failure_reason -%}
+            Sorry, I couldn't move the music to {{ player_name }}. {{ v_failure_reason }}.
+          {%- else -%}
+            Sorry, I couldn't move the music to {{ player_name }}.
+          {%- endif -%}
+        {%- else -%}
+          {{ tts_message }}
+        {%- endif -%}
 
   - alias: "Resolve TTS output target — override or target player"
     variables:
@@ -783,7 +842,7 @@ sequence:
     response_variable: _tts
     continue_on_error: true
     data:
-      text: "{{ tts_message }}"
+      text: "{{ tts_message_final | default(tts_message) }}"
       voice: "{{ dispatch_voice }}"
       voice_id: "{{ dispatch_tts_voice }}"
       priority: 4
@@ -864,7 +923,7 @@ sequence:
                            dispatch_persona | default('')
                            | replace('_', ' ') | title)
                        | replace('{excerpt}',
-                           (tts_message | default(''))[:150])
+                           (tts_message_final | default(tts_message) | default(''))[:150])
                        | replace('{track}',
                            media_title | default(''))
                        | replace('{artist}',
@@ -927,6 +986,6 @@ sequence:
     data:
       agent_name: "{{ dispatch_persona }}"
       user_query: "music follow me announcement"
-      agent_response: "{{ (tts_message | default(''))[:200] }}"
+      agent_response: "{{ (tts_message_final | default(tts_message) | default(''))[:200] }}"
       source: "automation"
     continue_on_error: true
