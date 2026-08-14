@@ -30,7 +30,7 @@ echo "Building HACS installer bundle..."
 rm -rf "$BUNDLE"
 mkdir -p \
   "$BUNDLE/pyscript" \
-  "$BUNDLE/pyscript_modules/modules" \
+  "$BUNDLE/pyscript/modules" \
   "$BUNDLE/pyscript_templates" \
   "$BUNDLE/packages" \
   "$BUNDLE/blueprints_automation" \
@@ -39,31 +39,43 @@ mkdir -p \
   "$BUNDLE/scripts"
 
 # Pyscript modules
-cp "$REPO"/pyscript/*.py "$BUNDLE/pyscript/" 2>/dev/null || true
-cp "$REPO/pyscript/modules/shared_utils.py" \
-   "$BUNDLE/pyscript_modules/modules/" 2>/dev/null || true
+#
+# shared_utils.py MUST land in bundle/pyscript/modules/. const.py declares it as
+# "modules/shared_utils.py" inside PYSCRIPT_FILES, so installer.py resolves it
+# relative to the `pyscript` bundle subdir. It previously went to
+# bundle/pyscript_modules/, which is not a BUNDLE_TO_DEST key and was read by
+# nothing — so this `core` file never installed and every install logged
+# "Missing from bundle".
+cp "$REPO"/pyscript/*.py "$BUNDLE/pyscript/"
+cp "$REPO/pyscript/modules/shared_utils.py" "$BUNDLE/pyscript/modules/"
 
 # Config templates
-cp "$REPO"/pyscript/*.template "$BUNDLE/pyscript_templates/" 2>/dev/null || true
+cp "$REPO"/pyscript/*.template "$BUNDLE/pyscript_templates/"
 
 # Packages
-cp "$REPO"/packages/ai_*.yaml "$BUNDLE/packages/" 2>/dev/null || true
+cp "$REPO"/packages/ai_*.yaml "$BUNDLE/packages/"
 
 # Blueprints (stored at the repo root in automation/ and script/)
-cp "$REPO"/automation/*.yaml "$BUNDLE/blueprints_automation/" 2>/dev/null || true
-cp "$REPO"/script/*.yaml "$BUNDLE/blueprints_script/" 2>/dev/null || true
+cp "$REPO"/automation/*.yaml "$BUNDLE/blueprints_automation/"
+cp "$REPO"/script/*.yaml "$BUNDLE/blueprints_script/"
 
 # Helper definitions
-cp "$REPO"/helpers/helpers_*.yaml "$BUNDLE/helpers/" 2>/dev/null || true
+cp "$REPO"/helpers/helpers_*.yaml "$BUNDLE/helpers/"
 
 # Scripts (sqlite-vec recompile helper)
-cp "$REPO/scripts/recompile_vec0.sh" "$BUNDLE/scripts/" 2>/dev/null || true
+cp "$REPO/scripts/recompile_vec0.sh" "$BUNDLE/scripts/"
 
-# Patched HACS components.
-#   - .zip for manual distribution
-#   - pre-extracted directory for the installer wizard to copy from
-# manifest.json is renamed to manifest.json.bundle in BOTH outputs so
-# hassfest doesn't scan them as separate integrations during CI.
+# Patched HACS components — shipped as .zip only.
+#
+# installer.py consumes COMPONENT_ZIPS exclusively (installer.py:317, :359).
+# The pre-extracted bundle/<comp>/ directories this used to also produce were
+# read by nothing: ELEVENLABS_TTS_FILES / EOC_FILES feed only COMPONENT_RENAMES,
+# which installer.py:277 applies to files coming from get_files_for_groups(),
+# and that never yields those dirs. They were ~30 dead files in every download.
+#
+# manifest.json is renamed to manifest.json.bundle inside the zip so hassfest
+# doesn't scan the bundled component as a second integration during CI;
+# installer.py:92-95 reverses the rename on extraction.
 for comp in elevenlabs_custom_tts extended_openai_conversation; do
   src="$REPO/source_components/$comp"
   if [[ ! -d "$src" ]]; then
@@ -79,16 +91,6 @@ for comp in elevenlabs_custom_tts extended_openai_conversation; do
     rm -f manifest.json.bundle
   )
   echo "  ${comp}.zip"
-
-  mkdir -p "$BUNDLE/$comp"
-  rsync -a \
-    --exclude='*.pyc' \
-    --exclude='__pycache__' \
-    --exclude='README.md' \
-    "$src/" "$BUNDLE/$comp/"
-  if [[ -f "$BUNDLE/$comp/manifest.json" ]]; then
-    mv "$BUNDLE/$comp/manifest.json" "$BUNDLE/$comp/manifest.json.bundle"
-  fi
 done
 
 echo "Bundle: $(find "$BUNDLE" -type f | wc -l | tr -d ' ') files"

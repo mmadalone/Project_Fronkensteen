@@ -14,25 +14,116 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The tag is the single source of truth for the version. manifest.json is
+      # what HACS and HA display; const.VERSION is what __init__.py compares
+      # against the value in .storage to decide install-vs-update. If those two
+      # drift, the payload ships but no files are ever copied — which is exactly
+      # what happened between 1.0.0 and 1.0.1.
+      - name: Stamp version from tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          COMPONENT="custom_components/project_fronkensteen"
+
+          jq --arg v "$VERSION" '.version = $v' "$COMPONENT/manifest.json" > "$COMPONENT/manifest.json.tmp"
+          mv "$COMPONENT/manifest.json.tmp" "$COMPONENT/manifest.json"
+
+          sed -i -E "s/^VERSION = \".*\"$/VERSION = \"$VERSION\"/" "$COMPONENT/const.py"
+
+          MANIFEST_V=$(jq -r .version "$COMPONENT/manifest.json")
+          CONST_V=$(sed -nE 's/^VERSION = "(.*)"$/\1/p' "$COMPONENT/const.py")
+          echo "tag=$VERSION manifest=$MANIFEST_V const=$CONST_V"
+          if [ "$MANIFEST_V" != "$VERSION" ] || [ "$CONST_V" != "$VERSION" ]; then
+            echo "ERROR: version stamping failed"
+            exit 1
+          fi
+
       - name: Sync bundle
         run: bash scripts/sync_bundle.sh
 
+      # Per-directory minimums. The previous "total >= 100" guard was useless:
+      # the real total is ~215, so every blueprint AND every package could
+      # vanish and it would still have passed.
       - name: Verify bundle
         run: |
+          set -euo pipefail
           BUNDLE="custom_components/project_fronkensteen/bundle"
-          echo "Pyscript: $(ls $BUNDLE/pyscript/*.py 2>/dev/null | wc -l) modules"
-          echo "Packages: $(ls $BUNDLE/packages/*.yaml 2>/dev/null | wc -l)"
-          echo "Auto blueprints: $(ls $BUNDLE/blueprints_automation/*.yaml 2>/dev/null | wc -l)"
-          echo "Script blueprints: $(ls $BUNDLE/blueprints_script/*.yaml 2>/dev/null | wc -l)"
-          echo "Helpers: $(ls $BUNDLE/helpers/*.yaml 2>/dev/null | wc -l)"
-          TOTAL=$(find $BUNDLE -type f | wc -l)
-          echo "Total: $TOTAL files"
-          if [ "$TOTAL" -lt 100 ]; then
-            echo "ERROR: Bundle has fewer than 100 files — sync may have failed"
+
+          check() {
+            local dir="$1" min="$2" n
+            n=$(find "$BUNDLE/$dir" -type f 2>/dev/null | wc -l)
+            echo "  $dir: $n (min $min)"
+            if [ "$n" -lt "$min" ]; then
+              echo "ERROR: $BUNDLE/$dir has $n files, expected at least $min"
+              exit 1
+            fi
+          }
+
+          check pyscript 40
+          check pyscript_templates 3
+          check packages 40
+          check blueprints_automation 70
+          check blueprints_script 30
+          check helpers 7
+          check scripts 1
+
+          # core dependency that silently went missing for the whole life of the
+          # bundle — it used to be written to pyscript_modules/, which the
+          # installer never reads
+          test -f "$BUNDLE/pyscript/modules/shared_utils.py" \
+            || { echo "ERROR: missing bundle/pyscript/modules/shared_utils.py"; exit 1; }
+
+          for z in elevenlabs_custom_tts extended_openai_conversation; do
+            test -f "$BUNDLE/$z.zip" || { echo "ERROR: missing $z.zip"; exit 1; }
+          done
+
+          echo "Total: $(find "$BUNDLE" -type f | wc -l) files"
+
+      # HACS extracts the asset with zipfile.extractall() straight into
+      # <config>/custom_components/project_fronkensteen/ — no path rewriting. So
+      # the zip must hold the CONTENTS of the domain dir at its root. A
+      # project_fronkensteen/ wrapper would nest to
+      # custom_components/project_fronkensteen/project_fronkensteen/ and HA
+      # would not load the integration.
+      - name: Build release zip
+        run: |
+          set -euo pipefail
+          cd custom_components/project_fronkensteen
+          zip -r -q "$RUNNER_TEMP/project_fronkensteen.zip" ./ -x "*.pyc" "__pycache__/*"
+
+      # Listing is written to a file rather than piped: `grep -q` exits on the
+      # first match, which SIGPIPEs `unzip`, and under `set -o pipefail` that
+      # would fail the step even though the assertion passed.
+      - name: Verify zip layout
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          unzip -l project_fronkensteen.zip > listing.txt
+          head -20 listing.txt
+
+          for f in manifest.json __init__.py const.py installer.py; do
+            grep -qE "[[:space:]]$f\$" listing.txt \
+              || { echo "ERROR: $f missing from zip root"; exit 1; }
+          done
+
+          grep -q "bundle/" listing.txt \
+            || { echo "ERROR: bundle/ missing from zip"; exit 1; }
+
+          grep -qE "[[:space:]]bundle/pyscript/modules/shared_utils.py\$" listing.txt \
+            || { echo "ERROR: shared_utils.py missing from zip"; exit 1; }
+
+          if grep -qE "[[:space:]]project_fronkensteen/" listing.txt; then
+            echo "ERROR: zip contains a project_fronkensteen/ wrapper directory"
             exit 1
           fi
+
+          unzip -p project_fronkensteen.zip manifest.json > zip_manifest.json
+          jq -e --arg v "$VERSION" '.version == $v' zip_manifest.json > /dev/null \
+            || { echo "ERROR: manifest.json in zip is not $VERSION"; exit 1; }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: ${{ runner.temp }}/project_fronkensteen.zip

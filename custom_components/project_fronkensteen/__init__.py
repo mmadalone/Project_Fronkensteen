@@ -10,6 +10,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 
@@ -94,6 +95,18 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Project Fronkensteen from a config entry."""
+    # Fail loudly if the payload is missing, BEFORE anything is persisted.
+    #
+    # installer.install()/update() only append "Bundle directory not found" to
+    # report["errors"], which the code below logs as a warning while still
+    # saving {"version": VERSION}. The entry then loads green having copied
+    # nothing, and because storage now records the current version, a corrected
+    # re-release at the same version takes the `else` branch and never retries.
+    # Raising here leaves storage untouched so HA retries setup instead.
+    bundle = installer._bundle_path(hass)  # pure path join, no I/O
+    if not await hass.async_add_executor_job(bundle.is_dir):
+        raise ConfigEntryNotReady(f"Bundle directory not found: {bundle}")
+
     store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
     stored = await store.async_load()
 
