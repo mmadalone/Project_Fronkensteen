@@ -13,6 +13,21 @@ blueprint:
 
     ### Recent changes
 
+    - **v16:** Reverse transfer + seek toggle. `empty_house_action` turns the
+      empty-house behaviour into a choice: `pause` (unchanged) or
+      `handover_to_phone`, which moves the Spotify session to your phone so it
+      leaves with you. The phone is resolved by NAME at runtime
+      (`empty_house_phone_device`), because Spotify regenerates device IDs.
+      Handover is **paused by default** (`empty_house_autoplay: false`) so
+      music does not start in your pocket; if the handover fails the existing
+      pause still runs, so the house is never left playing to nobody.
+      Also `ma_target_seek` (default **off**) — Music Assistant serves Spotify
+      as a duration-less stream and logs that seeking is not possible on it,
+      and a Voice PE crashed shortly after one such seek (never proven to be
+      the cause, hence a setting rather than a removal). Cost of off: MA
+      targets restart the track. Spotify Connect targets are unaffected and
+      always preserve position.
+
     - **v15:** Arrival transfer (phone → home). New §⑧ adds a
       `person not_home → home` trigger: when you arrive with music playing on
       your phone, it continues on whichever room you walk into. Arrival is
@@ -368,6 +383,45 @@ blueprint:
           selector:
             boolean: {}
 
+        empty_house_action:
+          name: What to do when every room is empty
+          description: >
+            `pause` simply stops the music (original behaviour).
+
+
+            `handover_to_phone` instead moves the Spotify session to your phone
+            so it leaves the house with you. Needs "Phone Spotify device name"
+            below. Falls back to pausing if the phone is not reachable.
+          default: pause
+          selector:
+            select:
+              options:
+                - pause
+                - handover_to_phone
+
+        empty_house_phone_device:
+          name: Phone Spotify device name (optional)
+          description: >
+            The phone's name as Spotify shows it, e.g. `Madaphone`. Resolved at
+            runtime rather than stored as an ID, because Spotify regenerates
+            device IDs.
+
+
+            Only used when the action above is `handover_to_phone`.
+          default: ""
+          selector:
+            text:
+
+        empty_house_autoplay:
+          name: Start playing on the phone
+          description: >
+            Off by default: the session is handed over PAUSED so music does not
+            suddenly start in your pocket as you leave. Turn on to have it keep
+            playing straight through the handover.
+          default: false
+          selector:
+            boolean: {}
+
         empty_grace_period:
           name: Grace period before stopping
           description: >
@@ -592,6 +646,23 @@ blueprint:
                 - spotify_connect
                 - ma_spotify
 
+        ma_target_seek:
+          name: Seek to original position on Music Assistant targets
+          description: >
+            Off by default. Music Assistant serves Spotify as a duration-less
+            stream and logs that seeking is not possible on it; a Voice PE also
+            crashed shortly after one such seek (never proven to be the cause,
+            which is why this is a setting rather than a removal).
+
+
+            Cost of leaving it off: Music Assistant targets restart the track
+            from the beginning instead of continuing where you were.
+            Spotify Connect targets (Sonos) always preserve position — this
+            setting does not affect them.
+          default: false
+          selector:
+            boolean: {}
+
         spotify_connect_device_ids:
           name: Spotify Connect device IDs (optional)
           description: >
@@ -746,6 +817,10 @@ variables:
   arrival_wait_timeout_value: !input arrival_wait_timeout
   arrival_cooldown_value: !input arrival_cooldown_seconds
   stop_when_all_empty_flag: !input stop_when_all_empty
+  empty_house_action_value: !input empty_house_action
+  empty_house_phone_device_value: !input empty_house_phone_device
+  empty_house_autoplay_flag: !input empty_house_autoplay
+  ma_seek_flag: !input ma_target_seek
   empty_grace_period_value: !input empty_grace_period
   spotifyplus_entity_id: !input spotifyplus_entity
   transfer_backend_list_raw: !input transfer_backend_list
@@ -1190,6 +1265,28 @@ actions:
             {%- endfor -%}
             {{ ns.p }}
 
+      # Hand the session to the phone instead of pausing, when configured.
+      # Tries first: if it fails, the pause below still runs, so the house is
+      # never left playing to nobody.
+      - alias: "Hand the session over to the phone (optional)"
+        if:
+          - condition: template
+            value_template: >
+              {{ empty_house_action_value == 'handover_to_phone'
+                 and empty_house_phone_device_value | default('') | string | trim | length > 0
+                 and spotifyplus_entity_id | default('') | string | trim | length > 0 }}
+        then:
+          - alias: "Move Spotify to the phone, paused unless told otherwise"
+            continue_on_error: true
+            action: pyscript.spotify_follow_me_transfer
+            data:
+              spotifyplus_entity: "{{ spotifyplus_entity_id }}"
+              target_device_name: "{{ empty_house_phone_device_value }}"
+              source_player: "{{ music_source_player }}"
+              source_ma_player: "{{ music_source_player }}"
+              autoplay: "{{ empty_house_autoplay_flag | bool }}"
+              queue_depth: 10
+
       - alias: "Pause them"
         if:
           - condition: template
@@ -1403,6 +1500,7 @@ actions:
               target_player: "{{ target_player }}"
               source_player: "{{ music_source_player }}"
               source_ma_player: "{{ music_source_player }}"
+              ma_seek: "{{ ma_seek_flag | bool }}"
               queue_depth: 10
 
     default:

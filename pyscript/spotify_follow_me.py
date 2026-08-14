@@ -38,6 +38,32 @@ CONFIG_ENTRIES = "/config/.storage/core.config_entries"
 
 
 @pyscript_executor  # noqa: F821
+def _resolve_device_by_name(token, name):
+    """Look up a Spotify Connect device id by display name.
+
+    Device ids are NOT stable — Spotify regenerates them — so anything that
+    targets the phone must resolve by name at runtime rather than store an id.
+    Returns "" when the device is not currently listed.
+    """
+    import json as _json
+    import urllib.error as _err
+    import urllib.request as _req
+
+    try:
+        resp = _req.urlopen(_req.Request(
+            "https://api.spotify.com/v1/me/player/devices",
+            headers={"Authorization": "Bearer " + token}), timeout=20)
+        devices = _json.loads(resp.read().decode()).get("devices") or []
+    except (_err.HTTPError, _err.URLError, ValueError, OSError):
+        return ""
+    wanted = str(name).strip().lower()
+    for d in devices:
+        if str(d.get("name") or "").strip().lower() == wanted:
+            return str(d.get("id") or "")
+    return ""
+
+
+@pyscript_executor  # noqa: F821
 def _read_spotify_token(path):
     """Pull the SpotifyPlus OAuth access token out of core.config_entries."""
     import json as _json
@@ -176,7 +202,10 @@ async def spotify_follow_me_transfer(
     source_ma_player="",
     source_device_id="",
     target_player="",
+    target_device_name="",
     queue_depth=20,
+    ma_seek=False,
+    autoplay=True,
 ):
     """yaml
     name: Spotify Follow-Me Transfer
@@ -239,6 +268,34 @@ async def spotify_follow_me_transfer(
         selector:
           entity:
             domain: media_player
+      target_device_name:
+        description: >-
+          Spotify Connect device NAME to target, resolved at runtime. Use this
+          instead of target_device_id when the id is not stable — notably a
+          phone, whose device id Spotify regenerates.
+        required: false
+        example: Madaphone
+        selector:
+          text:
+      ma_seek:
+        description: >-
+          Seek to the original position on Music Assistant targets. Off by
+          default: MA serves Spotify as a duration-less stream and logs that
+          seeking is not possible, and a Voice PE crashed shortly after one
+          such seek (unproven as the cause). Leaving it off means MA targets
+          restart the track.
+        required: false
+        default: false
+        selector:
+          boolean:
+      autoplay:
+        description: >-
+          Start playing on the target. Set false to hand over PAUSED — used by
+          the reverse transfer so music does not start in your pocket.
+        required: false
+        default: true
+        selector:
+          boolean:
       queue_depth:
         description: How many upcoming tracks to carry across (0-50).
         required: false
@@ -254,6 +311,7 @@ async def spotify_follow_me_transfer(
     ma_source = str(source_ma_player or "").strip()
     src_dev = str(source_device_id or "").strip()
     tgt = str(target_player or "").strip()
+    tgt_name = str(target_device_name or "").strip()
     try:
         depth = int(queue_depth)
     except (TypeError, ValueError):
@@ -266,10 +324,10 @@ async def spotify_follow_me_transfer(
     if not sp:
         await _set_status("error", "spotifyplus_entity is required")
         return {"ok": False, "reason": "missing_args"}
-    if not dev and not tgt:
+    if not dev and not tgt and not tgt_name:
         await _set_status(
             "error",
-            "need either target_device_id (Connect) or target_player (MA)",
+            "need target_device_id / target_device_name (Connect) or target_player (MA)",
         )
         return {"ok": False, "reason": "missing_args"}
 
@@ -286,6 +344,14 @@ async def spotify_follow_me_transfer(
     if not token:
         await _set_status("error", "no Spotify token in core.config_entries")
         return {"ok": False, "reason": "no_token"}
+
+    # Resolve a Connect target by NAME when no id was given (the reverse
+    # transfer targets a phone, whose device id Spotify regenerates).
+    if not dev and tgt_name:
+        dev = await _resolve_device_by_name(token, tgt_name)
+        if not dev:
+            await _set_status("error", f"device '{tgt_name}' not in Spotify's device list")
+            return {"ok": False, "reason": "target_device_not_found"}
 
     info = await _fetch_playback(token, depth)
 
@@ -379,15 +445,15 @@ async def spotify_follow_me_transfer(
                 media_id=uris,
                 media_type="track",
             )
-            # play_media always starts at 0, so seek separately once the queue
-            # flow stream is actually rolling. This DOES work — verified in the
-            # field with position preserved on the Voice PE.
-            #
-            # MA may log "seeking is not possible on duration-less streams!"
-            # around the same time; that warning is not reliably attributable
-            # to this call and does not by itself mean the seek failed. Judge
-            # by the player's reported media_position, not by the log.
-            if info["position_ms"] > 2000:
+            # play_media always starts at 0, so a seek is needed to preserve
+            # position. OPT-IN (ma_seek), default off: MA serves Spotify as a
+            # duration-less queue-flow stream and logs "seeking is not possible
+            # on duration-less streams!", and a Voice PE crashed (esp32 panic)
+            # shortly after one such seek. That was never proven to be the
+            # cause — a later seek did not crash — so this is exposed as a
+            # setting rather than removed. Cost of leaving it off: MA targets
+            # restart the track from the beginning.
+            if ma_seek and info["position_ms"] > 2000:
                 await task.sleep(6)  # noqa: F821
                 service.call(  # noqa: F821
                     "media_player",
@@ -428,6 +494,24 @@ async def spotify_follow_me_transfer(
             "playing rather than silencing every room"
         )
         return {"ok": False, "reason": "target_did_not_start"}
+
+    # 3b. Hand over paused when asked. Used by the reverse transfer: music
+    #     suddenly starting in your pocket as you leave the house is worse than
+    #     having to press play. Pause the TARGET, not the source — the source is
+    #     stopped below either way.
+    if not autoplay:
+        try:
+            if dev:
+                service.call(  # noqa: F821
+                    "spotifyplus", "player_media_pause",
+                    entity_id=sp, device_id=dev,
+                )
+            elif tgt:
+                service.call("media_player", "media_pause", entity_id=tgt)  # noqa: F821
+        except Exception as exc:  # noqa: BLE001
+            log.warning(  # noqa: F821
+                f"spotify_follow_me: handover-paused failed: {str(exc)[:120]}"
+            )
 
     # 4. Only now make it a move rather than a duplicate.
     if src:
