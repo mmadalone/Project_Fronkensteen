@@ -1,4 +1,4 @@
-# Notification Follow-Me (v3.20.0)
+# Notification Follow-Me (v3.20.1)
 
 ![header](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
 
@@ -315,6 +315,7 @@ When a messaging notification arrives on your phone (WhatsApp, Signal, SMS, or a
 
 ## Changelog
 
+- **v3.20.1:** Fix HA 2026.6+ regression that silently broke every announcement -- core attribute keys became an `EntityStateAttribute` StrEnum, so a rendered attributes dict stopped being a valid Python literal and HA quietly degraded it to a string inside `variables:` blocks (surfacing later as `'str object' has no attribute 'get'`). `_attrs`, `_r_attrs` and `_dismiss_lr` now round-trip through `| to_json | from_json`
 - **v3.20.0:** Eliminate duplicate announcements under `mode: parallel` -- trigger `to:` filter, context_id claim-check, post-debounce TOCTOU race guard, cooldown timestamp written before TTS
 - **v3.19.0:** Fix repeated announcements -- post_time dedup gate; HA startup trigger clears stale reminder state; all tts.speak calls migrated to tts_queue_speak
 - **v3.18.0:** Watchdog loop recovery fix -- context ID ownership guard prevents zombie loops; second heartbeat after TTS keeps watchdog fresh

@@ -192,6 +192,7 @@ Start
 
 ## Changelog
 
+- **v2.0.1** -- Fix HA 2026.6+ regression that silently broke replay: core attribute keys became an `EntityStateAttribute` StrEnum, so a rendered attributes dict stopped being a valid Python literal and HA quietly degraded it to a string inside `variables:` blocks (surfacing later as `'str object' has no attribute 'get'`). `_attrs` now round-trips through `| to_json | from_json`.
 - **v2.0.0** -- TTS queue migration: replaced raw `tts.speak` + manual volume/ducking (~175 lines) with single `pyscript.tts_queue_speak` call. Section 4 duck inputs deprecated as no-ops.
 - **v1.2.0** -- Duck guard integration + follow-me bypass refcount
 - **v1.1.0** -- TTS output volume slider + user pet names

@@ -1,5 +1,5 @@
 # =============================================================================
-# Notification Replay (v2.0.0)
+# Notification Replay (v2.0.1)
 # =============================================================================
 # On-demand replay of the last notification through the Follow-Me pipeline.
 # Reads the current state of the notification sensor, resolves presence,
@@ -10,7 +10,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Notification Replay (v2.0.0)"
+  name: "Notification Replay (v2.0.1)"
   author: madalone
   description: >
     # Notification Replay
@@ -24,6 +24,14 @@ blueprint:
     message with full sender alias support.
 
     Call it from a dashboard button, a voice intent, or any automation.
+
+    ### v2.0.1
+    - Fix HA 2026.6+ regression that broke replay entirely — core attribute
+      keys (`icon`, `friendly_name`, …) became an `EntityStateAttribute`
+      StrEnum, so a rendered attributes dict is no longer a valid Python
+      literal and HA silently degrades it to a string in `variables:` blocks.
+      `_attrs` now round trips through `| to_json | from_json` to restore
+      plain string keys (AP-84).
 
     ### v2.0.0
     - **TTS queue migration** — replaced raw `tts.speak` + manual
@@ -505,7 +513,12 @@ sequence:
   # ---------------------------------------------------------------------------
   - alias: "1 · Read notification sensor attributes"
     variables:
-      _attrs: "{{ states[sensor_entity].attributes | default({}) }}"
+      # AP-84: `| to_json | from_json` is load-bearing. HA 2026.6+ makes core
+      # attribute keys an `EntityStateAttribute` StrEnum whose repr is
+      # `<EntityStateAttribute.ICON: 'icon'>`, so the rendered dict fails
+      # `literal_eval` and HA silently hands back a string instead of a dict.
+      # The JSON round trip restores plain string keys. Do not remove.
+      _attrs: "{{ states[sensor_entity].attributes | default({}) | to_json | from_json }}"
       notif_sender: >-
         {% set raw = _attrs.get('android.title', '') | string %}
         {{ 'Unknown sender' if raw in ['null', ''] else raw }}

@@ -1,5 +1,5 @@
 # =============================================================================
-# Notification Follow-Me (v3.20.0)
+# Notification Follow-Me (v3.20.1)
 # =============================================================================
 # When a messaging notification arrives on the phone, determines the user's
 # room via FP2 presence sensors, routes to the nearest voice satellite, and
@@ -11,7 +11,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Notification Follow-Me (v3.20.0)"
+  name: "Notification Follow-Me (v3.20.1)"
   author: madalone
   description: >
     ![Image](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/notification-follow-me-header.jpeg)
@@ -29,6 +29,13 @@ blueprint:
     phone" fallback.
 
     ### Recent changes
+    - **v3.20.1:** Fix HA 2026.6+ regression that broke every announcement —
+      core attribute keys (`icon`, `friendly_name`, …) became an
+      `EntityStateAttribute` StrEnum, so a rendered attributes dict is no
+      longer a valid Python literal and HA silently degrades it to a string
+      in `variables:` blocks. `_attrs` / `_r_attrs` / `_dismiss_lr` now round
+      trip through `| to_json | from_json` to restore plain string keys
+      (AP-84)
     - **v3.20.0:** Eliminate duplicate announcements under `mode: parallel` —
       trigger now uses `to:` (null) to ignore attribute-only sensor changes
       per HA docs; §2c-W writes context_id alongside post_time for claim-check
@@ -2072,11 +2079,16 @@ actions:
   - alias: "1 · Extract notification attributes"
     variables:
       _conv_id: "notif-follow-me-{{ this.context.id }}"
+      # AP-84: `| to_json | from_json` is load-bearing. HA 2026.6+ makes core
+      # attribute keys an `EntityStateAttribute` StrEnum whose repr is
+      # `<EntityStateAttribute.ICON: 'icon'>`, so the rendered dict fails
+      # `literal_eval` and HA silently hands back a string instead of a dict.
+      # The JSON round trip restores plain string keys. Do not remove.
       _attrs: >-
         {% if trigger.to_state is defined %}
-          {{ trigger.to_state.attributes }}
+          {{ trigger.to_state.attributes | default({}) | to_json | from_json }}
         {% else %}
-          {{ states[sensor_entity].attributes | default({}) }}
+          {{ states[sensor_entity].attributes | default({}) | to_json | from_json }}
         {% endif %}
       notif_sender: >-
         {% set raw = _attrs.get('android.title', '') | string %}
@@ -3911,7 +3923,8 @@ actions:
             # ---------------------------------------------------------------
             - alias: "Set r attrs and 5 more variables"
               variables:
-                _r_attrs: "{{ states[sensor_entity].attributes | default({}) }}"
+                # AP-84: JSON round trip required — see §1 `_attrs`.
+                _r_attrs: "{{ states[sensor_entity].attributes | default({}) | to_json | from_json }}"
                 _r_sender_raw: >-
                   {{ _r_attrs.get('android.title', '')
                      | default(_r_attrs.get('title', ''), true) }}
@@ -4382,7 +4395,8 @@ actions:
                 # Dismiss matched a ledger entry — remove it
                 - alias: "Set dismiss lr and 3 more variables"
                   variables:
-                    _dismiss_lr: "{{ states[last_removed_entity].attributes | default({}) }}"
+                    # AP-84: JSON round trip required — see §1 `_attrs`.
+                    _dismiss_lr: "{{ states[last_removed_entity].attributes | default({}) | to_json | from_json }}"
                     _dismiss_sender: "{{ _dismiss_lr.get('android.title', '') }}"
                     _dismiss_package: "{{ _dismiss_lr.get('package', '') }}"
                     _dismiss_post_time: "{{ _dismiss_lr.get('post_time', '') | string }}"
