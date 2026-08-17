@@ -13,8 +13,10 @@
 #   binary_sensor.ai_wifi_stale_condition_jessica — WiFi home + no FP2 presence
 #
 # Signal sources:
-#   WiFi MAC (GL.iNet)    — device_tracker.oppo_a60 (Miquel, MAC 8E:9C:A3:8F:A1:69)
-#                         — device_tracker.oppo_a38 (Jessica, MAC 46:21:C5:F7:F4:72)
+#   WiFi MAC (GL.iNet)    — device_tracker.oppo_a60 (Miquel)
+#                         — device_tracker.oppo_a38 (Jessica)
+#                           (MACs deliberately omitted — this file is published
+#                            to the public mirror by ha-master-sync-to-repo.sh)
 #   GPS Companion App     — device_tracker.madoppo (Miquel only; Jessica TBD)
 #   FP2 mmWave zones      — 7 binary_sensors (anonymous, inferred via solo occupancy)
 #
