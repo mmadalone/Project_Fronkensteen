@@ -54,6 +54,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      # check_manifest.py is deliberately stdlib-only (ast), but this check has
+      # to parse YAML the same way EOC does, so it needs a real parser.
+      - name: Install PyYAML
+        run: pip install pyyaml==6.0.2
+
       # INSTALL.md tells users to paste these into the Extended OpenAI
       # Conversation "Functions" field, so they must be valid YAML. All five
       # silently lost their indentation on 2026-08-14 and stopped parsing.
