@@ -51,6 +51,14 @@ input_select:
     options: *privacy_override_options
     initial: auto
     icon: mdi:email-fast
+  # On-demand inbox reader. Unlike the push features, force_suppress here does
+  # not silence the answer — the user asked out loud, so it degrades to counts
+  # and sender names only and says so.
+  ai_privacy_gate_email_inbox:
+    name: "Privacy Override — Email Inbox (on-demand)"
+    options: *privacy_override_options
+    initial: auto
+    icon: mdi:email-search
   ai_privacy_gate_notification_follow_me:
     name: "Privacy Override — Notification Follow-Me"
     options: *privacy_override_options

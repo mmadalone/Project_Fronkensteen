@@ -8,6 +8,10 @@
 *.swo
 *~
 
+# Python bytecode (HA and the CI checks both generate these)
+__pycache__/
+*.pyc
+
 # Databases & runtime state (personal data, auto-generated)
 memory.db
 budget_state.json

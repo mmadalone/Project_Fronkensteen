@@ -23,3 +23,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
+
+  manifest:
+    name: Bundle/Manifest Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # sync_bundle.sh is what release.yaml runs, so building here also
+      # proves the build itself still works before a tag depends on it.
+      # bundle/ is gitignored, so it must be built to be checked.
+      - name: Build bundle
+        run: bash scripts/sync_bundle.sh .
+
+      # A file reaches a HACS user only if installer.py finds it in a
+      # const.py manifest. sync_bundle.sh copies by glob, so undeclared
+      # files look shipped but never install. This drifted to 15 files.
+      - name: Check bundle against const.py manifests
+        run: python3 scripts/check_manifest.py .
+
+  prompts:
+    name: Agent Prompt Specs Parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # INSTALL.md tells users to paste these into the Extended OpenAI
+      # Conversation "Functions" field, so they must be valid YAML. All five
+      # silently lost their indentation on 2026-08-14 and stopped parsing.
+      - name: Parse _Functions_*.md
+        run: python3 scripts/check_prompts.py .

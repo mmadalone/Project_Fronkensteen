@@ -357,6 +357,10 @@ For each agent you create:
 
 > **Customizing personas:** The prompt files contain the full personality definition. You can modify personality traits, add/remove personas, or create entirely new characters. The only requirement is the naming convention (`conversation.{slug}_{variant}`) so the dispatcher can discover them.
 
+> **Tools that call a script need that script to exist first.** Several specs in `_Functions_Standard.md` invoke `script.*` entities that you create from a blueprint — `email_inbox` needs `script.voice_email_inbox` (from `voice_email_inbox.yaml`), `calendar_event` needs `script.voice_calendar_event`, and so on. Create the script instance before pasting the tool definitions, or the agent will call a service that does not exist and the failure surfaces mid-conversation. Scripts do **not** need to be exposed to Assist — Extended OpenAI Conversation calls the service directly.
+
+> **Email inbox and privacy:** the `email_inbox` tool is privacy-gated at T2, but the gate entities ship with the **Presence & Identity** feature group. If you install **Notifications & Email** without it, the gate has nothing to read and fails open — the tool will answer in full regardless of who is in the room. Install both groups if that matters to you.
+
 ### 10d. Create Assist Pipelines
 
 In Settings > Voice Assistants, create a pipeline for each agent:

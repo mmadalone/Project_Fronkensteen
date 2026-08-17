@@ -48,6 +48,7 @@ SKIP_ON_UPDATE_SUBDIRS = {"pyscript_templates", "scripts"}
 
 PYSCRIPT_FILES = {
     # Core (always installed)
+    "automation_trace_watchdog.py": "core",
     "common_utilities.py": "core",
     "entity_history.py": "core",
     "memory.py": "core",
@@ -71,11 +72,18 @@ PYSCRIPT_FILES = {
     # Notifications
     "contact_history.py": "notifications",
     "email_promote.py": "notifications",
+    "email_reader.py": "notifications",
     "notification_dedup.py": "notifications",
     # Music & Media
+    "listen_history.py": "music",
+    "ma_phone_transfer.py": "music",
     "media_promote.py": "music",
     "music_composer.py": "music",
     "music_taste.py": "music",
+    "radio_klara.py": "music",
+    "spotify_connect_token.py": "music",
+    "spotify_follow_me.py": "music",
+    "watch_history.py": "music",
     # Presence & Identity
     "away_patterns.py": "presence",
     "entropy_correlator.py": "presence",
@@ -109,6 +117,7 @@ PACKAGE_FILES = {
     "ai_per_user_helpers.yaml": "core",
     "ai_phone_call_detection.yaml": "core",
     "ai_self_awareness.yaml": "core",
+    "ai_promoter_health.yaml": "core",
     "ai_system_health.yaml": "core",
     "ai_system_recovery.yaml": "core",
     "ai_test_harness.yaml": "core",
@@ -126,9 +135,12 @@ PACKAGE_FILES = {
     "ai_email_promotion.yaml": "notifications",
     "ai_notification_dedup.yaml": "notifications",
     # Music & Media
+    "ai_listen_history.yaml": "music",
     "ai_media_tracking.yaml": "music",
     "ai_music_composer.yaml": "music",
     "ai_music_taste.yaml": "music",
+    "ai_radio_klara.yaml": "music",
+    "ai_watch_history.yaml": "music",
     # Budget
     "ai_llm_budget.yaml": "budget",
     # Presence & Identity
@@ -174,6 +186,7 @@ BLUEPRINT_AUTOMATION_FILES = {
     "ups_notify.yaml": "core",
     "va_confirmation_dialog.yaml": "core",
     # Voice Pipeline
+    "assist_tts_reroute.yaml": "voice",
     "satellite_tracker.yaml": "voice",
     "voice_active_media_controls.yaml": "voice",
     "voice_handoff.yaml": "voice",
@@ -206,12 +219,14 @@ BLUEPRINT_AUTOMATION_FILES = {
     "alexa_presence_radio.yaml": "music",
     "alexa_presence_radio_stop.yaml": "music",
     "ambient_music_autoplay.yaml": "music",
+    "listen_history.yaml": "music",
     "media_tracking.yaml": "music",
     "music_assistant_follow_me_idle_off.yaml": "music",
     "music_assistant_follow_me_multi_room_advanced.yaml": "music",
     "music_compose_batch_trigger.yaml": "music",
     "music_taste_rebuild.yaml": "music",
     "music_weekly_refresh.yaml": "music",
+    "watch_history.yaml": "music",
     # Budget
     "budget_cost_alert.yaml": "budget",
     "budget_fallback.yaml": "budget",
@@ -260,6 +275,7 @@ BLUEPRINT_SCRIPT_FILES = {
     "voice_stop_radio.yaml": "voice",
     "voice_wake_guard_cleanup.yaml": "voice",
     "voice_wake_guard_tts_router.yaml": "voice",
+    "whisper_retag_automation.yaml": "voice",
     # Bedtime & Sleep
     "bedtime_instant.yaml": "bedtime",
     "bedtime_media_play_wrapper.yaml": "bedtime",
@@ -275,6 +291,7 @@ BLUEPRINT_SCRIPT_FILES = {
     # Notifications
     "announce_music_follow_me.yaml": "notifications",
     "announce_music_follow_me_llm.yaml": "notifications",
+    "voice_email_inbox.yaml": "notifications",
     # Music & Media
     "music_compose_approve.yaml": "music",
     # Memory

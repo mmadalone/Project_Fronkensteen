@@ -74,6 +74,14 @@ A multi-stage bedtime routine where the AI negotiates with you about going to sl
 
 A 4,800-line notification routing engine (`notification_follow_me.yaml`) that intercepts Android notifications and delivers them via the appropriate channel based on where you are, what time it is, whether Do Not Disturb is on, and whether you're in quiet hours. Quark would appreciate the operational efficiency: LLM-powered announcement generation, contact roster matching with sender aliases, burst combining (groups rapid-fire notifications into a single announcement), escalating reminder loops, ElevenLabs TTS directives, deduplication, per-sender cooldown, junk pattern filtering, ringer-mode volume control, multi-player ducking, and a refcount bypass system shared across 7+ automations with a watchdog that auto-resets stale state every 2 minutes.
 
+### Email — Push and Pull
+
+Mail arriving is handled by `email_follow_me.yaml`, which announces it in character wherever you are. Asking about mail is handled by `email_reader.py` + `voice_email_inbox.yaml`: say "Rick, what's in my inbox?", "any important emails?" or "anything from Jessica?" and the agent answers out loud on the speaker you addressed.
+
+Home Assistant's `imap` integration can't do this on its own — its sensor is a bare unread count and every service needs a message id you only learn from the arrival event, so nothing can enumerate a mailbox. The module therefore opens its own read-only IMAP session using the credentials already in your imap config entry (no new dependencies, nothing marked as read). On Gmail it uses server-side `X-GM-RAW` search for `is:important` and category filtering; everywhere else it falls back to plain `UNSEEN`/`SINCE` with client-side ranking, so "any important emails?" still means something. If a search comes back empty it widens the window once rather than flatly answering "nothing" — archived mailboxes are usually near-zero unread.
+
+Email is attacker-controlled text arriving in an agent that can call tools, so the reader returns subjects rather than bodies by default; a body needs an explicit follow-up about one specific message. Everything is stripped, instruction-neutered, secret-redacted and escaped in Python before it reaches the model, and messages are identified by opaque handles so a message id can never be handed to a service that would act on the wrong one. When the privacy gate trips it degrades to counts and sender names instead of going silent — you asked out loud, so being ignored would just make you ask again.
+
 ### Voice Handoff
 
 Maximum effort. Say "pass me to Deadpool" mid-conversation and the satellite switches personas live. The `voice_handoff.py` module saves the current pipeline state, switches to the target agent, plays farewell TTS from the source and a greeting from the target, then reopens the mic. Supports persona aliases (deadpool to deepee), expertise-based routing where agents proactively suggest handing off for out-of-domain questions, and configurable restore behavior. One of four deployed inter-agent communication patterns — alongside reactive banter, the whisper network, and theatrical mode.
@@ -172,7 +180,7 @@ Every voice interaction assembles context from three layers before the LLM proce
 The system separates **engine** (pyscript services) from **features** (blueprints):
 
 - **Tier 1 — Pyscript:** 38 Python modules exposing 168 services. Infrastructure: dispatcher, TTS queue, duck manager, memory, presence patterns, routine fingerprinting, music composition, budget tracking, system health, self-healing recovery, toggle audit, therapy session engine, listen/watch history.
-- **Tier 2 — Blueprints:** 79 automation + 34 script blueprints. User-facing features: bedtime routines, wake-up guards, notification routing, proactive briefings, music control, calendar CRUD, reactive banter, theatrical mode, therapy sessions.
+- **Tier 2 — Blueprints:** 80 automation + 35 script blueprints. User-facing features: bedtime routines, wake-up guards, notification routing, proactive briefings, music control, calendar CRUD, reactive banter, theatrical mode, therapy sessions.
 - **Packages:** 44 YAML packages defining template sensors, automations, and helper wiring.
 
 ### Inter-Agent Communication

@@ -114,6 +114,7 @@ _STARTUP_SENSORS = [
     # These are populated by _seed_snapshot_sensors() below instead.
     # Session 3 — email/dedup counters
     ("sensor.ai_email_priority_count", "0", "mdi:email-alert", "AI Email Priority Count"),
+    ("sensor.ai_email_reader_status", "idle", "mdi:email-search", "AI Email Reader Status"),
     ("sensor.ai_dedup_blocked_count", "0", "mdi:bell-cancel", "AI Dedup Blocked Count"),
     # Session 4 — self-awareness + escalation/recovery
     ("sensor.ai_last_satellite", "", "mdi:satellite-uplink", "AI Last Satellite"),
@@ -157,6 +158,7 @@ _STARTUP_SENSORS = [
     ("sensor.ai_phone_call_active", "off", "mdi:phone-in-talk", "AI Phone Call Active"),
     ("sensor.ai_sleep_detected", "off", "mdi:sleep", "AI Sleep Detected"),
     ("sensor.ai_theatrical_mode_active", "off", "mdi:drama-masks", "AI Theatrical Mode Active"),
+    ("sensor.ai_theatrical_status", "idle", "mdi:drama-masks", "AI Theatrical Status"),
     ("sensor.ai_bedtime_active", "off", "mdi:bed-clock", "AI Bedtime Active"),
     ("sensor.ai_continuous_conversation_active", "off", "mdi:microphone-message", "AI Continuous Conversation Active"),
     ("sensor.ai_sustained_solo_zone", "off", "mdi:account-clock", "AI Sustained Solo Zone"),
