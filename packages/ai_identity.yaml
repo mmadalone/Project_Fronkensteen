@@ -14,7 +14,7 @@
 #
 # Signal sources:
 #   WiFi MAC (GL.iNet)    — device_tracker.oppo_a60 (Miquel)
-#                         — device_tracker.oppo_a38 (Jessica)
+#                         — device_tracker.redmi_note_14 (Jessica)
 #                           (MACs deliberately omitted — this file is published
 #                            to the public mirror by ha-master-sync-to-repo.sh)
 #   GPS Companion App     — device_tracker.madoppo (Miquel only; Jessica TBD)
@@ -34,6 +34,7 @@
 #   <30      → guest            — generic responses, no personal context
 #
 # Deployed: 2026-03-01 | Updated: 2026-03-06 (WiFi staleness decay for Jessica)
+#                        2026-08-17 (Jessica repointed to Redmi Note 14 after phone swap)
 # =============================================================================
 
 # input_boolean: moved to helpers_input_boolean.yaml (C3 consolidation)
@@ -51,7 +52,7 @@ template:
         icon: mdi:account-eye
         state: >-
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
-          {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+          {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set solo = (m_wifi and not j_wifi) or (j_wifi and not m_wifi) -%}
           {%- set fp2_count =
             (is_state('binary_sensor.fp2_presence_sensor_living_room', 'on') | int)
@@ -69,7 +70,7 @@ template:
         unique_id: ai_wifi_stale_condition_jessica
         icon: mdi:wifi-alert
         state: >-
-          {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+          {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set fp2_on =
             is_state('binary_sensor.fp2_presence_sensor_living_room', 'on')
             or is_state('binary_sensor.fp2_presence_sensor_bed', 'on')
@@ -99,7 +100,7 @@ template:
           {%- else -%}
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
           {%- set m_gps  = is_state('device_tracker.madoppo', 'home') -%}
-          {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+          {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set fp2_on =
           is_state('binary_sensor.fp2_presence_sensor_living_room', 'on')
           or is_state('binary_sensor.fp2_presence_sensor_bed', 'on')
@@ -129,13 +130,13 @@ template:
         unit_of_measurement: "pts"
         state_class: measurement
         availability: >-
-          {{ states('device_tracker.oppo_a38')
+          {{ states('device_tracker.redmi_note_14')
              not in ['unavailable', 'unknown'] }}
         state: >-
           {%- if is_state('input_boolean.ai_guest_mode', 'on') -%}
           0
           {%- else -%}
-          {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+          {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set stale = is_state('input_boolean.ai_wifi_stale_jessica', 'on') -%}
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
           {%- set fp2_on =

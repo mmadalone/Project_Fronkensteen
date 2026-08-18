@@ -1018,8 +1018,8 @@ triggers:
     # Use homeassistant_started (late) instead of homeassistant.start (early)
     # — the latter fires before pyscript registers services.
     id: ha_restart
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 conditions:
   - condition: or
@@ -1097,12 +1097,25 @@ actions:
     then:
       - alias: "Wait for state_bridge seed (pyscript ready)"
         wait_template: >-
-          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable'] }}
+          {{ states('sensor.ai_last_satellite') not in ['unknown', 'unavailable']
+             and states(battery_sensor) not in ['unknown', 'unavailable'] }}
         timeout: "00:03:00"
         continue_on_timeout: true
   - alias: "Set battery"
     variables:
-      _battery: "{{ states(battery_sensor) | int(0) }}"
+      # -1, NOT 0. A sensor with no reading is not an empty battery. `| int(0)`
+      # made every HA restart announce "battery at 0%" while the integration
+      # was still connecting its websocket -- the sensor reads `unknown` for a
+      # few seconds and 0 trips the urgent/emergency branch. The guard below
+      # stops the run instead of inventing a reading.
+      _battery: "{{ states(battery_sensor) | int(-1) }}"
+
+  - alias: "Abort when the battery sensor has no numeric reading"
+    if:
+      - condition: template
+        value_template: "{{ (_battery | int(-1)) < 0 }}"
+    then:
+      - stop: "Battery sensor has no reading yet - nothing to report"
 
   # ── Bypass save/disable ──────────────────────────────────────────────
   - alias: "Set follow me was on"

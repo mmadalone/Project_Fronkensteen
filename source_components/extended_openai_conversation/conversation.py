@@ -121,6 +121,13 @@ _JSON_TOOL_OBJECT = re.compile(
     re.IGNORECASE,
 )
 
+# eleven_v3 emotional tags, e.g. [whispers] [laughs] [mischievously].
+# These are DELIBERATELY LEFT IN the spoken text -- the TTS renders them as
+# delivery, not as words. This pattern strips them ONLY from the copy used for
+# the continuation / farewell / echo-guard decisions below. NEVER apply it to
+# the string handed to async_set_speech().
+_SPEECH_TAG = re.compile(r'\[[^\[\]]{1,40}\]')
+
 
 # Transient errors that warrant retrying with a fallback model
 _FALLBACK_ELIGIBLE_ERRORS = (APITimeoutError, RateLimitError, InternalServerError, NotFoundError)
@@ -262,9 +269,19 @@ class ExtendedOpenAIAgentEntity(
 
     @staticmethod
     def _echo_words(text: str) -> list[str]:
-        """Normalise to a word list for echo comparison."""
+        """Normalise to a word list for echo comparison.
+
+        Accents are folded to ASCII (NFKD, then drop combining marks) BEFORE
+        the [^a-z0-9 ] strip. Without the fold the strip shatters accented
+        Spanish mid-word -- "a" + tilde + "no" became ["a", "o"] and
+        "cumplea" + tilde + "nos" became ["cumplea", "os"] -- silently
+        wrecking the overlap score in a Spanish-speaking household.
+        """
         import re as _re
-        return _re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split()
+        import unicodedata as _ud
+        _folded = _ud.normalize("NFKD", (text or "").lower())
+        _folded = "".join(_c for _c in _folded if not _ud.combining(_c))
+        return _re.sub(r"[^a-z0-9 ]+", " ", _folded).split()
 
     def _is_self_echo(self, conversation_id: str, text: str) -> bool:
         """True if `text` is the satellite mic re-hearing our own last reply.
@@ -427,13 +444,22 @@ class ExtendedOpenAIAgentEntity(
             },
         )
 
-        intent_response = intent.IntentResponse(language=user_input.language)
-        intent_response.async_set_speech(
-            self._sanitize_for_speech(query_response.message.content)
-        )
+        # Sanitize once -- this exact string is what gets spoken, tags included.
+        speech_text = self._sanitize_for_speech(query_response.message.content)
 
-        # Detect if LLM is asking a follow-up question to enable continued conversation
-        response_text = self._sanitize_for_speech(query_response.message.content) or ""
+        intent_response = intent.IntentResponse(language=user_input.language)
+        intent_response.async_set_speech(speech_text)
+
+        # Detect if LLM is asking a follow-up question to enable continued
+        # conversation. DECISION-ONLY copy with [tags] removed (2026-08-18): a
+        # reply ending "...caos creativo? [whispers]" failed endswith("?")
+        # below, so the mic never reopened. The English phrase list cannot
+        # rescue a Spanish reply, where "?" is the only continuation signal.
+        # _echo_words also counted "whispers" as a word the mic never heard.
+        # speech_text above keeps every tag, in every position.
+        response_text = re.sub(
+            r'\s{2,}', ' ', _SPEECH_TAG.sub(' ', speech_text or '')
+        ).strip()
         response_lower = response_text.lower()
         import time as _time_mod
         self._last_reply[conversation_id] = (

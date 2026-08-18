@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import async_timeout
 from elevenlabs import VoiceSettings
 from elevenlabs.core import ApiError
 
-from homeassistant.components.tts import TextToSpeechEntity, TtsAudioType, Voice
+from homeassistant.components.tts import (
+    TextToSpeechEntity,
+    TTSAudioRequest,
+    TTSAudioResponse,
+    TtsAudioType,
+    Voice,
+)
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 
@@ -27,6 +35,11 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Upper bound on a single streamed generation. Generous: measured
+# end-to-end is ~6.5s for 195 chars, but the timer also spans the
+# consumer pulling chunks, so keep well clear of normal replies.
+STREAM_TIMEOUT_S = 120
 
 SUPPORT_LANGUAGES = ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "ja", "hu", "ko"]
 
@@ -159,10 +172,15 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
 
         return voices
 
-    async def async_get_tts_audio(
+    def _prepare_request(
         self, message: str, language: str, options: dict[str, Any] | None = None
-    ) -> TtsAudioType:
-        """Load TTS audio file from ElevenLabs."""
+    ) -> tuple[dict[str, Any], str, str | None]:
+        """Resolve profile, mood and option precedence into request params.
+
+        Shared by the buffered path (async_get_tts_audio) and the
+        streaming path (async_stream_tts_audio) so both apply identical
+        profile resolution, voice-mood modulation and option precedence.
+        """
         if options is None:
             options = {}
 
@@ -283,39 +301,49 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             speed=speed,
         )
         
+        convert_params = {
+            "text": message,
+            "voice_id": voice_id,
+            "model_id": model_id,
+            "voice_settings": voice_settings,
+            "language_code": language,
+            "apply_text_normalization": apply_text_normalization,
+        }
+        return convert_params, voice_id, voice_profile_name
+
+    async def async_get_tts_audio(
+        self, message: str, language: str, options: dict[str, Any] | None = None
+    ) -> TtsAudioType:
+        """Load TTS audio from ElevenLabs as one buffered blob.
+
+        Retained for any caller not on the streaming path. Uses
+        text_to_speech.convert(), whose endpoint renders the entire clip
+        server-side before returning a byte.
+        """
         try:
+            convert_params, voice_id, voice_profile_name = self._prepare_request(
+                message, language, options
+            )
             with async_timeout.timeout(30):
-                # Prepare conversion parameters
-                convert_params = {
-                    "text": message,
-                    "voice_id": voice_id,
-                    "model_id": model_id,
-                    "voice_settings": voice_settings,
-                    "language_code": language,
-                    "apply_text_normalization": apply_text_normalization,
-                }
-                
-                # Generate audio with ElevenLabs (async generator)
                 audio_generator = self._client.text_to_speech.convert(**convert_params)
-                
-                # Collect all audio bytes from async generator
+
                 audio_bytes = b""
                 async for chunk in audio_generator:
                     audio_bytes += chunk
-                
+
                 if not audio_bytes:
                     _LOGGER.error("No audio data received from ElevenLabs")
                     return None
-                    
+
                 _LOGGER.info(
                     "Successfully generated %d bytes of audio for voice %s%s",
                     len(audio_bytes),
                     voice_id,
                     f" using profile '{voice_profile_name}'" if voice_profile_name else ""
                 )
-                
+
                 return ("mp3", audio_bytes)
-                
+
         except asyncio.TimeoutError:
             _LOGGER.error("Timeout generating TTS audio")
             return None
@@ -325,3 +353,84 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         except Exception as err:
             _LOGGER.error("Error generating TTS audio: %s", err)
             return None
+
+    async def async_stream_tts_audio(
+        self, request: TTSAudioRequest
+    ) -> TTSAudioResponse:
+        """Stream audio from ElevenLabs as it is generated.
+
+        Why this exists: text_to_speech.convert() posts to
+        /v1/text-to-speech/{voice_id}, which renders the whole clip
+        server-side before sending anything, so time-to-first-byte grows
+        with the text. Measured 2026-08-18: 1.23s for 23 chars, 4.24s for
+        158, 4.41s for 195. text_to_speech.stream() posts to the /stream
+        variant, whose first byte arrives in a flat ~0.8s regardless of
+        length. Passing those chunks straight through lets the speaker
+        start on the first one instead of waiting for the last.
+
+        This matters beyond comfort: the ESPHome satellite reports
+        "finished speaking" on a fixed ~2.0s timer and re-arms its mic
+        49-70ms later. With a ~4.4s first byte the microphone opened over
+        silence and the reply landed in an already-dead session.
+
+        NOTE: overriding this method also makes HA report
+        async_supports_streaming_input() == True. That only enables
+        token-by-token INPUT when the conversation agent ALSO sets
+        supports_streaming (assist_pipeline/pipeline.py, stream_response).
+        Extended OpenAI Conversation does not set it, so the full reply is
+        still joined below before any request is made -- which is what
+        keeps the speech sanitiser and the mood-tag "[" check operating on
+        complete text. Do not assume that still holds if EOC ever gains
+        streaming support.
+        """
+        message = "".join([chunk async for chunk in request.message_gen])
+        convert_params, voice_id, voice_profile_name = self._prepare_request(
+            message, request.language, request.options
+        )
+        profile_note = (
+            f" using profile '{voice_profile_name}'" if voice_profile_name else ""
+        )
+
+        async def _audio_stream() -> AsyncGenerator[bytes]:
+            total = 0
+            try:
+                with async_timeout.timeout(STREAM_TIMEOUT_S):
+                    async for chunk in self._client.text_to_speech.stream(
+                        **convert_params
+                    ):
+                        if not chunk:
+                            continue
+                        if total == 0:
+                            _LOGGER.info(
+                                "First audio chunk (%d bytes) from ElevenLabs for "
+                                "voice %s%s",
+                                len(chunk), voice_id, profile_note,
+                            )
+                        total += len(chunk)
+                        yield chunk
+            except asyncio.TimeoutError:
+                _LOGGER.error("Timeout streaming TTS audio after %d bytes", total)
+                raise
+            except ApiError as err:
+                _LOGGER.error("ElevenLabs API error after %d bytes: %s", total, err)
+                raise
+
+            if not total:
+                # Must RAISE, not return. A bare return is a clean generator
+                # exit, which HA reads as "succeeded with 0 bytes": it then
+                # writes a 0-byte mp3 into /config/tts under the deterministic
+                # sha1(message)+options key and serves that silence forever,
+                # surviving restarts. Raising propagates into
+                # _load_data_into_cache's except, which pops the mem cache and
+                # returns BEFORE the disk write -- matching both the pre-patch
+                # behaviour and the base contract at tts/entity.py:185-186.
+                raise HomeAssistantError(
+                    f"No TTS from {self.entity_id} for '{message[:64]}'"
+                )
+
+            _LOGGER.info(
+                "Streamed %d bytes of audio for voice %s%s",
+                total, voice_id, profile_note,
+            )
+
+        return TTSAudioResponse("mp3", _audio_stream())

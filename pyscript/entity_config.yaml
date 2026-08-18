@@ -107,7 +107,7 @@ persons:
     imap_sensor: sensor.gmail_messages
   jessica:
     calendar: ""
-    notify_service: notify.mobile_app_oppo_a38
+    notify_service: ""
     spotify: ""
     imap_sensor: ""
 

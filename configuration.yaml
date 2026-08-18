@@ -112,6 +112,8 @@ logger:
     custom_components.pyscript.file.email_promote: info
     custom_components.pyscript.file.satellite_idle_reset: info
     custom_components.extended_openai_conversation: debug
+    custom_components.elevenlabs_custom_tts: info
+    homeassistant.components.tts: debug
 
 pyscript:
  allow_all_imports: true

@@ -442,16 +442,54 @@ def _resolve_person_from_imap(sensor_entity: str = "") -> str:
     return slugs[0] if slugs else ""
 
 
+# Last known-good identity confidence: {person: (score, monotonic_ts)}.
+# A sensor reading `unknown`/`unavailable` means "no measurement right now",
+# NOT "definitely not this person". The old code collapsed both to 0 via
+# `or 0`, so a phone entering ColorOS doze (WiFi dropped for 1-3h) silently
+# suppressed every email announcement behind reason="low_confidence (0%)".
+_IDENTITY_CACHE: dict = {}
+IDENTITY_STALE_S = 1800  # 30 min — past this we fail closed rather than guess
+
+
 def _check_identity_confidence(person: str = "") -> int:
-    """Get identity confidence score for a person."""
+    """Get identity confidence score for a person.
+
+    Returns the live score when the sensor has a numeric reading. When it does
+    not, falls back to the last known-good score if it is fresher than
+    IDENTITY_STALE_S; past that it returns 0 (fail closed — the privacy gate
+    must not open just because presence data went missing).
+    """
     if not person:
         person = resolve_active_user()
-    try:
-        return int(float(
-            state.get(f"sensor.identity_confidence_{person}") or 0  # noqa: F821
-        ))
-    except (TypeError, ValueError, NameError):
+    if not person:
         return 0
+
+    raw = None
+    try:
+        raw = state.get(f"sensor.identity_confidence_{person}")  # noqa: F821
+    except (NameError, ValueError, TypeError):
+        raw = None
+
+    try:
+        score = int(float(raw))
+    except (TypeError, ValueError):
+        score = None
+
+    now_s = time.monotonic()
+    if score is not None:
+        _IDENTITY_CACHE[person] = (score, now_s)
+        return score
+
+    cached = _IDENTITY_CACHE.get(person)
+    if cached and (now_s - cached[1]) <= IDENTITY_STALE_S:
+        log.info(  # noqa: F821
+            f"email_promote: identity sensor for {person} unreadable "
+            f"({raw!r}) — using last known-good {cached[0]}% "
+            f"({int(now_s - cached[1])}s old)"
+        )
+        return cached[0]
+
+    return 0
 
 
 # ── Core Processing Logic ───────────────────────────────────────────────────

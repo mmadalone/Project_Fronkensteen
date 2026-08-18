@@ -399,7 +399,7 @@ views:
       # ── Raw Signals ──
       - entity: device_tracker.oppo_a60
         name: Miquel WiFi
-      - entity: device_tracker.oppo_a38
+      - entity: device_tracker.redmi_note_14
         name: Jessica WiFi
       - entity: device_tracker.madoppo
         name: Miquel GPS
@@ -1906,7 +1906,7 @@ views:
       entities:
       - entity: sensor.identity_confidence_jessica
         name: Confidence
-      - entity: device_tracker.oppo_a38
+      - entity: device_tracker.redmi_note_14
         name: WiFi
       - entity: input_boolean.ai_wifi_stale_jessica
         name: WiFi Stale
@@ -2147,7 +2147,7 @@ views:
     title: Signal Breakdown
     content: >-
       {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
-      {%- set j_wifi = is_state('device_tracker.oppo_a38', 'home') -%}
+      {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
       {%- set j_stale = is_state('input_boolean.ai_wifi_stale_jessica', 'on') -%}
       {%- set m_gps = is_state('device_tracker.madoppo', 'home') -%}
       {%- set solo = is_state('binary_sensor.ai_solo_single_zone', 'on') -%}
