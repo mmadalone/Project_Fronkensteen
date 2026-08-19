@@ -473,7 +473,7 @@ This replaces the old filesystem-based recovery (scanning `_versioning/` directo
 
 The HA MCP git tools (`ha_create_checkpoint`, `ha_git_commit`, `ha_git_rollback`) only track `HA_CONFIG`. They know nothing about `PROJECT_DIR` or `GIT_REPO`.
 
-Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Publish Workflow defined in the project instructions. Claude handles the sync (rsync) and commit (git MCP) natively. For full repo sync including bundle population for the HACS installer, use `ha-master-sync-to-repo.sh` (handles rsync, patched component sync, bundle population, and zipped patched components).
+Style guide edits in `PROJECT_DIR` are synced and committed via the Post-Edit Publish Workflow defined in the project instructions. Claude handles the sync (rsync) and commit (git MCP) natively. For full repo sync, use `ha-master-sync-to-repo.sh` (handles rsync and patched component sync to `source_components/`). It does **not** populate the installer bundle — that moved to CI on 2026-05-02: `scripts/sync_bundle.sh` runs from `.github/workflows/release.yaml` on tag push, and `custom_components/project_fronkensteen/bundle/` is gitignored precisely so the build output never lands in the repo.
 
 **Decision rule — two paths, zero deliberation:**
 

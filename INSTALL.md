@@ -64,7 +64,7 @@ Install via HACS > Integrations > Search:
 3. **OpenAI STT**
 4. **OpenAI TTS**
 
-**For Extended OpenAI Conversation:** Do NOT install from HACS. Use the patched version (adds a 4-layer speech sanitizer that strips tool-call leaks from TTS):
+**For Extended OpenAI Conversation:** Do NOT install from HACS. Use the patched version (adds a 6-layer speech sanitizer that strips tool-call leaks from TTS):
 ```
 source_components/extended_openai_conversation/ -> /config/custom_components/extended_openai_conversation/
 ```
@@ -73,6 +73,11 @@ source_components/extended_openai_conversation/ -> /config/custom_components/ext
 ```
 source_components/elevenlabs_custom_tts/ -> /config/custom_components/elevenlabs_custom_tts/
 ```
+
+> **Where to get `source_components/`.** The HACS release asset
+> (`project_fronkensteen.zip`) contains **only** `custom_components/project_fronkensteen/`,
+> so `source_components/` is not in it. Get those two patched components from the
+> release's **"Source code (zip)"** attachment, or by cloning the repository.
 
 Disable HACS auto-updates for both patched components.
 
@@ -91,7 +96,7 @@ pyscript/*.py                    -> /config/pyscript/
 pyscript/modules/shared_utils.py -> /config/pyscript/modules/shared_utils.py
 ```
 
-**Files to copy (36 modules + 1 shared utility):**
+**Files to copy (44 modules + 1 shared utility):**
 - `agent_dispatcher.py`, `agent_whisper.py`, `away_patterns.py`, `calendar_promote.py`
 - `common_utilities.py`, `contact_history.py`, `conversation_sensor.py`, `duck_manager.py`
 - `email_promote.py`, `entity_history.py`, `entropy_correlator.py`, `focus_guard.py`
@@ -119,7 +124,7 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
-**43 package files.** These define template sensors, automations, scripts, and some helpers.
+**46 package files.** These define template sensors, automations, scripts, and some helpers.
 
 ---
 
@@ -495,11 +500,37 @@ Pyscript is running in restricted mode. Set `allow_all_imports: true` in pyscrip
 
 ## Updating
 
-When a new version is released:
+### If you installed through HACS (recommended)
+
+Updates are applied for you. HACS downloads the new release, and on the next
+Home Assistant start the integration compares the installed version recorded in
+`.storage/project_fronkensteen` against the version it ships with — if they
+differ, it copies the updated files itself.
+
+1. Update **Project Fronkensteen** in HACS
+2. Restart Home Assistant
+3. Read the release notes on the
+   [Releases page](https://github.com/mmadalone/Project_Fronkensteen/releases)
+   for new helpers or configuration changes
+
+Your own configuration is preserved across an update: `entity_config.yaml`,
+`tts_speaker_config.json` and `voice_mood_profile_map.json` are treated as
+config templates and are not overwritten once they exist, and helper files are
+**merged** — new helpers are appended, and helpers you have already tuned keep
+their values.
+
+If files look out of date afterwards, run the `project_fronkensteen.repair_installation`
+service, which re-copies anything missing or stale.
+
+> Updating the two **patched components** (Extended OpenAI Conversation and
+> ElevenLabs Custom TTS) is still manual, and updating them *from HACS* will
+> silently discard the patches. See the note in Step 2.
+
+### If you installed manually
 
 1. Back up your `/config/pyscript/entity_config.yaml`, `tts_speaker_config.json`, and `voice_mood_profile_map.json`
 2. Copy updated `.py` files to `/config/pyscript/`
 3. Copy updated `.yaml` files to `/config/packages/`, `/config/blueprints/automation/madalone/`, `/config/blueprints/script/madalone/`, and `/config/helpers_*.yaml`
 4. Restore your config files from backup
-5. Check the changelog for new helpers or configuration changes
+5. Read the release notes for new helpers or configuration changes
 6. Restart Home Assistant

@@ -312,13 +312,18 @@ If you deploy any of these and they work (or don't), feedback is welcome via [Gi
 ### Quick Start (HACS)
 
 1. Add this repository as a [HACS custom repository](https://hacs.xyz/docs/faq/custom_repositories/) (category: Integration)
-2. Install **Project Fronkensteen** from HACS
+2. Install **Project Fronkensteen** from HACS — pick a **release**, not the `main` branch
 3. Restart Home Assistant
 4. Go to Settings > Integrations > Add Integration > Project Fronkensteen
 5. Follow the 5-step setup wizard (feature selection, household config, speaker setup)
 6. Restart Home Assistant again
 
 The installer copies all pyscript modules, packages, blueprints, helpers, and the patched ElevenLabs TTS to the correct locations. It only installs files for the feature groups you select.
+
+> **Releases only.** HACS installs this from a zip asset attached to each release
+> (`project_fronkensteen.zip`), so the default branch is deliberately hidden — installing
+> from `main` would look for an asset that does not exist there and fail. Updates are then
+> applied automatically; see [Updating](INSTALL.md#updating).
 
 ### Manual Install
 
