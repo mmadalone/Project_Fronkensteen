@@ -134,7 +134,6 @@ ai_email_follow_me_last_subject:
 # I-27: Work calendar keywords for auto-detection
 ai_work_calendar_keywords:
   name: "AI Context - Work Calendar Keywords"
-  initial: "standup,sprint,meeting,client,1:1,work,office,scrum,daily"
   max: 255
   icon: mdi:briefcase-search
 
@@ -175,7 +174,6 @@ ai_keyword_remove:
 # Domain suffix: "amazon.com" also matches "email.amazon.com"
 ai_email_known_contacts:
   name: "AI Email Known Contacts"
-  initial: ""
   max: 255
   icon: mdi:account-group
 
@@ -184,7 +182,6 @@ ai_email_known_contacts:
 # invoice, confirmation, password reset, security alert, payment, receipt.
 ai_email_priority_keywords:
   name: "AI Email Priority Keywords"
-  initial: ""
   max: 255
   icon: mdi:tag-text
 
@@ -193,7 +190,6 @@ ai_email_priority_keywords:
 # Seeded from existing email_follow_me blueprint blocked list.
 ai_email_blocked_senders:
   name: "AI Email Blocked Senders"
-  initial: "bingo@patreon.com, no-reply@revolut.com"
   max: 255
   icon: mdi:account-cancel
 
@@ -202,7 +198,6 @@ ai_email_blocked_senders:
 # Seeded from existing email_follow_me blueprint keyword_list.
 ai_email_blocked_keywords:
   name: "AI Email Blocked Keywords"
-  initial: "continua con la configuración de tu cuenta, vacantes nuevas que coinciden"
   max: 255
   icon: mdi:tag-off
 
@@ -216,7 +211,6 @@ ai_email_blocked_keywords:
 # Set to the entity_id of your preferred ha_text_ai instance.
 ai_task_instance:
   name: "AI Task - ha_text_ai Instance"
-  initial: "sensor.ha_text_ai_deepseek_chat"
   icon: mdi:robot-outline
   max: 255
 
@@ -224,7 +218,6 @@ ai_task_instance:
 # Mode: password — value hidden in UI.
 ai_embedding_api_url:
   name: "AI Embedding - API URL"
-  initial: "https://openrouter.ai/api/v1"
   icon: mdi:api
   max: 255
 
@@ -238,7 +231,6 @@ ai_embedding_api_key:
 # Embedding model name. text-embedding-3-small is cheapest and sufficient.
 ai_embedding_model:
   name: "AI Embedding - Model"
-  initial: "text-embedding-3-small"
   icon: mdi:cube-outline
   max: 100
 
@@ -253,7 +245,6 @@ ai_embedding_model:
 #   anthropic/claude-haiku-4-5   — strong fallback
 ai_radio_klara_vision_model:
   name: "AI Radio Klara - Vision Model"
-  initial: "google/gemini-2.5-flash"
   icon: mdi:eye-outline
   max: 100
 
@@ -261,7 +252,6 @@ ai_radio_klara_vision_model:
 # Space-separated list of tags that protect entries from archiving.
 ai_memory_archive_protection_tags:
   name: "AI Memory - Archive Protection Tags"
-  initial: "important remember pinned permanent"
   icon: mdi:shield-lock
   max: 255
 
@@ -277,7 +267,6 @@ ai_memory_archive_protection_tags:
 
 ai_budget_fallback_agent:
   name: "AI Budget - Fallback Conversation Agent"
-  initial: "homeassistant"
   icon: mdi:robot-off-outline
   max: 255
 
@@ -299,7 +288,6 @@ ai_budget_fallback_agent:
 # Overrides weekday/weekend defaults for specific days.
 ai_schedule_day_overrides:
   name: "AI Schedule - Day Overrides (JSON)"
-  initial: "{}"
   max: 255
   icon: mdi:calendar-week
 
@@ -311,7 +299,6 @@ ai_schedule_day_overrides:
 #   {"summary":"Standup","hour":9,"minute":0}  — JSON
 ai_test_calendar_event:
   name: "AI Test - Calendar Event Override"
-  initial: ""
   max: 255
   icon: mdi:calendar-clock
 
@@ -346,7 +333,6 @@ ai_test_calendar_event:
 # Allows testing another user's automations without their phone/presence.
 ai_test_identity:
   name: "AI Test - Identity Override"
-  initial: ""
   max: 20
   icon: mdi:account-switch
 
@@ -355,7 +341,6 @@ ai_test_identity:
 # For future prediction engine testing.
 ai_test_routine_stage:
   name: "AI Test - Routine Stage Override"
-  initial: ""
   max: 30
   icon: mdi:clock-fast
 
@@ -464,7 +449,6 @@ ai_dispatcher_fallback_pipeline:
   name: "Dispatcher Fallback Pipeline"
   icon: mdi:pipe-wrench
   max: 255
-  initial: "homeassistant"
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_system_recovery — Pending Category (reload survival)

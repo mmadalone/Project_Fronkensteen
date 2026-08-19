@@ -15,11 +15,9 @@ input_boolean:
   # ── Per-User Context Flags ──
   ai_context_work_day_miquel:
     name: "AI Context - Work Day (Miquel)"
-    initial: true
     icon: mdi:briefcase
   ai_context_work_day_jessica:
     name: "AI Context - Work Day (Jessica)"
-    initial: false
     icon: mdi:briefcase-search
 
   # ── WiFi Stale Detection ──
@@ -66,7 +64,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 30
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -75,7 +72,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 20
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -84,7 +80,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 40
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -93,7 +88,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 30
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -102,7 +96,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 50
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -111,7 +104,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 40
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -122,7 +114,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 30
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -131,7 +122,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 20
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -140,7 +130,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 40
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -149,7 +138,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 30
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -158,7 +146,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 50
     unit_of_measurement: "pts"
     icon: mdi:arrow-up-bold
     mode: slider
@@ -167,7 +154,6 @@ input_number:
     min: 5
     max: 70
     step: 5
-    initial: 40
     unit_of_measurement: "pts"
     icon: mdi:arrow-down-bold
     mode: slider
@@ -185,14 +171,12 @@ input_select:
       - Valencian
       - Dutch
       - Portuguese
-    initial: English
   ai_context_preferred_language_jessica:
     name: "AI Context - Preferred Language (Jessica)"
     options:
       - Spanish
       - Valencian
       - English
-    initial: Spanish
 
 # ═══════════════════════════════════════════════════════════════════
 # input_text — 38 entities
@@ -202,23 +186,18 @@ input_text:
   # ── Shared User Profile (household-specific) ──
   ai_context_user_name:
     name: "AI Context - User Name"
-    initial: "Miquel"
     max: 50
   ai_context_user_name_spoken:
     name: "AI Context - User Name (TTS pronunciation)"
-    initial: "Mee-kel"
     max: 50
   ai_context_user_languages:
     name: "AI Context - User Languages"
-    initial: "English, Spanish, Valencian, Dutch, Portuguese"
     max: 200
   ai_context_household:
     name: "AI Context - Household Members"
-    initial: "Miquel, Jessica (partner)"
     max: 200
   ai_context_pets:
     name: "AI Context - Pets"
-    initial: "none"
     max: 100
 
   # ── Per-Person Calendar Summaries ──
@@ -246,29 +225,23 @@ input_text:
   # ── Per-User Profile (Miquel) ──
   ai_context_user_name_miquel:
     name: "AI Context - User Name (Miquel)"
-    initial: "Miquel"
     max: 50
   ai_context_user_name_spoken_miquel:
     name: "AI Context - User Name Spoken (Miquel)"
-    initial: "Mee-kel"
     max: 50
   ai_context_user_languages_miquel:
     name: "AI Context - User Languages (Miquel)"
-    initial: "English, Spanish, Valencian, Dutch, Portuguese"
     max: 200
 
   # ── Per-User Profile (Jessica) ──
   ai_context_user_name_jessica:
     name: "AI Context - User Name (Jessica)"
-    initial: "Jessica"
     max: 50
   ai_context_user_name_spoken_jessica:
     name: "AI Context - User Name Spoken (Jessica)"
-    initial: "Jessica"
     max: 50
   ai_context_user_languages_jessica:
     name: "AI Context - User Languages (Jessica)"
-    initial: "Spanish, Valencian"
     max: 200
 
   # ── Communication Preferences ──

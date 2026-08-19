@@ -9,12 +9,13 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import Event, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 
-from . import installer
+from . import installer, seeder
 from .const import DOMAIN, VERSION
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -51,7 +52,28 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if "features" not in hass.data.get(DOMAIN, {}):
             return {"error": "not_configured"}
         result = await installer.repair(hass, hass.data[DOMAIN]["features"])
-        return {"repaired": result["repaired"], "errors": result["errors"]}
+
+        # A repair can restore a helper file containing helpers this install has
+        # never seen, which arrive with no value at all. Seeding here gives them
+        # their defaults. Existing helpers are safe: seeder skips any entity it
+        # has seeded before AND any whose value is no longer the bare fallback.
+        seeded = 0
+        store = hass.data.get(DOMAIN, {}).get("store")
+        if store is not None:
+            record = await store.async_load() or {}
+            done = record.get("seeded_helpers", [])
+            seed_report = await seeder.seed(hass, done)
+            if seed_report["seeded"]:
+                record["seeded_helpers"] = sorted(set(done) | set(seed_report["seeded"]))
+                await store.async_save(record)
+            seeded = len(seed_report["seeded"]) - seed_report["skipped"]
+            result["errors"] = result["errors"] + seed_report["errors"]
+
+        return {
+            "repaired": result["repaired"],
+            "helpers_seeded": seeded,
+            "errors": result["errors"],
+        }
 
     async def _handle_status(call: ServiceCall) -> dict:
         features = hass.data.get(DOMAIN, {}).get("features", [])
@@ -115,6 +137,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     speakers = entry.data.get("speakers", {})
     config_data = {**household, **speakers}
 
+    # Carry a running record rather than saving fresh literals, so keys a branch
+    # does not care about (notably seeded_helpers) survive an install or update
+    # instead of being silently dropped.
+    record = dict(stored or {})
+    is_first_install = not stored
+
+    async def _save(**changes) -> None:
+        record.update(changes)
+        await store.async_save(record)
+
     if not stored:
         _LOGGER.info("Installing Project Fronkensteen v%s", VERSION)
         report = await installer.install(hass, features, config_data)
@@ -124,7 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         for err in report["errors"]:
             _LOGGER.warning("Install error: %s", err)
-        await store.async_save({"version": VERSION, "features": features})
+        await _save(version=VERSION, features=features)
 
     elif stored.get("version") != VERSION:
         old = stored.get("version", "unknown")
@@ -136,7 +168,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         for err in report["errors"]:
             _LOGGER.warning("Update error: %s", err)
-        await store.async_save({"version": VERSION, "features": features})
+        await _save(version=VERSION, features=features)
 
     else:
         _LOGGER.debug("Project Fronkensteen v%s already installed", VERSION)
@@ -144,6 +176,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Make features available to services registered in async_setup
     hass.data[DOMAIN]["store"] = store
     hass.data[DOMAIN]["features"] = features
+
+    # Decide ONCE whether this installation is eligible for first-run defaults.
+    #
+    # Only a genuinely new install is. An existing one already holds chosen
+    # values -- including deliberate ones that happen to equal the fallback, so
+    # "is it still at the fallback?" cannot tell the two apart. Seeding such an
+    # install would overwrite real settings: on the config this was built
+    # against, exactly one helper would have been silently flipped back, and it
+    # was the one whose stray `initial:` had just been removed to stop that very
+    # thing. So an upgrade adopts the whole manifest as already-seeded, which
+    # still leaves helpers ADDED by a later version to be seeded normally.
+    if "seeded_helpers" not in record:
+        adopted = [] if is_first_install else sorted(await seeder.manifest_ids(hass))
+        if adopted:
+            _LOGGER.info(
+                "Existing installation: adopting %d helpers as already configured; "
+                "first-run defaults will apply only to helpers added later",
+                len(adopted),
+            )
+        await _save(seeded_helpers=adopted)
+
+    # The helpers are YAML-defined, so on the boot where they were just written
+    # they do not exist as entities yet -- they appear on the NEXT boot. Hence
+    # this runs on every setup and seeds whatever is present and untouched;
+    # anything absent is left for a later boot. EVENT_HOMEASSISTANT_STARTED (not
+    # EVENT_HOMEASSISTANT_START) is required -- the earlier event fires before
+    # YAML platforms have finished loading.
+    async def _seed(_event: Event | None = None) -> None:
+        current = await store.async_load() or {}
+        done = current.get("seeded_helpers", [])
+        report = await seeder.seed(hass, done)
+        if not report["seeded"]:
+            return
+        current["seeded_helpers"] = sorted(set(done) | set(report["seeded"]))
+        await store.async_save(current)
+
+    if hass.is_running:
+        await _seed()
+    else:
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _seed)
+        )
 
     return True
 

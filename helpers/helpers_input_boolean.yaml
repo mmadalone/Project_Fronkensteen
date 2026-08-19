@@ -8,7 +8,6 @@
 ai_music_follow_me:
   name: music_follow_me
   icon: mdi:speaker
-  initial: true
 
 # ai_ducking_flag removed — migrated to sensor (state.set, Session 8)
 
@@ -36,7 +35,6 @@ ai_wake_up_stop:
 ai_bedtime_global_lock:
   name: Bedtime negotiator global lock
   icon: mdi:lock
-  initial: false
 
 # ai_gn_bedtime_lock removed — migrated to sensor (state.set, Session 5)
 
@@ -44,17 +42,14 @@ ai_bedtime_global_lock:
 ai_voice_handoff_enabled:
   name: "AI Voice Handoff - Enabled"
   icon: mdi:account-switch
-  initial: true
 
 ai_voice_pin_enabled:
   name: "AI voice PIN enabled"
   icon: mdi:shield-lock
-  initial: false
 
 ai_notification_follow_me:
   name: Notification follow-me enabled
   icon: mdi:message-bulleted
-  initial: true
 
 ai_handoff_processing:
   name: AI Handoff Processing
@@ -66,7 +61,6 @@ ai_handoff_processing:
 ai_contact_history_enabled:
   name: AI Contact History Enabled
   icon: mdi:message-text-clock
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_banter — Reactive Banter (Pattern 1)
@@ -74,7 +68,6 @@ ai_contact_history_enabled:
 ai_reactive_banter_enabled:
   name: "AI Reactive Banter - Enabled"
   icon: mdi:message-reply-text
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_auto_off — Auto-Off System
@@ -101,7 +94,6 @@ ai_away_patterns_enabled:
 ai_entropy_correlation_enabled:
   name: "AI Entropy Correlation - Enabled"
   icon: mdi:chart-scatter-plot
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_calendar_promotion — Calendar Promotion
@@ -123,13 +115,11 @@ ai_calendar_promotion_enabled:
 # ai_context_work_day removed — migrated to sensor (state.set, Session 7)
 ai_context_guests_present:
   name: "AI Context - Guests Present"
-  initial: false
   icon: mdi:account-group
 
 # I-27: Manual override — when ON, user's toggle wins over auto-detection
 ai_work_day_manual_override:
   name: "AI Context - Work Day Manual Override"
-  initial: false
   icon: mdi:hand-back-left
 
 # ai_context_work_day_tomorrow removed — migrated to sensor (state.set, Session 7)
@@ -143,7 +133,6 @@ ai_dispatcher_enabled:
   icon: mdi:head-cog
 ai_keyword_manual:
   name: "Mark as Manual (sticky)"
-  initial: true
   icon: mdi:pin
 
 # ═══════════════════════════════════════════════════════════════════
@@ -152,12 +141,10 @@ ai_keyword_manual:
 ai_duck_manager_enabled:
   name: AI Duck Manager Enabled
   icon: mdi:volume-vibrate
-  initial: true
 # Duck Guard: let blueprints update snapshot during ducking
 ai_duck_guard_enabled:
   name: "Duck Guard for Blueprints"
   icon: mdi:shield-half-full
-  initial: true
 # I-22: Allow manual volume override during ducking
 ai_duck_allow_manual_override:
   name: "Duck Allow Manual Volume Override"
@@ -170,7 +157,6 @@ ai_duck_allow_manual_override:
 ai_email_master_toggle:
   name: "AI Email Follow-Me — Master Toggle"
   icon: mdi:email-sync
-  initial: true
 
 ai_email_promotion_enabled:
   name: "AI Email Promotion Enabled"
@@ -185,7 +171,6 @@ ai_email_promotion_enabled:
 # ═══════════════════════════════════════════════════════════════════
 ai_entity_history_enabled:
   name: "AI Entity History - Enabled"
-  initial: true
   icon: mdi:history
 
 # ═══════════════════════════════════════════════════════════════════
@@ -200,21 +185,18 @@ ai_entity_history_enabled:
 # OFF = agents can still call memory_search on demand, but L1 is lighter.
 ai_memory_context_enabled:
   name: "AI Memory - L1 Context Injection"
-  initial: true
   icon: mdi:brain
 
 # ── Auto-archive (I-42 Phase 2) ──────────────────────────────────
 # Master toggle for memory auto-archiving.
 ai_memory_auto_archive:
   name: "AI Memory - Auto Archive"
-  initial: true
   icon: mdi:archive-check
 
 # ── Search-time enrichment (auto-relationships Option A) ────────
 # Append graph-connected entries to memory search results.
 ai_memory_search_enrich:
   name: "AI Memory - Search Enrichment"
-  initial: true
   icon: mdi:graph-outline
 
 # ── Semantic autolink (vec0 content_match) ──────────────────────
@@ -222,7 +204,6 @@ ai_memory_search_enrich:
 # OFF by default — opt-in since it has embedding cost implications.
 ai_memory_semantic_autolink:
   name: "AI Memory - Semantic Autolink"
-  initial: false
   icon: mdi:vector-link
 
 # ═══════════════════════════════════════════════════════════════════
@@ -230,7 +211,6 @@ ai_memory_semantic_autolink:
 # ═══════════════════════════════════════════════════════════════════
 ai_escalation_enabled:
   name: "AI Escalation Follow-Through"
-  initial: true
   icon: mdi:dice-5
 
 # ═══════════════════════════════════════════════════════════════════
@@ -286,7 +266,6 @@ ai_focus_meal_ask_eaten:
 # ═══════════════════════════════════════════════════════════════════
 ai_guest_mode:
   name: "Guest Mode"
-  initial: false
   icon: mdi:account-question
 
 # ai_sustained_solo_zone removed — migrated to sensor (state.set, Session 8)
@@ -313,7 +292,6 @@ ai_media_tracking_enabled:
 ai_music_composer_enabled:
   name: "AI Music Composer - Enabled"
   icon: mdi:music-box
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_music_taste — Music Taste Extraction
@@ -390,7 +368,6 @@ ai_fp2_zone_shower_enabled:
 # ═══════════════════════════════════════════════════════════════════
 ai_privacy_gate_enabled:
   name: "AI Privacy Gate — Kill Switch"
-  initial: true
   icon: mdi:shield-account
 
 
@@ -456,7 +433,6 @@ ai_sleep_false_positive_flag:
 # Default OFF — must never activate accidentally in production.
 ai_test_mode:
   name: "AI Test Mode"
-  initial: false
   icon: mdi:flask-outline
 
 # TTS test session: swap ElevenLabs → HA Cloud to save credits.
@@ -464,7 +440,6 @@ ai_test_mode:
 # full pipeline but uses free HA Cloud TTS instead of ElevenLabs.
 ai_tts_test_mode:
   name: "AI TTS Test Session — Use HA Cloud"
-  initial: false
   icon: mdi:flask-round-bottom
 
 # ═══════════════════════════════════════════════════════════════════
@@ -495,18 +470,15 @@ ai_interview_mode:
 # ═══════════════════════════════════════════════════════════════════
 ai_whisper_enabled:
   name: "AI Whisper - Enabled"
-  initial: true
   icon: mdi:ear-hearing
 
 ai_whisper_mood_detection:
   name: "AI Whisper - Mood Detection"
-  initial: true
   icon: mdi:emoticon-outline
 
 ai_conversation_sensor_enabled:
   name: AI Conversation Sensor Enabled
   icon: mdi:message-text-clock
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_winddown — Bedtime Wind-Down System (C11)
@@ -520,27 +492,22 @@ ai_scene_learner_enabled:
 
 ai_circadian_workshop_enabled:
   name: "AI Circadian Workshop Enabled"
-  initial: true
   icon: mdi:sun-clock
 
 ai_circadian_living_room_enabled:
   name: "AI Circadian Living Room Enabled"
-  initial: true
   icon: mdi:sun-clock
 
 ai_pre_light_enabled:
   name: "AI Pre-Light Enabled"
-  initial: true
   icon: mdi:lightbulb-flash
 
 ai_ambient_music_enabled:
   name: "AI Ambient Music Enabled"
-  initial: false
   icon: mdi:music-note
 
 ai_winddown_enabled:
   name: "AI Wind-Down - Enabled"
-  initial: true
   icon: mdi:weather-night
 
 # ai_winddown_active removed — migrated to sensor (state.set, Session 5)
@@ -551,7 +518,6 @@ ai_winddown_enabled:
 ai_theatrical_mode_enabled:
   name: "AI Theatrical Mode - Enabled"
   icon: mdi:drama-masks
-  initial: true
 
 # ai_theatrical_mode_active removed — migrated to sensor (state.set, Session 8)
 
@@ -561,19 +527,16 @@ ai_theatrical_mode_enabled:
 ai_voice_mood_enabled:
   name: "AI Voice Mood Modulation - Enabled"
   icon: mdi:waveform
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_auto_on — Auto-On System (zone toggles)
 # ═══════════════════════════════════════════════════════════════════
 ai_auto_on_workshop:
   name: "AI Auto-On — Workshop"
-  initial: true
   icon: mdi:lightbulb-auto
 
 ai_auto_on_living_room:
   name: "AI Auto-On — Living Room"
-  initial: true
   icon: mdi:lightbulb-auto
 
 # ═══════════════════════════════════════════════════════════════════
@@ -662,7 +625,6 @@ ai_memory_to_do_list_mirror_kill_switch:
 ai_notifications_master_enabled:
   name: "AI Notifications — Master Enabled"
   icon: mdi:bell-check
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # Therapy Session (QS-5)
@@ -681,7 +643,6 @@ ai_therapy_enabled:
 ai_toggle_audit_enabled:
   name: "AI Toggle Audit - Enabled"
   icon: mdi:clipboard-check-outline
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # Dispatcher Bypass Mode (set by pyscript on cache failure)
@@ -694,7 +655,6 @@ ai_toggle_audit_enabled:
 ai_system_recovery_enabled:
   name: "AI System Recovery Engine"
   icon: mdi:wrench-cog
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # Contact History (migrated from UI)
@@ -709,7 +669,6 @@ ai_contact_history_summarizer_kill_switch:
 ai_watch_history_enabled:
   name: "AI Watch History"
   icon: mdi:television-play
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_listen_history — Music Listen History Tracker
@@ -717,7 +676,6 @@ ai_watch_history_enabled:
 ai_listen_history_enabled:
   name: "AI Listen History"
   icon: mdi:music-note
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_radio_klara — Radio Klara Now-Playing Awareness
@@ -728,7 +686,6 @@ ai_listen_history_enabled:
 ai_radio_klara_enabled:
   name: "AI Radio Klara - Enabled"
   icon: mdi:radio
-  initial: true
 
 # Set ON when the cached schedule is older than 2× the refresh interval.
 # Cleared automatically when the next refresh succeeds.
@@ -744,7 +701,6 @@ ai_radio_klara_data_stale:
 ai_trace_watchdog_enabled:
   name: "AI Trace Watchdog - Enabled"
   icon: mdi:shield-search
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # lcars_* — LCARS theme control helpers
@@ -758,7 +714,6 @@ ai_trace_watchdog_enabled:
 lcars_texture:
   name: "LCARS Texture"
   icon: mdi:gradient-vertical
-  initial: false
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_echo_guard — Satellite self-hearing guard (patched EOC)
@@ -766,7 +721,6 @@ lcars_texture:
 ai_echo_guard_enabled:
   name: "AI Echo Guard - Enabled"
   icon: mdi:ear-hearing-off
-  initial: true
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_eoc_disable_reasoning — strip reasoning tokens on OpenRouter
@@ -777,7 +731,6 @@ ai_echo_guard_enabled:
 ai_eoc_disable_reasoning:
   name: "AI EOC - Disable Reasoning Tokens (OpenRouter)"
   icon: mdi:brain
-  initial: true
 
 ai_tts_leadin_enabled:
   name: "TTS Satellite Lead-in"

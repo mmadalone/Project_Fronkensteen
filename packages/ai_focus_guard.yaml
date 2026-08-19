@@ -107,6 +107,38 @@ automation:
         target:
           entity_id: input_boolean.ai_focus_mode
 
+  # Bedtime lock expiry. Nothing in the config ever cleared this helper --
+  # until 2026-08-19 its only expiry was `initial: false`, i.e. whenever the
+  # next restart happened to occur. Removing that (it was overwriting the
+  # user's value on every boot) left the lock with no expiry at all, so it
+  # gets a real one here.
+  #
+  # 04:00, not midnight like the focus-mode reset above: the lock is switched
+  # on BEFORE midnight and is supposed to hold through the night. 04:00 is
+  # after any plausible bedtime and before any plausible wake time, so it
+  # cannot cut a night short or survive into the day. Deliberately a fixed
+  # hour rather than a per-person wake time -- this only needs to not persist,
+  # and resolving weekday/weekend/alt-day schedules per person would tie a
+  # simple expiry to one household's helper names.
+  - id: ai_bedtime_global_lock_expire
+    alias: "AI Focus Guard - Bedtime Lock Expiry"
+    description: >-
+      Clear the overnight bedtime lock each morning. Without this the lock
+      stays on until somebody notices, suppressing dispatcher bedtime checks
+      and focus-guard nudges indefinitely.
+    mode: single
+    triggers:
+      - trigger: time
+        at: "04:00:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.ai_bedtime_global_lock
+        state: "on"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ai_bedtime_global_lock
+
 # =============================================================================
 # DASHBOARD CARD — Copy/paste into a manual dashboard or raw config editor
 # =============================================================================

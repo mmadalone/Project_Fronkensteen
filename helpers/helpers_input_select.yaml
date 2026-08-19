@@ -13,7 +13,6 @@ ai_handoff_llm_lines_mode:
     - ha_text_ai
     - conversation_agent
   icon: mdi:text-box-edit
-  initial: static
 
 ai_sleep_lights_sensor:
   name: "AI Sleep Lights - Presence Sensor"
@@ -32,7 +31,6 @@ ai_context_preferred_language:
     - Spanish
     - Valencian
     - Dutch
-  initial: English
 
 
 # I-45: Expertise-based agent routing mode (read by hot context → LLM prompt)
@@ -43,7 +41,6 @@ ai_expertise_routing_mode:
     - suggest
     - auto
   icon: mdi:head-lightbulb
-  initial: auto
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_dispatcher — Agent Dispatcher
@@ -142,7 +139,6 @@ ai_email_filter_mode:
     - whitelist
     - blacklist
     - hybrid
-  initial: blacklist
   icon: mdi:filter-variant
 
 # ═══════════════════════════════════════════════════════════════════
@@ -156,7 +152,6 @@ ai_budget_cost_source:
     - estimated
     - actual
     - hybrid
-  initial: hybrid
   icon: mdi:scale-balance
 
 # I-33: Budget metric selector (display preference — all limits are enforced)
@@ -197,7 +192,6 @@ ai_privacy_gate_mode:
     - auto
     - force_suppress_all
     - force_allow_all
-  initial: auto
   icon: mdi:shield-edit
 
 

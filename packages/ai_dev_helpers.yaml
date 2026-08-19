@@ -47,7 +47,6 @@ input_number:
     icon: mdi:car-clock
   ai_away_flap_debounce_seconds:
     name: "AI Away - WiFi Flap Debounce"
-    initial: 300
     min: 60
     max: 600
     step: 30
@@ -56,7 +55,6 @@ input_number:
     icon: mdi:wifi-alert
   ai_away_prediction_update_minutes:
     name: "AI Away - Prediction Update Interval"
-    initial: 15
     min: 5
     max: 60
     step: 5
@@ -65,7 +63,6 @@ input_number:
     icon: mdi:update
   ai_away_ordinal_min_samples:
     name: "AI Away - Ordinal Min Samples"
-    initial: 5
     min: 3
     max: 20
     step: 1
@@ -73,7 +70,6 @@ input_number:
     icon: mdi:counter
   ai_away_min_entropy_samples:
     name: "AI Away - Min Entropy Samples"
-    initial: 50
     min: 20
     max: 200
     step: 5
@@ -85,7 +81,6 @@ input_number:
   # ═══════════════════════════════════════════════════════════════════
   ai_entropy_tier_low:
     name: "AI Entropy Tier - Low Threshold"
-    initial: 1.0
     min: 0.1
     max: 3.0
     step: 0.1
@@ -93,7 +88,6 @@ input_number:
     icon: mdi:chart-bell-curve
   ai_entropy_tier_high:
     name: "AI Entropy Tier - High Threshold"
-    initial: 2.0
     min: 0.5
     max: 5.0
     step: 0.1
@@ -127,7 +121,6 @@ input_number:
     min: 0
     max: 2000
     step: 100
-    initial: 0
     mode: slider
     unit_of_measurement: "ms"
     icon: mdi:timer-sand
@@ -136,7 +129,6 @@ input_number:
     min: 0
     max: 1
     step: 0.05
-    initial: 0.5
     mode: slider
     icon: mdi:volume-medium
 
@@ -148,7 +140,6 @@ input_number:
     min: 128
     max: 1536
     step: 128
-    initial: 512
     mode: box
     icon: mdi:vector-square
   ai_embedding_batch_size:
@@ -156,7 +147,6 @@ input_number:
     min: 10
     max: 200
     step: 10
-    initial: 50
     mode: box
     icon: mdi:package-variant
   ai_semantic_search_results:
@@ -164,7 +154,6 @@ input_number:
     min: 1
     max: 20
     step: 1
-    initial: 5
     mode: box
     icon: mdi:text-search
   ai_semantic_similarity_threshold:
@@ -172,7 +161,6 @@ input_number:
     min: 0
     max: 1
     step: 0.05
-    initial: 0.7
     mode: slider
     icon: mdi:target
   ai_semantic_blend_weight:
@@ -180,7 +168,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 50
     mode: slider
     unit_of_measurement: "%"
     icon: mdi:scale-balance
@@ -190,7 +177,6 @@ input_number:
     min: 1
     max: 50
     step: 1
-    initial: 5
     mode: slider
 
   # ═══════════════════════════════════════════════════════════════════
@@ -201,7 +187,6 @@ input_number:
     min: 1000
     max: 50000
     step: 500
-    initial: 5000
     mode: slider
     unit_of_measurement: "records"
     icon: mdi:database-alert
@@ -210,7 +195,6 @@ input_number:
     min: 50
     max: 500
     step: 10
-    initial: 100
     mode: slider
     unit_of_measurement: "MB"
     icon: mdi:harddisk
@@ -219,7 +203,6 @@ input_number:
     min: 50
     max: 95
     step: 5
-    initial: 80
     mode: slider
     unit_of_measurement: "%"
     icon: mdi:archive-arrow-down
@@ -228,7 +211,6 @@ input_number:
     min: 7
     max: 365
     step: 1
-    initial: 30
     mode: box
     unit_of_measurement: "days"
     icon: mdi:calendar-clock
@@ -237,7 +219,6 @@ input_number:
     min: 0
     max: 10
     step: 1
-    initial: 3
     mode: box
     icon: mdi:graph-outline
   ai_memory_search_enrich_min_weight:
@@ -245,7 +226,6 @@ input_number:
     min: 0
     max: 1
     step: 0.05
-    initial: 0.15
     mode: slider
     icon: mdi:weight
   ai_memory_semantic_autolink_threshold:
@@ -253,7 +233,6 @@ input_number:
     min: 0.5
     max: 1
     step: 0.05
-    initial: 0.7
     mode: slider
     icon: mdi:vector-link
   ai_memory_semantic_autolink_batch:
@@ -261,7 +240,6 @@ input_number:
     min: 10
     max: 200
     step: 10
-    initial: 50
     mode: box
     icon: mdi:vector-link
 
@@ -273,7 +251,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 15
     unit_of_measurement: "%"
     icon: mdi:dice-multiple
     mode: slider
@@ -282,7 +259,6 @@ input_number:
     min: 0
     max: 120
     step: 5
-    initial: 30
     unit_of_measurement: "min"
     icon: mdi:timer-sand
   ai_escalation_prob_persona_switch:
@@ -290,7 +266,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 10
     unit_of_measurement: "%"
     icon: mdi:account-switch
     mode: slider
@@ -299,7 +274,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 15
     unit_of_measurement: "%"
     icon: mdi:music-note
     mode: slider
@@ -308,7 +282,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 40
     unit_of_measurement: "%"
     icon: mdi:flash
     mode: slider
@@ -317,7 +290,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:volume-high
     mode: slider
@@ -326,7 +298,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 50
     unit_of_measurement: "%"
     icon: mdi:cellphone-message
     mode: slider
@@ -335,7 +306,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 25
     unit_of_measurement: "%"
     icon: mdi:message-bulleted
     mode: slider
@@ -344,7 +314,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 20
     unit_of_measurement: "%"
     icon: mdi:script-text-play
     mode: slider
@@ -419,7 +388,6 @@ input_number:
     max: 60
     step: 5
     unit_of_measurement: "min"
-    initial: 20
 
   # ═══════════════════════════════════════════════════════════════════
   # Budget Thresholds
@@ -439,7 +407,6 @@ input_number:
     max: 100
     step: 5
     mode: slider
-    initial: 30
   ai_budget_threshold_high:
     name: "LLM Budget High Threshold (%)"
     icon: mdi:cash-plus
@@ -447,7 +414,6 @@ input_number:
     max: 100
     step: 5
     mode: slider
-    initial: 60
 
   # ═══════════════════════════════════════════════════════════════════
   # Email Priority Filter
@@ -457,7 +423,6 @@ input_number:
     min: 30
     max: 1440
     step: 30
-    initial: 120
     mode: slider
     unit_of_measurement: "min"
     icon: mdi:timer-alert
@@ -481,7 +446,6 @@ input_number:
     step: 1
     mode: slider
     unit_of_measurement: h
-    initial: 48
 
   # ═══════════════════════════════════════════════════════════════════
   # Presence Pattern Recognition
@@ -521,7 +485,6 @@ input_number:
     step: 10
     unit_of_measurement: "s"
     mode: slider
-    initial: 120
   ai_presence_identity_confidence_floor:
     name: "AI - Presence Identity Confidence Floor"
     icon: mdi:gauge-low
@@ -530,7 +493,6 @@ input_number:
     step: 5
     unit_of_measurement: "%"
     mode: slider
-    initial: 20
   ai_presence_identity_departure_debounce:
     name: "AI - Presence Identity Departure Debounce"
     icon: mdi:clock-fast
@@ -539,7 +501,6 @@ input_number:
     step: 5
     unit_of_measurement: "s"
     mode: slider
-    initial: 60
 
   # ═══════════════════════════════════════════════════════════════════
   # Sleep / Bedtime Tuning
@@ -566,7 +527,6 @@ input_number:
   # ═══════════════════════════════════════════════════════════════════
   ai_project_hot_context_limit:
     name: "AI Project Hot Context Limit"
-    initial: 5
     min: 1
     max: 15
     step: 1
@@ -621,7 +581,6 @@ input_number:
     step: 0.1
     mode: slider
     unit_of_measurement: s
-    initial: 0.5
   ai_tts_poll_interval:
     name: "TTS Playback Poll Interval (seconds)"
     icon: mdi:timer-sync-outline
@@ -630,7 +589,6 @@ input_number:
     step: 0.05
     mode: slider
     unit_of_measurement: s
-    initial: 0.25
   ai_tts_max_timeout:
     name: "TTS Playback Max Timeout (seconds)"
     icon: mdi:timer-alert-outline
@@ -639,7 +597,6 @@ input_number:
     step: 1
     mode: slider
     unit_of_measurement: s
-    initial: 30
   ai_tts_post_buffer:
     name: "TTS Post-Playback Buffer (seconds)"
     icon: mdi:timer-check-outline
@@ -648,7 +605,6 @@ input_number:
     step: 0.1
     mode: slider
     unit_of_measurement: s
-    initial: 0.3
   ai_tts_max_ambient:
     name: "TTS Max Ambient Queue"
     icon: mdi:playlist-music
@@ -656,7 +612,6 @@ input_number:
     max: 20
     step: 1
     mode: box
-    initial: 3
   ai_tts_default_duration:
     name: "TTS Default Duration (seconds)"
     icon: mdi:clock-outline
@@ -665,7 +620,6 @@ input_number:
     step: 0.5
     mode: slider
     unit_of_measurement: s
-    initial: 5
   ai_tts_generation_buffer:
     name: "TTS Generation Buffer (seconds)"
     icon: mdi:timer-sand
@@ -674,7 +628,6 @@ input_number:
     step: 0.5
     mode: slider
     unit_of_measurement: s
-    initial: 2.0
   ai_tts_stuck_timeout_minutes:
     name: "TTS Stuck Timeout (minutes)"
     icon: mdi:timer-alert
@@ -683,7 +636,6 @@ input_number:
     step: 1
     mode: slider
     unit_of_measurement: min
-    initial: 2
 
   # ═══════════════════════════════════════════════════════════════════
   # Audio Ducking Tuning
@@ -695,7 +647,6 @@ input_number:
     max: 1
     step: 0.05
     mode: slider
-    initial: 0.1
   ai_duck_announce_volume:
     name: "Duck Manager - Announce Volume Level"
     icon: mdi:volume-high
@@ -703,7 +654,6 @@ input_number:
     max: 1
     step: 0.05
     mode: slider
-    initial: 0.5
   ai_duck_restore_delay:
     name: "Duck Manager - Restore Delay (seconds)"
     icon: mdi:timer-outline
@@ -712,7 +662,6 @@ input_number:
     step: 0.1
     mode: slider
     unit_of_measurement: s
-    initial: 0.5
   ai_duck_restore_timeout:
     name: "Duck Manager - Restore Timeout (seconds)"
     icon: mdi:timer-alert-outline
@@ -721,7 +670,6 @@ input_number:
     step: 1
     mode: slider
     unit_of_measurement: s
-    initial: 25
   ai_duck_post_buffer:
     name: "Duck Manager - Post-Playback Buffer (seconds)"
     icon: mdi:timer-check-outline
@@ -730,7 +678,6 @@ input_number:
     step: 0.5
     mode: slider
     unit_of_measurement: s
-    initial: 5
 
   # ═══════════════════════════════════════════════════════════════════
   # Presence Confidence & Decay
@@ -742,7 +689,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 100
   ai_presence_conf_voice:
     name: "Presence Confidence - Voice"
     icon: mdi:microphone
@@ -750,7 +696,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 95
   ai_presence_conf_departure:
     name: "Presence Confidence - Departure"
     icon: mdi:exit-run
@@ -758,7 +703,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 95
   ai_presence_conf_arrival:
     name: "Presence Confidence - Arrival"
     icon: mdi:home-import-outline
@@ -766,7 +710,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 90
   ai_presence_conf_count:
     name: "Presence Confidence - Count Constraint"
     icon: mdi:counter
@@ -774,7 +717,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 85
   ai_presence_conf_transition:
     name: "Presence Confidence - Transition"
     icon: mdi:swap-horizontal
@@ -782,7 +724,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 80
   ai_presence_conf_markov_cap:
     name: "Presence Confidence - Markov Cap"
     icon: mdi:chart-line
@@ -790,7 +731,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 50
   ai_presence_fp2_dwell_sec:
     name: "Presence FP2 Dwell Time (seconds)"
     icon: mdi:timer-outline
@@ -799,7 +739,6 @@ input_number:
     step: 5
     mode: slider
     unit_of_measurement: s
-    initial: 30
   ai_presence_decay_start:
     name: "Presence Decay Start (minutes)"
     icon: mdi:clock-start
@@ -808,7 +747,6 @@ input_number:
     step: 1
     mode: slider
     unit_of_measurement: min
-    initial: 15
   ai_presence_decay_cap:
     name: "Presence Decay Cap (minutes)"
     icon: mdi:clock-end
@@ -817,7 +755,6 @@ input_number:
     step: 5
     mode: slider
     unit_of_measurement: min
-    initial: 60
   ai_presence_decay_range:
     name: "Presence Decay Range (minutes)"
     icon: mdi:arrow-expand-horizontal
@@ -826,7 +763,6 @@ input_number:
     step: 5
     mode: slider
     unit_of_measurement: min
-    initial: 45
   ai_presence_decay_factor:
     name: "Presence Decay Factor"
     icon: mdi:percent-outline
@@ -834,7 +770,6 @@ input_number:
     max: 1
     step: 0.05
     mode: slider
-    initial: 0.5
   ai_identity_confidence_min:
     name: "Identity Confidence Minimum (%)"
     icon: mdi:account-check
@@ -842,7 +777,6 @@ input_number:
     max: 100
     step: 5
     mode: slider
-    initial: 70
 
   # ═══════════════════════════════════════════════════════════════════
   # Calendar Promotion Tuning
@@ -855,7 +789,6 @@ input_number:
     step: 30
     mode: slider
     unit_of_measurement: s
-    initial: 300
   ai_calendar_failure_threshold:
     name: "Calendar Failure Notify Threshold"
     icon: mdi:alert-circle-outline
@@ -863,14 +796,12 @@ input_number:
     max: 20
     step: 1
     mode: box
-    initial: 3
   ai_calendar_default_event_duration:
     name: "Calendar Default Event Duration"
     icon: mdi:clock-outline
     min: 15
     max: 480
     step: 15
-    initial: 60
     mode: slider
     unit_of_measurement: min
 
@@ -885,7 +816,6 @@ input_number:
     step: 10
     mode: slider
     unit_of_measurement: s
-    initial: 180
   ai_music_play_expiry_days:
     name: "Music Play History Expiry (days)"
     icon: mdi:calendar-clock
@@ -894,7 +824,6 @@ input_number:
     step: 30
     mode: slider
     unit_of_measurement: d
-    initial: 365
   ai_music_top_limit:
     name: "Music Top Artists Limit"
     icon: mdi:format-list-numbered
@@ -902,7 +831,6 @@ input_number:
     max: 50
     step: 5
     mode: box
-    initial: 15
 
   # ═══════════════════════════════════════════════════════════════════
   # Dispatcher Tuning
@@ -915,7 +843,6 @@ input_number:
     step: 30
     mode: slider
     unit_of_measurement: s
-    initial: 300
 
   # ═══════════════════════════════════════════════════════════════════
   # WiFi Scoring Weights
@@ -927,7 +854,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 30
   ai_wifi_score_secondary:
     name: "WiFi Score - Secondary Device (GPS)"
     icon: mdi:wifi-strength-3
@@ -935,7 +861,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 50
   ai_wifi_score_tertiary:
     name: "WiFi Score - Tertiary Device"
     icon: mdi:wifi-strength-2
@@ -943,7 +868,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 15
   ai_wifi_score_quaternary:
     name: "WiFi Score - Quaternary Device"
     icon: mdi:wifi-strength-1
@@ -951,7 +875,6 @@ input_number:
     max: 100
     step: 5
     mode: box
-    initial: 5
 
   # ═══════════════════════════════════════════════════════════════════
   # Agent Whisper Network
@@ -962,7 +885,6 @@ input_number:
     min: 1
     max: 30
     step: 1
-    initial: 2
     mode: slider
     unit_of_measurement: days
   ai_whisper_mood_expiry_days:
@@ -971,7 +893,6 @@ input_number:
     min: 1
     max: 14
     step: 1
-    initial: 1
     mode: slider
     unit_of_measurement: days
   ai_whisper_topic_expiry_days:
@@ -980,7 +901,6 @@ input_number:
     min: 1
     max: 30
     step: 1
-    initial: 3
     mode: slider
     unit_of_measurement: days
   ai_whisper_mood_dedup_seconds:
@@ -989,7 +909,6 @@ input_number:
     min: 60
     max: 7200
     step: 60
-    initial: 3600
     mode: slider
     unit_of_measurement: s
   ai_whisper_max_auto_keywords:
@@ -998,7 +917,6 @@ input_number:
     min: 5
     max: 100
     step: 5
-    initial: 30
     mode: box
   ai_whisper_keyword_cooldown:
     name: "Whisper - Keyword Update Cooldown"
@@ -1006,7 +924,6 @@ input_number:
     min: 60
     max: 1800
     step: 30
-    initial: 300
     mode: slider
     unit_of_measurement: s
   ai_whisper_topic_history_count:
@@ -1015,7 +932,6 @@ input_number:
     min: 1
     max: 15
     step: 1
-    initial: 5
     mode: slider
 
   # ═══════════════════════════════════════════════════════════════════
@@ -1027,7 +943,6 @@ input_number:
     min: 1
     max: 90
     step: 1
-    initial: 7
     mode: box
     unit_of_measurement: days
 
@@ -1040,7 +955,6 @@ input_number:
     min: 1
     max: 240
     step: 1
-    initial: 30
     mode: slider
     unit_of_measurement: min
 
@@ -1053,7 +967,6 @@ input_number:
     min: 2
     max: 20
     step: 1
-    initial: 6
     mode: slider
   ai_theatrical_max_words:
     name: "AI Theatrical - Max Words Per Turn"
@@ -1061,7 +974,6 @@ input_number:
     min: 10
     max: 100
     step: 5
-    initial: 40
     mode: slider
   ai_theatrical_budget_floor:
     name: "AI Theatrical - Budget Floor (%)"
@@ -1069,7 +981,6 @@ input_number:
     min: 0
     max: 100
     step: 5
-    initial: 70
     unit_of_measurement: "%"
 
   # ═══════════════════════════════════════════════════════════════════
@@ -1126,7 +1037,6 @@ input_number:
     max: 10
     step: 1
     mode: box
-    initial: 3
   ai_recovery_base_backoff_seconds:
     name: "Recovery Base Backoff (seconds)"
     icon: mdi:timer-sand
@@ -1135,7 +1045,6 @@ input_number:
     step: 10
     mode: slider
     unit_of_measurement: s
-    initial: 60
 
   # ═══════════════════════════════════════════════════════════════════
   # Toggle Audit Trail
@@ -1148,7 +1057,6 @@ input_number:
     step: 1
     mode: box
     unit_of_measurement: days
-    initial: 90
 
 # ═══════════════════════════════════════════════════════════════════
 # input_select — 4 entities
@@ -1175,7 +1083,6 @@ input_select:
       - mic_gap
       - turn_limit
       - wake_word
-    initial: turn_limit
   ai_theatrical_context_mode:
     name: "AI Theatrical - Context Mode"
     icon: mdi:brain
@@ -1183,11 +1090,9 @@ input_select:
       - full
       - topic_only
       - whisper
-    initial: full
   ai_theatrical_turn_order:
     name: "AI Theatrical - Turn Order"
     icon: mdi:shuffle-variant
     options:
       - round_robin
       - random
-    initial: round_robin

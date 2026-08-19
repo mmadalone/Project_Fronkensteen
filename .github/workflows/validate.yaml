@@ -64,3 +64,24 @@ jobs:
       # silently lost their indentation on 2026-08-14 and stopped parsing.
       - name: Parse _Functions_*.md
         run: python3 scripts/check_prompts.py .
+
+  helper_defaults:
+    name: Helper Defaults Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install PyYAML
+        run: pip install pyyaml==6.0.2
+
+      # helper_defaults.json duplicates facts that live in the helper YAML —
+      # bounds, options, and which helpers exist — because `initial:` was
+      # stripped from 252 of them and something has to give a FRESH install
+      # sensible starting values. A drifted copy fails invisibly here and
+      # visibly in someone else's install, so the manifest is re-checked
+      # against the YAML on every push.
+      - name: Check helper_defaults.json against the helper YAML
+        run: python3 scripts/check_helper_defaults.py
