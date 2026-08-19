@@ -2106,7 +2106,10 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════════
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   _pfx: !input safety_prefix
+  run_tag: "{{ this.entity_id }}"
   _memory_search_instruction: !input memory_search_instruction
   _bedtime_question_esp: !input bedtime_question_system_prompt
   _audiobook_offer_start_msg: !input audiobook_offer_start_message
@@ -2146,6 +2149,22 @@ variables:
   v_proactive_pipeline_name: !input conversation_agent
   v_bedtime_pipeline_name: !input bedtime_conversation_agent
   assist_satellites_val: !input assist_satellites
+  # A target selector yields whichever shape the user picked, and the deployed
+  # instances use BOTH: automations.yaml:413 supplies `entity_id`, while :481 and
+  # :547 supply `device_id`. Reading `.entity_id` alone therefore resolved to ''
+  # for two of the three instances — and because that made the surrounding
+  # template statically false, HA attached no state listeners at all, so the
+  # waits below could never fire and simply burned their whole timeout.
+  # Resolve once here, covering string/list/device forms, and use everywhere.
+  resolved_satellite: >-
+    {% set t = assist_satellites_val | default({}) %}
+    {% set eids = t.entity_id | default([]) %}
+    {% set eids = [eids] if eids is string else eids %}
+    {% set dids = t.device_id | default([]) %}
+    {% set dids = [dids] if dids is string else dids %}
+    {% set from_dev = dids | map('device_entities') | sum(start=[])
+                           | select('match', 'assist_satellite\.') | list %}
+    {{ (eids + from_dev) | first | default('') }}
   llm_prompt_val: !input llm_prompt
   context_entities_val: !input context_entities
 
@@ -3033,6 +3052,10 @@ actions:
                           duck: "{{ not bypass_ducking }}"
 
                           priority: 1
+                          # Echoed back on tts_queue_item_completed so the wait below matches
+                          # THIS utterance rather than any queue activity.
+                          metadata:
+                            tag: "proactive_bedtime_escalation_autonomous_announcement_{{ run_tag }}"
                         continue_on_error: true
 
                       - alias: "Whisper — update self-awareness"
@@ -3043,9 +3066,20 @@ actions:
                           source: "automation"
                         continue_on_error: true
 
-                      - alias: "Post-TTS delay"
-                        delay:
-                          seconds: 5
+                      # CALIBRATION (2026-08-19): was `delay: seconds: 5`, sized when the Voice
+                      # PE firmware faked TTS completion after 2s. Measured tts_queue busy spans:
+                      # median 21.5s, p90 41.0s, max 116.8s. The autonomous path falls through
+                      # into the shared bedtime routine immediately after this, so 5s had the TV
+                      # shutdown, lights-off and media_player.media_stop running over the
+                      # "no more negotiations" announcement -- media_stop truncates it on the spot.
+                      - alias: "Wait for the autonomous bedtime announcement to finish playing"
+                        wait_for_trigger:
+                          - trigger: event
+                            event_type: tts_queue_item_completed
+                            event_data:
+                              tag: "proactive_bedtime_escalation_autonomous_announcement_{{ run_tag }}"
+                        timeout: "00:01:30"
+                        continue_on_timeout: true
 
                   # Autonomous path: falls through main router choose
                   # into the shared bedtime routine below.
@@ -3228,6 +3262,10 @@ actions:
                   ttl_hours: "{{ ((effective_cooldown | float - 1) / 60) | round(2) }}"
                   volume_level: "{{ proactive_tts_volume_val | float(0) if proactive_tts_volume_val | float(0) > 0 else none }}"
                   duck: "{{ not bypass_ducking }}"
+                  # Echoed back on tts_queue_item_completed so the wait below matches
+                  # THIS utterance rather than any queue activity.
+                  metadata:
+                    tag: "proactive_bedtime_escalation_proactive_nag_{{ run_tag }}"
                 continue_on_error: true
 
               - alias: "Whisper — update self-awareness"
@@ -3238,9 +3276,21 @@ actions:
                   source: "automation"
                 continue_on_error: true
 
-              - alias: "Post-TTS delay"
-                delay:
-                  seconds: 5
+              # CALIBRATION (2026-08-19): was `delay: seconds: 5`, sized when the Voice
+              # PE firmware faked TTS completion after 2s. Measured tts_queue busy spans:
+              # median 21.5s, p90 41.0s. The bedtime question below opens the satellite
+              # mic (or speaks a fallback TTS) right after this step, so 5s + the 5s
+              # question delay had the question talking over the nag and the satellite
+              # hearing the nag's own tail as the user's answer. dedup_announce passes
+              # `metadata` straight through to tts_queue_speak, so the tag round-trips.
+              - alias: "Wait for the proactive nag to finish playing"
+                wait_for_trigger:
+                  - trigger: event
+                    event_type: tts_queue_item_completed
+                    event_data:
+                      tag: "proactive_bedtime_escalation_proactive_nag_{{ run_tag }}"
+                timeout: "00:01:30"
+                continue_on_timeout: true
 
               # --- Bedtime question (at configurable stage) ---
               - alias: "Bedtime question — ask if user wants bedtime routine"
@@ -3455,11 +3505,25 @@ actions:
                               text: "{{ bedtime_tts_message }}"
                               priority: 2
                               duck: "{{ not bypass_ducking }}"
+                              # Echoed back on tts_queue_item_completed so the wait below matches
+                              # THIS utterance rather than any queue activity.
+                              metadata:
+                                tag: "proactive_bedtime_escalation_bed_settling_tts_{{ run_tag }}"
                             continue_on_error: true
 
-                          - alias: "Wait configured seconds"
-                            delay:
-                              seconds: "{{ post_tts_delay_val | int(3) }}"
+                          # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 3s).
+                          # Measured tts_queue busy spans: median 21.5s, p90 41.0s. This branch falls
+                          # through into the shared bedtime routine, so a 3s buffer had the TV
+                          # shutdown, lights-off and media_player.media_stop firing over the settling
+                          # message -- media_stop on the announcement speaker truncates it outright.
+                          - alias: "Wait for the bed-confirmed settling message to finish playing"
+                            wait_for_trigger:
+                              - trigger: event
+                                event_type: tts_queue_item_completed
+                                event_data:
+                                  tag: "proactive_bedtime_escalation_bed_settling_tts_{{ run_tag }}"
+                            timeout: "00:01:30"
+                            continue_on_timeout: true
                     default:
                       - alias: "Settling TTS disabled — skip announcement"
                         action: logbook.log
@@ -3514,11 +3578,26 @@ actions:
                   text: "{{ bedtime_tts_message }}"
                   priority: 1
                   duck: "{{ not bypass_ducking }}"
+                  # Echoed back on tts_queue_item_completed so the wait below matches
+                  # THIS utterance rather than any queue activity.
+                  metadata:
+                    tag: "proactive_bedtime_escalation_bedtime_announcement_{{ run_tag }}"
                 continue_on_error: true
 
-              - alias: "Wait 5 seconds"
-                delay:
-                  seconds: 5
+              # CALIBRATION (2026-08-19): was `delay: seconds: 5`, sized when the Voice
+              # PE firmware faked TTS completion after 2s. Measured tts_queue busy spans:
+              # median 21.5s, p90 41.0s, max 116.8s. This step falls straight through into
+              # the shared bedtime routine, so 5s had the TV shutdown, lights-off and
+              # media_player.media_stop running while the announcement was still speaking
+              # -- media_stop on the announcement speaker cuts it off mid-sentence.
+              - alias: "Wait for the bedtime announcement to finish playing"
+                wait_for_trigger:
+                  - trigger: event
+                    event_type: tts_queue_item_completed
+                    event_data:
+                      tag: "proactive_bedtime_escalation_bedtime_announcement_{{ run_tag }}"
+                timeout: "00:01:30"
+                continue_on_timeout: true
 
     # =====================================================================
     # DEFAULT — no trigger matched (manual run or unknown trigger)
@@ -3697,17 +3776,32 @@ actions:
                         action: assist_satellite.start_conversation
                         target:
                           entity_id: >-
-                            {% set eid = assist_satellites_val.entity_id | default([]) %}
-                            {% if eid is string %}{{ eid }}{% else %}{{ eid | first | default('') }}{% endif %}
+                            {{ resolved_satellite }}
                         data:
                           start_message: "{{ _audiobook_offer_start_msg }}"
                           extra_system_prompt: "{{ _audiobook_offer_esp }}"
                         response_variable: audiobook_conversation
                         continue_on_error: true
 
-                      - alias: "Post-conversation settle delay"
-                        delay:
-                          seconds: "{{ media_settle_delay_val | int(5) }}"
+                      # CALIBRATION (2026-08-19): was `delay: media_conversation_settle_delay`
+                      # (default 30s). assist_satellite.start_conversation returns once the
+                      # OPENING message has played, so this fixed delay was standing in for the
+                      # whole audiobook-picking dialogue (measured `responding` spans median
+                      # 12.7s, max 69.8s). Running short set the audiobook volume before the
+                      # agent's tool call had started playback, and let the settling-in TTS
+                      # further below talk over the live conversation. Wait on the satellite:
+                      # the template is already true at setup (idle), so it arms only once the
+                      # mic opens, and `for: 3s` avoids matching the brief idle between turns.
+                      - alias: "Wait for the audiobook conversation to finish"
+                        wait_for_trigger:
+                          - trigger: template
+                            value_template: >-
+                              {{ resolved_satellite | length > 0
+                                 and is_state(resolved_satellite, 'idle') }}
+                            for:
+                              seconds: 3
+                        timeout: "00:02:00"
+                        continue_on_timeout: true
 
                       - alias: "Ensure audiobook volume after conversation"
                         action: media_player.volume_set
@@ -3857,8 +3951,7 @@ actions:
                 action: assist_satellite.start_conversation
                 target:
                   entity_id: >-
-                    {% set eid = assist_satellites_val.entity_id | default([]) %}
-                    {% if eid is string %}{{ eid }}{% else %}{{ eid | first | default('') }}{% endif %}
+                    {{ resolved_satellite }}
                 data:
                   preannounce: true
                   start_message: "{{ _kodi_media_start_msg }}"
@@ -3871,9 +3964,28 @@ actions:
                     === CURATED CONTENT ===
                     {{ kodi_curated_val | default('No curated content configured.') }}
 
-              - alias: "Post-conversation settle delay"
-                delay:
-                  seconds: "{{ media_settle_delay_val | int(30) }}"
+              # CALIBRATION (2026-08-19): was `delay: media_conversation_settle_delay`
+              # (default 30s). assist_satellite.start_conversation returns as soon as the
+              # OPENING message has played -- HA sets the entity back to idle in its
+              # `finally` -- so this delay was covering the entire dialogue that follows
+              # (user turn + agent reply, measured `responding` spans median 12.7s, max
+              # 69.8s) with one fixed guess. When it ran short, the settling-in TTS below
+              # spoke over the live conversation and the satellite heard it as the user's
+              # answer. Wait on the satellite instead: the template is already true at
+              # setup (idle), so the trigger arms only once the mic actually opens, and
+              # `for: 3s` keeps a multi-turn conversation from matching the brief idle
+              # between turns. Templated entity_id is not valid in a state trigger
+              # (cv.entity_ids_or_uuids), hence the template trigger.
+              - alias: "Wait for the media selection conversation to finish"
+                wait_for_trigger:
+                  - trigger: template
+                    value_template: >-
+                      {{ resolved_satellite | length > 0
+                         and is_state(resolved_satellite, 'idle') }}
+                    for:
+                      seconds: 3
+                timeout: "00:02:00"
+                continue_on_timeout: true
 
               - alias: "Log media conversation completed"
                 continue_on_error: true
@@ -3978,11 +4090,26 @@ actions:
                       text: "{{ settling_message }}"
                       priority: 2
                       duck: "{{ not bypass_ducking }}"
+                      # Echoed back on tts_queue_item_completed so the wait below matches
+                      # THIS utterance rather than any queue activity.
+                      metadata:
+                        tag: "proactive_bedtime_escalation_settling_in_{{ run_tag }}"
                     continue_on_error: true
 
-                  - alias: "Post-TTS buffer for settling-in"
-                    delay:
-                      seconds: "{{ post_tts_delay_val | int(5) }}"
+                  # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+                  # Everything downstream was tuned against the Voice PE firmware's fake 2s
+                  # TTS completion. Measured tts_queue busy spans: median 21.5s, p90 41.0s.
+                  # A 5s buffer had the goodnight LLM call, the countdown re-read and the
+                  # lights-out countdown all starting while the settling-in message was still
+                  # playing. Wait for the real end of THIS utterance instead.
+                  - alias: "Wait for the settling-in message to finish playing"
+                    wait_for_trigger:
+                      - trigger: event
+                        event_type: tts_queue_item_completed
+                        event_data:
+                          tag: "proactive_bedtime_escalation_settling_in_{{ run_tag }}"
+                    timeout: "00:01:30"
+                    continue_on_timeout: true
 
   # =================================================================
   # GOODNIGHT + COUNTDOWN
@@ -4043,11 +4170,28 @@ actions:
               text: "{{ goodnight_message }}"
               priority: 2
               duck: "{{ not bypass_ducking }}"
+              # Echoed back on tts_queue_item_completed so the wait below matches
+              # THIS utterance rather than any queue activity.
+              metadata:
+                tag: "proactive_bedtime_escalation_goodnight_{{ run_tag }}"
             continue_on_error: true
 
-          - alias: "Post-TTS buffer for goodnight"
-            delay:
-              seconds: "{{ post_tts_delay_val | int(5) }}"
+          # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+          # The countdown timer below starts the moment this step returns, so a 5s
+          # buffer against a measured tts_queue busy span of median 21.5s / p90 41.0s
+          # started the lights-out clock while the goodnight was still being spoken --
+          # and on the `bed_confirmed` path (bed countdown 0) or in test mode (10s
+          # countdown) the lamp went off mid-sentence. Wait for the real end of THIS
+          # utterance; the timeout is only a safety valve, continue_on_timeout keeps
+          # the routine moving if the event never arrives, exactly as the delay did.
+          - alias: "Wait for the goodnight message to finish playing"
+            wait_for_trigger:
+              - trigger: event
+                event_type: tts_queue_item_completed
+                event_data:
+                  tag: "proactive_bedtime_escalation_goodnight_{{ run_tag }}"
+            timeout: "00:01:30"
+            continue_on_timeout: true
 
   - alias: "Log goodnight delivered — countdown begins"
     continue_on_error: true

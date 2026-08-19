@@ -483,7 +483,10 @@ mode: restart
 max_exceeded: silent
 
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   v_enable: !input enable
+  run_tag: "{{ this.entity_id }}"
   v_toggle: !input interview_toggle
   v_timeout: !input timeout_minutes
   v_satellite: !input satellite
@@ -745,10 +748,29 @@ actions:
           target: "{{ speaker_entity }}"
           priority: 1
           duck: "{{ not bypass_ducking }}"
-      # 1b. Audio download delay — let speaker transition from idle → playing
-      - alias: "1b · Audio download delay"
-        delay:
-          seconds: 3
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "user_interview_opening_question_{{ run_tag }}"
+      # CALIBRATION (2026-08-19): was `delay: seconds: 3` (the "audio download
+      # delay"), sized when the Voice PE firmware faked TTS completion after
+      # 2s. It only ever covered the idle -> playing transition, leaving the
+      # 15s speaker-idle wait in 1c to do the real work -- and 15s is short
+      # against a measured tts_queue busy span of median 21.5s / p90 41.0s.
+      # start_message is free text, so a longer opening question was still
+      # playing when 1d/1e opened the mic: the satellite heard the tail of its
+      # own question and burned the first interview turn on it. Wait for the
+      # real end of THIS utterance instead. The timeout is only a safety valve
+      # -- with continue_on_timeout the interview still opens if the event
+      # never arrives (failed or skipped TTS), exactly as the old delay did.
+      - alias: "1b · Wait for the opening question to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "user_interview_opening_question_{{ run_tag }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
       # 1c. Wait for speaker to finish playing
       - alias: "1c · Wait for speaker idle"
         wait_template: >-

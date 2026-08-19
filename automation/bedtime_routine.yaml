@@ -1020,7 +1020,10 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   _pfx: !input safety_prefix
+  run_tag: "{{ this.entity_id }}"
   # --- Infrastructure ---
   v_ducking_flag: !input ducking_flag
   v_duck_guard: !input duck_guard_enabled
@@ -1467,6 +1470,10 @@ actions:
               target_mode: explicit
               priority: 3
               duck: "{{ not bypass_ducking }}"
+              # Echoed back on tts_queue_item_completed so the wait below matches
+              # THIS utterance rather than any queue activity.
+              metadata:
+                tag: "bedtime_routine_preset_announcement_{{ run_tag }}"
             continue_on_error: true
 
           - alias: "Whisper — update self-awareness"
@@ -1477,9 +1484,25 @@ actions:
               source: "automation"
             continue_on_error: true
 
-          - alias: "Post-TTS buffer — let streaming audio finish before TV/lights actions"
-            delay:
-              seconds: "{{ post_tts_delay_val | int(5) }}"
+          # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+          # A fixed delay is wrong for speech in a way a timeout is not -- it does
+          # not merely truncate the slow cases, it is wrong EVERY time unless the
+          # duration happens to match. Measured tts_queue busy spans: median
+          # 21.5s, p90 41.0s, max 116.8s -- so a 5s buffer had the TV shutdown and
+          # lights-off below running while the announcement was still speaking.
+          # tts_queue_speak already echoes `metadata` back on
+          # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses),
+          # so wait for the real end of THIS utterance. The timeout is only a
+          # safety valve: continue_on_timeout keeps the routine moving if the event
+          # never arrives (failed TTS), exactly as the old delay did.
+          - alias: "Wait for the bedtime announcement to finish playing"
+            wait_for_trigger:
+              - trigger: event
+                event_type: tts_queue_item_completed
+                event_data:
+                  tag: "bedtime_routine_preset_announcement_{{ run_tag }}"
+            timeout: "00:01:30"
+            continue_on_timeout: true
 
           # --- TV shutdown (same three-method stack) ---
           - alias: "TV shutdown — media_player.turn_off (skipped if no TV entity configured)"
@@ -1689,11 +1712,32 @@ actions:
                               target_mode: explicit
                               priority: 3
                               duck: "{{ not bypass_ducking }}"
+                              # Echoed back on tts_queue_item_completed so the wait
+                              # below matches THIS utterance rather than any queue
+                              # activity.
+                              metadata:
+                                tag: "bedtime_routine_preset_settling_in_{{ run_tag }}"
                             continue_on_error: true
 
-                          - alias: "Post-TTS buffer for settling-in message"
-                            delay:
-                              seconds: "{{ post_tts_delay_val | int(5) }}"
+                          # CALIBRATION (2026-08-19): was `delay: post_tts_delay`
+                          # (default 5s). Measured tts_queue busy spans are median
+                          # 21.5s / p90 41.0s / max 116.8s, so the buffer expired
+                          # mid-sentence and the non-negotiable countdown below
+                          # started ticking while the settling-in message was still
+                          # speaking — the user got a countdown shortened by the
+                          # length of the utterance, and on a long message the
+                          # goodnight/lamp-off stack could stack on top of it.
+                          # continue_on_timeout keeps the routine moving if TTS
+                          # fails and the event never arrives, exactly as the old
+                          # delay did.
+                          - alias: "Wait for the settling-in message to finish playing"
+                            wait_for_trigger:
+                              - trigger: event
+                                event_type: tts_queue_item_completed
+                                event_data:
+                                  tag: "bedtime_routine_preset_settling_in_{{ run_tag }}"
+                            timeout: "00:01:30"
+                            continue_on_timeout: true
 
           # --- Countdown (non-negotiable in preset mode) ---
           - alias: "Wait the default countdown — lamp stays on, user settles in with audiobook"
@@ -1831,6 +1875,10 @@ actions:
                       target_mode: explicit
                       priority: 3
                       duck: "{{ not bypass_ducking }}"
+                      # Echoed back on tts_queue_item_completed so the wait below
+                      # matches THIS utterance rather than any queue activity.
+                      metadata:
+                        tag: "bedtime_routine_preset_goodnight_{{ run_tag }}"
                     continue_on_error: true
 
                   - alias: "Whisper — update self-awareness"
@@ -1841,9 +1889,20 @@ actions:
                       source: "automation"
                     continue_on_error: true
 
-                  - alias: "Post-TTS buffer for final goodnight"
-                    delay:
-                      seconds: "{{ post_tts_delay_val | int(5) }}"
+                  # CALIBRATION (2026-08-19): was `delay: post_tts_delay`
+                  # (default 5s) against a measured 21.5s median / 41.0s p90 TTS
+                  # span. This is the last step of the preset branch — the common
+                  # tail immediately below turns the living room lamp off and kills
+                  # the temporary switches, so the room went dark about five
+                  # seconds into a goodnight that was still being spoken.
+                  - alias: "Wait for the preset goodnight to finish playing"
+                    wait_for_trigger:
+                      - trigger: event
+                        event_type: tts_queue_item_completed
+                        event_data:
+                          tag: "bedtime_routine_preset_goodnight_{{ run_tag }}"
+                    timeout: "00:01:30"
+                    continue_on_timeout: true
 
     # =====================================================================
     # CONVERSATIONAL MODES — curated / freeform / both (existing v3 flow)
@@ -1977,9 +2036,33 @@ actions:
                   extra_system_prompt: >-
                     {{ v_countdown_system_prompt }}
 
-              - alias: "Wait for conversation to settle — agent has had time to set the countdown helper"
-                delay:
-                  seconds: "{{ post_tts_delay_val | int(5) }}"
+              # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default
+              # 5s). There is no tts_queue item behind start_conversation, so
+              # tts_queue_item_completed never fires here — wait on the satellite
+              # instead. Measured assist_satellite `responding` spans are median
+              # 12.7s / max 69.8s, so 5s expired while the agent was still
+              # speaking its opening line, before the user had even answered.
+              # The "Re-read countdown helper" step below then read the OLD value
+              # and the negotiated countdown was silently discarded.
+              # `for: seconds: 3` matters: a multi-turn negotiation passes through
+              # `idle` briefly between turns, so without it the wait would return
+              # after turn one. The satellites arrive as a target dict
+              # (!input assist_satellites, which may name areas or devices), so
+              # there is no single entity id to watch — the trigger waits until no
+              # assist satellite at all is mid-conversation, which can only ever
+              # be later than the target one going idle, never earlier.
+              - alias: "Wait for the countdown negotiation conversation to finish"
+                wait_for_trigger:
+                  - trigger: template
+                    value_template: >-
+                      {{ states.assist_satellite
+                         | selectattr('state', 'in',
+                                      ['listening', 'processing', 'responding'])
+                         | list | count == 0 }}
+                    for:
+                      seconds: 3
+                timeout: "00:02:00"
+                continue_on_timeout: true
 
         default:
           - alias: "TTS — conversational bedtime announcement"
@@ -1992,11 +2075,26 @@ actions:
               target_mode: explicit
               priority: 3
               duck: "{{ not bypass_ducking }}"
+              # Echoed back on tts_queue_item_completed so the wait below matches
+              # THIS utterance rather than any queue activity.
+              metadata:
+                tag: "bedtime_routine_conversational_announcement_{{ run_tag }}"
             continue_on_error: true
 
-          - alias: "Post-TTS buffer — let streaming audio finish"
-            delay:
-              seconds: "{{ post_tts_delay_val | int(5) }}"
+          # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s)
+          # against a measured 21.5s median / 41.0s p90 / 116.8s max TTS span.
+          # The audiobook offer below opens a satellite conversation — with a 5s
+          # buffer it started talking (and opened the mic) over the tail of the
+          # bedtime announcement, so the user heard two overlapping voices and the
+          # satellite listened into the announcement's own audio.
+          - alias: "Wait for the bedtime announcement to finish playing"
+            wait_for_trigger:
+              - trigger: event
+                event_type: tts_queue_item_completed
+                event_data:
+                  tag: "bedtime_routine_conversational_announcement_{{ run_tag }}"
+            timeout: "00:02:00"
+            continue_on_timeout: true
 
       # --- Re-read countdown — agent may have changed it ---
       - alias: "Re-read countdown helper — the agent may have negotiated a different value"
@@ -2051,9 +2149,33 @@ actions:
                     Media type for search: {{ audiobook_media_type }}.
                     Volume: {{ audiobook_volume }}.
 
-              - alias: "Wait for audiobook conversation to settle — satellite needs time for the full exchange"
-                delay:
-                  seconds: 30
+              # CALIBRATION (2026-08-19): was a flat `delay: seconds: 30`. There
+              # is no tts_queue item behind start_conversation, so
+              # tts_queue_item_completed never fires here — wait on the satellite
+              # instead. Measured assist_satellite `responding` spans are median
+              # 12.7s / max 69.8s, and this is the longest exchange in the
+              # routine (offer, browse, pick, confirm), so 30s regularly expired
+              # mid-conversation: the bedtime wind-down music below started
+              # playing and the goodnight TTS spoke over the user still choosing
+              # an audiobook. `for: seconds: 3` matters — a multi-turn exchange
+              # passes through `idle` between turns, so without it the wait would
+              # return after turn one. The satellites arrive as a target dict
+              # (!input assist_satellites, which may name areas or devices), so
+              # there is no single entity id to watch — the trigger waits until no
+              # assist satellite at all is mid-conversation, which can only ever
+              # be later than the target one going idle, never earlier.
+              - alias: "Wait for the audiobook conversation to finish"
+                wait_for_trigger:
+                  - trigger: template
+                    value_template: >-
+                      {{ states.assist_satellite
+                         | selectattr('state', 'in',
+                                      ['listening', 'processing', 'responding'])
+                         | list | count == 0 }}
+                    for:
+                      seconds: 3
+                timeout: "00:04:00"
+                continue_on_timeout: true
 
       # --- Bedtime music (after audiobook, before goodnight) ---
       - alias: "Play bedtime wind-down music"
@@ -2181,6 +2303,10 @@ actions:
           target_mode: explicit
           priority: 3
           duck: "{{ not bypass_ducking }}"
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "bedtime_routine_conversational_goodnight_{{ run_tag }}"
         continue_on_error: true
 
       - alias: "Whisper — update self-awareness"
@@ -2191,9 +2317,22 @@ actions:
           source: "automation"
         continue_on_error: true
 
-      - alias: "Post-TTS buffer — let goodnight finish playing"
-        delay:
-          seconds: "{{ post_tts_delay_val | int(5) }}"
+      # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s)
+      # against a measured 21.5s median / 41.0s p90 TTS span — the step's own
+      # alias claims it lets the goodnight finish playing, and it did not. The
+      # negotiated countdown below started ticking about five seconds into a
+      # goodnight still being spoken, so the countdown the agent promised the
+      # user was short by the length of the goodnight — and at the 1-minute
+      # minimum a long goodnight can outlast the whole countdown, putting the
+      # bathroom guard and lamp-off on top of it.
+      - alias: "Wait for the conversational goodnight to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "bedtime_routine_conversational_goodnight_{{ run_tag }}"
+        timeout: "00:02:00"
+        continue_on_timeout: true
 
       # --- Countdown — wait the negotiated duration ---
       - alias: "Wait the negotiated countdown — lamp stays on, user goes to bed"

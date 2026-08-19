@@ -160,3 +160,109 @@
         episode_name: >-
           {% if states('media_player.madteevee') not in ['playing', 'paused'] %}
           {% else %}{{ state_attr('sensor.ai_watch_history_status', 'current_episode_name') | default('', true) }}{% endif %}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DEBOUNCED FP2 PRESENCE  (added 2026-08-19)
+# ═══════════════════════════════════════════════════════════════════════════
+# The Aqara FP2 drops a STATIONARY occupant. Measured over 7 days on the
+# workshop zone: ON spans have a median of 4.6s, and 102 of 163 are under 15s.
+# The flapping clusters in occupied hours and disappears in empty ones, so it is
+# not a faulty sensor — it is the standard mmWave failure mode: someone sits
+# still, stops producing motion, is dropped, and is re-detected on the next
+# small movement. 327 transitions in 24h on the workshop alone.
+#
+# That breaks anything requiring sustained presence. Music follow-me needs a
+# zone held for 15s, which the workshop essentially never manages — which is why
+# music followed the wrong person to the bathroom: the bathroom was simply the
+# only zone stable enough to qualify.
+#
+# delay_off = 60s, chosen by replaying 7 days of real transitions through
+# candidate values rather than picked round (scratchpad/sim_delay_off.py):
+#
+#     delay_off   median ON span   ON spans >= 15s
+#         0s            4s              30%
+#        30s           37s              66%
+#        60s           63s              72%     <- knee
+#        90s          114s              74%
+#       120s          168s              81%
+#
+# Past 60s the curve flattens: 60->90 buys 2 points for another 30s of
+# departure latency. The OFF-span distribution is a smooth decay, NOT two
+# separable populations, so no value cleanly divides "dropout" from "left the
+# room" — 60s is a trade-off, not a threshold. The ~28% of ON spans still under
+# 15s are mostly genuine walk-throughs, which SHOULD NOT hold a zone.
+#
+# Cost: a real departure is reported up to 60s late. Acceptable for every
+# consumer repointed at these (follow-me, auto-on/off, room routing).
+#
+# NOT for every consumer. Left deliberately on the raw sensors:
+#   - pyscript/presence_identity.py — runs its own dwell + transition tracking
+#     (input_number.ai_presence_fp2_dwell_sec); feeding it a pre-smoothed
+#     signal would double-filter and skew identity attribution.
+#   - packages/ai_focus_guard.yaml:64 — history_stats workshop hours, chosen
+#     precisely BECAUSE it is immune to flapping; smoothing would inflate it.
+# ═══════════════════════════════════════════════════════════════════════════
+- binary_sensor:
+    - name: "AI Presence Workshop"
+      unique_id: ai_presence_workshop
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_workshop', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_workshop') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Living Room"
+      unique_id: ai_presence_living_room
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_living_room', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_living_room') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Bathroom"
+      unique_id: ai_presence_bathroom
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_bathroom') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Kitchen"
+      unique_id: ai_presence_kitchen
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_kitchen') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Main Room"
+      unique_id: ai_presence_main_room
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_main_room', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_main_room') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Bed"
+      unique_id: ai_presence_bed
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_bed', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_bed') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Lobby"
+      unique_id: ai_presence_lobby
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_lobby', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_lobby') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60
+
+    - name: "AI Presence Shower"
+      unique_id: ai_presence_shower
+      device_class: occupancy
+      state: "{{ is_state('binary_sensor.fp2_presence_sensor_shower', 'on') }}"
+      availability: "{{ states('binary_sensor.fp2_presence_sensor_shower') not in ['unknown', 'unavailable'] }}"
+      delay_off:
+        seconds: 60

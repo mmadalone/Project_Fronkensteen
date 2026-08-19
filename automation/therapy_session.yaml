@@ -561,7 +561,10 @@ mode: single
 max_exceeded: silent
 
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   v_enable: !input enable
+  run_tag: "{{ this.entity_id }}"
   v_toggle: !input therapy_toggle
   v_timeout: !input timeout_minutes
   v_start_message: !input start_message
@@ -898,9 +901,29 @@ actions:
           target: "{{ speaker_entity }}"
           priority: 1
           duck: "{{ not bypass_ducking }}"
-      - alias: "2f · Audio download delay"
-        delay:
-          seconds: 3
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "therapy_session_opening_message_{{ run_tag }}"
+      # CALIBRATION (2026-08-19): was `delay: seconds: 3` (the "audio download
+      # delay"), sized when the Voice PE firmware faked TTS completion after
+      # 2s. It only ever covered the idle -> playing transition, leaving the
+      # 15s speaker-idle wait below to do the real work -- and 15s is short
+      # against a measured tts_queue busy span of median 21.5s / p90 41.0s.
+      # So a longer opening message was still playing when 2g/2i opened the
+      # mic: the therapist talked over itself and the satellite heard its own
+      # voice as the user's first answer. Wait for the real end of THIS
+      # utterance instead. The timeout is only a safety valve -- with
+      # continue_on_timeout the session still starts if the event never
+      # arrives (failed or skipped TTS), exactly as the old delay did.
+      - alias: "2f · Wait for the opening message to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "therapy_session_opening_message_{{ run_tag }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
       - alias: "2f · Wait for speaker idle"
         wait_template: >-
           {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
@@ -966,8 +989,24 @@ actions:
           target: "{{ speaker_entity }}"
           priority: 1
           duck: "{{ not bypass_ducking }}"
-      - delay:
-          seconds: 5
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "therapy_session_test_announce_{{ run_tag }}"
+      # CALIBRATION (2026-08-19): was `delay: seconds: 5`. This diagnostic
+      # announcement is four rendered lines (session number, type, user,
+      # resume note, pipeline) and routinely runs past 5s, while the loop
+      # below starts cycling the mic immediately (step A0/A) -- so the test
+      # run recorded its own diagnostics as the first user turn. Measured
+      # tts_queue busy spans: median 21.5s, p90 41.0s.
+      - alias: "3-test · Wait for the test announcement to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "therapy_session_test_announce_{{ run_tag }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
 
   - alias: "3 · Loop variables"
     variables:
@@ -1066,8 +1105,25 @@ actions:
                 target: "{{ speaker_entity }}"
                 priority: 1
                 duck: "{{ not bypass_ducking }}"
-            - delay:
-                seconds: 3
+                # Echoed back on tts_queue_item_completed so the wait below
+                # matches THIS utterance rather than any queue activity.
+                metadata:
+                  tag: "therapy_session_test_single_cycle_end_{{ run_tag }}"
+            # CALIBRATION (2026-08-19): was `delay: seconds: 3`, sized against
+            # the old faked-2s TTS clock. Turning the therapy toggle off is
+            # what ends the session -- it drops out of the loop and runs the
+            # whole cleanup block (session end, report, continuous-conversation
+            # off, pipeline restore, follow-me/mood restore). At 3s against a
+            # 21.5s median that cleanup ran on top of the sign-off, cutting it
+            # off mid-sentence.
+            - alias: "F-test · Wait for the sign-off to finish playing"
+              wait_for_trigger:
+                - trigger: event
+                  event_type: tts_queue_item_completed
+                  event_data:
+                    tag: "therapy_session_test_single_cycle_end_{{ run_tag }}"
+              timeout: "00:00:45"
+              continue_on_timeout: true
             - action: input_boolean.turn_off
               target:
                 entity_id: !input therapy_toggle

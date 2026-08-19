@@ -955,7 +955,10 @@ trace:
 # VARIABLES
 # =============================================================================
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   # ── core ────────────────────────────────────────────────────────────────
+  run_tag: "{{ this.entity_id }}"
   proactive_mode: !input proactive_mode
   budget_floor: !input budget_floor
   presence_entities: !input presence_sensors
@@ -1664,6 +1667,11 @@ actions:
       skip_dedup: "{{ tts_collision_mode != 'dedup' }}"
       duck: "{{ not bypass_ducking }}"
       chime_path: "{{ v_chime_path | default('') }}"
+      # Echoed back on tts_queue_item_completed (dedup_announce forwards
+      # metadata straight through to tts_queue_speak) so the bedtime-question
+      # wait in step 9 matches THIS utterance, not any queue activity.
+      metadata:
+        tag: "proactive_unified_presence_announcement_{{ run_tag }}"
     continue_on_error: true
 
   # ── 6. Bail if dedup suppressed the announcement ────────────────────────
@@ -1704,9 +1712,19 @@ actions:
       - condition: template
         value_template: "{{ enable_bedtime_question }}"
     then:
-      - alias: "Wait for TTS audio to finish"
-        delay:
-          seconds: "{{ (bedtime_question_delay | default(5)) | int }}"
+      # CALIBRATION (2026-08-19): was `delay: bedtime_question_delay`
+      # (default 5s). Measured tts_queue busy span is median 21.5s /
+      # p90 41.0s, so the bedtime question was generated AND asked on
+      # the satellite while the proactive announcement above was still
+      # speaking — ask_question opened the mic over live audio.
+      - alias: "Wait for the proactive announcement to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "proactive_unified_presence_announcement_{{ run_tag }}"
+        timeout: "00:02:00"
+        continue_on_timeout: true
 
       - alias: "Generate bedtime question via LLM (60s timeout)"
         continue_on_error: true

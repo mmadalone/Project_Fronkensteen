@@ -1209,6 +1209,31 @@ async def _process_queue() -> None:
                     )
             except Exception as e:
                 log.error(f"tts_queue playback error: {e}")  # noqa: F821
+            finally:
+                # ── Restore speaker volume, now that the audio has ended ──
+                # _play_item() defers this for announce-native items because it
+                # only DISPATCHES the audio; the wait above is what tracks the
+                # real duration. Doing it here means the tail plays at the
+                # volume it was announced at, instead of dropping back to the
+                # background level partway through.
+                #
+                # In `finally`, not in the happy path: the except above swallows
+                # a playback error and carries on to the next item, so on that
+                # branch the speaker would keep the TTS volume permanently.
+                # Preemption is fine too — the audio was cut short, so restoring
+                # immediately is the correct behaviour.
+                _pending_restore = item.pop("_pending_volume_restore", None)
+                if _pending_restore:
+                    _settle = _pending_restore[2] if len(_pending_restore) > 2 else 0
+                    try:
+                        _settle = max(0.0, min(float(_settle), 30.0))
+                    except (TypeError, ValueError):
+                        _settle = 0.0
+                    if _settle:
+                        await asyncio.sleep(_settle)
+                    await _restore_speaker_volume(
+                        _pending_restore[0], _pending_restore[1]
+                    )
     finally:
         # Resume announce-native speakers that were playing before the
         # queue started but got stopped by preemption (media_stop).
@@ -1230,6 +1255,30 @@ async def _process_queue() -> None:
             _current_item = None
             _processing = False
         _set_result("idle", op="queue_idle", queue_length=0)
+
+async def _restore_speaker_volume(speaker_single, original_volume) -> None:
+    """Put a speaker back to the volume it held before TTS, and re-sync the guard.
+
+    Extracted so it can be called from two places: immediately, when a duck
+    session has already waited out playback, and deferred to _process_queue()
+    when it has not. Timing is the caller's problem; this only does the restore.
+    """
+    try:
+        await service.call("media_player", "volume_set",  # noqa: F821
+                           entity_id=speaker_single, volume_level=original_volume)
+    except Exception as exc:
+        log.warning(f"tts_queue: volume restore failed for {speaker_single}: {exc}")  # noqa: F821
+    # Duck guard snapshot sync
+    try:
+        if state.get("input_boolean.ai_duck_guard_enabled") == "on":  # noqa: F821
+            await hass.services.async_call(  # noqa: F821
+                "pyscript", "duck_manager_update_snapshot",
+                {"entity_id": speaker_single, "volume_level": original_volume},
+                blocking=True, return_response=True,
+            )
+    except Exception:
+        pass
+
 
 async def _play_item(item: dict) -> None:
     """Play a single queue item via tts.speak or media_player.play_media."""
@@ -1277,8 +1326,29 @@ async def _play_item(item: dict) -> None:
                 log.debug(f"tts_queue: skipped — {speaker} already playing (conflict=skip)")  # noqa: F821
                 return
             elif conflict_mode == "wait" and state.get(speaker) == "playing":  # noqa: F821
-                log.debug(f"tts_queue: waiting — {speaker} playing (conflict=wait)")  # noqa: F821
-                await asyncio.sleep(1.5)
+                # Actually wait, rather than pausing 1.5s and dispatching anyway.
+                # The old flat sleep made "wait" behave identically to
+                # "override" for anything longer than 1.5s — which is
+                # everything: measured tts_queue busy spans run to a 21.5s
+                # median. The second item landed on top of the first, mixing on
+                # announce-capable speakers and cutting it off mid-word on the
+                # rest, so a user who deliberately chose "wait" got "override"
+                # with no indication. Bounded by the same helper the playback
+                # loop uses, so a stuck speaker cannot wedge the queue.
+                _conflict_deadline = (
+                    asyncio.get_event_loop().time() + _get_playback_timeout()
+                )
+                while asyncio.get_event_loop().time() < _conflict_deadline:
+                    if _preempted or not _is_speaker_playing(speaker):
+                        break
+                    await asyncio.sleep(0.25)
+                else:
+                    log.warning(  # noqa: F821
+                        f"tts_queue: {speaker} still playing after "
+                        f"{_get_playback_timeout():.0f}s (conflict=wait) — "
+                        f"dispatching anyway"
+                    )
+                log.debug(f"tts_queue: proceeding — {speaker} free (conflict=wait)")  # noqa: F821
         except Exception:
             pass
 
@@ -1439,25 +1509,33 @@ async def _play_item(item: dict) -> None:
                 )
 
         # ── Restore original TTS speaker volume ──
+        # With a duck session, duck_manager_restore above already waited for
+        # playback, so restoring now is correct.
+        #
+        # WITHOUT one (announce-native), this used to `await
+        # asyncio.sleep(restore_delay_sec)` — a flat 8s — and restore here. But
+        # _play_item() only DISPATCHES the audio; the caller, _process_queue(),
+        # waits out the real duration afterwards (tts_queue.py:1160-1191). So
+        # the restore landed 8s after the announcement STARTED, not after it
+        # finished, and every announcement longer than that played its tail at
+        # the pre-TTS (background) volume. Measured tts_queue busy spans:
+        # median 21.5s, p90 41.0s — so the quiet tail was the normal case, not
+        # an edge case. Silent, too: a bare sleep reports nothing.
+        #
+        # Hand it to _process_queue() to run once the audio has actually ended.
+        # `volume_restore_delay` keeps its name but changes reference point: it
+        # used to be measured from DISPATCH and had to be long enough to cover
+        # the whole utterance; it is now a settle buffer applied AFTER playback
+        # ends. Anyone who raised it to stop their announcements going quiet can
+        # now lower it. It is carried through rather than dropped so the input
+        # does not become a setting that silently does nothing.
         if original_volume is not None:
-            if not session_id:
-                # No duck session (announce-native) → wait for TTS to finish
-                await asyncio.sleep(restore_delay_sec)
-            try:
-                await service.call("media_player", "volume_set",  # noqa: F821
-                                   entity_id=speaker_single, volume_level=original_volume)
-            except Exception as exc:
-                log.warning(f"tts_queue: volume restore failed for {speaker_single}: {exc}")  # noqa: F821
-            # Duck guard snapshot sync
-            try:
-                if state.get("input_boolean.ai_duck_guard_enabled") == "on":  # noqa: F821
-                    await hass.services.async_call(  # noqa: F821
-                        "pyscript", "duck_manager_update_snapshot",
-                        {"entity_id": speaker_single, "volume_level": original_volume},
-                        blocking=True, return_response=True,
-                    )
-            except Exception:
-                pass
+            if session_id:
+                await _restore_speaker_volume(speaker_single, original_volume)
+            else:
+                item["_pending_volume_restore"] = (
+                    speaker_single, original_volume, restore_delay_sec
+                )
 
 
 # ── Event Trigger ─────────────────────────────────────────────────────────────
@@ -1558,6 +1636,45 @@ async def tts_queue_flush_deferred():
 #
 #   Other modes: "broadcast" (all speakers), "source_room" (trigger room).
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fire_not_queued(metadata, priority, reason):
+    """Announce that an item is finished because it never played.
+
+    Callers wait on `tts_queue_item_completed` keyed by their own `metadata`
+    tag instead of guessing a delay long enough for speech. But several paths
+    below return BEFORE anything is enqueued -- test mode, the
+    `ai_tts_queue_active` kill switch, validation failures, a full ambient
+    queue, an unexpected exception. On those paths the normal completion event
+    at the end of playback never fires, so a caller waiting on its tag would
+    block for its entire timeout: a bedtime routine sitting for 90s with the
+    lamp still on, where its old fixed delay would have moved on in 5s.
+
+    Firing here closes that gap once, at the source, instead of making every
+    caller defensively inspect the response. Two properties keep it safe for
+    the existing consumers:
+      * `completed=False` -- reactive_banter.yaml matches
+        `event_data: {completed: true}`, so it correctly ignores these.
+      * `speaker=""` -- theatrical_mode.py's handler guards on a non-empty
+        speaker before counting a completion, so these cannot inflate its
+        per-speaker tally. No speaker has been resolved at any of these points
+        anyway.
+    """
+    meta = dict(metadata) if isinstance(metadata, dict) else {}
+    for _rk in ("completed", "priority", "speaker", "reason"):
+        meta.pop(_rk, None)
+    try:
+        event.fire(  # noqa: F821
+            "tts_queue_item_completed",
+            completed=False,
+            priority=priority,
+            speaker="",
+            reason=reason,
+            **meta,
+        )
+    except Exception as exc:  # telemetry must never break the caller
+        log.warning("tts_queue: could not fire not-queued event: %s", exc)  # noqa: F821
+
 
 @service(supports_response="only")  # noqa: F821
 async def tts_queue_speak(
@@ -1705,17 +1822,25 @@ async def tts_queue_speak(
           object:
     """
     # Returns: {status, op, queue_length?, priority?, speaker?, preempted?, test_mode?, cache_hit?, cache_key?, error?, reason?}  # noqa: E501
+    # Every early return below must release waiters via _fire_not_queued(), or a
+    # caller waiting on its metadata tag blocks for its full timeout instead of
+    # its old fixed delay. See that function for why this is fixed here rather
+    # than in each caller.
     if _is_test_mode():
         log.info("tts_queue [TEST]: would enqueue TTS text=%s voice=%s", text[:50] if text else "", voice)  # noqa: F821
+        _fire_not_queued(metadata, priority, "test_mode_skip")
         return {"status": "test_mode_skip"}
 
     if state.get("input_boolean.ai_tts_queue_active") == "off":  # noqa: F821
+        _fire_not_queued(metadata, priority, "disabled")
         return {"status": "disabled", "op": "tts_queue_speak"}
 
     if not text and not media_file:
+        _fire_not_queued(metadata, priority, "missing_text_or_media")
         return {"status": "error", "op": "tts_queue_speak",
                 "error": "text or media_file required"}
     if text and not voice:
+        _fire_not_queued(metadata, priority, "missing_voice")
         return {"status": "error", "op": "tts_queue_speak",
                 "error": "voice required when text is provided"}
 
@@ -1730,6 +1855,7 @@ async def tts_queue_speak(
             ambient_count = _queue_count_by_priority_sync(PRIORITY_AMBIENT)
             if ambient_count >= _get_max_ambient():
                 log.debug(f"tts_queue: ambient dropped ({ambient_count} in queue)")  # noqa: F821
+                _fire_not_queued(metadata, priority, "ambient_queue_full")
                 return {"status": "dropped", "op": "tts_queue_speak",
                         "reason": "ambient_queue_full"}
 
@@ -1803,6 +1929,11 @@ async def tts_queue_speak(
     except Exception as exc:
         log.error("tts_queue_speak failed: %s: %s", type(exc).__name__, exc)  # noqa: F821
         _set_result("error", op="tts_queue_speak", error=str(exc))
+        # The item may or may not have been enqueued before the throw. Firing an
+        # extra not-queued event is harmless (waiters are one-shot, and a real
+        # completion later is simply ignored); NOT firing strands any waiter for
+        # its whole timeout.
+        _fire_not_queued(metadata, priority, "exception")
         return {"status": "error", "op": "tts_queue_speak", "error": str(exc)}
 
 

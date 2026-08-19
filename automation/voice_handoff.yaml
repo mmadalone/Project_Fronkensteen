@@ -416,7 +416,14 @@ blueprint:
           description: >-
             How long the processing guard can stay ON before being treated as
             stale and bypassed. Lower values recover faster from stuck handoffs.
-          default: 30
+          # CALIBRATION (2026-08-19): 120s, was 30s. The guard is set ON at
+          # step 0b and cleared at step 11b, and that window now contains two
+          # full TTS playbacks (farewell + greeting) plus their waits. With a
+          # single reply measured up to 69.8s, a 30s staleness bound expired
+          # mid-handoff and let a concurrent handoff bypass the guard it exists
+          # to enforce. Deployed instances carry no explicit value, so they
+          # take this default.
+          default: 120
           selector:
             number:
               min: 10
@@ -923,9 +930,18 @@ actions:
              or (saved_pipeline | lower != 'preferred'
                  and saved_persona == handoff_target) }}
     then:
+      # CALIBRATION (2026-08-19): 90s, not 10s. Until 2026-08-18 the Voice PE
+      # firmware fabricated completion after a 2000ms watchdog, so this state
+      # went idle a flat ~2.0s after `responding` no matter how long the reply
+      # was, and 10s looked like 5x headroom. Streaming TTS + a silent pre-roll
+      # made the signal honest: measured n=47, median 12.7s, max 69.8s, with
+      # 72% of replies over 10s. The next action opens the MICROPHONE with
+      # nothing in between, so an early expiry re-arms it over live audio --
+      # the failure that had STT transcribe room noise and the agent execute it.
+      # Re-measure with voice_timing_report.py before changing this number.
       - alias: "Wait for satellite idle"
         wait_template: "{{ is_state(satellite_entity, 'idle') }}"
-        timeout: "00:00:10"
+        timeout: "00:01:30"
         continue_on_timeout: true
       - alias: "Reopen mic for self-handoff (target already active)"
         action: assist_satellite.start_conversation
@@ -953,9 +969,14 @@ actions:
       - stop: "Self-handoff — mic reopened"
 
   # 5. Wait for satellite to finish speaking
+  # CALIBRATION (2026-08-19): 90s, not 15s — see the note at step 4b. Against
+  # the old fabricated 2.0s clock 15s was 7.5x headroom; against real audio it
+  # sits BELOW the 12.7s median plus one sentence, and 43% of replies exceed it.
+  # Expiry is swallowed (continue_on_timeout), so the farewell TTS was being
+  # queued on top of the outgoing agent still talking.
   - alias: "Wait for satellite idle"
     wait_template: "{{ is_state(satellite_entity, 'idle') }}"
-    timeout: "00:00:15"
+    timeout: "00:01:30"
     continue_on_timeout: true
 
   # 5-gap. Let ESPHome media player start playback before checking state
@@ -965,11 +986,15 @@ actions:
       seconds: 1
 
   # 5a. Wait for speaker to finish playing outgoing agent's TTS response
+  # CALIBRATION (2026-08-19): 90s, not 15s. This is the only backstop for step 5
+  # above, but it starts 1s later, so at 15s each the composed ceiling was ~31s
+  # — still short of the 44.1s, 46.2s and 69.8s replies in the measured set, and
+  # both halves expired together on anything longer than ~31s.
   - alias: "Wait for template condition"
     wait_template: >-
       {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
          'paused', 'unknown'] }}
-    timeout: "00:00:15"
+    timeout: "00:01:30"
     continue_on_timeout: true
 
   # 5b. Brief pause to let pipeline settle after farewell
@@ -1115,9 +1140,15 @@ actions:
               name: "Blueprint Failure"
               message: "pyscript.tts_queue_speak (farewell) failed in {{ this.attributes.friendly_name }}"
               entity_id: "{{ this.entity_id }}"
+      # CALIBRATION (2026-08-19): 40s, not 10s. The queue only reports `idle`
+      # after tts_queue.py's _wait_for_playback_done() returns — i.e. after the
+      # farewell has actually PLAYED, not after it was dispatched. 10s sat below
+      # the 12.7s median utterance. 40s clears the queue's own ~30s internal cap
+      # plus its post-buffer, so an expiry here now means the queue is genuinely
+      # stuck rather than merely still talking.
       - alias: "Wait for TTS queue idle"
         wait_template: "{{ is_state('sensor.ai_tts_queue_status', 'idle') }}"
-        timeout: "00:00:10"
+        timeout: "00:00:40"
         continue_on_timeout: true
       - alias: "Wait for speaker idle"
         wait_template: "{{ is_state(speaker_entity, 'idle') }}"
@@ -1695,9 +1726,15 @@ actions:
             #    Subsequent: catches step G's start_conversation session.
             #    Multi-turn retries DON'T go through IDLE, so this only
             #    completes when the session truly ends.
+            # CALIBRATION (2026-08-19): 120s, not 60s. This bound covers an
+            # entire multi-turn SESSION — user speech, STT, inference and full
+            # reply audio, repeated — while a single measured reply already runs
+            # to 69.8s. At 60s it could expire mid-session, and because expiry
+            # is swallowed the loop would fall through to step G and reopen the
+            # mic on top of a session still in progress.
             - alias: "Wait for satellite idle"
               wait_template: "{{ is_state(satellite_entity, 'idle') }}"
-              timeout: "00:01:00"
+              timeout: "00:02:00"
               continue_on_timeout: true
             # B. No-speech detection: multi-turn sessions with real user speech
             #    last 10+ seconds. Sessions that end quickly (< 12s) via

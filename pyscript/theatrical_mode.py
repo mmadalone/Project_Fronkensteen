@@ -306,7 +306,15 @@ def _build_tts_media_uri(tts_engine, message, voice_id=""):
 # Satellite & speaker wait helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def _wait_for_satellite_idle(satellite, timeout_secs=10):
+# CALIBRATION (2026-08-19): default was 10s. Until 2026-08-18 the Voice PE
+# firmware fabricated TTS completion after a 2000 ms watchdog, so 10s looked
+# generous. With streaming TTS + the silent pre-roll the clock is honest and
+# assist_satellite `responding` spans measure n=47, median 12.7s, max 69.8s —
+# a 10s bound gave up on the MEDIAN reply (theatrical then aborted the debate
+# or skipped a turn's TTS). 75s clears the measured tail. Polling structure
+# unchanged: 0.5s ticks, timeout_secs * 2 iterations; returns as soon as the
+# satellite reports idle, so the raised bound costs nothing in the normal case.
+async def _wait_for_satellite_idle(satellite, timeout_secs=75):
     """Wait for satellite to return to idle. Returns True if idle."""
     for _ in range(timeout_secs * 2):
         try:
@@ -483,7 +491,7 @@ async def theatrical_mode_start(
         sat_st = None
     if sat_st in ["listening", "responding"]:
         log.info("theatrical: satellite busy (%s), waiting...", sat_st)
-        if not await _wait_for_satellite_idle(sat, 10):
+        if not await _wait_for_satellite_idle(sat):
             log.warning("theatrical: satellite never went idle, aborting")
             return {"status": "satellite_busy"}
 
@@ -813,7 +821,7 @@ async def theatrical_mode_start(
                     "theatrical: satellite busy (%s) before TTS, waiting...",
                     sat_st,
                 )
-                if not await _wait_for_satellite_idle(sat, 10):
+                if not await _wait_for_satellite_idle(sat):
                     log.warning("theatrical: satellite stuck, skipping TTS")
                     continue
 

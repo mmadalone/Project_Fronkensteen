@@ -574,7 +574,19 @@ async def voice_handoff(
 
     # ── Announce greeting (mic stays closed) ──────────────────────────────
     if greeting:
-        await _wait_for_audio_done(satellite)
+        # NO _wait_for_audio_done() here (removed 2026-08-19). Nothing has
+        # produced audio since the last wait: the farewell branch already waited
+        # at its own call above, or -- with no farewell -- the wait before the
+        # LLM lines did. Everything in between is a select.select_option and
+        # _generate_llm_line(), which returns TEXT and dispatches no TTS.
+        #
+        # That made the call worse than redundant. _wait_for_audio_done's
+        # Phase 2 arms an esphome.voice_tts_done event trigger plus a speaker
+        # trigger with state_check_now=False -- both FUTURE-ONLY. Arriving with
+        # the satellite already idle and silent, Phase 1 returned instantly and
+        # Phase 2 had no signal left to receive, so it blocked for the full 60s
+        # default and logged a spurious "audio wait timeout" before every
+        # greeting on the default handoff path.
         await service.call(  # noqa: F821
             "assist_satellite", "announce",
             entity_id=satellite,
@@ -650,8 +662,20 @@ async def voice_handoff(
                 if state.get(satellite) != "idle":  # noqa: F821
                     break
                 await asyncio.sleep(0.5)
-            # Wait for multi-turn session to fully end (satellite idle)
-            await _wait_for_audio_done(satellite, timeout=60)
+            # Wait for multi-turn session to fully end (satellite idle).
+            # Bounded by the loop's OWN remaining budget rather than a literal.
+            # A hardcoded 60 could outlive the deadline (harmless today, since
+            # both deployed instances pass continuous_conversation_timeout=30)
+            # or expire inside it (the real hazard: with the 120s default, a
+            # session running past 60s let this wait lapse, fall through the
+            # `duration < 12` check, and issue a fresh start_conversation at the
+            # bottom of the loop -- reopening the mic on top of a session still
+            # in progress). Deriving it from `deadline` keeps inner <= outer by
+            # construction. Floor of 15s so the last moments of the budget still
+            # allow a reply to land (measured median reply: 12.7s).
+            await _wait_for_audio_done(
+                satellite, timeout=max(15, deadline - time.monotonic())
+            )
             if time.monotonic() >= deadline:
                 break
             # No-speech detection: sessions < 12s = no real interaction

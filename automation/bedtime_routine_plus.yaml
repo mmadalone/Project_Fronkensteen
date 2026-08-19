@@ -1217,7 +1217,10 @@ blueprint:
 # Variables
 # ═══════════════════════════════════════════════════════════════════════
 variables:
+  # Instance-scoped so two instances of this blueprint cannot match
+  # each other's tts_queue_item_completed events (global event bus).
   _pfx: !input safety_prefix
+  run_tag: "{{ this.entity_id }}"
   # --- Blueprint version ---
   blueprint_version: "5.4.14"
 
@@ -1773,11 +1776,31 @@ actions:
           target_mode: explicit
           priority: 3
           duck: "{{ not bypass_ducking }}"
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "bedtime_plus_bedtime_announcement_{{ run_tag }}"
         continue_on_error: true
 
-      - alias: "Post-TTS buffer — let streaming audio finish"
-        delay:
-          seconds: "{{ post_tts_delay_val | int(5) }}"
+      # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+      # The next steps kill the lights, force the lamp on and stop the other media
+      # players -- so the room went dark and the music cut out mid-sentence.
+      # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+      # merely truncate the slow cases, it is wrong EVERY time unless the duration
+      # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+      # max 116.8s. tts_queue_speak echoes `metadata` back on
+      # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+      # wait for the real end of THIS utterance. The timeout is only a safety valve:
+      # continue_on_timeout keeps the routine moving if the event never arrives
+      # (failed TTS), exactly as the old delay did.
+      - alias: "Wait for the bedtime announcement to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "bedtime_plus_bedtime_announcement_{{ run_tag }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
 
   # --- Lights off except lamp (TV stays ON) -----------------------------------
 
@@ -2056,11 +2079,32 @@ actions:
                               target_mode: explicit
                               priority: 3
                               duck: "{{ not bypass_ducking }}"
+                              # Echoed back on tts_queue_item_completed so the wait below matches
+                              # THIS utterance rather than any queue activity.
+                              metadata:
+                                tag: "bedtime_plus_preset_settling_in_{{ run_tag }}"
                             continue_on_error: true
 
-                          - alias: "Post-TTS buffer for settling-in message"
-                            delay:
-                              seconds: "{{ post_tts_delay_val | int(5) }}"
+                          # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+                          # The step after this is the countdown `delay: minutes`, so the countdown clock
+                          # started while the settling-in line was still being spoken -- the settle window
+                          # was short by however much speech was left.
+                          # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+                          # merely truncate the slow cases, it is wrong EVERY time unless the duration
+                          # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+                          # max 116.8s. tts_queue_speak echoes `metadata` back on
+                          # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+                          # wait for the real end of THIS utterance. The timeout is only a safety valve:
+                          # continue_on_timeout keeps the routine moving if the event never arrives
+                          # (failed TTS), exactly as the old delay did.
+                          - alias: "Wait for the settling-in message to finish playing"
+                            wait_for_trigger:
+                              - trigger: event
+                                event_type: tts_queue_item_completed
+                                event_data:
+                                  tag: "bedtime_plus_preset_settling_in_{{ run_tag }}"
+                            timeout: "00:01:30"
+                            continue_on_timeout: true
 
           # --- Countdown (non-negotiable in preset mode) ---
           - alias: "Wait the default countdown — lamp stays on, user settles in"
@@ -2190,6 +2234,10 @@ actions:
                       target_mode: explicit
                       priority: 3
                       duck: "{{ not bypass_ducking }}"
+                      # Echoed back on tts_queue_item_completed so the wait below matches
+                      # THIS utterance rather than any queue activity.
+                      metadata:
+                        tag: "bedtime_plus_preset_goodnight_{{ run_tag }}"
                     continue_on_error: true
 
                   - alias: "Whisper — update self-awareness"
@@ -2200,9 +2248,26 @@ actions:
                       source: "automation"
                     continue_on_error: true
 
-                  - alias: "Post-TTS buffer for final goodnight"
-                    delay:
-                      seconds: "{{ post_tts_delay_val | int(5) }}"
+                  # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+                  # This is the last step of the preset branch: the common tail immediately turns
+                  # off the living room lamp and the temporary switches, so the lights went out
+                  # mid-goodnight.
+                  # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+                  # merely truncate the slow cases, it is wrong EVERY time unless the duration
+                  # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+                  # max 116.8s. tts_queue_speak echoes `metadata` back on
+                  # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+                  # wait for the real end of THIS utterance. The timeout is only a safety valve:
+                  # continue_on_timeout keeps the routine moving if the event never arrives
+                  # (failed TTS), exactly as the old delay did.
+                  - alias: "Wait for the preset goodnight to finish playing"
+                    wait_for_trigger:
+                      - trigger: event
+                        event_type: tts_queue_item_completed
+                        event_data:
+                          tag: "bedtime_plus_preset_goodnight_{{ run_tag }}"
+                    timeout: "00:01:30"
+                    continue_on_timeout: true
 
     # =====================================================================
     # CONVERSATIONAL MODES — curated / freeform / both
@@ -2609,11 +2674,32 @@ actions:
                                       target_mode: explicit
                                       priority: 3
                                       duck: "{{ not bypass_ducking }}"
+                                      # Echoed back on tts_queue_item_completed so the wait below matches
+                                      # THIS utterance rather than any queue activity.
+                                      metadata:
+                                        tag: "bedtime_plus_conversational_settling_in_{{ run_tag }}"
                                     continue_on_error: true
 
-                                  - alias: "Post-TTS buffer for settling-in message"
-                                    delay:
-                                      seconds: "{{ post_tts_delay_val | int(5) }}"
+                                  # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+                                  # The next step fires the goodnight `conversation.process` -- the LLM call and
+                                  # everything after it were pulled forward while this line was still playing, and
+                                  # the error compounds into the countdown below starting early.
+                                  # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+                                  # merely truncate the slow cases, it is wrong EVERY time unless the duration
+                                  # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+                                  # max 116.8s. tts_queue_speak echoes `metadata` back on
+                                  # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+                                  # wait for the real end of THIS utterance. The timeout is only a safety valve:
+                                  # continue_on_timeout keeps the routine moving if the event never arrives
+                                  # (failed TTS), exactly as the old delay did.
+                                  - alias: "Wait for the settling-in message to finish playing"
+                                    wait_for_trigger:
+                                      - trigger: event
+                                        event_type: tts_queue_item_completed
+                                        event_data:
+                                          tag: "bedtime_plus_conversational_settling_in_{{ run_tag }}"
+                                    timeout: "00:01:30"
+                                    continue_on_timeout: true
 
       # --- Goodnight message (conversational modes only) ---
       - alias: "Generate goodnight message via conversation agent"
@@ -2656,6 +2742,10 @@ actions:
           target_mode: explicit
           priority: 3
           duck: "{{ not bypass_ducking }}"
+          # Echoed back on tts_queue_item_completed so the wait below matches
+          # THIS utterance rather than any queue activity.
+          metadata:
+            tag: "bedtime_plus_conversational_goodnight_{{ run_tag }}"
         continue_on_error: true
 
       - alias: "Whisper — update self-awareness"
@@ -2666,9 +2756,25 @@ actions:
           source: "automation"
         continue_on_error: true
 
-      - alias: "Post-TTS buffer — let goodnight finish playing"
-        delay:
-          seconds: "{{ post_tts_delay_val | int(5) }}"
+      # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+      # The step after this is the negotiated countdown `delay: minutes`, so the
+      # countdown started while the goodnight was still being spoken.
+      # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+      # merely truncate the slow cases, it is wrong EVERY time unless the duration
+      # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+      # max 116.8s. tts_queue_speak echoes `metadata` back on
+      # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+      # wait for the real end of THIS utterance. The timeout is only a safety valve:
+      # continue_on_timeout keeps the routine moving if the event never arrives
+      # (failed TTS), exactly as the old delay did.
+      - alias: "Wait for the goodnight to finish playing"
+        wait_for_trigger:
+          - trigger: event
+            event_type: tts_queue_item_completed
+            event_data:
+              tag: "bedtime_plus_conversational_goodnight_{{ run_tag }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
 
       # --- Countdown — wait the negotiated duration ---
       - alias: "Wait the negotiated countdown — lamp stays on, user goes to bed"
@@ -2798,6 +2904,10 @@ actions:
                   target_mode: explicit
                   priority: 3
                   duck: "{{ not bypass_ducking }}"
+                  # Echoed back on tts_queue_item_completed so the wait below matches
+                  # THIS utterance rather than any queue activity.
+                  metadata:
+                    tag: "bedtime_plus_conversational_final_goodnight_{{ run_tag }}"
                 continue_on_error: true
 
               - alias: "Whisper — update self-awareness"
@@ -2808,9 +2918,25 @@ actions:
                   source: "automation"
                 continue_on_error: true
 
-              - alias: "Post-TTS buffer for final goodnight"
-                delay:
-                  seconds: "{{ post_tts_delay_val | int(5) }}"
+              # CALIBRATION (2026-08-19): was `delay: post_tts_delay` (default 5s).
+              # This is the last step before the common tail, which turns off the living room
+              # lamp -- the lights went out mid-goodnight.
+              # A fixed delay is wrong for speech in a way a timeout is not -- it does not
+              # merely truncate the slow cases, it is wrong EVERY time unless the duration
+              # happens to match. Measured tts_queue busy spans: median 21.5s, p90 41.0s,
+              # max 116.8s. tts_queue_speak echoes `metadata` back on
+              # tts_queue_item_completed (the mechanism reactive_banter.yaml:511 uses), so
+              # wait for the real end of THIS utterance. The timeout is only a safety valve:
+              # continue_on_timeout keeps the routine moving if the event never arrives
+              # (failed TTS), exactly as the old delay did.
+              - alias: "Wait for the final goodnight to finish playing"
+                wait_for_trigger:
+                  - trigger: event
+                    event_type: tts_queue_item_completed
+                    event_data:
+                      tag: "bedtime_plus_conversational_final_goodnight_{{ run_tag }}"
+                timeout: "00:01:30"
+                continue_on_timeout: true
 
   # --- Common tail (both modes) — lamp off + cleanup ----------------------------
 

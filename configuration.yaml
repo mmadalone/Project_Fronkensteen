@@ -111,6 +111,13 @@ logger:
     custom_components.pyscript.file.music_composer: debug
     custom_components.pyscript.file.email_promote: info
     custom_components.pyscript.file.satellite_idle_reset: info
+    # info (2026-08-19) for the handoff validation runs. At the default
+    # `warning` only the FAILURE is visible ("audio wait timeout"); info also
+    # logs which signal ended each wait — "audio done (esphome event)" vs
+    # "(speaker idle)". That distinction decides whether _wait_for_audio_done's
+    # future-only Phase 2 needs its structural fix, and it cannot be recovered
+    # after the fact. Drop back to warning once that is settled.
+    custom_components.pyscript.file.voice_handoff: info
     custom_components.extended_openai_conversation: debug
     custom_components.elevenlabs_custom_tts: info
 
