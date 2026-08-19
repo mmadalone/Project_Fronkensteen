@@ -778,3 +778,14 @@ ai_eoc_disable_reasoning:
   name: "AI EOC - Disable Reasoning Tokens (OpenRouter)"
   icon: mdi:brain
   initial: true
+
+ai_tts_leadin_enabled:
+  name: "TTS Satellite Lead-in"
+  icon: mdi:timer-sand
+  # Silent pre-roll that wins the ESPHome 2000ms playing-watchdog race.
+  # Deliberately NO `initial:` — that would overwrite the user's choice on
+  # every restart (the trap that silently resets 283 of 479 helpers).
+  # NOTE: a NEW input_boolean with no `initial:` and no restore history comes
+  # up OFF, not on — it must be switched on once by hand (done 2026-08-18).
+  # Thereafter restore_state persists the user's choice across restarts, which
+  # is the behaviour we want and the reason `initial:` stays absent.

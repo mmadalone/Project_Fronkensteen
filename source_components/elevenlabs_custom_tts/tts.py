@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 import async_timeout
@@ -40,6 +41,37 @@ _LOGGER = logging.getLogger(__name__)
 # end-to-end is ~6.5s for 195 chars, but the timer also spans the
 # consumer pulling chunks, so keep well clear of normal replies.
 STREAM_TIMEOUT_S = 120
+
+# HA pops these before calling the engine UNLESS we declare them supported
+# (tts/__init__.py). String literals rather than imports so an HA-core rename
+# cannot break module import.
+ATTR_PREFERRED_FORMAT = "preferred_format"
+ATTR_PREFERRED_SAMPLE_RATE = "preferred_sample_rate"
+ATTR_PREFERRED_SAMPLE_CHANNELS = "preferred_sample_channels"
+ATTR_PREFERRED_SAMPLE_BYTES = "preferred_sample_bytes"
+
+# Silent 44.1 kHz mono MP3, 1.6 s.
+#
+# The ESPHome Voice PE arms a 2000 ms "playing" watchdog when HA hands it the
+# TTS URL (voice_assistant.cpp:747-757). If audio has not begun by then the
+# firmware FABRICATES an AnnounceFinished, HA marks the satellite idle, and the
+# device re-arms the microphone OVER the still-playing reply -- which has been
+# observed executing tool calls from mis-transcribed room audio.
+#
+# HA cannot suppress that: the fabricated and honest messages are byte-identical
+# on the wire, and the mic opens on the ESP32 before HA is notified. What HA DOES
+# control is when audio starts. The satellite negotiates FLAC/48k, so every reply
+# is transcoded mp3->flac, and ffmpeg's mp3 demuxer emits nothing until ~1.4 s of
+# audio DURATION has arrived. Measured on this system: 2215 ms to first FLAC byte
+# without this pre-roll, 45 ms with it.
+#
+# Yielding this first satisfies the demuxer immediately. The device reaches
+# ANNOUNCING in ~50 ms, and the watchdog -- which re-arms every loop while
+# playing -- becomes a sliding window that never fires. Margin to the deadline
+# goes from ~0.19 s to ~1.7 s. Cost is ~0.25 s of added lead-in in the typical
+# case, and it is FASTER than today whenever ElevenLabs is slow.
+LEAD_IN_PATH = Path(__file__).parent / "leadin_1600ms.mp3"
+LEAD_IN_SWITCH = "input_boolean.ai_tts_leadin_enabled"
 
 SUPPORT_LANGUAGES = ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "ja", "hu", "ko"]
 
@@ -80,6 +112,16 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         self._mood_profile_map = await self.hass.async_add_executor_job(
             self._load_mood_profile_map_sync
         )
+        try:
+            self._lead_in_cache = await self.hass.async_add_executor_job(
+                LEAD_IN_PATH.read_bytes
+            )
+            _LOGGER.info(
+                "Satellite lead-in loaded (%d bytes)", len(self._lead_in_cache)
+            )
+        except Exception as err:  # missing file must degrade, never raise
+            self._lead_in_cache = b""
+            _LOGGER.warning("Satellite lead-in unavailable (%s) — disabled", err)
 
     @staticmethod
     def _load_mood_profile_map_sync() -> dict:
@@ -129,7 +171,14 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             "style",
             "speed",
             "use_speaker_boost",
-            "apply_text_normalization"
+            "apply_text_normalization",
+            # Declared ONLY so HA hands these to us instead of popping them.
+            # We never act on them beyond gating the lead-in below. Conversion
+            # behaviour and cache keys are unchanged either way.
+            ATTR_PREFERRED_FORMAT,
+            ATTR_PREFERRED_SAMPLE_RATE,
+            ATTR_PREFERRED_SAMPLE_CHANNELS,
+            ATTR_PREFERRED_SAMPLE_BYTES,
         ]
 
     @property
@@ -354,6 +403,24 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             _LOGGER.error("Error generating TTS audio: %s", err)
             return None
 
+    def _lead_in_bytes(self, options: dict[str, Any] | None) -> bytes:
+        """Silent MP3 pre-roll, or b'' when it must not be used.
+
+        Gated on a caller having negotiated a non-wav preferred format -- i.e.
+        the ESPHome media_player ANNOUNCEMENT path, the only path carrying the
+        2000 ms device watchdog. Deliberately excluded:
+          * tts_queue / tts.speak / play_media -> no preferred_format at all
+          * ESPHome SPEAKER path -> "wav", PCM pushed over the API, no watchdog
+        So Sonos, Alexa and every notification are untouched by construction.
+        """
+        fmt = (options or {}).get(ATTR_PREFERRED_FORMAT)
+        if not fmt or fmt == "wav":
+            return b""
+        kill = self.hass.states.get(LEAD_IN_SWITCH)
+        if kill is not None and kill.state == "off":
+            return b""
+        return getattr(self, "_lead_in_cache", b"")
+
     async def async_stream_tts_audio(
         self, request: TTSAudioRequest
     ) -> TTSAudioResponse:
@@ -391,8 +458,18 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             f" using profile '{voice_profile_name}'" if voice_profile_name else ""
         )
 
+        lead_in = self._lead_in_bytes(request.options)
+
         async def _audio_stream() -> AsyncGenerator[bytes]:
             total = 0
+            if lead_in:
+                # NOT counted in `total`: the no-audio raise at the end of this
+                # method must still fire when ElevenLabs returns nothing, or HA
+                # caches a silent clip under the deterministic key forever.
+                _LOGGER.debug(
+                    "Prepending %d-byte silent lead-in", len(lead_in)
+                )
+                yield lead_in
             try:
                 with async_timeout.timeout(STREAM_TIMEOUT_S):
                     async for chunk in self._client.text_to_speech.stream(
