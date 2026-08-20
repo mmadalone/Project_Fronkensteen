@@ -48,6 +48,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
+    CONTEXT_KEEP_OPENING,
+    CONTEXT_TRIM_TARGET,
     CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
     CONF_FALLBACK_MODEL,
@@ -130,6 +132,14 @@ _SPEECH_TAG = re.compile(r'\[[^\[\]]{1,40}\]')
 
 
 # Transient errors that warrant retrying with a fallback model
+# How long a satellite's conversation history stays warm, in seconds.
+# History is keyed by device rather than conversation_id (see
+# _async_handle_message), so without an expiry a chat resumed the next
+# morning would silently inherit last night's context. 30 minutes keeps a
+# real conversation intact across long pauses while still starting clean
+# once the user has plainly moved on.
+HISTORY_TTL = 1800.0
+
 _FALLBACK_ELIGIBLE_ERRORS = (APITimeoutError, RateLimitError, InternalServerError, NotFoundError)
 
 # Models whose endpoint refuses reasoning control ("Reasoning is mandatory for this
@@ -183,7 +193,11 @@ class ExtendedOpenAIAgentEntity(
         self.hass = hass
         self.entry = entry
         self.subentry = subentry
+        # Keyed by SATELLITE (device_id), not conversation_id — see the note at
+        # the hist_key assignment in _async_handle_message.
         self.history: dict[str, list[dict]] = {}
+        # hist_key -> monotonic timestamp of the last turn, for HISTORY_TTL.
+        self._history_ts: dict[str, float] = {}
         # Echo guard: conversation_id -> (normalised reply words, monotonic ts)
         self._last_reply: dict[str, tuple[list[str], float]] = {}
 
@@ -338,8 +352,62 @@ class ExtendedOpenAIAgentEntity(
                 continue_conversation=False,
             )
 
-        if conversation_id in self.history:
-            messages = self.history[conversation_id]
+        # ── History key: the SATELLITE, not the conversation ─────────────────
+        # HA mints a fresh conversation_id every time the mic is reopened with
+        # assist_satellite.start_conversation, and the voice_handoff continuous
+        # loop does exactly that on every turn. Keying history on it therefore
+        # rebuilt `messages` from scratch on every single reply — the agent
+        # remembered nothing said thirty seconds earlier, while appearing to
+        # work. Measured 2026-08-20: total_tokens sat flat at ~15,150 across a
+        # multi-turn conversation instead of climbing, and truncate_message_history
+        # (threshold 32768) never fired because the total never grew.
+        #
+        # start_conversation exposes no conversation_id parameter, so the id
+        # cannot be pinned from the caller side; the key has to come from
+        # something else that is stable. device_id is the physical satellite, so
+        # history now follows the room. self.history lives on the agent instance,
+        # so it is already per-persona — this makes it per-persona-per-room.
+        # Text/API callers have no device and fall back to conversation_id.
+        hist_key = user_input.device_id or conversation_id
+
+        # Expire stale history: resuming hours later should start clean rather
+        # than silently dragging in last night's conversation.
+        import time as _t
+        _now = _t.monotonic()
+        if hist_key in self.history and (
+            _now - self._history_ts.get(hist_key, 0.0) > HISTORY_TTL
+        ):
+            _LOGGER.debug(
+                "History for %s expired after %.0fs — starting fresh",
+                hist_key, _now - self._history_ts.get(hist_key, 0.0),
+            )
+            self.history.pop(hist_key, None)
+            self._history_ts.pop(hist_key, None)
+
+        if hist_key in self.history:
+            messages = self.history[hist_key]
+            # ALWAYS regenerate messages[0]. The system prompt is not static —
+            # it embeds live state: the exposed-entity dump, the time of day,
+            # occupancy, budget. Reusing the stored copy freezes all of it at
+            # whatever the house looked like when this history began.
+            #
+            # This bit hard on 2026-08-20. Keying history by device (above) made
+            # histories long-lived, and the first message after a restart built
+            # its system prompt while entities were still loading — leaving the
+            # agent permanently holding a near-empty entity list (prompt_tokens
+            # fell from ~15,150 to 1,367) and calling services on whatever junk
+            # entity was still visible to it. The old per-turn conversation_id
+            # rebuilt this every message, which hid the problem entirely.
+            try:
+                messages[0] = self._generate_system_message(
+                    exposed_entities, user_input
+                )
+            except TemplateError as err:
+                # Prefer a stale prompt over dropping the whole conversation.
+                _LOGGER.error("Error re-rendering system prompt: %s", err)
+            _LOGGER.debug(
+                "History hit for %s: %d prior messages", hist_key, len(messages)
+            )
         else:
             user_input.conversation_id = conversation_id
             try:
@@ -432,7 +500,8 @@ class ExtendedOpenAIAgentEntity(
         if msg.get("tool_calls") == []:
             msg.pop("tool_calls", None)
         messages.append(msg)
-        self.history[conversation_id] = messages
+        self.history[hist_key] = messages
+        self._history_ts[hist_key] = _t.monotonic()
 
         self.hass.bus.async_fire(
             EVENT_CONVERSATION_FINISHED,
@@ -744,6 +813,52 @@ class ExtendedOpenAIAgentEntity(
         strategy = self.options.get(
             CONF_CONTEXT_TRUNCATE_STRATEGY, DEFAULT_CONTEXT_TRUNCATE_STRATEGY
         )
+
+        if strategy == "bookend":
+            # Drop from the MIDDLE, never from the start.
+            #
+            # Trimming oldest-first is the obvious move and the wrong one here:
+            # the opening exchange is what the conversation is ABOUT. For a
+            # therapist persona that is the presenting problem — the one thing
+            # that must survive however old it gets. Recent turns matter too,
+            # because that is where the thread currently is. What nobody misses
+            # is the middle.
+            #
+            # Deliberately NOT summarisation: that would put a second LLM
+            # round-trip in the middle of a reply — seconds of dead air on a
+            # voice path — and would paraphrase away the exact wording a
+            # therapist should be able to quote back at you.
+            keep_open = CONTEXT_KEEP_OPENING
+            body = messages[1:]                 # messages[0] is the system prompt
+            if len(body) <= keep_open + 2:
+                return                          # nothing worth dropping yet
+
+            target = max(2, int(len(body) * CONTEXT_TRIM_TARGET))
+            opening, recent = body[:keep_open], body[-target:]
+
+            # Never separate a tool result from the assistant message that
+            # requested it — the API rejects an orphaned tool message.
+            while recent and recent[0].get("role") == "tool":
+                recent = recent[1:]
+
+            dropped = len(body) - len(opening) - len(recent)
+            if dropped <= 0:
+                return
+
+            messages[1:] = opening + [{
+                "role": "system",
+                "content": (
+                    f"[{dropped} earlier messages from this same conversation were "
+                    "dropped to save room. The opening above and the recent messages "
+                    "below are intact. If you need something from the missing "
+                    "stretch, ask rather than invent it.]"
+                ),
+            }] + recent
+            _LOGGER.info(
+                "Trimmed %d middle messages (kept %d opening + %d recent)",
+                dropped, len(opening), len(recent),
+            )
+            return
 
         if strategy == "clear":
             last_user_message_index = None

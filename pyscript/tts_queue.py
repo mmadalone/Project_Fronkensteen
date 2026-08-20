@@ -1171,6 +1171,41 @@ async def _process_queue() -> None:
                                 f"(gen_buf={gen_buf:.1f})"
                             )
                             await asyncio.sleep(est_secs)
+                            # The estimate alone is not enough. Measured against
+                            # real playback on the workshop ESP it misses in both
+                            # directions (est/actual: 19.5/19.1, 16.2/9.6,
+                            # 18.8/10.7, 17.1/13.2 -- and 24.7/26.1). Over-waiting
+                            # is harmless; UNDER-waiting cuts the tail off, and
+                            # everything downstream keys off this queue going idle.
+                            # A 249-char Spanish line ran 26.1s against a 24.7s
+                            # estimate, so the handoff farewell lost its last ~1.7s
+                            # and the greeting that followed was cut short.
+                            #
+                            # The comment above says announce-capable speakers do
+                            # not report state during announce. That is not true of
+                            # this ESP: when it is the target it reports
+                            # playing -> idle, and in the clean case agreed with the
+                            # estimate to 0.2s. So use state to EXTEND the wait
+                            # only, never to shorten it -- if the estimate was
+                            # already generous nothing changes, and if it was short
+                            # we now hold until the audio really ends. Bounded, so
+                            # a speaker that never leaves 'playing' (music resuming
+                            # underneath) cannot wedge the queue.
+                            _tail_deadline = (
+                                asyncio.get_event_loop().time()
+                                + _get_playback_timeout()
+                            )
+                            _tail_waited = 0.0
+                            while asyncio.get_event_loop().time() < _tail_deadline:
+                                if _preempted or not _is_speaker_playing(speaker):
+                                    break
+                                await asyncio.sleep(0.25)
+                                _tail_waited += 0.25
+                            if _tail_waited:
+                                log.info(  # noqa: F821
+                                    f"tts_queue: estimate was short — held "
+                                    f"{_tail_waited:.1f}s more for {speaker}"
+                                )
                         else:
                             # If speaker was already playing (e.g. radio/music),
                             # state polling won't work — it never leaves 'playing'.

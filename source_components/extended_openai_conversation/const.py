@@ -102,7 +102,16 @@ CONF_USE_TOOLS = "use_tools"
 DEFAULT_USE_TOOLS = True
 CONF_CONTEXT_THRESHOLD = "context_threshold"
 DEFAULT_CONTEXT_THRESHOLD = 13000
-CONTEXT_TRUNCATE_STRATEGIES = [{"key": "clear", "label": "Clear All Messages"}]
+CONTEXT_TRUNCATE_STRATEGIES = [
+    {"key": "bookend", "label": "Keep Opening + Recent (drop the middle)"},
+    {"key": "clear", "label": "Clear All Messages"},
+]
+# How many opening messages to protect when trimming. The first exchange is
+# what the conversation is ABOUT -- for a therapist persona, dropping it is
+# the one thing you must not do, however old it gets.
+CONTEXT_KEEP_OPENING = 2
+# Fraction of the budget to spend on recent turns before trimming stops.
+CONTEXT_TRIM_TARGET = 0.6
 CONF_CONTEXT_TRUNCATE_STRATEGY = "context_truncate_strategy"
 DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 

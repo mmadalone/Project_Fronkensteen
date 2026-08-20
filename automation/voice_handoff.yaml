@@ -1595,9 +1595,16 @@ actions:
               message: "pyscript.tts_queue_speak (greeting) failed in {{ this.attributes.friendly_name }}"
               entity_id: "{{ this.entity_id }}"
 
+      # CALIBRATION (2026-08-20): 40s, not 10s — matching the farewell-side wait
+      # above. CONFIRMED from an automation trace of the 00:20 handoff: this wait
+      # expired (`{"remaining": 0.0, "completed": false}`) against a greeting that
+      # took ~26s to play. The queue only reports idle after playback, so 10s was
+      # never enough for a full greeting. Harmless in that run only because the
+      # "wait for playback to finish" below caught it — but it means the expiry
+      # was doing nothing except hiding whether the queue actually drained.
       - alias: "Wait for TTS queue idle"
         wait_template: "{{ is_state('sensor.ai_tts_queue_status', 'idle') }}"
-        timeout: "00:00:10"
+        timeout: "00:00:40"
         continue_on_timeout: true
 
       - alias: "Wait for speaker to start playing"
@@ -1703,6 +1710,14 @@ actions:
       - alias: "Set loop deadline, no speech count, mic open time"
         variables:
           loop_deadline: "{{ as_timestamp(now()) + (continuous_timeout | float(120)) }}"
+          # Absolute ceiling, set ONCE and never refreshed (2026-08-20).
+          # loop_deadline now extends after every turn containing real
+          # speech, which is what makes a long conversation possible — but
+          # it also means that deadline alone can no longer end the loop.
+          # no_speech_count is then the only exit, and it resets to 0 on any
+          # turn over 12s, so an alternating real/empty pattern could run
+          # unbounded. This is the backstop that cannot be pushed forward.
+          loop_hard_deadline: "{{ as_timestamp(now()) + 300 }}"
           no_speech_count: 0
           mic_open_time: "{{ as_timestamp(now()) }}"
       - alias: "Repeat while condition holds"
@@ -1711,6 +1726,7 @@ actions:
             - condition: template
               value_template: >-
                 {{ as_timestamp(now()) < loop_deadline | float
+                   and as_timestamp(now()) < loop_hard_deadline | float
                    and no_speech_count | int(0) < 3
                    and states('sensor.ai_continuous_conversation_active') != 'off' }}
           sequence:
@@ -1739,27 +1755,20 @@ actions:
             # B. No-speech detection: multi-turn sessions with real user speech
             #    last 10+ seconds. Sessions that end quickly (< 12s) via
             #    stt-no-text-recognized mean no real interaction happened.
-            - alias: "Set session duration, no speech count"
+            - alias: "Set session duration"
               variables:
                 session_duration: >-
                   {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
                   {{ dur }}
-                no_speech_count: >-
-                  {% set dur = as_timestamp(now()) - (mic_open_time | float(as_timestamp(now()))) %}
-                  {% if dur < 12 %}
-                    {{ no_speech_count | int(0) + 1 }}
-                  {% else %}
-                    0
-                  {% endif %}
-            # C. Combined exit check (deadline + no-speech + stop signal)
-            - condition: template
-              value_template: >-
-                {{ as_timestamp(now()) < loop_deadline | float
-                   and no_speech_count | int(0) < 3
-                   and states('sensor.ai_continuous_conversation_active') != 'off' }}
-            # D. Wait for ESP speaker to finish TTS playback (two-phase).
-            #    Phase 1: Wait for speaker to START (leave idle → ANNOUNCING).
-            #    Phase 2: Wait for speaker to FINISH (return to idle).
+            # B2. Whether this turn was REAL is decided further down, from
+            #     whether the agent actually produced audio — not from how long
+            #     the session lasted. Duration was the old test (< 12s = "no
+            #     speech") and it is simply wrong: measured 2026-08-20, empty
+            #     sessions ran 17-46s because the satellite sits listening and
+            #     retries before giving up. Every empty turn therefore scored as
+            #     a real one, resetting no_speech_count AND refreshing the
+            #     deadline, so the loop reopened the mic 21 times and could only
+            #     ever be stopped by the hard ceiling.
             #    Replaces old echo guard (3s) + polling wait_template (15s).
             - alias: "Wait for speaker to start playing"
               wait_template: >-
@@ -1767,12 +1776,39 @@ actions:
                    'paused', 'unknown'] }}
               timeout: "00:00:05"
               continue_on_timeout: true
+            - alias: "Score this turn from whether the agent actually spoke"
+              variables:
+                # `wait` holds the result of the speaker-start wait immediately
+                # above. Completed => the agent produced audio => a real
+                # exchange. Timed out => nothing was said => an empty turn.
+                # This is the same discriminator the traces show: real turns
+                # pass that wait instantly, empty ones expire it.
+                agent_replied: "{{ wait.completed | default(false) | bool }}"
+                no_speech_count: >-
+                  {% if wait.completed | default(false) | bool %}0
+                  {% else %}{{ no_speech_count | int(0) + 1 }}{% endif %}
+                loop_deadline: >-
+                  {% if wait.completed | default(false) | bool %}{{ as_timestamp(now()) + (continuous_timeout | float(120)) }}
+                  {% else %}{{ loop_deadline | float(as_timestamp(now())) }}{% endif %}
             - alias: "Wait for TTS playback to finish"
               wait_template: >-
                 {{ states(speaker_entity) in ['idle', 'off', 'unavailable',
                    'paused', 'unknown'] }}
               timeout: "00:00:45"
               continue_on_timeout: true
+            # E2. Post-playback buffer — CALIBRATION (2026-08-20).
+            # Step 10b applies this on the main path before opening the mic, but
+            # the loop had NO equivalent, so it reopened 0.09s after the
+            # satellite reported idle. Confirmed from a trace: a real 27.7s turn
+            # ended at 23:52:07.700 and start_conversation fired at 23:52:07.791.
+            # The speaker lags the satellite by ~98ms, and the TTS queue by up to
+            # 1.7s, so the mic opened straight over the tail of the reply — the
+            # agent got cut off mid-sentence, the mic then heard his own audio,
+            # STT returned nothing, and the loop span through empty turns until
+            # the 3-strike counter stopped it. Same buffer as step 10b.
+            - alias: "Post-playback buffer before reopening mic"
+              delay:
+                seconds: "{{ [echo_guard_seconds | float(0.5), 0.5] | max }}"
             # F. Record timestamp before new session
             - alias: "Set mic open time"
               variables:
