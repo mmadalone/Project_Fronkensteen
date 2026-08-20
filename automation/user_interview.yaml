@@ -537,8 +537,8 @@ triggers:
   # ── HA restart — auto-import interview files (fires after all
   # integrations finish setup so pyscript services are registered) ──
   - id: ha_start
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 conditions:
   - condition: template

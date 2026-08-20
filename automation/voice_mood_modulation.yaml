@@ -252,8 +252,8 @@ triggers:
   # The `homeassistant`/start platform is special-cased and fires reliably.
   # It fires EARLY though, before pyscript registers services — which is what the
   # `wait_template` readiness guard in `actions:` below exists to absorb.
-  - trigger: homeassistant
-    event: start
+  - trigger: event
+    event_type: homeassistant_started
 
 variables:
   v_agent: !input agent_name

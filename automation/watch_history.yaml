@@ -261,8 +261,8 @@ triggers:
 
   # 5. HA restart — recover session if Kodi is playing (fires after all
   # integrations finish setup so pyscript services are registered).
-  - trigger: homeassistant
-    event: start
+  - trigger: event
+    event_type: homeassistant_started
     id: ha_start
 
 # ── Conditions ──────────────────────────────────────────────────────────────

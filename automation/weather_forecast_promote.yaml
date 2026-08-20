@@ -156,8 +156,8 @@ triggers:
     id: manual
   # Use homeassistant_started (late) instead of homeassistant.start (early)
   # — the latter fires before pyscript registers services.
-  - trigger: homeassistant
-    event: start
+  - trigger: event
+    event_type: homeassistant_started
     id: ha_start
 
 conditions:

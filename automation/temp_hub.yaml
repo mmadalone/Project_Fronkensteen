@@ -110,8 +110,8 @@ triggers:
     # Use homeassistant_started (late) — temp sensor is guaranteed
     # available by then. `homeassistant.start` (early) can fire while
     # the sensor is still loading.
-    trigger: homeassistant
-    event: start
+    trigger: event
+    event_type: homeassistant_started
 
 conditions: []
 
