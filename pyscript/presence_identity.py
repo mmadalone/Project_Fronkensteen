@@ -137,6 +137,14 @@ def _get_min_dwell_sec() -> int:
     return _helper_int("input_number.ai_presence_fp2_dwell_sec", 30)
 
 
+# ON-confirmation: an FP2 zone must hold 'on' this long before the identity
+# engine accepts the activation (added 2026-08-28). The dwell above is a
+# hold-DOWN — it swallows edges AFTER acceptance — so without this, the FIRST
+# on-edge was accepted instantly and 1-5s zone-attribution ghosts fully
+# activated zones for identity attribution. 5s matches template.yaml delay_on.
+ZONE_ON_CONFIRM_SEC = 5
+
+
 # ── Anchor confidence values ─────────────────────────────────────────────────
 
 _CONF_DEFAULTS = {
@@ -150,6 +158,12 @@ def _get_conf(name: str) -> int:
 # ── Module State ─────────────────────────────────────────────────────────────
 # LOCK DISCIPLINE: All reads/writes to _location, _zone_state, _zone_change_ts,
 # and _recent_zone_off MUST happen inside `async with _lock:`. Helper functions
+# EXCEPTION (2026-08-28): _on_fp2_change's pre-sleep dwell check reads
+# _zone_change_ts UNLOCKED, and the 5s ON-confirmation sleep widens that
+# read-to-lock window to seconds. This is safe ONLY because the locked
+# `prev_state` guard re-validates before any mutation (a stale task no-ops).
+# Do NOT remove the prev_state guard on the assumption the dwell check
+# already serialized things — it does not.
 # (_assign, _compute_confidence, _update_sensors, _anchor_*, _track_transition,
 # _apply_count_constraint) are called from within locked trigger handlers —
 # they do NOT acquire the lock themselves to avoid re-entrancy deadlocks.
@@ -200,10 +214,22 @@ def _get_departure_debounce():
 # ── FP2 State Readers ───────────────────────────────────────────────────────
 
 def _get_active_zones() -> list:
-    """Return list of zone names where FP2 reports 'on'."""
+    """Return zone names actively occupied: raw FP2 'on' AND confirmed.
+
+    2026-08-28: intersect the live reading with the confirmed _zone_state so
+    that 1-5s attribution ghosts (raw 'on' but never accepted by
+    _on_fp2_change's ON-confirmation) cannot leak into the count constraint,
+    WiFi anchors, or the decay tick's Markov fallback. A raw-only read was the
+    leak; a _zone_state-only read would be worse — the 30s dwell hold-down can
+    swallow an OFF edge and leave _zone_state stale-'on' with no further edge
+    to correct it, and the live read is what masked that. The intersection
+    excludes both failure modes. Callers on mutation paths hold _lock; the
+    disabled-startup status update reads it unlocked (benign: writers are
+    enable-gated at that moment).
+    """
     active = []
     for entity, zone in _get_fp2_entities().items():
-        if state.get(entity) == "on":  # noqa: F821
+        if state.get(entity) == "on" and _zone_state.get(zone) == "on":  # noqa: F821
             active.append(zone)
     return active
 
@@ -411,10 +437,28 @@ def _anchor_departure(departed: str):
         _assign(other, best_zone, _get_conf("departure"), "departure_elimination")
 
 
+def _get_raw_on_zones() -> list:
+    """Zone names where the RAW FP2 entity reads 'on' (confirmed or not)."""
+    raw = []
+    for entity, zone in _get_fp2_entities().items():
+        if state.get(entity) == "on":  # noqa: F821
+            raw.append(zone)
+    return raw
+
+
 def _anchor_arrival(arriving: str):
-    """WiFi arrival — if FP2 count increased, new body = arriving person."""
+    """WiFi arrival — if FP2 count increased, new body = arriving person.
+
+    2026-08-28: candidates prefer CONFIRMED zones (_get_active_zones) but
+    fall back to raw-on-unconfirmed ones. A person who walked in seconds ago
+    has a raw-on zone still inside its 5s ON-confirmation window; without the
+    fallback the arriving person would be mis-anchored to the OTHER
+    resident's zone at conf 90 and the confirm-time count constraint would
+    then scramble both assignments via the Markov tiebreak.
+    """
     active = _get_active_zones()
-    if not active:
+    raw_on = _get_raw_on_zones()
+    if not raw_on and not active:
         # WiFi home but no FP2 yet (e.g., still outside smoking)
         _assign(arriving, "home", 70, "wifi_arrival_no_fp2")
         return
@@ -424,8 +468,11 @@ def _anchor_arrival(arriving: str):
         return
     other_zone = _location[other]["zone"]
 
-    # If other person is tracked to a zone, arriving person is in a different zone
+    # If other person is tracked to a zone, arriving person is in a different
+    # zone. Prefer confirmed candidates; fall back to unconfirmed raw-on.
     unassigned = [z for z in active if z != other_zone]
+    if not unassigned:
+        unassigned = [z for z in raw_on if z != other_zone and z not in active]
     if unassigned:
         # Pick most recently activated unassigned zone
         best_zone = unassigned[0]
@@ -439,6 +486,9 @@ def _anchor_arrival(arriving: str):
     elif active:
         # Both in same zone
         _assign(arriving, active[0], _get_conf("arrival"), "wifi_arrival_same_zone")
+    elif raw_on:
+        # Both in the same zone while it is still inside its confirm window
+        _assign(arriving, raw_on[0], _get_conf("arrival"), "wifi_arrival_same_zone")
 
 
 # ── Transition Tracking ─────────────────────────────────────────────────────
@@ -592,6 +642,14 @@ async def _on_fp2_change(var_name=None, value=None, old_value=None):
     if now - last_change < _get_min_dwell_sec() and old_value is not None:
         return
 
+    # ON-confirmation: let attribution ghosts (1-5s blips) die before accepting.
+    # OFF edges and startup syncs (old_value is None) pass straight through.
+    if value == "on" and old_value is not None:
+        await task.sleep(ZONE_ON_CONFIRM_SEC)  # noqa: F821
+        if state.get(var_name) != "on":  # noqa: F821
+            return  # ghost blip — zone did not hold
+        now = time.monotonic()
+
     async with _lock:
         prev_state = _zone_state.get(zone, "off")
 
@@ -623,6 +681,28 @@ async def _on_fp2_change(var_name=None, value=None, old_value=None):
         if _get_occupancy_mode() == "dual":
             _apply_count_constraint()
 
+        _update_sensors()
+
+
+@state_trigger("input_boolean.ai_presence_identity_enabled")  # noqa: F821
+async def _on_identity_enable_toggle(value=None):
+    """Re-sync _zone_state from raw FP2 when the engine is (re-)enabled.
+
+    2026-08-28: _on_fp2_change drops edges while disabled and
+    _get_active_zones depends on _zone_state, so without this re-sync an
+    enable-while-running would leave occupied zones invisible until each
+    cycled off->on past the dwell.
+    """
+    if value != "on":
+        return
+    async with _lock:
+        now = time.monotonic()
+        for entity, zone in _get_fp2_entities().items():
+            s = state.get(entity)  # noqa: F821
+            prev = _zone_state.get(zone)
+            _zone_state[zone] = s if s in ("on", "off") else "off"
+            if s == "on" and prev != "on":
+                _zone_change_ts[zone] = now
         _update_sensors()
 
 
@@ -824,6 +904,19 @@ async def presence_identity_startup():
         if p not in _location:
             _location[p] = {"zone": "unknown", "confidence": 0, "source": "none", "since": 0.0}
 
+    # Seed _zone_state from current FP2 readings BEFORE registering triggers
+    # and regardless of the enable switch (2026-08-28): _get_active_zones
+    # consults _zone_state, so an unseeded map makes occupied zones invisible
+    # (empty intersection) to any edge/arrival that fires early, and to the
+    # whole engine after an enable-while-running.
+    async with _lock:
+        now = time.monotonic()
+        for entity, zone in _get_fp2_entities().items():
+            s = state.get(entity)  # noqa: F821
+            _zone_state[zone] = s if s in ("on", "off") else "off"
+            if s == "on":
+                _zone_change_ts[zone] = now
+
     # Register FP2 and WiFi triggers dynamically from config
     global _fp2_triggers, _wifi_triggers
     fp2_entities = _get_fp2_entities().keys()
@@ -841,14 +934,6 @@ async def presence_identity_startup():
         return
 
     async with _lock:
-        # Initialize zone state from current FP2 readings
-        now = time.monotonic()
-        for entity, zone in _get_fp2_entities().items():
-            s = state.get(entity)  # noqa: F821
-            _zone_state[zone] = s if s in ("on", "off") else "off"
-            if s == "on":
-                _zone_change_ts[zone] = now
-
         # Check occupancy mode and anchor if possible
         solo = _get_solo_person()
         if solo:
