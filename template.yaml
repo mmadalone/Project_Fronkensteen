@@ -202,12 +202,34 @@
 #   - packages/ai_focus_guard.yaml:64 — history_stats workshop hours, chosen
 #     precisely BECAUSE it is immune to flapping; smoothing would inflate it.
 # ═══════════════════════════════════════════════════════════════════════════
+# ── ROUND 2 (2026-08-28): delay_on 5s added to the six SUB-ZONE wrappers ───
+# Verified diagnosis (10-agent adversarial review + official docs): blips are
+# zone-attribution jitter of a PRESENT person — blip rate is 21-117x higher
+# while the same radar's whole-area sensor is ON, ~0 in the empty flat; the
+# union sensor was OFF only 6s during 51.6h of sub-zone ON, so the radar never
+# loses the person, it misattributes them. delay_off:60 alone STRETCHED each
+# 1-5s ghost into >=61s of false occupancy (2.3-6.4x inflation).
+# Replay simulation on 72h of history: delay_on 5s (the ON-span CDF knee)
+# kills 74.8% of blips (77-89% on workshop/kitchen/lobby/shower), loses ZERO
+# genuine >=30s stays, removes ~2.2h/day of false occupancy.
+# NOT on ai_presence_bathroom / ai_presence_main_room: those are the FP2s'
+# whole-area sensors ("Presence Sensor 1" = union of the field) — ~1% of their
+# ON spans are <5s, nothing to kill, and entry latency matters there.
+# Cost: genuine sub-5s walk-throughs are SUPPRESSED, not delayed. Accepted.
+# Compensation in the same round: zone_presence presence_delay reduced by 5s
+# (workshop 10->5, living room 5->0) so net entry latency is unchanged; the
+# 2026-08-19 repoint was FINISHED (48 automations.yaml + 3 scripts.yaml refs
+# raw->wrapper; "Bathroom occupancy" lighting deliberately kept RAW for
+# instant entry); presence_identity.py gained a 5s ON-confirmation.
+# ═══════════════════════════════════════════════════════════════════════════
 - binary_sensor:
     - name: "AI Presence Workshop"
       unique_id: ai_presence_workshop
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_workshop', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_workshop') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60
 
@@ -216,6 +238,8 @@
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_living_room', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_living_room') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60
 
@@ -232,6 +256,8 @@
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_kitchen') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60
 
@@ -248,6 +274,8 @@
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_bed', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_bed') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60
 
@@ -256,6 +284,8 @@
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_lobby', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_lobby') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60
 
@@ -264,5 +294,7 @@
       device_class: occupancy
       state: "{{ is_state('binary_sensor.fp2_presence_sensor_shower', 'on') }}"
       availability: "{{ states('binary_sensor.fp2_presence_sensor_shower') not in ['unknown', 'unavailable'] }}"
+      delay_on:
+        seconds: 5
       delay_off:
         seconds: 60

@@ -87,6 +87,7 @@ _zone_on_time: dict[str, float] = {} # zone → unix ts when last turned ON
 _recent_zone_off: dict[str, float] = {}  # zone → unix ts when last turned OFF
 _zone_debounce_ts: dict[str, float] = {}  # zone → last accepted trigger time
 ZONE_DEBOUNCE_SEC = 10.0  # suppress FP2 flapping within this window
+ZONE_ON_CONFIRM_SEC = 5.0  # zone must hold 'on' this long before ingestion (2026-08-28)
 _rebuild_in_progress = False
 _fp2_triggers = []             # factory-created trigger references (keep alive)
 result_entity_name: dict[str, str] = {}
@@ -206,22 +207,41 @@ def _extract_data_sync(lookback_days: int, transition_window_sec: int = 300, ent
     transitions: list[tuple[str, str, float]] = []
     dwells: list[tuple[str, float, float]] = []
     zones_seen: set[str] = set()
-    prev_state: dict[str, str] = {}   # zone → last known state
     zone_on: dict[str, float] = {}    # zone → timestamp turned ON
     recent_off: dict[str, float] = {} # zone → timestamp turned OFF
     earliest_ts = rows[0][2] if rows[0][2] else 0
 
+    # Pass 0: materialize deduped chronological events once, so the span
+    # pre-scan and the transition scan agree on which rows are real edges.
+    events: list[tuple[str, str, float]] = []
+    _dedup_prev: dict[str, str] = {}
     for meta_id, state_val, ts in rows:
         if ts is None or meta_id not in meta_map:
             continue
         zone = meta_map[meta_id]
         zones_seen.add(zone)
-
         # Skip duplicate states (attribute-only updates, not real transitions)
-        if prev_state.get(zone) == state_val:
+        if _dedup_prev.get(zone) == state_val:
             continue
-        prev_state[zone] = state_val
+        _dedup_prev[zone] = state_val
+        events.append((zone, state_val, ts))
 
+    # Pass 1 (2026-08-28): per-ON hold spans, so ghost blips are rejected as
+    # transition DESTINATIONS — the recorder keeps RAW FP2 history, so without
+    # this the nightly rebuild re-ingests every 1-5s attribution ghost that
+    # the live path's ZONE_ON_CONFIRM_SEC now filters. An ON with no later
+    # OFF (still on at extraction time) counts as held.
+    on_span: dict[tuple[str, float], float] = {}
+    _span_on: dict[str, float] = {}
+    for zone, state_val, ts in events:
+        if state_val == "on":
+            _span_on[zone] = ts
+        elif state_val == "off" and zone in _span_on:
+            _start = _span_on.pop(zone)
+            on_span[(zone, _start)] = ts - _start
+
+    # Pass 2: transitions + dwells (as before, plus destination-hold filter)
+    for zone, state_val, ts in events:
         if state_val == "on":
             zone_on[zone] = ts
             # Find source zone: most recent OFF from a DIFFERENT zone within window
@@ -235,7 +255,11 @@ def _extract_data_sync(lookback_days: int, transition_window_sec: int = 300, ent
             if best_from:
                 # Validate source zone had meaningful dwell time (not flicker)
                 dwell_from = best_ts - zone_on.get(best_from, best_ts)
-                if dwell_from >= MIN_DWELL_SECONDS:
+                # Destination must have held >= ZONE_ON_CONFIRM_SEC too,
+                # mirroring the live path; a shorter span is a ghost and the
+                # "transition" never happened.
+                dest_held = on_span.get((zone, ts), float("inf")) >= ZONE_ON_CONFIRM_SEC
+                if dwell_from >= MIN_DWELL_SECONDS and dest_held:
                     transitions.append((best_from, zone, ts))
 
         elif state_val == "off":
@@ -902,6 +926,22 @@ async def _on_fp2_change(var_name=None, value=None):
     if not _is_zone_enabled(zone):
         return
 
+    # ON-confirmation (2026-08-28): require the zone to hold 'on' briefly so
+    # 1-5s attribution ghosts never enter the Markov frequency table — the
+    # 10s ZONE_DEBOUNCE_SEC below cannot stop the FIRST blip after a quiet
+    # period. A killed ghost leaves zero trace: its OFF edge is dropped by the
+    # old == value guard below because _zone_state was never marked 'on'.
+    # 5s matches template.yaml delay_on and presence_identity.ZONE_ON_CONFIRM_SEC.
+    edge_ts = time.time()  # real edge time (wake time would bias dwell -5s)
+    if value == "on":
+        await task.sleep(ZONE_ON_CONFIRM_SEC)  # noqa: F821
+        if state.get(var_name) != "on":  # noqa: F821
+            return  # ghost blip — zone did not hold
+        if _rebuild_in_progress:
+            return  # rebuild started during the confirm sleep — don't mutate
+        if not _is_enabled():
+            return  # disabled during the confirm sleep
+
     # Track state internally to detect actual state changes
     old = _zone_state.get(zone)
     _zone_state[zone] = value
@@ -922,8 +962,8 @@ async def _on_fp2_change(var_name=None, value=None):
         _recent_zone_off[zone] = now
         return
 
-    # value == "on" — zone activated
-    _zone_on_time[zone] = now
+    # value == "on" — zone activated (stamp the raw edge, not the wake time)
+    _zone_on_time[zone] = edge_ts
 
     # Find source zone: most recent OFF from another zone within window
     best_from = None
