@@ -96,4 +96,5 @@ In a voice-first system with 5 AI personas responding through TTS, every leaked 
 - **Original component**: [extended_openai_conversation](https://github.com/jekalmin/extended_openai_conversation) by jekalmin
 - **License**: Apache 2.0
 - **Forked at**: v2.0.2
+- **Manifest**: `version` 2.0.3, `requirements` `openai>=2.21.0`. Upstream 2.0.3 changed only its manifest (`openai>=3.10.0`, minimum HA 2026.10). This fork uses a lower floor so it accepts every `openai` HA has pinned since 2026.3: 2.21.0 (2026.3–2026.7), 2.45.0 (2026.8–2026.9) and 3.10.0 (2026.10+). The original `openai~=2.21.0` allowed only 2.21.x and broke when HA moved to 2.45.0 in 2026.8; it was loosened in v1.1.3. The code is still the v2.0.2 base plus the patches above.
 - **Upstream features preserved**: All conversation agent functionality, config flow, subentries, function calling, context management
