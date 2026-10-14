@@ -158,6 +158,7 @@ action:
 | TTS streaming requires HA 2025.10+ | 08_voice_assistant_pattern.md | HA release notes |
 | MCP servers introduced HA 2025.2+ | 03_conversation_agents.md | HA release notes |
 | `data_template` deprecated ~HA 0.115/2020, no removal date announced | 06_anti_patterns_and_workflow.md | HA release notes |
+| `homeassistant.reload_config_entry` by target deprecated HA 2026.10.0, stops working 2027.4 (AP-85) | 06_anti_patterns_and_workflow.md | HA core `components/homeassistant/__init__.py` warning text — absent in 2026.9.3, present in 2026.10.0 |
 
 **Procedure:**
 1. Web search: `site:home-assistant.io "<feature_name>" release`

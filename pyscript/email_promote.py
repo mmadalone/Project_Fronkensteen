@@ -59,6 +59,7 @@ from shared_utils import (
 # =============================================================================
 
 RESULT_ENTITY = "sensor.ai_email_promotion_status"
+ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
 
 # Built-in fallback priority keywords (always checked alongside user-defined)
 _FALLBACK_PRIORITY_KEYWORDS = [
@@ -988,6 +989,29 @@ def _get_imap_sensor() -> str:
     return cfg.get("imap_sensor") or "sensor.gmail_messages"
 
 
+@pyscript_executor  # noqa: F821
+def _resolve_config_entry_id_sync(registry_file: str, entity_id: str) -> str:
+    """Return the config_entry_id that owns entity_id, or "" if none (AP-55).
+
+    homeassistant.reload_config_entry must be given an entry_id: reloading by
+    target was deprecated in HA 2026.10 and stops working in 2027.4 (AP-85).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    registry_path = _Path(registry_file)
+    if not registry_path.exists():
+        return ""
+    try:
+        data = _json.loads(registry_path.read_text())
+    except Exception:
+        return ""
+    for ent in data.get("data", {}).get("entities", []):
+        if ent.get("entity_id") == entity_id:
+            return ent.get("config_entry_id") or ""
+    return ""
+
+
 async def _check_imap_health() -> None:
     """Check IMAP sensor availability and notify on failure."""
     try:
@@ -1036,13 +1060,19 @@ async def email_promote_startup():
     # blocking=False prevents hanging on IMAP reconnect/IDLE setup.
     try:
         imap_sensor = _get_imap_sensor()
-        log.info(f"email_promote: requesting IMAP reload for {imap_sensor}")  # noqa: F821
-        await service.call(  # noqa: F821
-            "homeassistant", "reload_config_entry",
-            entity_id=imap_sensor,
-            blocking=False,
-        )
-        log.info("email_promote: IMAP config entry reload dispatched — catch-up events will fire")  # noqa: F821
+        entry_id = await _resolve_config_entry_id_sync(ENTITY_REGISTRY_FILE, imap_sensor)
+        if not entry_id:
+            log.warning(  # noqa: F821
+                f"email_promote: no config entry found for {imap_sensor} — skipping IMAP reload"
+            )
+        else:
+            log.info(f"email_promote: requesting IMAP reload for {imap_sensor} (entry {entry_id})")  # noqa: F821
+            await service.call(  # noqa: F821
+                "homeassistant", "reload_config_entry",
+                entry_id=entry_id,
+                blocking=False,
+            )
+            log.info("email_promote: IMAP config entry reload dispatched — catch-up events will fire")  # noqa: F821
     except Exception as exc:
         log.warning(f"email_promote: IMAP reload failed (non-fatal): {exc}")  # noqa: F821
 

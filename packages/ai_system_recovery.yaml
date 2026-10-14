@@ -112,8 +112,10 @@ automation:
           notification_id: ai_memory_read_only
 
   # ── Promoter Stale Auto-Recovery ──
-  # Entity IDs resolved dynamically from entity registry — first entity
-  # matching the domain is used to locate the config entry.
+  # The config entry is resolved at run time: first entity matching the search
+  # term → config_entry_id() → reload by entry_id. Reloading by target
+  # (entity_id/device_id/area_id) was deprecated in HA 2026.10 and stops
+  # working in 2027.4 — see style guide AP-85.
   - alias: "AI Recovery — Calendar Stale Reload"
     id: ai_recovery_calendar_stale
     triggers:
@@ -124,11 +126,23 @@ automation:
           minutes: 15
     conditions: []
     actions:
-      - action: homeassistant.reload_config_entry
-        target:
-          entity_id: >-
-            {{ states.calendar | map(attribute='entity_id')
-               | select('search', 'gmail') | first | default('') }}
+      - alias: "Resolve the Gmail calendar's config entry"
+        variables:
+          _entry_id: >-
+            {% set src = states.calendar | map(attribute='entity_id')
+               | select('search', 'gmail') | first | default('') %}
+            {{ (config_entry_id(src) or '') if src else '' }}
+      - alias: "Stop if no config entry resolved"
+        if:
+          - condition: template
+            value_template: "{{ _entry_id | length == 0 }}"
+        then:
+          - stop: "No Gmail calendar config entry found — nothing to reload"
+            error: true
+      - alias: "Reload the calendar config entry"
+        action: homeassistant.reload_config_entry
+        data:
+          entry_id: "{{ _entry_id }}"
 
   - alias: "AI Recovery — Email Stale Reload"
     id: ai_recovery_email_stale
@@ -140,8 +154,20 @@ automation:
           minutes: 15
     conditions: []
     actions:
-      - action: homeassistant.reload_config_entry
-        target:
-          entity_id: >-
-            {{ states.sensor | map(attribute='entity_id')
-               | select('search', 'gmail_messages') | first | default('') }}
+      - alias: "Resolve the Gmail IMAP sensor's config entry"
+        variables:
+          _entry_id: >-
+            {% set src = states.sensor | map(attribute='entity_id')
+               | select('search', 'gmail_messages') | first | default('') %}
+            {{ (config_entry_id(src) or '') if src else '' }}
+      - alias: "Stop if no config entry resolved"
+        if:
+          - condition: template
+            value_template: "{{ _entry_id | length == 0 }}"
+        then:
+          - stop: "No Gmail IMAP config entry found — nothing to reload"
+            error: true
+      - alias: "Reload the IMAP config entry"
+        action: homeassistant.reload_config_entry
+        data:
+          entry_id: "{{ _entry_id }}"
