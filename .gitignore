@@ -18,6 +18,9 @@ budget_state.json
 model_pricing.json
 pipeline_tts_backup.json
 
+# Per-household config (names, devices). Installs get pyscript/entity_config.yaml.template instead.
+pyscript/entity_config.yaml
+
 # Temporary files
 *.tmp
 *.bak

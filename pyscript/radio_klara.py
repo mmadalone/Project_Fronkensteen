@@ -187,6 +187,22 @@ def _b64_image_data_url(image_bytes, mime: str = "image/jpeg") -> str:
         return ""
 
 
+@pyscript_compile  # noqa: F821
+def _sniff_image_mime(image_bytes) -> str:
+    """Return the image MIME type from its magic bytes (JPEG if unrecognised).
+
+    The file name is not trusted: a CDN can serve a different format than the
+    extension says, and the vision model needs the real type in the data URL.
+    """
+    if not image_bytes:
+        return "image/jpeg"
+    if image_bytes[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+        return "image/png"
+    if image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
 # =============================================================================
 # Pure logic — @pyscript_compile
 # =============================================================================
@@ -318,8 +334,9 @@ def _extract_image_url(html, base_url, pattern=None):
     if not html:
         return None
     if not pattern:
-        # Default: match Radio Klara's "parrilla" schedule image
-        pattern = r'src=["\']([^"\']+parrilla[^"\']*\.jpe?g)["\']'
+        # Default: match Radio Klara's "parrilla" schedule image (the 2025-26
+        # grid was a JPEG, the 2026-27 one is a PNG)
+        pattern = r'src=["\']([^"\']+parrilla[^"\']*\.(?:jpe?g|png|webp))["\']'
     match = _re.search(pattern, html, _re.IGNORECASE)
     if not match:
         return None
@@ -492,7 +509,7 @@ async def _vision_extract_schedule(image_bytes, station_name, model):
         )
         return None
 
-    data_url = _b64_image_data_url(image_bytes, "image/jpeg")
+    data_url = _b64_image_data_url(image_bytes, _sniff_image_mime(image_bytes))
     if not data_url:
         return None
 
@@ -947,6 +964,7 @@ async def _do_refresh():
     _update_now_playing_sensor()
     _set_status("loaded", show_count=len(new_cache["weekly_schedule"]),
                 source_url=source_url_for_cache)
+    _dismiss_failure_notification()
     return "ok"
 
 
@@ -962,6 +980,17 @@ def _maybe_notify_failure():
                 f"radio_klara: {_consecutive_failures} consecutive refresh "
                 "failures. Cache is preserved but may go stale. Check logs."
             ),
+            notification_id="radio_klara_refresh_failing",
+        )
+    except Exception:
+        pass
+
+
+def _dismiss_failure_notification():
+    """Clear the "refresh failing" notification after a successful refresh."""
+    try:
+        service.call(  # noqa: F821
+            "persistent_notification", "dismiss",
             notification_id="radio_klara_refresh_failing",
         )
     except Exception:
