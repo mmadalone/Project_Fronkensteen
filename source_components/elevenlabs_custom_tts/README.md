@@ -1,42 +1,34 @@
 # ElevenLabs Custom TTS — Patched Fork
 
-Patched fork of [Loryan Strant's ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) (MIT license, forked at **v0.6.3**) with voice mood modulation for Project Fronkensteen.
+Patched fork of [Loryan Strant's ElevenLabs Custom TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) (MIT license), **rebased onto v0.8.2** on 2026-10-18. It adds the three things Project Fronkensteen's voice stack depends on: streaming generation, a satellite lead-in pre-roll, and voice mood modulation.
 
-**HACS auto-updates must be disabled for this component.** It is distributed automatically by the Project Fronkensteen installer when the Voice Pipeline feature group is enabled.
+**Do not update this component through HACS.** A HACS update replaces the whole folder and removes the patches; that happened with 0.8.2 on 2026-10-17. The component is installed by the Project Fronkensteen installer when the Voice Pipeline feature group is enabled. To take a new upstream release, port the patches onto it.
 
 ---
 
-## What Was Changed
+## What This Fork Changes
 
-The upstream component provides multi-profile ElevenLabs TTS with voice selection via Assist Pipelines. This fork adds **voice mood modulation** — the ability to shift each AI persona's voice characteristics throughout the day.
+Everything is in `tts.py`, plus the `leadin_1600ms.mp3` asset.
 
-### Added: Voice Mood Modulation (v3 Pivot)
+| Change | Why |
+|--------|-----|
+| **Streaming** — `async_stream_tts_audio` via `text_to_speech.stream()` | The buffered endpoint renders the whole clip before sending a byte, so time-to-first-byte grows with the text (4.4 s for 195 characters). The `/stream` endpoint's first chunk arrives in about 0.8 s regardless of length. A reply that yields no audio **raises** instead of returning, so HA never caches a silent clip under the deterministic key. |
+| **Satellite lead-in** — a 1.6 s silent MP3 yielded first | The ESPHome Voice PE fabricates "finished speaking" if no audio has started 2 s after HA hands it the URL, then re-opens the microphone over the reply. ffmpeg's MP3 demuxer holds output until about 1.4 s of audio has arrived. Sent only when the caller asked for a non-`wav` `preferred_format` (the satellite announcement path), so Sonos, Alexa and notifications are untouched. Kill switch: `input_boolean.ai_tts_leadin_enabled`. |
+| **Voice mood** — per-agent stability and audio-tag prefix | See below. |
+| **Option precedence** — defaults < profile < mood < genuine per-call overrides | HA merges `default_options` into every call; merged last, they overrode the profile's model, forcing `eleven_multilingual_v2` and making v3 tags like `[exhales]` get read aloud. With a profile, only values that differ from the defaults count as overrides. Upstream 0.8.2 instead ignores per-call options when a profile is used, which would drop the mood values `tts_queue.py` passes. |
+| **Profile resolution** | Case-insensitive profile match; default voice is the first configured profile; the voice picker is hidden (`None`) when no profiles exist. |
+| **Streaming deadline** | 120 s total, enforced per await on ElevenLabs. A timeout context spanning `yield`s would fire inside whatever HA's consumer task was doing between chunks. |
+
+**Unchanged from upstream v0.8.2:** `__init__.py`, `config_flow.py`, `const.py`, `services.yaml`, `strings.json`, `translations/`, `manifest.json`. Earlier versions of this fork also widened the model list and pinned `elevenlabs==2.51.0`; 0.8.0 made both unnecessary (a dropdown of the account's models, and `elevenlabs>=2.51.0,<3`).
+
+### Voice Mood Modulation (v3)
 
 ElevenLabs v3 ignores most `VoiceSettings` parameters (`similarity_boost`, `style`, `speed`). Only two mechanisms actually affect the voice:
 
 1. **Stability slider** — the one `VoiceSettings` parameter v3 respects. Lower values = more expressive/creative, higher = more consistent/robotic.
 2. **Audio tags** — text prefixes like `[slurring]`, `[whispers]`, `[excited]` that v3 interprets as performance directions.
 
-This fork injects both at TTS time, per-agent, based on time-of-day schedules managed by the `voice_mood_modulation.yaml` blueprint.
-
-### Changes to `tts.py`
-
-| Section | What Changed |
-|---------|-------------|
-| `__init__` | Added `self._mood_profile_map = {}` — maps ElevenLabs voice profile names to agent identifiers |
-| `async_added_to_hass` | New method. Loads `voice_mood_profile_map.json` at entity init |
-| `_load_mood_profile_map_sync` | New static method. Reads `/config/pyscript/voice_mood_profile_map.json` in executor thread |
-| `async_get_tts_audio` | Added mood modulation block (lines 208-237). On every TTS call: looks up agent from profile map, reads stability from `input_number.ai_voice_mood_{agent}_stability`, reads tag prefix from `sensor.ai_voice_mood_{agent}_tags`, injects both into the request |
-| Option merge order | Changed to: `defaults < profile < mood < per-request overrides` (mood overrides profile stability but per-request overrides everything) |
-| Tag injection | Added guard: `if mood_tag_prefix and "[" not in message` — prepends tags only to non-agent text (notifications, announcements). Agent conversation responses already contain their own tags via system prompts. |
-
-### Files Unchanged from Upstream
-
-- `__init__.py` — integration setup, client creation
-- `config_flow.py` — multi-profile config flow (upstream feature)
-- `const.py` — constants and defaults
-- `services.yaml` — service definitions
-- `strings.json` — UI translations
+This fork injects both at TTS time, per-agent, based on time-of-day schedules managed by the `voice_mood_modulation.yaml` blueprint. The map and the lead-in clip are loaded once in `async_added_to_hass` (off the event loop); `_voice_mood()` reads the agent's helpers on every call, and the tag prefix is only added when the text has no `[` tags of its own (agent replies already carry tags from their system prompts).
 
 ---
 
@@ -110,5 +102,5 @@ The patched TTS component handles mood for **pipeline-routed TTS** (agent conver
 
 - **Original component**: [HA-ElevenLabs-Custom-TTS](https://github.com/loryanstrant/HA-ElevenLabs-Custom-TTS) by Loryan Strant (@loryanstrant)
 - **License**: MIT
-- **Forked at**: v0.6.3
-- **Upstream features preserved**: Multi-profile voice selection, voice_id passthrough, config flow with profile management, Assist Pipeline voice picker integration
+- **Based on**: v0.8.2 (rebased 2026-10-18; earlier bases v0.6.3 and v0.7.0)
+- **Upstream features preserved**: multi-profile voice selection, voice_id passthrough, config flow with profile management and the model dropdown, Assist Pipeline voice picker, and 0.8.x's fixes (an `asyncio` timeout instead of the broken `async_timeout` timer, errors raised as `HomeAssistantError` with ElevenLabs' explanation, the API-key fingerprint `unique_id` with its config-entry v2 migration, and no `language_code` for models that reject it)

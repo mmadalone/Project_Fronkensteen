@@ -8,7 +8,6 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-import async_timeout
 from elevenlabs import VoiceSettings
 from elevenlabs.core import ApiError
 
@@ -33,12 +32,14 @@ from .const import (
     DEFAULT_SPEED,
     DEFAULT_USE_SPEAKER_BOOST,
     DEFAULT_APPLY_TEXT_NORMALIZATION,
+    MODELS_WITHOUT_LANGUAGE_CODE,
+    TTS_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # Upper bound on a single streamed generation. Generous: measured
-# end-to-end is ~6.5s for 195 chars, but the timer also spans the
+# end-to-end is ~6.5s for 195 chars, but the budget also spans the
 # consumer pulling chunks, so keep well clear of normal replies.
 STREAM_TIMEOUT_S = 120
 
@@ -73,6 +74,10 @@ ATTR_PREFERRED_SAMPLE_BYTES = "preferred_sample_bytes"
 LEAD_IN_PATH = Path(__file__).parent / "leadin_1600ms.mp3"
 LEAD_IN_SWITCH = "input_boolean.ai_tts_leadin_enabled"
 
+# Voice mood modulation (Project Fronkensteen): profile name -> agent identifier
+MOOD_PROFILE_MAP_PATH = "/config/pyscript/voice_mood_profile_map.json"
+MOOD_SWITCH = "input_boolean.ai_voice_mood_enabled"
+
 SUPPORT_LANGUAGES = ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "ja", "hu", "ko"]
 
 async def async_setup_entry(
@@ -85,9 +90,37 @@ async def async_setup_entry(
     if DOMAIN not in hass.data or config_entry.entry_id not in hass.data[DOMAIN]:
         _LOGGER.error("ElevenLabs integration not loaded")
         return
-        
+
     client = hass.data[DOMAIN][config_entry.entry_id]
     async_add_entities([ElevenLabsTTSProvider(hass, client, config_entry)])
+
+
+def _merge_options(
+    defaults: dict[str, Any],
+    profile: dict[str, Any] | None,
+    mood: dict[str, Any],
+    call_options: dict[str, Any],
+) -> dict[str, Any]:
+    """Decide the final TTS settings: defaults < profile < mood < per-call overrides.
+
+    defaults:     integration-wide defaults (always contains every key)
+    profile:      the selected voice profile's settings, or None if no profile was used
+    mood:         voice-mood values for the profile's agent (e.g. {"stability": 0.3})
+    call_options: options passed in the tts.speak call, with voice/voice_profile
+                  already stripped when they only selected the profile
+
+    HA's TTS layer merges this entity's default_options INTO the call options
+    before calling us, so they arrive carrying the defaults (notably
+    model_id=DEFAULT_MODEL) as if they were deliberate overrides. Merged last,
+    they silently beat the voice profile, which forced every profile onto
+    eleven_multilingual_v2 and made v3 audio tags like [exhales] get read aloud
+    as words. With a profile, only values that differ from the defaults count
+    as overrides, so a genuine per-call override still wins.
+    """
+    if profile is None:
+        return {**defaults, **call_options}
+    overrides = {k: v for k, v in call_options.items() if defaults.get(k) != v}
+    return {**defaults, **profile, **mood, **overrides}
 
 
 class ElevenLabsTTSProvider(TextToSpeechEntity):
@@ -98,17 +131,15 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         self.hass = hass
         self._client = client
         self._config_entry = config_entry
-        # Set the entity name for entity ID generation
-        self._name = "elevenlabs_custom_tts"
-        # Set the friendly name that should appear in UI and registry
+        # Shown in the UI; also slugifies to the tts.elevenlabs_custom_tts entity_id
         self._attr_name = "ElevenLabs Custom TTS"
-        self._friendly_name = "ElevenLabs Custom TTS"
-
-        # ── Voice mood profile map (profile name → agent identifier) ──
-        self._mood_profile_map = {}
+        # Voice mood profile map (profile name -> agent identifier), loaded in async_added_to_hass
+        self._mood_profile_map: dict[str, str] = {}
+        # Satellite lead-in pre-roll bytes, loaded in async_added_to_hass
+        self._lead_in_cache = b""
 
     async def async_added_to_hass(self) -> None:
-        """Load mood profile map asynchronously when entity is added."""
+        """Load the mood profile map and the lead-in clip off the event loop."""
         self._mood_profile_map = await self.hass.async_add_executor_job(
             self._load_mood_profile_map_sync
         )
@@ -125,10 +156,10 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
 
     @staticmethod
     def _load_mood_profile_map_sync() -> dict:
-        """Load profile→agent map from JSON config (runs in executor thread)."""
+        """Load profile->agent map from JSON config (runs in executor thread)."""
         import json as _json
         try:
-            with open("/config/pyscript/voice_mood_profile_map.json", "r") as f:
+            with open(MOOD_PROFILE_MAP_PATH, "r") as f:
                 data = _json.load(f)
             _LOGGER.debug("Loaded mood profile map: %s", list(data.keys()))
             return data
@@ -140,14 +171,10 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             return {}
 
     @property
-    def name(self) -> str:
-        """Return the name of the entity (for entity ID)."""
-        return self._name
-
-    @property
     def unique_id(self) -> str:
         """Return a unique ID for this TTS entity."""
-        return f"{DOMAIN}_tts"
+        # One entity per config entry; a fixed ID collides with multiple API keys
+        return f"{DOMAIN}_{self._config_entry.entry_id}"
 
     @property
     def default_language(self) -> str:
@@ -165,7 +192,7 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         return [
             "voice_profile",
             "voice",
-            "model_id", 
+            "model_id",
             "stability",
             "similarity_boost",
             "style",
@@ -210,6 +237,8 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         voices = []
         for profile_name, profile_data in voice_profiles.items():
             voice_id = profile_data.get("voice", "")
+            # The voice_id in Voice() becomes the identifier used in the Assist pipeline;
+            # when selected, it is passed back to us as the "voice" option
             voices.append(
                 Voice(
                     voice_id=profile_name,
@@ -221,14 +250,45 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
 
         return voices
 
+    def _voice_mood(self, voice_profile_name: str) -> tuple[dict[str, Any], str]:
+        """Return (mood options, tag prefix) for a profile's agent, or ({}, "")."""
+        mood_options: dict[str, Any] = {}
+        mood_tag_prefix = ""
+        if not self._mood_profile_map:
+            return mood_options, mood_tag_prefix
+        try:
+            kill_switch = self.hass.states.get(MOOD_SWITCH)
+            if not kill_switch or kill_switch.state != "on":
+                return mood_options, mood_tag_prefix
+            agent = self._mood_profile_map.get(voice_profile_name.lower().strip())
+            if not agent:
+                return mood_options, mood_tag_prefix
+            # Stability: the one VoiceSettings param v3 respects
+            stability = self.hass.states.get(f"input_number.ai_voice_mood_{agent}_stability")
+            if stability and stability.state not in ("unknown", "unavailable", ""):
+                mood_options["stability"] = float(stability.state)
+            # Tag prefix: for non-agent text (notifications, announcements)
+            tags = self.hass.states.get(f"sensor.ai_voice_mood_{agent}_tags")
+            if tags and tags.state not in ("unknown", "unavailable", ""):
+                mood_tag_prefix = tags.state.strip()
+            if mood_options or mood_tag_prefix:
+                _LOGGER.debug(
+                    "Voice mood for '%s' (agent=%s): opts=%s tags='%s'",
+                    voice_profile_name, agent, mood_options, mood_tag_prefix,
+                )
+        except Exception as exc:
+            _LOGGER.warning("Voice mood failed: %s", exc)
+            return {}, ""
+        return mood_options, mood_tag_prefix
+
     def _prepare_request(
         self, message: str, language: str, options: dict[str, Any] | None = None
     ) -> tuple[dict[str, Any], str, str | None]:
         """Resolve profile, mood and option precedence into request params.
 
-        Shared by the buffered path (async_get_tts_audio) and the
-        streaming path (async_stream_tts_audio) so both apply identical
-        profile resolution, voice-mood modulation and option precedence.
+        Shared by the buffered path (async_get_tts_audio) and the streaming
+        path (async_stream_tts_audio) so both apply identical profile
+        resolution, voice-mood modulation and option precedence.
         """
         if options is None:
             options = {}
@@ -242,92 +302,51 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             list(voice_profiles.keys()),
         )
 
-        # --- Profile resolution ---
-        # Priority: explicit voice_profile > voice matching profile name > raw voice ID
-        profile_options = None
+        # Profile resolution: explicit voice_profile > voice matching a profile name > raw voice ID
+        profile = None
         voice_profile_name = options.get("voice_profile")
-
-        # If no explicit voice_profile, check if "voice" matches a profile name
+        # The Assist pipeline passes the selected profile as "voice"
         if not voice_profile_name and "voice" in options:
             voice_profile_name = options["voice"]
 
-        # Look up profile (exact match first, then case-insensitive)
         if voice_profile_name and voice_profiles:
             if voice_profile_name in voice_profiles:
-                profile_options = voice_profiles[voice_profile_name].copy()
+                profile = voice_profiles[voice_profile_name].copy()
             else:
                 # Case-insensitive fallback
                 for pname, pdata in voice_profiles.items():
                     if pname.lower().strip() == voice_profile_name.lower().strip():
-                        profile_options = pdata.copy()
+                        profile = pdata.copy()
                         voice_profile_name = pname
                         break
 
-            if profile_options:
+            if profile is not None:
                 _LOGGER.info("Using voice profile '%s' (voice_id=%s)",
-                            voice_profile_name, profile_options.get("voice", "?"))
+                            voice_profile_name, profile.get("voice", "?"))
             else:
-                _LOGGER.warning(
+                # HA merges default_options into every call, so "voice" is always
+                # present; only an unmatched non-default value is worth a warning.
+                is_default_voice = voice_profile_name == self.default_options["voice"]
+                _LOGGER.log(
+                    logging.DEBUG if is_default_voice else logging.WARNING,
                     "Voice '%s' did not match any profile %s — treating as raw voice ID",
                     voice_profile_name, list(voice_profiles.keys()),
                 )
 
-        # ── Voice mood modulation (v3): stability + tag prefix ──
-        mood_options = {}
+        mood_options: dict[str, Any] = {}
         mood_tag_prefix = ""
-        if profile_options and voice_profile_name and self._mood_profile_map:
-            try:
-                kill_switch = self.hass.states.get(
-                    "input_boolean.ai_voice_mood_enabled"
-                )
-                if kill_switch and kill_switch.state == "on":
-                    _agent = self._mood_profile_map.get(voice_profile_name.lower().strip())
-                    if _agent:
-                        # Stability — the one VoiceSettings param v3 respects
-                        _st = self.hass.states.get(
-                            f"input_number.ai_voice_mood_{_agent}_stability"
-                        )
-                        if _st and _st.state not in ("unknown", "unavailable", ""):
-                            mood_options["stability"] = float(_st.state)
-                        # Tag prefix — for non-agent text (notifications, announcements)
-                        _tags = self.hass.states.get(
-                            f"sensor.ai_voice_mood_{_agent}_tags"
-                        )
-                        if _tags and _tags.state not in ("unknown", "unavailable", ""):
-                            mood_tag_prefix = _tags.state.strip()
-                        if mood_options or mood_tag_prefix:
-                            _LOGGER.debug(
-                                "Voice mood for '%s' (agent=%s): opts=%s tags='%s'",
-                                voice_profile_name, _agent, mood_options, mood_tag_prefix,
-                            )
-            except Exception as exc:
-                _LOGGER.warning("Voice mood failed: %s", exc)
+        if profile is not None:
+            mood_options, mood_tag_prefix = self._voice_mood(voice_profile_name)
 
-        # Build merged options: defaults < profile < mood < per-request overrides
-        # When "voice" was used to select a profile, exclude it from overrides
-        # so the profile's actual voice UUID isn't overwritten by the profile name
-        exclude_keys = {"voice_profile"}
-        if profile_options and "voice_profile" not in options:
-            # voice was used for profile matching — don't let it override the UUID
-            exclude_keys.add("voice")
-        api_options = {k: v for k, v in options.items() if k not in exclude_keys}
-        if profile_options:
-            # HA's TTS layer merges this entity's default_options INTO `options`
-            # before calling us, so `api_options` arrives carrying the defaults
-            # (notably model_id=DEFAULT_MODEL) as if they were deliberate
-            # per-request overrides. Merged last, they silently beat the voice
-            # profile — which forced every profile onto eleven_multilingual_v2
-            # and made v3 audio tags like [exhales] get read aloud as words.
-            # Keep only values that genuinely differ from the defaults, so real
-            # per-request overrides still win but HA-injected defaults do not.
-            _defaults = self.default_options
-            api_options = {
-                k: v for k, v in api_options.items() if _defaults.get(k) != v
-            }
-            merged_options = {**self.default_options, **profile_options, **mood_options, **api_options}
-        else:
-            merged_options = {**self.default_options, **api_options}
-        
+        call_options = dict(options)
+        call_options.pop("voice_profile", None)
+        if profile is not None and "voice_profile" not in options:
+            # "voice" only selected the profile; it is not an ElevenLabs voice ID
+            call_options.pop("voice", None)
+        merged_options = _merge_options(self.default_options, profile, mood_options, call_options)
+        if profile is None:
+            voice_profile_name = None
+
         voice_id = merged_options["voice"]
         model_id = merged_options["model_id"]
         stability = merged_options["stability"]
@@ -337,8 +356,8 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         use_speaker_boost = merged_options["use_speaker_boost"]
         apply_text_normalization = merged_options["apply_text_normalization"]
 
-        # Inject mood tag prefix for non-tagged text (notifications, announcements).
-        # Agent conversation responses already contain tags — skip those.
+        # Inject the mood tag prefix into untagged text (notifications, announcements).
+        # Agent conversation replies already carry their own tags, so skip those.
         if mood_tag_prefix and "[" not in message:
             message = f"{mood_tag_prefix} {message}"
 
@@ -349,15 +368,16 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
             use_speaker_boost=use_speaker_boost,
             speed=speed,
         )
-        
+
         convert_params = {
             "text": message,
             "voice_id": voice_id,
             "model_id": model_id,
             "voice_settings": voice_settings,
-            "language_code": language,
             "apply_text_normalization": apply_text_normalization,
         }
+        if model_id not in MODELS_WITHOUT_LANGUAGE_CODE:
+            convert_params["language_code"] = language
         return convert_params, voice_id, voice_profile_name
 
     async def async_get_tts_audio(
@@ -369,39 +389,38 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         text_to_speech.convert(), whose endpoint renders the entire clip
         server-side before returning a byte.
         """
+        _LOGGER.debug("TTS request received for message length: %d", len(message))
+        convert_params, voice_id, voice_profile_name = self._prepare_request(
+            message, language, options
+        )
+        model_id = convert_params["model_id"]
+
         try:
-            convert_params, voice_id, voice_profile_name = self._prepare_request(
-                message, language, options
-            )
-            with async_timeout.timeout(30):
-                audio_generator = self._client.text_to_speech.convert(**convert_params)
-
-                audio_bytes = b""
-                async for chunk in audio_generator:
-                    audio_bytes += chunk
-
-                if not audio_bytes:
-                    _LOGGER.error("No audio data received from ElevenLabs")
-                    return None
-
-                _LOGGER.info(
-                    "Successfully generated %d bytes of audio for voice %s%s",
-                    len(audio_bytes),
-                    voice_id,
-                    f" using profile '{voice_profile_name}'" if voice_profile_name else ""
-                )
-
-                return ("mp3", audio_bytes)
-
-        except asyncio.TimeoutError:
-            _LOGGER.error("Timeout generating TTS audio")
-            return None
+            async with asyncio.timeout(TTS_TIMEOUT):
+                # Collect all audio bytes from the async generator
+                chunks = [
+                    chunk async for chunk in self._client.text_to_speech.convert(**convert_params)
+                ]
+        except TimeoutError as err:
+            raise HomeAssistantError("Timed out generating ElevenLabs TTS audio") from err
         except ApiError as err:
-            _LOGGER.error("ElevenLabs API error: %s", err)
-            return None
-        except Exception as err:
-            _LOGGER.error("Error generating TTS audio: %s", err)
-            return None
+            # err.body carries ElevenLabs' explanation (e.g. unsupported setting for a model)
+            raise HomeAssistantError(
+                f"ElevenLabs API error {err.status_code}: {err.body}"
+            ) from err
+
+        audio_bytes = b"".join(chunks)
+        if not audio_bytes:
+            raise HomeAssistantError("No audio data received from ElevenLabs")
+
+        _LOGGER.debug(
+            "Generated %d bytes of audio for voice %s with model %s%s",
+            len(audio_bytes),
+            voice_id,
+            model_id,
+            f" using profile '{voice_profile_name}'" if voice_profile_name else "",
+        )
+        return ("mp3", audio_bytes)
 
     def _lead_in_bytes(self, options: dict[str, Any] | None) -> bytes:
         """Silent MP3 pre-roll, or b'' when it must not be used.
@@ -419,7 +438,7 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
         kill = self.hass.states.get(LEAD_IN_SWITCH)
         if kill is not None and kill.state == "off":
             return b""
-        return getattr(self, "_lead_in_cache", b"")
+        return self._lead_in_cache
 
     async def async_stream_tts_audio(
         self, request: TTSAudioRequest
@@ -470,27 +489,49 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
                     "Prepending %d-byte silent lead-in", len(lead_in)
                 )
                 yield lead_in
+            # The deadline is enforced per await on ElevenLabs, never across a
+            # yield: a timeout context spanning yields would fire inside
+            # whatever the consumer task is doing between chunks.
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + STREAM_TIMEOUT_S
+            chunks = aiter(self._client.text_to_speech.stream(**convert_params))
             try:
-                with async_timeout.timeout(STREAM_TIMEOUT_S):
-                    async for chunk in self._client.text_to_speech.stream(
-                        **convert_params
-                    ):
-                        if not chunk:
-                            continue
-                        if total == 0:
-                            _LOGGER.info(
-                                "First audio chunk (%d bytes) from ElevenLabs for "
-                                "voice %s%s",
-                                len(chunk), voice_id, profile_note,
-                            )
-                        total += len(chunk)
-                        yield chunk
-            except asyncio.TimeoutError:
+                while True:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    try:
+                        chunk = await asyncio.wait_for(anext(chunks), remaining)
+                    except StopAsyncIteration:
+                        break
+                    if not chunk:
+                        continue
+                    if total == 0:
+                        _LOGGER.info(
+                            "First audio chunk (%d bytes) from ElevenLabs for "
+                            "voice %s%s",
+                            len(chunk), voice_id, profile_note,
+                        )
+                    total += len(chunk)
+                    yield chunk
+            except TimeoutError as err:
                 _LOGGER.error("Timeout streaming TTS audio after %d bytes", total)
-                raise
+                raise HomeAssistantError(
+                    "Timed out streaming ElevenLabs TTS audio"
+                ) from err
             except ApiError as err:
-                _LOGGER.error("ElevenLabs API error after %d bytes: %s", total, err)
-                raise
+                # Status + ElevenLabs' explanation only; str(err) dumps every header
+                _LOGGER.error(
+                    "ElevenLabs API error %s after %d bytes: %s",
+                    err.status_code, total, err.body,
+                )
+                raise HomeAssistantError(
+                    f"ElevenLabs API error {err.status_code}: {err.body}"
+                ) from err
+            finally:
+                aclose = getattr(chunks, "aclose", None)
+                if aclose is not None:
+                    await aclose()
 
             if not total:
                 # Must RAISE, not return. A bare return is a clean generator
@@ -499,8 +540,8 @@ class ElevenLabsTTSProvider(TextToSpeechEntity):
                 # sha1(message)+options key and serves that silence forever,
                 # surviving restarts. Raising propagates into
                 # _load_data_into_cache's except, which pops the mem cache and
-                # returns BEFORE the disk write -- matching both the pre-patch
-                # behaviour and the base contract at tts/entity.py:185-186.
+                # returns BEFORE the disk write -- matching the base contract
+                # at tts/entity.py.
                 raise HomeAssistantError(
                     f"No TTS from {self.entity_id} for '{message[:64]}'"
                 )
