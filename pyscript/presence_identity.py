@@ -784,8 +784,12 @@ async def presence_identity_satellite_trigger(var_name=None, value=None, old_val
         elif occ == "dual":
             # Dual: check if someone is already tracked to this zone
             # If yes, that person spoke. If ambiguous, don't anchor.
+            # Only persons presence_identity_startup has seeded: this trigger is
+            # live from module load, and state_bridge seeds sensor.ai_last_satellite
+            # inside the startup handler's 10 s settle delay (KeyError otherwise).
+            known = [p for p in persons if p in _location]
             tracked_here = [
-                p for p in persons
+                p for p in known
                 if _location[p]["zone"] == zone
                 and _compute_confidence(p) >= _get_confidence_floor()
             ]
@@ -796,7 +800,7 @@ async def presence_identity_satellite_trigger(var_name=None, value=None, old_val
             elif len(tracked_here) == 0:
                 # Nobody tracked here — check if one person is confidently elsewhere
                 other_zone_persons = [
-                    p for p in persons
+                    p for p in known
                     if _location[p]["zone"] not in ("unknown", "away", zone)
                     and _compute_confidence(p) >= 60
                 ]
