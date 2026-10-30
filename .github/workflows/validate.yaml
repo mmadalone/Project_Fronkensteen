@@ -85,3 +85,23 @@ jobs:
       # against the YAML on every push.
       - name: Check helper_defaults.json against the helper YAML
         run: python3 scripts/check_helper_defaults.py
+
+  hardcoded_entities:
+    name: Hardcoded Entity IDs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install PyYAML
+        run: pip install pyyaml==6.0.2
+
+      # One household's entity IDs in shipped code work only in that house and
+      # silently do nothing in every other one (AP-86). Shipped code discovers
+      # entities or reads them from configuration. IDs that predate this check
+      # are grandfathered in scripts/hardcoded_entities_baseline.json, which may
+      # only shrink: a new ID fails, and so does a baseline entry already fixed.
+      - name: Check shipped files for hardcoded entity IDs
+        run: python3 scripts/check_hardcoded_entities.py .

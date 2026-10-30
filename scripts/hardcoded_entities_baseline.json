@@ -1,0 +1,202 @@
+{
+  "automation/alexa_on_demand_briefing.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/assist_tts_reroute.yaml": [
+    "input_boolean.assist_tts_reroute_enabled"
+  ],
+  "automation/bedtime_routine_plus.yaml": [
+    "sensor.madteevee_pvr_channel"
+  ],
+  "automation/bedtime_winddown.yaml": [
+    "sensor.madteevee_pvr_channel"
+  ],
+  "automation/budget_cost_alert.yaml": [
+    "automation.this"
+  ],
+  "automation/calendar_alarm.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/contact_history_summarizer.yaml": [
+    "sensor.ha_text_ai"
+  ],
+  "automation/conversation_summarizer.yaml": [
+    "sensor.ha_text_ai"
+  ],
+  "automation/email_follow_me.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/email_priority_filter.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/listen_history.yaml": [
+    "media_player.bathroom_ma",
+    "media_player.workshop_ma"
+  ],
+  "automation/mass_llm_enhanced_assist_blueprint_en.yaml": [
+    "script.voice_play_bedtime_audiobook",
+    "script.voice_play_media"
+  ],
+  "automation/media_tracking.yaml": [
+    "sensor.radarr_queue",
+    "sensor.sonarr_queue"
+  ],
+  "automation/music_taste_rebuild.yaml": [
+    "sensor.ha_text_ai_deepseek_chat"
+  ],
+  "automation/notification_follow_me.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/phone_charge_reminder.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/proactive_bedtime_escalation.yaml": [
+    "script.voice_memory_tool",
+    "sensor.madteevee_pvr_channel"
+  ],
+  "automation/reactive_banter.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/system_recovery_alert.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/theatrical_mode.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release",
+    "tts.google_en_com"
+  ],
+  "automation/voice_handoff.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "automation/wake-up-guard.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release",
+    "script.wake_guard_stop_cleanup",
+    "script.wake_guard_tts_speak"
+  ],
+  "automation/watch_history.yaml": [
+    "media_player.madteevee",
+    "sensor.madteevee_now_playing"
+  ],
+  "automation/weather_forecast_promote.yaml": [
+    "sensor.ha_text_ai_deepseek_chat"
+  ],
+  "helpers/helpers_input_select.yaml": [
+    "binary_sensor.fp2_presence_sensor_bathroom",
+    "binary_sensor.fp2_presence_sensor_bed",
+    "binary_sensor.fp2_presence_sensor_kitchen",
+    "binary_sensor.fp2_presence_sensor_living_room",
+    "binary_sensor.fp2_presence_sensor_lobby",
+    "binary_sensor.fp2_presence_sensor_main_room",
+    "binary_sensor.fp2_presence_sensor_shower",
+    "binary_sensor.fp2_presence_sensor_workshop"
+  ],
+  "packages/ai_context_hot.yaml": [
+    "assist_satellite.home_assistant_voice_0905c5_assist_satellite",
+    "assist_satellite.home_assistant_voice_0a0109_assist_satellite",
+    "binary_sensor.fp2_presence_sensor_bathroom",
+    "binary_sensor.fp2_presence_sensor_bed",
+    "binary_sensor.fp2_presence_sensor_kitchen",
+    "binary_sensor.fp2_presence_sensor_living_room",
+    "binary_sensor.fp2_presence_sensor_lobby",
+    "binary_sensor.fp2_presence_sensor_main_room",
+    "binary_sensor.fp2_presence_sensor_shower",
+    "binary_sensor.fp2_presence_sensor_workshop",
+    "media_player.bathroom_ma",
+    "media_player.bathroom_sonos",
+    "media_player.ha_voice_pe_living_room_quark_esp",
+    "media_player.ha_voice_pe_workshop_rick_esp",
+    "media_player.madteevee",
+    "media_player.workshop_ma",
+    "media_player.workshop_sonos",
+    "sensor.madteevee_now_playing",
+    "weather.forecast_home"
+  ],
+  "packages/ai_focus_guard.yaml": [
+    "binary_sensor.fp2_presence_sensor_workshop"
+  ],
+  "packages/ai_history_context.yaml": [
+    "person.jessica",
+    "person.miquel",
+    "sensor.aemet_temperature"
+  ],
+  "packages/ai_identity.yaml": [
+    "binary_sensor.fp2_presence_sensor_bathroom",
+    "binary_sensor.fp2_presence_sensor_bed",
+    "binary_sensor.fp2_presence_sensor_kitchen",
+    "binary_sensor.fp2_presence_sensor_living_room",
+    "binary_sensor.fp2_presence_sensor_lobby",
+    "binary_sensor.fp2_presence_sensor_shower",
+    "binary_sensor.fp2_presence_sensor_workshop",
+    "device_tracker.madoppo",
+    "device_tracker.oppo_a60",
+    "device_tracker.redmi_note_14"
+  ],
+  "pyscript/calendar_promote.py": [
+    "calendar.birthdays",
+    "calendar.holidays_in_spain"
+  ],
+  "pyscript/common_utilities.py": [
+    "sensor.ha_text_ai_deepseek_chat"
+  ],
+  "pyscript/contact_history.py": [
+    "sensor.ha_text_ai"
+  ],
+  "pyscript/conversation_sensor.py": [
+    "sensor.ha_text_ai"
+  ],
+  "pyscript/email_promote.py": [
+    "sensor.gmail_messages"
+  ],
+  "pyscript/focus_guard.py": [
+    "assist_satellite.home_assistant_voice_0905c5_assist_satellite",
+    "assist_satellite.home_assistant_voice_0a0109_assist_satellite",
+    "binary_sensor.fp2_presence_sensor_bathroom",
+    "binary_sensor.fp2_presence_sensor_bed",
+    "binary_sensor.fp2_presence_sensor_kitchen",
+    "binary_sensor.fp2_presence_sensor_living_room",
+    "binary_sensor.fp2_presence_sensor_main_room",
+    "binary_sensor.fp2_presence_sensor_workshop"
+  ],
+  "pyscript/media_promote.py": [
+    "calendar.radarr",
+    "sensor.radarr_queue",
+    "sensor.sonarr_queue",
+    "sensor.sonarr_upcoming"
+  ],
+  "pyscript/presence_patterns.py": [
+    "binary_sensor.fp2_presence_sensor_kitchen",
+    "binary_sensor.fp2_presence_sensor_living_room",
+    "binary_sensor.fp2_presence_sensor_workshop"
+  ],
+  "pyscript/proactive_briefing.py": [
+    "weather.forecast_home"
+  ],
+  "pyscript/project_promote.py": [
+    "sensor.ha_text_ai"
+  ],
+  "pyscript/radio_klara.py": [
+    "media_player.bathroom_ma",
+    "media_player.ha_voice_pe_living_room_quark_esp",
+    "media_player.workshop_ma"
+  ],
+  "pyscript/tts_queue.py": [
+    "tts.elevenlabs_custom_tts"
+  ],
+  "script/notification_replay.yaml": [
+    "script.refcount_bypass_claim",
+    "script.refcount_bypass_release"
+  ],
+  "script/voice_wake_guard_tts_router.yaml": [
+    "tts.elevenlabs_custom_tts"
+  ]
+}
