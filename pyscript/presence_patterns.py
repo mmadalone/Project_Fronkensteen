@@ -1139,12 +1139,10 @@ async def sleep_detect_log():
             except Exception:
                 pass
 
-        # Other zone absence bonus
-        other_zones = [
-            "binary_sensor.fp2_presence_sensor_workshop",
-            "binary_sensor.fp2_presence_sensor_living_room",
-            "binary_sensor.fp2_presence_sensor_kitchen",
-        ]
+        # Other zone absence bonus: workshop, living room and kitchen, by name
+        # through fp2_zones
+        other_zones = [entity for entity, zone_name in _get_fp2_entities().items()
+                       if zone_name in ("workshop", "living_room", "kitchen")]
         all_clear = True
         for zone in other_zones:
             try:

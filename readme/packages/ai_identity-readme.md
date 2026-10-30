@@ -29,8 +29,9 @@ Core identity layer of the Voice Context Architecture. Computes per-person confi
 
 ## Dependencies
 
-- **Device trackers:** `device_tracker.oppo_a60` (Miquel WiFi), `device_tracker.oppo_a38` (Jessica WiFi), `device_tracker.madoppo` (Miquel GPS)
-- **Hardware:** Aqara FP2 presence sensors (7 zones), GL.iNet router (WiFi MAC tracking)
+- **Device trackers:** `device_tracker.oppo_a60` (Miquel WiFi), `device_tracker.redmi_note_14` (Jessica WiFi), `device_tracker.madoppo` (Miquel GPS)
+- **Hardware:** Aqara FP2 presence sensors, GL.iNet router (WiFi MAC tracking)
+- **Zones:** `sensor.ai_zone_map` — the `fp2_zones` map from `entity_config.yaml`, published by `state_bridge.py`. Every zone except `main_room` counts in the occupied-zone checks.
 - **Integration:** HA Companion App (GPS for Miquel)
 
 ## Cross-References

@@ -14,7 +14,8 @@
 #   input_datetime.ai_focus_guard_snooze_until — snooze expiry timestamp
 #   input_number.ai_focus_guard_threshold_hours — hours before first nudge (default 2)
 #   input_number.ai_focus_mode_max_hours  — focus mode auto-expiry (default 2)
-#   sensor.workshop_hours_today        — history_stats: FP2 workshop ON-time today
+#   binary_sensor.ai_focus_zone_occupied — mirror of the workshop FP2 zone (via sensor.ai_zone_map)
+#   sensor.workshop_hours_today        — history_stats: workshop zone ON-time today
 #   sensor.ai_focus_guard_status       — created by pyscript (last op status)
 #
 # Services (pyscript):
@@ -45,7 +46,7 @@
 #   packages/ai_llm_budget.yaml (budget gate for agent-personality nudges)
 #   packages/ai_test_harness.yaml (test mode toggle)
 #
-# Deployed: 2026-03-03
+# Deployed: 2026-03-03 | Updated: 2026-10-30 (workshop zone found through sensor.ai_zone_map)
 # =============================================================================
 
 # ── INPUT HELPERS ────────────────────────────────────────────────────────────
@@ -56,12 +57,25 @@
 
 # ── SENSORS ─────────────────────────────────────────────────────────────────
 
+template:
+  - binary_sensor:
+      # The workshop FP2 zone, found by zone name through sensor.ai_zone_map
+      # (state_bridge.py), so history_stats below needs no hardcoded sensor.
+      # A plain mirror: the same ON time as the zone itself, no smoothing.
+      - name: "AI Focus Zone Occupied"
+        unique_id: ai_focus_zone_occupied
+        device_class: occupancy
+        state: >-
+          {{ (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items()
+             | selectattr('1', 'eq', 'workshop') | map(attribute='0')
+             | select('is_state', 'on') | list | count > 0 }}
+
 sensor:
   # Workshop hours today — HA-native history_stats, immune to FP2 flapping.
   # Sums total ON-time from recorder data (no custom accumulator needed).
   - platform: history_stats
     name: "Workshop Hours Today"
-    entity_id: binary_sensor.fp2_presence_sensor_workshop
+    entity_id: binary_sensor.ai_focus_zone_occupied
     state: "on"
     type: time
     start: "{{ today_at('00:00') }}"

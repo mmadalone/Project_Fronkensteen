@@ -341,27 +341,32 @@ def _is_nudge_enabled(nudge_type: str) -> bool:
         return True  # default enabled if entity missing
 
 
-# Satellite entity map — zone name → assist_satellite entity
-ZONE_TO_SATELLITE = {
-    "workshop": "assist_satellite.home_assistant_voice_0905c5_assist_satellite",
-    "living_room": "assist_satellite.home_assistant_voice_0a0109_assist_satellite",
-}
+def _get_zone_satellites() -> dict:
+    """zone name → assist_satellite entity, from entity_config.yaml satellite_zones."""
+    cfg = load_entity_config()
+    return {zone: sat for sat, zone in (cfg.get("satellite_zones") or {}).items()}
 
-# Default satellite (workshop / Rick)
-DEFAULT_SATELLITE = "assist_satellite.home_assistant_voice_0905c5_assist_satellite"
+
+def _get_default_satellite() -> str:
+    """The workshop satellite, else the first configured one."""
+    satellites = _get_zone_satellites()
+    if satellites.get("workshop"):
+        return satellites["workshop"]
+    return list(satellites.values())[0] if satellites else ""
 
 
 def _get_presence_satellite() -> str:
     """Get the assist satellite entity in the user's current zone."""
+    satellites = _get_zone_satellites()
     for zone, fp2_entity in _get_fp2_zones().items():
         try:
             if str(state.get(fp2_entity) or "off").lower() == "on":  # noqa: F821
-                sat = ZONE_TO_SATELLITE.get(zone)
+                sat = satellites.get(zone)
                 if sat:
                     return sat
         except NameError:
             continue
-    return DEFAULT_SATELLITE
+    return _get_default_satellite()
 
 
 def _get_workshop_hours() -> float:
@@ -1258,11 +1263,16 @@ async def _cron_evaluate():
         )
 
 
-@state_trigger(  # noqa: F821
-    "binary_sensor.fp2_presence_sensor_workshop",
-    state_check_now=False,
-)
-async def _workshop_zone_change(**kwargs):
+# ── Zone triggers ────────────────────────────────────────────────────────────
+# Built at startup from fp2_zones, because decorators cannot read
+# entity_config.yaml. Same factory pattern as presence_identity.
+
+# Zones whose activation counts for break tracking (by fp2_zones name)
+_BREAK_ZONES = ("living_room", "kitchen", "bathroom", "bed", "main_room")
+_zone_triggers = []  # factory-created trigger references (keep alive)
+
+
+async def _on_workshop_zone_change():
     """React to workshop zone changes for immediate re-evaluation."""
     if not _is_enabled():
         return
@@ -1279,15 +1289,7 @@ async def _workshop_zone_change(**kwargs):
         )
 
 
-@state_trigger(  # noqa: F821
-    "binary_sensor.fp2_presence_sensor_living_room == 'on'",
-    "binary_sensor.fp2_presence_sensor_kitchen == 'on'",
-    "binary_sensor.fp2_presence_sensor_bathroom == 'on'",
-    "binary_sensor.fp2_presence_sensor_bed == 'on'",
-    "binary_sensor.fp2_presence_sensor_main_room == 'on'",
-    state_check_now=False,
-)
-async def _zone_change_re_eval(**kwargs):
+async def _on_break_zone_active():
     """React to any zone becoming active for break suggestion tracking."""
     global _last_zone_change_time, _last_active_zone
 
@@ -1302,6 +1304,40 @@ async def _zone_change_re_eval(**kwargs):
         _clear_escalation("break_suggest")
 
 
+def _workshop_trigger_factory(entity_id):
+    """Create the @state_trigger for the workshop zone."""
+    @state_trigger(entity_id, state_check_now=False)  # noqa: F821
+    async def _trig(**kwargs):
+        await _on_workshop_zone_change()
+    return _trig
+
+
+def _break_zones_trigger_factory(trigger_expr):
+    """Create the @state_trigger for a break zone turning on."""
+    @state_trigger(trigger_expr, state_check_now=False)  # noqa: F821
+    async def _trig(**kwargs):
+        await _on_break_zone_active()
+    return _trig
+
+
+def _register_zone_triggers():
+    """Build the zone triggers from fp2_zones (zone name → entity)."""
+    global _zone_triggers
+    zones = _get_fp2_zones()
+    triggers = []
+    if zones.get("workshop"):
+        triggers.append(_workshop_trigger_factory(zones["workshop"]))
+    # Several str_exprs are OR'ed by pyscript anyway; one joined expression
+    # is the same trigger.
+    break_exprs = [f"{zones[z]} == 'on'" for z in _BREAK_ZONES if zones.get(z)]
+    if break_exprs:
+        triggers.append(_break_zones_trigger_factory(" or ".join(break_exprs)))
+    _zone_triggers = triggers
+    log.info(  # noqa: F821
+        f"focus_guard: registered {len(triggers)} zone trigger(s) from fp2_zones"
+    )
+
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 @time_trigger("startup")  # noqa: F821
@@ -1309,6 +1345,7 @@ async def _startup():
     """Initialize focus guard status sensor and workshop tracking."""
     task.sleep(10)  # noqa: F821
     await asyncio.to_thread(reload_entity_config)
+    _register_zone_triggers()
 
     global _last_zone_change_time, _last_active_zone
 

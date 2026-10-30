@@ -24,7 +24,7 @@ The central nervous system of the voice agent architecture. Assembles a live tex
 
 This package reads from a wide range of entities across the system:
 
-- **Presence:** Aqara FP2 binary sensors (8 zones), `sensor.ai_location_miquel`, `sensor.ai_location_jessica`
+- **Presence:** FP2 zones and voice satellites from `sensor.ai_zone_map` (`entity_config.yaml` `fp2_zones` / `satellite_zones`, published by `state_bridge.py`); `sensor.ai_location_<person>` per person
 - **Identity:** `sensor.occupancy_mode`, `sensor.identity_confidence_*`, identity helpers
 - **Media:** Music Assistant players, Sonos players, voice PE ESP players, MadTeeVee (Kodi)
 - **Weather:** `weather.forecast_home` (Met.no)

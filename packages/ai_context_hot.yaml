@@ -4,7 +4,7 @@
 # Architecture spec: voice_context_architecture.md § "Layer 1 — Hot Context"
 # Provides: sensor.ai_hot_context — text block for all agent system prompts
 # Usage in agent prompts: {{ state_attr('sensor.ai_hot_context', 'context') }}
-# Deployed: 2026-02-28 | Updated: 2026-10-30 (next alarm from each person's phone, person_phones.py)
+# Deployed: 2026-02-28 | Updated: 2026-10-30 (next alarm from each person's phone; FP2 zones and satellites from sensor.ai_zone_map)
 # =============================================================================
 
 # ── STATIC USER PROFILE (Shared / Generic) ────────────────────────────────────
@@ -71,19 +71,14 @@ template:
             {%- set ns = namespace(lines=[]) -%}
 
             {# ── PRESENCE + IDENTITY (I-48: per-person room inference) ── #}
-            {%- set pmap = [
-              ('Workshop', 'binary_sensor.fp2_presence_sensor_workshop'),
-              ('Living Room', 'binary_sensor.fp2_presence_sensor_living_room'),
-              ('Main Room', 'binary_sensor.fp2_presence_sensor_main_room'),
-              ('Kitchen', 'binary_sensor.fp2_presence_sensor_kitchen'),
-              ('Bathroom', 'binary_sensor.fp2_presence_sensor_bathroom'),
-              ('Shower', 'binary_sensor.fp2_presence_sensor_shower'),
-              ('Bed area', 'binary_sensor.fp2_presence_sensor_bed'),
-              ('Lobby', 'binary_sensor.fp2_presence_sensor_lobby')
-            ] -%}
+            {# FP2 zones from entity_config.yaml via sensor.ai_zone_map (state_bridge.py);
+               labels come from the zone names #}
             {%- set pns = namespace(zones=[]) -%}
-            {%- for zone, entity in pmap -%}
-              {%- if is_state(entity, 'on') -%}{%- set pns.zones = pns.zones + [zone] -%}{%- endif -%}
+            {%- for entity, zone in (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items() -%}
+              {%- if is_state(entity, 'on') -%}
+                {%- set label = 'Bed area' if zone == 'bed' else zone | replace('_', ' ') | title -%}
+                {%- set pns.zones = pns.zones + [label] -%}
+              {%- endif -%}
             {%- endfor -%}
             {%- set id_enabled = is_state('input_boolean.ai_presence_identity_enabled', 'on') -%}
             {%- set id_floor = states('input_number.ai_presence_identity_confidence_floor') | int(20) -%}
@@ -121,13 +116,11 @@ template:
               {%- endif -%}
             {%- endif -%}
 
-            {# ── SATELLITE ORIGIN — keep in sync with satellite_zones in entity_config.yaml
-                 and room-to-player map in _Functions_Standard.md play_media tool ── #}
+            {# ── SATELLITE ORIGIN — satellite_zones from entity_config.yaml via
+                 sensor.ai_zone_map; keep the room names in sync with the room-to-player
+                 map in _Functions_Standard.md play_media tool ── #}
             {%- set _sat = states('sensor.ai_last_satellite') | default('', true) | trim -%}
-            {%- set _sat_room_map = {
-              'assist_satellite.home_assistant_voice_0905c5_assist_satellite': 'workshop',
-              'assist_satellite.home_assistant_voice_0a0109_assist_satellite': 'living_room'
-            } -%}
+            {%- set _sat_room_map = state_attr('sensor.ai_zone_map', 'satellite_zones') or {} -%}
             {%- set _speaking_room = _sat_room_map.get(_sat, '') -%}
             {%- if _speaking_room -%}
               {%- set ns.lines = ns.lines + ['Speaking from: ' ~ _speaking_room ~ '.'] -%}

@@ -13,10 +13,15 @@ Usage from a blueprint action:
         attrs_json: '{"detail": "world"}'
         icon: mdi:brain
         friendly_name: AI My Thing
+
+Also publishes sensor.ai_zone_map: the fp2_zones and satellite_zones maps from
+entity_config.yaml, for YAML templates, which cannot read that file.
 """
 
 import json as _json  # noqa: F811 — shadow-safe alias
 from datetime import datetime  # noqa: F811 — for budget state timestamps
+
+from shared_utils import reload_entity_config
 
 
 # ── Budget State File I/O ─────────────────────────────────────────────────────
@@ -177,6 +182,31 @@ _STARTUP_SENSORS = [
     # Each person's Companion App phone sensors (person_phones.py)
     ("sensor.ai_person_phones", "0", "mdi:cellphone-link", "AI Person Phones"),
 ]
+
+
+# ── Zone map for YAML templates ──────────────────────────────────────────────
+# Templates cannot read entity_config.yaml, so the zone maps they need are
+# published here in the config's own {entity: zone} shape. Pyscript modules
+# keep reading the config directly.
+
+ZONE_MAP_ENTITY = "sensor.ai_zone_map"
+
+
+@time_trigger("startup")  # noqa: F821
+def _publish_zone_map():
+    """Publish fp2_zones and satellite_zones from entity_config.yaml."""
+    cfg = reload_entity_config()
+    fp2_zones = dict(cfg.get("fp2_zones") or {})
+    satellite_zones = dict(cfg.get("satellite_zones") or {})
+    state.set(  # noqa: F821
+        ZONE_MAP_ENTITY, str(len(fp2_zones)),
+        new_attributes={
+            "fp2_zones": fp2_zones,
+            "satellite_zones": satellite_zones,
+            "friendly_name": "AI Zone Map",
+            "icon": "mdi:floor-plan",
+        },
+    )
 
 
 @time_trigger("startup")  # noqa: F821

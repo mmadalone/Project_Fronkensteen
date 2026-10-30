@@ -4,7 +4,7 @@ Provides anti-ADHD nudges: time checks, meal reminders, calendar warnings, socia
 
 ## What's Inside
 
-- **Sensors:** 1 history_stats sensor (`sensor.workshop_hours_today`)
+- **Sensors:** 1 history_stats sensor (`sensor.workshop_hours_today`), 1 template binary sensor (`binary_sensor.ai_focus_zone_occupied`)
 - **Automations:** 2 (`ai_focus_guard_midnight_reset`, `ai_focus_mode_auto_expire`)
 - **Input helpers:** 6+ (moved to consolidated helper files) -- booleans, numbers, datetimes
 
@@ -12,7 +12,8 @@ Provides anti-ADHD nudges: time checks, meal reminders, calendar warnings, socia
 
 | Entity ID | Type | Purpose |
 |---|---|---|
-| `sensor.workshop_hours_today` | history_stats sensor | FP2 workshop presence ON-time today (hours) |
+| `sensor.workshop_hours_today` | history_stats sensor | Workshop zone ON-time today (hours), counted from `binary_sensor.ai_focus_zone_occupied` |
+| `binary_sensor.ai_focus_zone_occupied` | template binary_sensor | Mirror of the `workshop` FP2 zone, found through `sensor.ai_zone_map` |
 | `automation.ai_focus_guard_midnight_reset` | automation | Turns off focus mode at midnight |
 | `automation.ai_focus_mode_auto_expire` | automation | Auto-expires focus mode after `focus_mode_max_hours` |
 | `input_boolean.ai_focus_mode` | input_boolean | Voice-activated DND (suppresses non-calendar nudges) |
@@ -33,7 +34,7 @@ Provides anti-ADHD nudges: time checks, meal reminders, calendar warnings, socia
 - **Package:** `ai_identity.yaml` (identity confidence, occupancy mode)
 - **Package:** `ai_llm_budget.yaml` (budget gate for agent-personality nudges)
 - **Package:** `ai_test_harness.yaml` (test mode toggle)
-- **Hardware:** Aqara FP2 workshop presence sensor
+- **Hardware:** Aqara FP2 presence sensor for the `workshop` zone (mapped in `entity_config.yaml` `fp2_zones`, read through `sensor.ai_zone_map`)
 
 ## Cross-References
 
@@ -45,5 +46,5 @@ Provides anti-ADHD nudges: time checks, meal reminders, calendar warnings, socia
 - 6 nudge types with independent escalation: time check (P4-P2), meal reminder (P4-P2), calendar warning (P3-P1), social nudge (P4-P3), break suggestion (P4 only), bedtime approach (P3-P1).
 - Calendar warnings always bypass focus mode. All other nudge types are suppressed when focus mode is ON.
 - Focus mode auto-expires using a `for:` duration trigger that reads from `ai_focus_mode_max_hours`, supporting fractional hours.
-- The `workshop_hours_today` sensor uses HA-native `history_stats` with FP2 data, immune to sensor flapping.
+- The `workshop_hours_today` sensor uses HA-native `history_stats` on the workshop zone mirror (the same ON time as the FP2 zone), immune to sensor flapping. history_stats needs a fixed entity, which is why the mirror exists.
 - Deployed: 2026-03-03.

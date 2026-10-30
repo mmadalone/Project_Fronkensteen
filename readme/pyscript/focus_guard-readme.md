@@ -15,9 +15,9 @@ Task 20 of the Voice Context Architecture. Evaluates 6 nudge conditions every 15
 | Trigger | Function | Condition |
 |---------|----------|-----------|
 | `@time_trigger("cron(*/15 * * * *)")` | `_cron_evaluate` | 15-minute evaluation cycle |
-| `@state_trigger("binary_sensor.fp2_presence_sensor_workshop")` | `_on_workshop_zone_change` | Workshop zone entry/exit triggers evaluation (primary focus zone) |
-| `@state_trigger("binary_sensor.fp2_presence_sensor_living_room == 'on'", ...)` | `_zone_change_re_eval` | Living room, kitchen, bathroom, bed, main room zone entry triggers zone tracking update and break suggestion reset |
-| `@time_trigger("startup")` | `_startup` | Initializes status sensor and workshop tracking state |
+| `@state_trigger` on the `workshop` zone, built at startup by `_workshop_trigger_factory` | `_on_workshop_zone_change` | Workshop zone entry/exit triggers evaluation (primary focus zone) |
+| `@state_trigger` on the break zones turning on, built at startup by `_break_zones_trigger_factory` | `_on_break_zone_active` | Living room, kitchen, bathroom, bed or main room zone entry updates zone tracking and resets the break suggestion |
+| `@time_trigger("startup")` | `_startup` | Initializes status sensor and workshop tracking state; registers the two zone triggers from `fp2_zones` |
 
 ## Key Functions
 
@@ -40,7 +40,8 @@ Task 20 of the Voice Context Architecture. Evaluates 6 nudge conditions every 15
 - `input_datetime.ai_last_meal_time` — Timestamp of last meal
 - `input_datetime.ai_context_bed_time` — Configured bedtime for bedtime approach nudge
 - `input_datetime.ai_focus_guard_snooze_until` — Snooze expiry timestamp
-- `binary_sensor.fp2_presence_sensor_*` — FP2 zone sensors (workshop, living room, main room, kitchen, bathroom, shower, bed, lobby). Configured via `entity_config.yaml` `fp2_zones` with hardcoded defaults as fallback.
+- FP2 zone sensors from `entity_config.yaml` `fp2_zones`, looked up by zone name: `workshop` (focus zone) and `living_room`, `kitchen`, `bathroom`, `bed`, `main_room` (break zones). No entity IDs in the module.
+- Voice satellites from `entity_config.yaml` `satellite_zones`; the workshop satellite is the default.
 - `input_text.ai_calendar_today_summary` — Calendar data for appointment proximity checks
 - `person.miquel` / `person.jessica` — Home/away state for social nudge
 

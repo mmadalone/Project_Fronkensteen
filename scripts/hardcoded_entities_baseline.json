@@ -98,16 +98,6 @@
     "binary_sensor.fp2_presence_sensor_workshop"
   ],
   "packages/ai_context_hot.yaml": [
-    "assist_satellite.home_assistant_voice_0905c5_assist_satellite",
-    "assist_satellite.home_assistant_voice_0a0109_assist_satellite",
-    "binary_sensor.fp2_presence_sensor_bathroom",
-    "binary_sensor.fp2_presence_sensor_bed",
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_lobby",
-    "binary_sensor.fp2_presence_sensor_main_room",
-    "binary_sensor.fp2_presence_sensor_shower",
-    "binary_sensor.fp2_presence_sensor_workshop",
     "media_player.bathroom_ma",
     "media_player.bathroom_sonos",
     "media_player.ha_voice_pe_living_room_quark_esp",
@@ -118,22 +108,12 @@
     "sensor.madteevee_now_playing",
     "weather.forecast_home"
   ],
-  "packages/ai_focus_guard.yaml": [
-    "binary_sensor.fp2_presence_sensor_workshop"
-  ],
   "packages/ai_history_context.yaml": [
     "person.jessica",
     "person.miquel",
     "sensor.aemet_temperature"
   ],
   "packages/ai_identity.yaml": [
-    "binary_sensor.fp2_presence_sensor_bathroom",
-    "binary_sensor.fp2_presence_sensor_bed",
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_lobby",
-    "binary_sensor.fp2_presence_sensor_shower",
-    "binary_sensor.fp2_presence_sensor_workshop",
     "device_tracker.madoppo",
     "device_tracker.oppo_a60",
     "device_tracker.redmi_note_14"
@@ -154,26 +134,11 @@
   "pyscript/email_promote.py": [
     "sensor.gmail_messages"
   ],
-  "pyscript/focus_guard.py": [
-    "assist_satellite.home_assistant_voice_0905c5_assist_satellite",
-    "assist_satellite.home_assistant_voice_0a0109_assist_satellite",
-    "binary_sensor.fp2_presence_sensor_bathroom",
-    "binary_sensor.fp2_presence_sensor_bed",
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_main_room",
-    "binary_sensor.fp2_presence_sensor_workshop"
-  ],
   "pyscript/media_promote.py": [
     "calendar.radarr",
     "sensor.radarr_queue",
     "sensor.sonarr_queue",
     "sensor.sonarr_upcoming"
-  ],
-  "pyscript/presence_patterns.py": [
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_workshop"
   ],
   "pyscript/proactive_briefing.py": [
     "weather.forecast_home"

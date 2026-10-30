@@ -10,9 +10,22 @@
 
 # FP2 zone map: binary_sensor entity → zone name
 # Used by: presence_identity, presence_patterns, predictive_schedule,
-#          routine_fingerprint, sleep_config, focus_guard
+#          routine_fingerprint, sleep_config, focus_guard, and (through
+#          sensor.ai_zone_map, published by state_bridge.py) the packages
+#          ai_context_hot, ai_identity and ai_focus_guard
 # Replace with your room presence sensor entity IDs.
 # If you have fewer zones, remove the ones you don't have.
+#
+# Zone names matter: features look zones up by name. Use these names for the
+# rooms you have; zones with other names still show up as presence:
+#   workshop      focus guard: hours spent in the room, and its nudges
+#   bed           sleep detection
+#   workshop, living_room, kitchen
+#                 all three empty adds to sleep detection's confidence
+#   living_room, kitchen, bathroom, bed, main_room
+#                 focus guard: entering one counts as taking a break
+#   main_room     for a zone that covers the whole room; ai_identity leaves
+#                 it out when counting occupied zones
 fp2_zones:
   binary_sensor.YOUR_PRESENCE_SENSOR_ZONE1: zone1
   binary_sensor.YOUR_PRESENCE_SENSOR_ZONE2: zone2
@@ -20,7 +33,9 @@ fp2_zones:
   # Add more zones as needed
 
 # Satellite → zone map
-# Used by: presence_identity (voice interaction → room inference)
+# Used by: presence_identity (voice interaction → room inference), focus_guard
+#          (which satellite to speak on; the workshop one is the default), and
+#          ai_context_hot ("Speaking from") through sensor.ai_zone_map
 # Map each voice satellite to the zone it's physically in.
 satellite_zones:
   assist_satellite.YOUR_SATELLITE_1: zone1

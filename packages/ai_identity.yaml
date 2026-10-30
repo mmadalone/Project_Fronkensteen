@@ -33,7 +33,7 @@
 #   30–69    → limited_personal — name greeting, no sensitive data
 #   <30      → guest            — generic responses, no personal context
 #
-# Deployed: 2026-03-01 | Updated: 2026-03-06 (WiFi staleness decay for Jessica)
+# Deployed: 2026-03-01 | Updated: 2026-10-30 (FP2 zones from sensor.ai_zone_map)
 #                        2026-08-17 (Jessica repointed to Redmi Note 14 after phone swap)
 # =============================================================================
 
@@ -54,14 +54,11 @@ template:
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
           {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set solo = (m_wifi and not j_wifi) or (j_wifi and not m_wifi) -%}
-          {%- set fp2_count =
-            (is_state('binary_sensor.fp2_presence_sensor_living_room', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_bed', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_workshop', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_lobby', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on') | int)
-          + (is_state('binary_sensor.fp2_presence_sensor_shower', 'on') | int) -%}
+          {# Occupied FP2 zones, from sensor.ai_zone_map. main_room is left out,
+             as in the original zone list. #}
+          {%- set fp2_count = (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items()
+               | rejectattr('1', 'eq', 'main_room') | map(attribute='0')
+               | select('is_state', 'on') | list | count -%}
           {{ solo and fp2_count == 1 }}
 
       # True when Jessica's WiFi says home but NO FP2 zone detects a body.
@@ -71,14 +68,11 @@ template:
         icon: mdi:wifi-alert
         state: >-
           {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
-          {%- set fp2_on =
-            is_state('binary_sensor.fp2_presence_sensor_living_room', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_bed', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_workshop', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_lobby', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on')
-            or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
+          {# Occupied FP2 zones, from sensor.ai_zone_map. main_room is left out,
+             as in the original zone list. #}
+          {%- set fp2_on = (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items()
+               | rejectattr('1', 'eq', 'main_room') | map(attribute='0')
+               | select('is_state', 'on') | list | count > 0 -%}
           {{ j_wifi and not fp2_on }}
 
   - sensor:
@@ -101,14 +95,11 @@ template:
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
           {%- set m_gps  = is_state('device_tracker.madoppo', 'home') -%}
           {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
-          {%- set fp2_on =
-          is_state('binary_sensor.fp2_presence_sensor_living_room', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_bed', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_workshop', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_lobby', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
+          {# Occupied FP2 zones, from sensor.ai_zone_map. main_room is left out,
+             as in the original zone list. #}
+          {%- set fp2_on = (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items()
+               | rejectattr('1', 'eq', 'main_room') | map(attribute='0')
+               | select('is_state', 'on') | list | count > 0 -%}
           {%- set solo = m_wifi and not j_wifi -%}
           {%- set sustained = is_state('sensor.ai_sustained_solo_zone', 'on') -%}
           {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
@@ -139,14 +130,11 @@ template:
           {%- set j_wifi = is_state('device_tracker.redmi_note_14', 'home') -%}
           {%- set stale = is_state('input_boolean.ai_wifi_stale_jessica', 'on') -%}
           {%- set m_wifi = is_state('device_tracker.oppo_a60', 'home') -%}
-          {%- set fp2_on =
-          is_state('binary_sensor.fp2_presence_sensor_living_room', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_bed', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_workshop', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_kitchen', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_lobby', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_bathroom', 'on')
-          or is_state('binary_sensor.fp2_presence_sensor_shower', 'on') -%}
+          {# Occupied FP2 zones, from sensor.ai_zone_map. main_room is left out,
+             as in the original zone list. #}
+          {%- set fp2_on = (state_attr('sensor.ai_zone_map', 'fp2_zones') or {}).items()
+               | rejectattr('1', 'eq', 'main_room') | map(attribute='0')
+               | select('is_state', 'on') | list | count > 0 -%}
           {%- set solo = j_wifi and not m_wifi -%}
           {%- set sustained = is_state('sensor.ai_sustained_solo_zone', 'on') -%}
           {%- set w1 = states('input_number.ai_wifi_score_primary') | int(30) -%}
