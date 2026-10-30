@@ -52,6 +52,7 @@ PYSCRIPT_FILES = {
     "common_utilities.py": "core",
     "entity_history.py": "core",
     "memory.py": "core",
+    "person_phones.py": "core",
     "satellite_idle_reset.py": "core",
     "state_bridge.py": "core",
     "system_health.py": "core",

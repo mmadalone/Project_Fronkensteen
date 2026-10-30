@@ -9,7 +9,7 @@ Queries the HA recorder database (read-only) for historical FP2 zone transitions
 | `pyscript.presence_extract_transitions` | `lookback_days` (int, default 0 = helper), `min_confidence` (float, default 0.1) | `{status, op, transitions, patterns, zones_seen, total_states, elapsed_ms}` | Extract zone transitions from recorder DB, build frequency tables, store to L2. |
 | `pyscript.presence_predict_next` | `current_zone` (str, required), `time_bucket` (str, auto-detected), `day_type` (str, auto-detected) | `{status, current_zone, time_bucket, day_type, predictions: [{zone, probability, avg_eta_minutes}], confidence, sample_count}` | Predict next zone from frequency table. Returns probability distribution. |
 | `pyscript.presence_rebuild_patterns` | (none) | `{status, op, deleted, transitions, patterns, zones_seen, total_states, elapsed_ms}` | Full rebuild: delete old patterns, re-extract from recorder, re-store. Guards against concurrent rebuilds. |
-| `pyscript.sleep_detect_log` | (none) | `{status, op, duration_min, confidence}` | Log sleep detection event to L2 with duration and confidence scoring (bed presence + phone charging + zone absence). |
+| `pyscript.sleep_detect_log` | (none) | `{status, op, duration_min, confidence}` | Log sleep detection event to L2 with duration and confidence scoring (bed presence + any person's phone charging, via `sensor.ai_person_phones` + zone absence). |
 | `pyscript.meal_passive_log` | (none) | `{status, op, meal_type, ...}` | Log passive meal detection to L2. Determines meal type from time of day. |
 
 All services use `supports_response="only"`.

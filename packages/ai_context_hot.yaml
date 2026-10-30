@@ -4,7 +4,7 @@
 # Architecture spec: voice_context_architecture.md § "Layer 1 — Hot Context"
 # Provides: sensor.ai_hot_context — text block for all agent system prompts
 # Usage in agent prompts: {{ state_attr('sensor.ai_hot_context', 'context') }}
-# Deployed: 2026-02-28 | Updated: 2026-03-03 (Task 20 — Focus/meal line)
+# Deployed: 2026-02-28 | Updated: 2026-10-30 (next alarm from each person's phone, person_phones.py)
 # =============================================================================
 
 # ── STATIC USER PROFILE (Shared / Generic) ────────────────────────────────────
@@ -388,20 +388,32 @@ template:
               {%- set ns.lines = ns.lines + ["Tomorrow's weather: " ~ tw] -%}
             {%- endif -%}
 
-            {# ── NEXT ALARM (phone: madaringer) ── #}
-            {%- set alarm_ts = states('sensor.madaphone_next_alarm') -%}
-            {%- if alarm_ts not in ['unavailable', 'unknown', 'none', ''] -%}
-              {%- set alarm_dt = as_local(as_datetime(alarm_ts)) -%}
-              {%- set today_s = now().strftime('%Y-%m-%d') -%}
-              {%- set tomorrow_s = (now() + timedelta(days=1)).strftime('%Y-%m-%d') -%}
-              {%- if alarm_dt.strftime('%Y-%m-%d') == today_s -%}
-                {%- set alarm_lbl = 'today ' ~ alarm_dt.strftime('%-I:%M %p') -%}
-              {%- elif alarm_dt.strftime('%Y-%m-%d') == tomorrow_s -%}
-                {%- set alarm_lbl = 'tomorrow ' ~ alarm_dt.strftime('%-I:%M %p') -%}
-              {%- else -%}
-                {%- set alarm_lbl = alarm_dt.strftime('%A %-I:%M %p') -%}
+            {# ── NEXT ALARM — each person's phone (sensor.ai_person_phones, person_phones.py) ── #}
+            {# One alarm keeps the plain line; two or more name whose alarm each is. #}
+            {%- set alarm_ns = namespace(items=[]) -%}
+            {%- for ph in state_attr('sensor.ai_person_phones', 'phones') | default([], true) -%}
+              {%- set alarm_ts = states(ph.next_alarm) if ph.next_alarm is defined else '' -%}
+              {%- if alarm_ts not in ['unavailable', 'unknown', 'none', ''] -%}
+                {%- set alarm_dt = as_local(as_datetime(alarm_ts)) -%}
+                {%- set today_s = now().strftime('%Y-%m-%d') -%}
+                {%- set tomorrow_s = (now() + timedelta(days=1)).strftime('%Y-%m-%d') -%}
+                {%- if alarm_dt.strftime('%Y-%m-%d') == today_s -%}
+                  {%- set alarm_lbl = 'today ' ~ alarm_dt.strftime('%-I:%M %p') -%}
+                {%- elif alarm_dt.strftime('%Y-%m-%d') == tomorrow_s -%}
+                  {%- set alarm_lbl = 'tomorrow ' ~ alarm_dt.strftime('%-I:%M %p') -%}
+                {%- else -%}
+                  {%- set alarm_lbl = alarm_dt.strftime('%A %-I:%M %p') -%}
+                {%- endif -%}
+                {%- set who = state_attr(ph.person, 'friendly_name') | default(ph.person, true) -%}
+                {%- set alarm_ns.items = alarm_ns.items + [[who, alarm_lbl]] -%}
               {%- endif -%}
-              {%- set ns.lines = ns.lines + ['Next alarm: ' ~ alarm_lbl ~ '.'] -%}
+            {%- endfor -%}
+            {%- if alarm_ns.items | count == 1 -%}
+              {%- set ns.lines = ns.lines + ['Next alarm: ' ~ alarm_ns.items[0][1] ~ '.'] -%}
+            {%- else -%}
+              {%- for item in alarm_ns.items -%}
+                {%- set ns.lines = ns.lines + ['Next alarm (' ~ item[0] ~ '): ' ~ item[1] ~ '.'] -%}
+              {%- endfor -%}
             {%- endif -%}
 
             {# ── SCHEDULE — Calendar + Email (Task 18c + Gap 1 per-person + Gap 2 email stale) ── #}

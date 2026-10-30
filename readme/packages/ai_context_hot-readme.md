@@ -28,6 +28,7 @@ This package reads from a wide range of entities across the system:
 - **Identity:** `sensor.occupancy_mode`, `sensor.identity_confidence_*`, identity helpers
 - **Media:** Music Assistant players, Sonos players, voice PE ESP players, MadTeeVee (Kodi)
 - **Weather:** `weather.forecast_home` (Met.no)
+- **Next alarm:** `sensor.ai_person_phones` (`pyscript/person_phones.py`) — each person's Companion App `next_alarm` sensor; with two or more alarms, each line names the person
 - **Calendar:** `input_text.ai_calendar_today_summary`, `input_text.ai_calendar_tomorrow_summary`
 - **Email:** `input_number.ai_email_priority_count`
 - **Focus:** `sensor.workshop_hours_today`, `input_boolean.ai_focus_mode`, `input_datetime.ai_last_meal_time`

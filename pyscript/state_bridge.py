@@ -174,6 +174,8 @@ _STARTUP_SENSORS = [
     # Radio Klara now-playing awareness (radio_klara.py)
     ("sensor.ai_radio_klara_status", "idle", "mdi:radio", "AI Radio Klara Status"),
     ("sensor.ai_radio_klara_now_playing", "idle", "mdi:radio-tower", "AI Radio Klara Now Playing"),
+    # Each person's Companion App phone sensors (person_phones.py)
+    ("sensor.ai_person_phones", "0", "mdi:cellphone-link", "AI Person Phones"),
 ]
 
 

@@ -1126,12 +1126,18 @@ async def sleep_detect_log():
         elif duration_min > 120:  # 2+ hours
             confidence += 15
 
-        # Phone charging bonus
+        # Phone charging bonus: any person's phone (found by person_phones.py)
         try:
-            if state.get("binary_sensor.madaphone_is_charging") == "on":  # noqa: F821
-                confidence += 10
+            phones = state.getattr("sensor.ai_person_phones") or {}  # noqa: F821
         except Exception:
-            pass
+            phones = {}
+        for charging_entity in phones.get("is_charging_entities") or []:
+            try:
+                if state.get(charging_entity) == "on":  # noqa: F821
+                    confidence += 10
+                    break
+            except Exception:
+                pass
 
         # Other zone absence bonus
         other_zones = [

@@ -10,10 +10,12 @@
 #   automation.ai_phone_call_start          — detect call start
 #   automation.ai_phone_call_end            — detect call end + flush
 #
-# Sensors: sensor.madaphone_phone_state (idle / ringing / offhook)
-# Dependencies: pyscript/tts_queue.py (deferred queue + flush event)
+# Sensors: every person's Companion App phone_state sensor (idle / ringing /
+#          offhook), listed in sensor.ai_person_phones by person_phones.py
+# Dependencies: pyscript/person_phones.py (finds each person's phone)
+#               pyscript/tts_queue.py (deferred queue + flush event)
 #               pyscript/state_bridge.py (set_sensor_value service)
-# Deployed: 2026-03-04 | Updated: 2026-03-29 (Session 8 — boolean→sensor migration)
+# Deployed: 2026-03-04 | Updated: 2026-10-30 (phones discovered, no hardcoded phone)
 # =============================================================================
 
 # ── INPUT HELPERS ────────────────────────────────────────────────────────────
@@ -26,15 +28,16 @@ automation:
   # ── CALL START ──────────────────────────────────────────────────────────
   - id: ai_phone_call_start
     alias: "AI - Phone Call Start"
-    description: "Set phone call active when ringing or offhook"
+    description: "Set phone call active when any person's phone is ringing or offhook"
     mode: single
     triggers:
-      - trigger: state
-        entity_id: sensor.madaphone_phone_state
-        to: "ringing"
-      - trigger: state
-        entity_id: sensor.madaphone_phone_state
-        to: "offhook"
+      # Fires when the first phone enters a call.
+      - trigger: template
+        id: call_started
+        value_template: >-
+          {{ state_attr('sensor.ai_person_phones', 'phone_state_entities')
+             | default([], true) | select('is_state', ['ringing', 'offhook'])
+             | list | count > 0 }}
     conditions:
       - condition: state
         entity_id: sensor.ai_phone_call_active
@@ -50,15 +53,19 @@ automation:
   # ── CALL END ────────────────────────────────────────────────────────────
   - id: ai_phone_call_end
     alias: "AI - Phone Call End"
-    description: "Clear phone call active on idle, flush deferred TTS"
+    description: "Clear phone call active once no phone is in a call, flush deferred TTS"
     mode: single
     triggers:
-      - trigger: state
-        entity_id: sensor.madaphone_phone_state
-        from:
-          - "ringing"
-          - "offhook"
-        to: "idle"
+      # Fires when no phone is ringing or offhook and at least one is idle.
+      # Requiring idle keeps the old meaning: a phone that drops to
+      # unavailable mid-call does not end the call.
+      - trigger: template
+        id: call_ended
+        value_template: >-
+          {%- set phones = state_attr('sensor.ai_person_phones', 'phone_state_entities')
+                           | default([], true) -%}
+          {{ phones | select('is_state', ['ringing', 'offhook']) | list | count == 0
+             and phones | select('is_state', 'idle') | list | count > 0 }}
     conditions:
       - condition: state
         entity_id: sensor.ai_phone_call_active
