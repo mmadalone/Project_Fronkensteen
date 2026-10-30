@@ -1,0 +1,177 @@
+blueprint:
+  name: "Speaker Wake — Volume Pulse"
+  description: |
+    # Speaker Wake — Volume Pulse
+
+    SCRIPT: Wakes external speakers that drop into standby on silence or
+    quiet audio. Briefly raises a media player's volume (100% by default)
+    for a few seconds, then restores it — either to the volume it had
+    before the pulse, or to a fixed volume you choose.
+
+    Safeguards: does nothing if the player is off or unavailable; never
+    touches mute; refuses to run twice at once (a second run would save the
+    pulse volume as "current"); and if the remembered volume is already at
+    or above the pulse level — e.g. a previous run was interrupted mid-pulse
+    — it restores the fixed volume instead, so the player can't get stuck loud.
+
+    ### Recent changes
+    - **v1.0:** Initial version
+
+  domain: script
+  author: Madalone + Assistant
+  source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/script/speaker_wake_volume_pulse.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+
+  input:
+    # ===========================================================================
+    # ① TARGET
+    # ===========================================================================
+    target:
+      name: "① Target"
+      icon: mdi:speaker
+      description: The media player whose volume drives the external speakers.
+      collapsed: false
+      input:
+        media_player:
+          name: "Media player"
+          description: >-
+            Required. The player feeding the external speakers (e.g. Kodi).
+            Only players that support setting volume are listed.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: media_player
+                  supported_features:
+                    - media_player.MediaPlayerEntityFeature.VOLUME_SET
+
+    # ===========================================================================
+    # ② PULSE
+    # ===========================================================================
+    pulse:
+      name: "② Pulse"
+      icon: mdi:volume-high
+      description: How loud and how long the wake-up pulse is.
+      collapsed: false
+      input:
+        pulse_volume:
+          name: "Pulse volume"
+          description: >-
+            Volume used to wake the speakers. Must be loud enough to cross the
+            speakers' auto-wake threshold — 100% is the safe choice.
+          default: 100
+          selector:
+            number:
+              min: 1
+              max: 100
+              step: 1
+              unit_of_measurement: "%"
+              mode: slider
+
+        pulse_seconds:
+          name: "Pulse duration"
+          description: >-
+            How long to hold the pulse volume before restoring. Long enough
+            for the speakers to detect signal and wake, short enough not to
+            blast whatever is playing.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 60
+              step: 1
+              unit_of_measurement: seconds
+
+    # ===========================================================================
+    # ③ RESTORE
+    # ===========================================================================
+    restore:
+      name: "③ Restore"
+      icon: mdi:volume-medium
+      description: What volume to return to after the pulse.
+      collapsed: true
+      input:
+        restore_mode:
+          name: "Restore mode"
+          description: >-
+            "Remember" returns to whatever volume the player had right before
+            the pulse. "Fixed" always returns to the fixed volume below.
+            Remember mode also uses the fixed volume as a fallback when the
+            current volume can't be read, or when it is already at or above
+            the pulse volume (a stranded pulse from an interrupted run).
+          default: remember
+          selector:
+            select:
+              mode: list
+              options:
+                - label: "Remember current volume"
+                  value: remember
+                - label: "Fixed volume"
+                  value: fixed
+
+        fixed_volume:
+          name: "Fixed volume"
+          description: >-
+            Volume to restore in "Fixed" mode, and the fallback for "Remember"
+            mode.
+          default: 40
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              unit_of_measurement: "%"
+              mode: slider
+
+mode: single
+max_exceeded: silent
+
+variables:
+  media_player: !input media_player
+  pulse_volume: !input pulse_volume
+  pulse_seconds: !input pulse_seconds
+  restore_mode: !input restore_mode
+  fixed_volume: !input fixed_volume
+  _pulse_level: "{{ (pulse_volume | float(100)) / 100 }}"
+  _fixed_level: "{{ (fixed_volume | float(40)) / 100 }}"
+
+sequence:
+  - alias: "Bail if no player configured or player can't take a volume change"
+    if:
+      - condition: template
+        value_template: >-
+          {{ media_player == ''
+             or states(media_player) in ['off', 'unavailable', 'unknown'] }}
+    then:
+      - stop: "Media player not configured, off, or unavailable — nothing to pulse."
+
+  - alias: "Capture restore volume — remembered, or fixed if unreadable/stranded"
+    variables:
+      _current: "{{ state_attr(media_player, 'volume_level') }}"
+      _restore_level: >-
+        {% if restore_mode == 'remember'
+              and _current is number
+              and _current < _pulse_level %}
+          {{ _current }}
+        {% else %}
+          {{ _fixed_level }}
+        {% endif %}
+
+  - alias: "Pulse volume up — loud enough to wake the speakers"
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ media_player }}"
+    data:
+      volume_level: "{{ _pulse_level }}"
+
+  - alias: "Hold the pulse while the speakers wake"
+    delay:
+      seconds: "{{ pulse_seconds | int(3) }}"
+
+  - alias: "Restore volume"
+    action: media_player.volume_set
+    target:
+      entity_id: "{{ media_player }}"
+    data:
+      volume_level: "{{ _restore_level | float(_fixed_level | float(0.4)) }}"

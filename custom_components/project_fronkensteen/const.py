@@ -263,6 +263,7 @@ BLUEPRINT_SCRIPT_FILES = {
     "notification_replay.yaml": "core",
     "refcount_bypass_claim.yaml": "core",
     "refcount_bypass_release.yaml": "core",
+    "speaker_wake_volume_pulse.yaml": "core",
     # Voice Pipeline
     "llm_voice_script.yaml": "voice",
     "voice_calendar_event.yaml": "voice",
