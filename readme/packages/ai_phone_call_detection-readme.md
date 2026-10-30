@@ -20,7 +20,7 @@ Detects active phone calls via the HA Companion App phone state sensor and defer
 
 ## Dependencies
 
-- **Sensor:** `sensor.madaringer_phone_state` (HA Companion App — states: idle, ringing, offhook)
+- **Sensor:** `sensor.madaphone_phone_state` (HA Companion App — states: idle, ringing, offhook)
 - **Pyscript:** `pyscript/tts_queue.py` — provides `pyscript.tts_queue_flush_deferred` service and deferred queue logic
 - **Helper file:** `helpers_input_boolean.yaml` (both input booleans defined there)
 

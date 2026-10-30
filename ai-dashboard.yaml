@@ -506,11 +506,11 @@ views:
       state_color: true
       columns: 4
       entities:
-      - entity: sensor.madaringer_battery_level
+      - entity: sensor.madaphone_battery_level
         name: Battery
-      - entity: sensor.madaringer_battery_state
+      - entity: sensor.madaphone_battery_state
         name: State
-      - entity: binary_sensor.madaringer_is_charging
+      - entity: binary_sensor.madaphone_is_charging
         name: Charging
       - entity: sensor.ai_phone_call_active
         name: On Call

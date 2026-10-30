@@ -389,7 +389,7 @@ template:
             {%- endif -%}
 
             {# ── NEXT ALARM (phone: madaringer) ── #}
-            {%- set alarm_ts = states('sensor.madaringer_next_alarm') -%}
+            {%- set alarm_ts = states('sensor.madaphone_next_alarm') -%}
             {%- if alarm_ts not in ['unavailable', 'unknown', 'none', ''] -%}
               {%- set alarm_dt = as_local(as_datetime(alarm_ts)) -%}
               {%- set today_s = now().strftime('%Y-%m-%d') -%}

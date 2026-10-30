@@ -10,7 +10,7 @@
 #   automation.ai_phone_call_start          — detect call start
 #   automation.ai_phone_call_end            — detect call end + flush
 #
-# Sensors: sensor.madaringer_phone_state (idle / ringing / offhook)
+# Sensors: sensor.madaphone_phone_state (idle / ringing / offhook)
 # Dependencies: pyscript/tts_queue.py (deferred queue + flush event)
 #               pyscript/state_bridge.py (set_sensor_value service)
 # Deployed: 2026-03-04 | Updated: 2026-03-29 (Session 8 — boolean→sensor migration)
@@ -30,10 +30,10 @@ automation:
     mode: single
     triggers:
       - trigger: state
-        entity_id: sensor.madaringer_phone_state
+        entity_id: sensor.madaphone_phone_state
         to: "ringing"
       - trigger: state
-        entity_id: sensor.madaringer_phone_state
+        entity_id: sensor.madaphone_phone_state
         to: "offhook"
     conditions:
       - condition: state
@@ -54,7 +54,7 @@ automation:
     mode: single
     triggers:
       - trigger: state
-        entity_id: sensor.madaringer_phone_state
+        entity_id: sensor.madaphone_phone_state
         from:
           - "ringing"
           - "offhook"

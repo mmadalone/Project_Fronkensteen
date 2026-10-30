@@ -1128,7 +1128,7 @@ async def sleep_detect_log():
 
         # Phone charging bonus
         try:
-            if state.get("binary_sensor.madaringer_is_charging") == "on":  # noqa: F821
+            if state.get("binary_sensor.madaphone_is_charging") == "on":  # noqa: F821
                 confidence += 10
         except Exception:
             pass
