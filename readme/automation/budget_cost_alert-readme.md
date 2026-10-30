@@ -52,7 +52,7 @@ Notify and optionally auto-downgrade when daily cost exceeds configurable thresh
 - Optional TTS announcement via `tts_queue_speak` with presence routing
 - TTS uses HA Cloud TTS by default (free, always available even when ElevenLabs budget is exhausted)
 - Auto-downgrade on critical: activates `ai_budget_fallback_active` to switch all satellites to fallback pipelines
-- Cooldown gate prevents repeated alerts of the same level
+- Cooldown gate holds back a warning sent too soon after the last alert; critical alerts always go through
 - Cost percentage calculated against `input_number.ai_budget_daily_cost_limit`
 - L2 memory logging on auto-downgrade for audit trail
 
@@ -97,7 +97,7 @@ Notify and optionally auto-downgrade when daily cost exceeds configurable thresh
 | Input | Default | Description |
 |-------|---------|-------------|
 | `auto_downgrade` | `false` | Auto-activate budget fallback mode on critical threshold |
-| `cooldown_minutes` | `30` | Minimum minutes between repeated alerts of the same level |
+| `cooldown_minutes` | `30` | Minimum minutes after the last alert before another warning is sent. Critical alerts always go through |
 
 </details>
 
@@ -105,7 +105,7 @@ Notify and optionally auto-downgrade when daily cost exceeds configurable thresh
 
 - **Mode:** `single` -- prevents overlapping alert processing
 - **Trigger type:** `numeric_state` with `above:` -- fires when sensor crosses the threshold
-- **Cooldown:** Checks `this.attributes.last_triggered` to calculate elapsed time since last alert
+- **Cooldown:** Checks `this.attributes.last_triggered` to calculate elapsed time since the last alert. A critical alert skips the check, so an earlier warning can't block the auto-downgrade
 - **TTS voice:** Defaults to `tts.home_assistant_cloud` -- free and always available even when the ElevenLabs budget that triggered the alert is itself exhausted
 - **TTS priority:** Set to 1 (high) -- alerts should not be suppressed by lower-priority queue items
 - **Auto-downgrade guard:** Only activates if `ai_budget_fallback_active` is currently OFF (prevents duplicate activation)

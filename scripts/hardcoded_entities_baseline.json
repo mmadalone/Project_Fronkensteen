@@ -12,9 +12,6 @@
   "automation/bedtime_winddown.yaml": [
     "sensor.madteevee_pvr_channel"
   ],
-  "automation/budget_cost_alert.yaml": [
-    "automation.this"
-  ],
   "automation/calendar_alarm.yaml": [
     "script.refcount_bypass_claim",
     "script.refcount_bypass_release"

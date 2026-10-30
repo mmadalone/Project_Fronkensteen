@@ -6,6 +6,17 @@ blueprint:
     Warning = persistent notification + optional TTS.
     Critical = same + optional auto-downgrade (activates budget fallback).
     Cooldown prevents alert spam during sustained high-cost periods.
+
+    ### Recent changes
+    - **v1.1:** Six inputs were used in templates without being declared as
+      variables, so the alert reported a cost of €0, never sent the push
+      notification, spoke even with TTS turned off, ignored the cooldown
+      setting and never auto-downgraded. They are declared now.
+    - **v1.1:** The cooldown works. It read the last alert time from
+      `automation.this`, which is not an entity, so it never held anything
+      back. It now uses `this.attributes.last_triggered`, and a critical
+      alert always goes through, so a recent warning can't block the
+      auto-downgrade.
   domain: automation
   author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/budget_cost_alert.yaml
@@ -101,7 +112,9 @@ blueprint:
             boolean: {}
         cooldown_minutes:
           name: Alert Cooldown (minutes)
-          description: "Minimum time between repeated alerts of the same level."
+          description: >-
+            Minimum time after the last alert before another warning is sent.
+            Critical alerts always go through.
           default: 30
           selector:
             number:
@@ -112,6 +125,14 @@ blueprint:
 mode: single
 
 variables:
+  # Inputs used inside templates must be declared here, before the variables
+  # that read them.
+  cost_entity: !input cost_entity
+  cost_threshold_critical: !input cost_threshold_critical
+  cooldown_minutes: !input cooldown_minutes
+  auto_downgrade: !input auto_downgrade
+  notify_target: !input notify_target
+  tts_announce: !input tts_announce
   _cost: "{{ states(cost_entity) | float(0) }}"
   _limit: "{{ states('input_number.ai_budget_daily_cost_limit') | float(5) }}"
   _pct: "{{ ((_cost / [_limit, 0.01] | max) * 100) | round(0) }}"
@@ -128,11 +149,13 @@ triggers:
     id: critical
 
 conditions:
-  # Cooldown gate — skip if last alert was too recent
+  # Cooldown gate — hold back a warning sent too soon after the last alert.
+  # Critical alerts always pass, so an earlier warning can't block the
+  # auto-downgrade.
   - condition: template
     value_template: >-
-      {% set last = state_attr('automation.this', 'last_triggered') %}
-      {% if last is none %}true
+      {% set last = this.attributes.last_triggered %}
+      {% if trigger.id == 'critical' or last is none %}true
       {% else %}
         {{ (now() - last).total_seconds() > (cooldown_minutes | int(30)) * 60 }}
       {% endif %}
