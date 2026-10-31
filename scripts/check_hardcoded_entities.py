@@ -30,6 +30,9 @@ WHAT IS ALLOWED
     scripts and automations defined in packages
   - ALLOWLIST below: IDs that are the same on every install that has them,
     each with its reason
+  - CONVENTION_SCRIPTS below: script IDs that blueprints default to, created
+    from a named blueprint under exactly that ID. INSTALL.md must list each
+    one, or the check fails
 
   Hardcoded IDs that predate this check are grandfathered in
   scripts/hardcoded_entities_baseline.json, per file. The check fails on any
@@ -74,6 +77,19 @@ ALLOWLIST: dict[str, str] = {
     "stt.home_assistant_cloud": "fixed entity ID of Home Assistant Cloud STT",
     "update.home_assistant_core_update": "Home Assistant's own Core update entity",
     "media_player.unknown": "tts_queue.py sentinel for an unresolved speaker, not an entity",
+}
+
+# Project convention: blueprint inputs default to the script that the install
+# guide (INSTALL.md, Step 12) tells you to create from this blueprint, under
+# exactly this ID.
+CONVENTION_SCRIPTS: dict[str, str] = {
+    "script.refcount_bypass_claim": "refcount_bypass_claim.yaml",
+    "script.refcount_bypass_release": "refcount_bypass_release.yaml",
+    "script.wake_guard_tts_speak": "voice_wake_guard_tts_router.yaml",
+    "script.wake_guard_stop_cleanup": "voice_wake_guard_cleanup.yaml",
+    "script.voice_play_bedtime_audiobook": "voice_play_bedtime_audiobook.yaml",
+    "script.voice_play_media": "voice_play_bedtime_audiobook.yaml, second instance",
+    "script.voice_memory_tool": "luuquangvu memory_tool_full_llm.yaml, third-party",
 }
 
 # "<domain>.<service>" looks like an entity ID. A real entity is almost never
@@ -275,7 +291,7 @@ def scan(repo: Path) -> dict[str, dict[str, int]]:
                 entity_id, obj = m.group(0), m.group("obj")
                 if (obj.startswith("ai_") or obj.endswith("_") or obj in FILE_EXTENSIONS
                         or obj in SERVICE_NAMES or entity_id in owned
-                        or entity_id in ALLOWLIST):
+                        or entity_id in ALLOWLIST or entity_id in CONVENTION_SCRIPTS):
                     continue
                 # Folded YAML scalars join lines, so find the line in the source.
                 line = next((n for n in range(first, min(last, len(lines)) + 1)
@@ -312,8 +328,14 @@ def main() -> int:
     stale = [(f, eid) for f, ids in sorted(baseline.items())
              for eid in ids if eid not in found.get(f, {})]
 
+    install_guide = (repo / "INSTALL.md").read_text(encoding="utf-8")
+    # Backticked, so script.x does not count as documenting script.x_y
+    undocumented = [s for s in CONVENTION_SCRIPTS if f"`{s}`" not in install_guide]
+
     for f, eid, line in new:
         print(f"FAIL {f}:{line}: hardcoded entity ID {eid}")
+    for s in undocumented:
+        print(f"FAIL INSTALL.md: convention script {s} is not documented")
     for f, eid in stale:
         print(f"FAIL {f}: baseline lists {eid}, which no longer occurs")
 
@@ -325,7 +347,10 @@ def main() -> int:
     if stale:
         print(f"\n{len(stale)} fixed ID(s) still in the baseline. Run: "
               f"python3 scripts/check_hardcoded_entities.py --update-baseline")
-    if new or stale:
+    if undocumented:
+        print(f"\n{len(undocumented)} convention script(s) missing from INSTALL.md "
+              f"(Step 12, 'Script IDs Other Blueprints Expect').")
+    if new or stale or undocumented:
         return 1
 
     print(f"No new hardcoded entity IDs ({grandfathered} grandfathered in "

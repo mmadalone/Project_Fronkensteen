@@ -1,8 +1,4 @@
 {
-  "automation/alexa_on_demand_briefing.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
   "automation/assist_tts_reroute.yaml": [
     "input_boolean.assist_tts_reroute_enabled"
   ],
@@ -12,31 +8,15 @@
   "automation/bedtime_winddown.yaml": [
     "sensor.madteevee_pvr_channel"
   ],
-  "automation/calendar_alarm.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
   "automation/contact_history_summarizer.yaml": [
     "sensor.ha_text_ai"
   ],
   "automation/conversation_summarizer.yaml": [
     "sensor.ha_text_ai"
   ],
-  "automation/email_follow_me.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
-  "automation/email_priority_filter.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
   "automation/listen_history.yaml": [
     "media_player.bathroom_ma",
     "media_player.workshop_ma"
-  ],
-  "automation/mass_llm_enhanced_assist_blueprint_en.yaml": [
-    "script.voice_play_bedtime_audiobook",
-    "script.voice_play_media"
   ],
   "automation/media_tracking.yaml": [
     "sensor.radarr_queue",
@@ -45,40 +25,11 @@
   "automation/music_taste_rebuild.yaml": [
     "sensor.ha_text_ai_deepseek_chat"
   ],
-  "automation/notification_follow_me.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
-  "automation/phone_charge_reminder.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
   "automation/proactive_bedtime_escalation.yaml": [
-    "script.voice_memory_tool",
     "sensor.madteevee_pvr_channel"
   ],
-  "automation/reactive_banter.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
-  "automation/system_recovery_alert.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
   "automation/theatrical_mode.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release",
     "tts.google_en_com"
-  ],
-  "automation/voice_handoff.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
-  ],
-  "automation/wake-up-guard.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release",
-    "script.wake_guard_stop_cleanup",
-    "script.wake_guard_tts_speak"
   ],
   "automation/watch_history.yaml": [
     "media_player.madteevee",
@@ -143,10 +94,6 @@
   ],
   "pyscript/tts_queue.py": [
     "tts.elevenlabs_custom_tts"
-  ],
-  "script/notification_replay.yaml": [
-    "script.refcount_bypass_claim",
-    "script.refcount_bypass_release"
   ],
   "script/voice_wake_guard_tts_router.yaml": [
     "tts.elevenlabs_custom_tts"

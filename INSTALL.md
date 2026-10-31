@@ -454,6 +454,20 @@ Start with these core blueprints. Add more as you explore:
 | `privacy_gate_hysteresis.yaml` | Per-person privacy gating (1 per person per tier) | Medium |
 | `sqlite_vec_recompile.yaml` | Auto-recompile vec0.so after HA Core updates (if using sqlite-vec) | Medium |
 
+### Script IDs Other Blueprints Expect
+
+Some blueprints default to a script by its entity ID. Create each script below from the listed blueprint and give it exactly this ID, or set the matching input in every blueprint that uses it. A script's entity ID comes from the name you give it (for example, "Refcount Bypass Claim" becomes `script.refcount_bypass_claim`); you can also change it in the script's settings.
+
+| Script ID | Create from | Used by |
+|-----------|-------------|---------|
+| `script.refcount_bypass_claim` | `refcount_bypass_claim.yaml` | 12 blueprints that speak through the TTS queue (`notification_follow_me.yaml`, `voice_handoff.yaml`, `wake-up-guard.yaml`, …) |
+| `script.refcount_bypass_release` | `refcount_bypass_release.yaml` | The same 12 blueprints |
+| `script.wake_guard_tts_speak` | `voice_wake_guard_tts_router.yaml` | `wake-up-guard.yaml` |
+| `script.wake_guard_stop_cleanup` | `voice_wake_guard_cleanup.yaml` | `wake-up-guard.yaml` |
+| `script.voice_play_bedtime_audiobook` | `voice_play_bedtime_audiobook.yaml` | `mass_llm_enhanced_assist_blueprint_en.yaml` |
+| `script.voice_play_media` | `voice_play_bedtime_audiobook.yaml` (a second instance, for any media) | `mass_llm_enhanced_assist_blueprint_en.yaml` |
+| `script.voice_memory_tool` | [Memory Tool](https://github.com/luuquangvu/tutorials/blob/main/memory_tool_full_llm.yaml) by luuquangvu (third-party; import it first) | `proactive_bedtime_escalation.yaml` |
+
 See the [readme/](readme/) directory for detailed documentation on each blueprint.
 
 ---
