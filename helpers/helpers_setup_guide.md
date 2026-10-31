@@ -104,8 +104,6 @@ Also configure `pyscript/tts_speaker_config.json` — the single source of truth
 
 | Helper | Type | What to Set |
 |--------|------|-------------|
-| `input_select.ai_sleep_detection_sensor` | select | Your bed presence sensor |
-| `input_select.ai_sleep_lights_sensor` | select | Presence sensor for sleep lights |
 | `input_select.ai_sleep_lights_light_picker` | select | Light entity for sleep lights |
 | `input_boolean.ai_fp2_zone_*_enabled` | boolean | Enable/disable zones for presence tracking (8 zones) |
 

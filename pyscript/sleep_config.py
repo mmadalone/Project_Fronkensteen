@@ -1,57 +1,36 @@
-"""Sleep Config — Entity Picker Services for Sleep Lights and Detection.
+"""Sleep Config — Entity Picker Services for Sleep Lights.
 
 Provides add/remove picker services for managing sleep light targets stored
-in L2 memory, and populates dropdown options for sleep detection sensors
-and light entity selectors from FP2 presence sensors and the light registry.
+in L2 memory, and populates the light picker dropdown from the light registry.
 """
 import asyncio
 import json
 from typing import Any
 
-from shared_utils import build_result_entity_name, load_entity_config
+from shared_utils import build_result_entity_name
 
 # =============================================================================
-# Sleep Config — Entity Picker Services for Sleep Lights & Detection
+# Sleep Config — Entity Picker Services for Sleep Lights
 # =============================================================================
 # Provides Add/Remove picker pattern for sleep light targets (stored in L2)
-# and populates sensor pickers for sleep detection/lights.
+# and populates the light picker dropdown.
 #
 # Services:
 #   pyscript.sleep_lights_add_target    — add light from picker to targets
 #   pyscript.sleep_lights_remove_target — remove light from targets
 #   pyscript.sleep_lights_load_display  — refresh target display sensor
-#   pyscript.sleep_config_populate_pickers — refresh dropdown options
+#   pyscript.sleep_config_populate_pickers — refresh the light picker options
 #
 # Dependencies:
 #   pyscript/memory.py (L2: memory_get, memory_set)
 #   input helpers defined in packages/ai_sleep_lights.yaml
-#   input helpers defined in packages/ai_sleep_detection.yaml
-# Deployed: 2026-03-04
+# Deployed: 2026-03-04 | Updated: 2026-10-31 (unused sleep-sensor pickers removed)
 # =============================================================================
 
 DISPLAY_ENTITY = "sensor.ai_sleep_lights_display"
 L2_KEY = "sleep_lights:targets"
 L2_SCOPE = "household"
 L2_TAGS = "sleep lights targets config"
-
-def _get_fp2_sensors() -> list:
-    """Get FP2 sensor entities from config (keys of fp2_zones map)."""
-    cfg = load_entity_config()
-    fp2 = cfg.get("fp2_zones")
-    if not fp2:
-        log.warning("sleep_config: fp2_zones not found in entity_config.yaml")  # noqa: F821
-        return []
-    return list(fp2.keys())
-
-
-def _get_bed_sensor() -> str:
-    """Resolve the bed zone sensor from fp2_zones config."""
-    cfg = load_entity_config()
-    fp2 = cfg.get("fp2_zones", {})
-    for entity_id, zone in fp2.items():
-        if zone == "bed":
-            return entity_id
-    return ""
 
 # ── State ─────────────────────────────────────────────────────────────────────
 _targets: list = []     # current sleep light entity targets
@@ -207,7 +186,7 @@ async def sleep_config_populate_pickers():
     """
     yaml
     name: Sleep Config Populate Pickers
-    description: Refresh all sleep-related dropdown options.
+    description: Refresh the sleep lights light picker options.
     """
     if _is_test_mode():
         log.info("sleep_config [TEST]: would populate sleep config pickers")  # noqa: F821
@@ -227,26 +206,6 @@ async def sleep_config_populate_pickers():
         )
     except Exception as exc:
         log.warning(f"sleep_config: light picker populate failed: {exc}")  # noqa: F821
-
-    # Sleep lights sensor picker
-    try:
-        await service.call(  # noqa: F821
-            "input_select", "set_options",
-            entity_id="input_select.ai_sleep_lights_sensor",
-            options=_get_fp2_sensors(),
-        )
-    except Exception as exc:
-        log.warning(f"sleep_config: lights sensor picker populate failed: {exc}")  # noqa: F821
-
-    # Sleep detection sensor picker
-    try:
-        await service.call(  # noqa: F821
-            "input_select", "set_options",
-            entity_id="input_select.ai_sleep_detection_sensor",
-            options=_get_fp2_sensors(),
-        )
-    except Exception as exc:
-        log.warning(f"sleep_config: detection sensor picker populate failed: {exc}")  # noqa: F821
 
     return {"status": "ok"}
 
@@ -268,31 +227,6 @@ async def _sleep_config_startup():
 
     # Populate pickers
     await sleep_config_populate_pickers()
-
-    # Set default sensor selections if empty/unknown
-    bed_sensor = _get_bed_sensor()
-    if bed_sensor:
-        try:
-            det_val = state.get("input_select.ai_sleep_detection_sensor") or ""  # noqa: F821
-            if det_val in ("unknown", "unavailable", ""):
-                await service.call(  # noqa: F821
-                    "input_select", "select_option",
-                    entity_id="input_select.ai_sleep_detection_sensor",
-                    option=bed_sensor,
-                )
-        except Exception:
-            pass
-
-        try:
-            lights_val = state.get("input_select.ai_sleep_lights_sensor") or ""  # noqa: F821
-            if lights_val in ("unknown", "unavailable", ""):
-                await service.call(  # noqa: F821
-                    "input_select", "select_option",
-                    entity_id="input_select.ai_sleep_lights_sensor",
-                    option=bed_sensor,
-                )
-        except Exception:
-            pass
 
     try:
         lp_val = state.get("input_select.ai_sleep_lights_light_picker") or ""  # noqa: F821

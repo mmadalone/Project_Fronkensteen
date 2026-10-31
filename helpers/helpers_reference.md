@@ -394,8 +394,6 @@ Detects when the user falls asleep using presence sensors.
 |-----------|------|------|---------|---------|
 | `input_boolean.ai_sleep_detection_enabled` | boolean | E | Master kill switch. | ON |
 | `input_boolean.ai_sleep_false_positive_flag` | boolean | E [system] | Set when the system suspects a false positive sleep detection. | OFF |
-| `input_select.ai_sleep_detection_sensor` | select | E [config] | Binary sensor used for sleep detection. Pick your bed presence sensor. | — |
-| `input_select.ai_sleep_lights_sensor` | select | E [config] | Presence sensor for automatic sleep lights. | — |
 | `input_select.ai_sleep_lights_light_picker` | select | E [config] | Light entity for sleep lights. | — |
 | `input_datetime.ai_sleep_start` | datetime | E [system] | When sleep was detected. | — |
 | `input_datetime.ai_sleep_end` | datetime | E [system] | When wake-up was detected. | — |

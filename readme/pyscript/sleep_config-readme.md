@@ -1,6 +1,6 @@
 # Sleep Config -- Entity Picker Services
 
-Provides add/remove picker services for managing sleep light targets stored in L2 memory, and populates dropdown options for sleep detection sensors and light entity selectors from FP2 presence sensors and the light registry. Part of the sleep management subsystem.
+Provides add/remove picker services for managing sleep light targets stored in L2 memory, and populates the light picker dropdown from the light registry. Part of the sleep management subsystem.
 
 ## Services
 
@@ -9,7 +9,7 @@ Provides add/remove picker services for managing sleep light targets stored in L
 | `pyscript.sleep_lights_add_target` | (none -- reads from picker helper) | `{status, added, count}` | Add light from `input_select.ai_sleep_lights_light_picker` to sleep light targets. Saves to L2. |
 | `pyscript.sleep_lights_remove_target` | (none -- reads from picker helper) | `{status, removed, count}` | Remove light from sleep light targets. Saves to L2. |
 | `pyscript.sleep_lights_load_display` | (none) | `{status, count}` | Refresh target display sensor from L2 memory. |
-| `pyscript.sleep_config_populate_pickers` | (none) | `{status}` | Refresh all sleep-related dropdown options: light picker (all available lights), lights sensor picker (FP2 sensors), detection sensor picker (FP2 sensors). |
+| `pyscript.sleep_config_populate_pickers` | (none) | `{status}` | Refresh the light picker options (all available lights). |
 
 All services use `supports_response="optional"`.
 
@@ -17,7 +17,7 @@ All services use `supports_response="optional"`.
 
 | Trigger | Function | Condition |
 |---------|----------|-----------|
-| `@time_trigger("startup")` | `_sleep_config_startup` | Load targets from L2, populate pickers, set default sensor selections if empty. 5s delay for entity readiness. |
+| `@time_trigger("startup")` | `_sleep_config_startup` | Load targets from L2, populate the light picker, select the first light if the picker is empty. 5s delay for entity readiness. |
 
 ## Key Functions
 
@@ -29,14 +29,12 @@ All services use `supports_response="optional"`.
 ## State Dependencies
 
 - `input_select.ai_sleep_lights_light_picker` -- Light entity picker dropdown
-- `input_select.ai_sleep_lights_sensor` -- FP2 sensor picker for sleep lights
-- `input_select.ai_sleep_detection_sensor` -- FP2 sensor picker for sleep detection
 - `input_boolean.ai_test_mode` -- Test mode toggle
 - `state.names(domain="light")` -- All available light entities (for picker population)
 
 ## Package Pairing
 
-Pairs with `packages/ai_sleep_lights.yaml` (light picker, sensor picker, targets) and `packages/ai_sleep_detection.yaml` (detection sensor picker). Display sensor: `sensor.ai_sleep_lights_display`.
+Pairs with `packages/ai_sleep_lights.yaml` (light picker, targets). Display sensor: `sensor.ai_sleep_lights_display`.
 
 ## Called By
 

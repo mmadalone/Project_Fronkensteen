@@ -1387,8 +1387,6 @@ views:
         name: Enabled
       - entity: input_boolean.ai_sleep_false_positive_flag
         name: Flag False Positive
-      - entity: input_select.ai_sleep_detection_sensor
-        name: Detection Sensor
       - entity: input_number.ai_sleep_min_duration
         name: Min Duration (min)
   - type: vertical-stack

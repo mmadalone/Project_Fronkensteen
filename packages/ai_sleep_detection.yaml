@@ -13,15 +13,13 @@
 #   input_boolean.ai_sleep_false_positive_flag    — manual FP override
 #   input_datetime.ai_sleep_window_start          — detection window start
 #   input_datetime.ai_sleep_window_end            — detection window end
-#   input_select.ai_sleep_detection_sensor        — configurable presence sensor
-#   automation.ai_sleep_detect_start              — presence → sleep
-#   automation.ai_sleep_detect_end                — presence off → wake
-#   automation.ai_sleep_false_positive            — FP override handler
+#   AI - Sleep Detection automation               — one sleep_detection.yaml
+#                                                   blueprint instance (see below)
 #
-# Sensors: configurable via input_select.ai_sleep_detection_sensor
+# Sensors: the blueprint instance's presence_entity input (the bed zone)
 # Dependencies: pyscript/presence_patterns.py (sleep_detect_log service)
-#               pyscript/sleep_config.py (picker population)
-# Deployed: 2026-03-04
+# Deployed: 2026-03-04 | Updated: 2026-10-31 (unused sensor picker removed; header
+#           matches the blueprint setup)
 # =============================================================================
 
 # ── INPUT HELPERS ────────────────────────────────────────────────────────────

@@ -87,16 +87,6 @@
   "automation/weather_forecast_promote.yaml": [
     "sensor.ha_text_ai_deepseek_chat"
   ],
-  "helpers/helpers_input_select.yaml": [
-    "binary_sensor.fp2_presence_sensor_bathroom",
-    "binary_sensor.fp2_presence_sensor_bed",
-    "binary_sensor.fp2_presence_sensor_kitchen",
-    "binary_sensor.fp2_presence_sensor_living_room",
-    "binary_sensor.fp2_presence_sensor_lobby",
-    "binary_sensor.fp2_presence_sensor_main_room",
-    "binary_sensor.fp2_presence_sensor_shower",
-    "binary_sensor.fp2_presence_sensor_workshop"
-  ],
   "packages/ai_context_hot.yaml": [
     "media_player.bathroom_ma",
     "media_player.bathroom_sonos",

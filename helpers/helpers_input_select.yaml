@@ -14,12 +14,6 @@ ai_handoff_llm_lines_mode:
     - conversation_agent
   icon: mdi:text-box-edit
 
-ai_sleep_lights_sensor:
-  name: "AI Sleep Lights - Presence Sensor"
-  options:
-    - binary_sensor.fp2_presence_sensor_bed
-  icon: mdi:motion-sensor
-
 # ═══════════════════════════════════════════════════════════════════
 # ai_context_hot — Layer 1 Hot Context
 # ═══════════════════════════════════════════════════════════════════
@@ -194,23 +188,6 @@ ai_privacy_gate_mode:
     - force_allow_all
   icon: mdi:shield-edit
 
-
-# ═══════════════════════════════════════════════════════════════════
-# ai_sleep_detection — Sleep State Detection
-# ═══════════════════════════════════════════════════════════════════
-
-ai_sleep_detection_sensor:
-  name: "AI Sleep Detection - Presence Sensor"
-  options:
-    - binary_sensor.fp2_presence_sensor_main_room
-    - binary_sensor.fp2_presence_sensor_living_room
-    - binary_sensor.fp2_presence_sensor_bed
-    - binary_sensor.fp2_presence_sensor_workshop
-    - binary_sensor.fp2_presence_sensor_kitchen
-    - binary_sensor.fp2_presence_sensor_lobby
-    - binary_sensor.fp2_presence_sensor_bathroom
-    - binary_sensor.fp2_presence_sensor_shower
-  icon: mdi:motion-sensor
 
 # ═══════════════════════════════════════════════════════════════════
 # ai_tts_queue — TTS Queue Speaker Routing
