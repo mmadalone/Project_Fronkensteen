@@ -53,7 +53,7 @@ from shared_utils import (
 #   - packages/ai_test_harness.yaml (test mode toggle)
 #   - packages/ai_identity.yaml (identity confidence sensors)
 #   - packages/ai_llm_budget.yaml (LLM budget gate)
-#   - IMAP integration (sensor.gmail_messages)
+#   - IMAP integration (the sensor named by entity_config.yaml imap_sensor)
 #
 # Deployed: 2026-03-02 | Pipeline-aware: 2026-03-02
 # =============================================================================
@@ -390,6 +390,9 @@ def _set_email_stale(stale_val: bool) -> None:
             new_attributes={
                 "icon": "mdi:email-alert",
                 "friendly_name": "AI Email Data Stale",
+                # Read by packages/ai_system_recovery.yaml to find the
+                # IMAP config entry to reload.
+                "imap_sensor": _get_imap_sensor(),
             },
         )
     except Exception as exc:
@@ -984,9 +987,13 @@ async def email_clear_count(current_count: int = -1):
 # ── T24-3b: IMAP Health Check ─────────────────────────────────────────────────
 
 def _get_imap_sensor() -> str:
-    """Read IMAP sensor entity from config file."""
-    cfg = load_entity_config()
-    return cfg.get("imap_sensor") or "sensor.gmail_messages"
+    """IMAP sensor from entity_config.yaml imap_sensor; "" = IMAP upkeep is off.
+
+    Empty turns off the health check, the stale check and the startup
+    catch-up reload; email classification still runs.
+    """
+    value = load_entity_config().get("imap_sensor")
+    return value.strip() if isinstance(value, str) else ""
 
 
 @pyscript_executor  # noqa: F821
@@ -1016,6 +1023,8 @@ async def _check_imap_health() -> None:
     """Check IMAP sensor availability and notify on failure."""
     try:
         imap_sensor = _get_imap_sensor()
+        if not imap_sensor:
+            return  # entity_config.yaml names no IMAP sensor
         imap_state = state.get(imap_sensor)  # noqa: F821
         if imap_state in (None, "unavailable", "unknown"):
             log.warning(  # noqa: F821
@@ -1060,8 +1069,14 @@ async def email_promote_startup():
     # blocking=False prevents hanging on IMAP reconnect/IDLE setup.
     try:
         imap_sensor = _get_imap_sensor()
-        entry_id = await _resolve_config_entry_id_sync(ENTITY_REGISTRY_FILE, imap_sensor)
-        if not entry_id:
+        entry_id = ""
+        if imap_sensor:
+            entry_id = await _resolve_config_entry_id_sync(ENTITY_REGISTRY_FILE, imap_sensor)
+        if not imap_sensor:
+            log.info(  # noqa: F821
+                "email_promote: no imap_sensor in entity_config.yaml — skipping IMAP reload"
+            )
+        elif not entry_id:
             log.warning(  # noqa: F821
                 f"email_promote: no config entry found for {imap_sensor} — skipping IMAP reload"
             )
@@ -1104,6 +1119,8 @@ async def email_check_stale():
     """Flag email as stale if IMAP sensor hasn't changed in N minutes."""
     try:
         imap_sensor = _get_imap_sensor()
+        if not imap_sensor:
+            return  # entity_config.yaml names no IMAP sensor
         imap_state = state.get(imap_sensor)  # noqa: F821
         if imap_state in (None, "unavailable", "unknown"):
             _set_email_stale(True)

@@ -1,5 +1,5 @@
 # =============================================================================
-# Conversation Summarizer (v1.0.0)
+# Conversation Summarizer (v1.1.0)
 # =============================================================================
 # Scheduled job that compresses raw conversation responses into per-agent
 # summaries using a cheap LLM call. Part of conversation_sensor.py L2
@@ -22,6 +22,13 @@ blueprint:
     Scheduled batch summarization of raw conversation responses stored in L2
     memory by conversation_sensor.py.  Groups entries by agent, compresses via
     LLM, and stores summaries back in L2 with configurable retention.
+
+
+    ### Recent changes
+
+    - **v1.1.0:** Fix defaults that broke new instances; LLM Instance = task instance
+
+    - **v1.0.0:** Initial version
   domain: automation
   author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/blueprints/automation/madalone/conversation_summarizer.yaml
@@ -43,8 +50,7 @@ blueprint:
           description: >-
             Time entity that controls when the batch runs.
             Recommendation: 03:00 (30 min before embedding batch at 03:30).
-          default:
-            entity_id: input_datetime.ai_conversation_summarizer_batch_time
+          default: input_datetime.ai_conversation_summarizer_batch_time
           selector:
             entity:
               domain: input_datetime
@@ -54,8 +60,7 @@ blueprint:
           description: >-
             Boolean that enables/disables conversation summarization.
             ON = summarization active.
-          default:
-            entity_id: input_boolean.ai_conversation_sensor_enabled
+          default: input_boolean.ai_conversation_sensor_enabled
           selector:
             entity:
               domain: input_boolean
@@ -150,12 +155,15 @@ blueprint:
         llm_instance:
           name: LLM Instance
           description: >-
-            Which ha_text_ai sensor to use for LLM compression calls.
-          default:
-            entity_id: sensor.ha_text_ai
+            Which ha_text_ai sensor to use for LLM compression calls. Leave
+            empty to use the household task instance
+            (input_text.ai_task_instance, else the install's ha_text_ai sensor).
+          default: ""
           selector:
             entity:
-              domain: sensor
+              filter:
+                - integration: ha_text_ai
+                  domain: sensor
 
         budget_floor:
           name: "Budget Floor (%)"

@@ -11,6 +11,7 @@
 # Sensors created:
 #   sensor.ai_home_time_today_miquel       — hours home today (person.miquel)
 #   sensor.ai_home_time_today_jessica      — hours home today (person.jessica)
+#   sensor.ai_outside_temperature          — outdoor temperature (source for the 3 below)
 #   sensor.ai_outside_temperature_24h      — mean temp 24h
 #   sensor.ai_outside_temperature_24h_min  — min temp 24h
 #   sensor.ai_outside_temperature_24h_max  — max temp 24h
@@ -39,13 +40,14 @@ sensor:
   # ── Temperature range last 24h ────────────────────────────────────
   # Three sensors: mean (state), min, max. HA statistics platform
   # no longer exposes min/max as attributes — separate sensors required.
-  # SETUP: Change entity_id below to your outdoor temperature sensor.
-  #        Must report °C with unit_of_measurement attribute.
-  #        Reference: entity_config.yaml → weather_temperature_entity
+  # They read sensor.ai_outside_temperature (template at the end of this
+  # file) because a statistics sensor needs one fixed entity_id. Choose the
+  # source in entity_config.yaml → weather_temperature_entity; empty = the
+  # weather entity's own temperature.
   - platform: statistics
     name: "AI Outside Temperature 24h"
     unique_id: ai_outside_temperature_24h
-    entity_id: sensor.aemet_temperature
+    entity_id: sensor.ai_outside_temperature
     state_characteristic: mean
     max_age:
       hours: 24
@@ -54,7 +56,7 @@ sensor:
   - platform: statistics
     name: "AI Outside Temperature 24h Min"
     unique_id: ai_outside_temperature_24h_min
-    entity_id: sensor.aemet_temperature
+    entity_id: sensor.ai_outside_temperature
     state_characteristic: value_min
     max_age:
       hours: 24
@@ -63,11 +65,52 @@ sensor:
   - platform: statistics
     name: "AI Outside Temperature 24h Max"
     unique_id: ai_outside_temperature_24h_max
-    entity_id: sensor.aemet_temperature
+    entity_id: sensor.ai_outside_temperature
     state_characteristic: value_max
     max_age:
       hours: 24
     precision: 1
+
+# =============================================================================
+# Outdoor temperature — source for the 24h statistics sensors above
+# =============================================================================
+# Source published by state_bridge.py on sensor.ai_weather_sources:
+# entity_config.yaml weather_temperature_entity, else the weather entity's
+# temperature attribute. A configured sensor that does not exist leaves this
+# unavailable rather than switching source. °F is converted to °C because the
+# hot context prints °C. No device_class: with device_class temperature HA
+# shows the sensor in the install's unit system and would turn the °C back
+# into °F. Unavailable until the sources are published, so no sample from
+# another source lands in the 24h window after a restart.
+# =============================================================================
+
+template:
+  - sensor:
+      - name: "AI Outside Temperature"
+        unique_id: ai_outside_temperature
+        unit_of_measurement: "°C"
+        state_class: measurement
+        availability: >-
+          {%- set src = state_attr('sensor.ai_weather_sources', 'temperature_entity') | default('', true) -%}
+          {%- set wx = state_attr('sensor.ai_weather_sources', 'weather_entity') | default('', true) -%}
+          {%- if src -%}
+            {{ is_number(states(src)) }}
+          {%- elif wx -%}
+            {{ is_number(state_attr(wx, 'temperature')) }}
+          {%- else -%}
+            false
+          {%- endif -%}
+        state: >-
+          {%- set src = state_attr('sensor.ai_weather_sources', 'temperature_entity') | default('', true) -%}
+          {%- set wx = state_attr('sensor.ai_weather_sources', 'weather_entity') | default('', true) -%}
+          {%- if src -%}
+            {%- set t = states(src) | float(0) -%}
+            {%- set unit = state_attr(src, 'unit_of_measurement') | default('', true) -%}
+          {%- else -%}
+            {%- set t = state_attr(wx, 'temperature') | float(0) -%}
+            {%- set unit = state_attr(wx, 'temperature_unit') | default('', true) -%}
+          {%- endif -%}
+          {{ ((t - 32) * 5 / 9) | round(2) if unit == '°F' else t }}
 
 # =============================================================================
 # Automations — Arrival / Departure timestamps for "home since" context

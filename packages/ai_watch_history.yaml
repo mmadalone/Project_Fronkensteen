@@ -18,9 +18,10 @@
 #   - helpers_input_number.yaml: ai_watch_min_duration_pvr,
 #       ai_watch_min_duration_content, ai_watch_history_retention_days
 #
-# Data source: sensor.madteevee_now_playing (template sensor in template.yaml)
-#   Pre-classifies content as live_tv/series/movie with PVR channel data.
-#   No direct Kodi JSON-RPC needed.
+# Data source: the Kodi media player, Kodi JSON-RPC, and optionally a
+#   now-playing template sensor of your own (the blueprint's Now Playing
+#   input) that pre-classifies content as live_tv/series/movie with PVR
+#   channel data.
 #
 # L2 Memory keys:
 #   watch:{date}:{index}       — individual entries (30d expiry)
@@ -29,6 +30,6 @@
 # Dependencies:
 #   - Blueprints: watch_history.yaml
 #   - Context: ai_context_hot.yaml (reads sensor for L1 injection)
-#   - Template sensors: sensor.madteevee_now_playing, sensor.madteevee_pvr_channel
+#   - Template sensors (optional, your own): a now-playing sensor and a PVR channel sensor
 #   - Other packages: ai_privacy_gate.yaml
 # ======================================================================

@@ -458,6 +458,15 @@ ai_tts_strip_stage_directions:
   icon: mdi:drama-masks
 
 # ═══════════════════════════════════════════════════════════════════
+# ai_assist_tts_reroute — Assist TTS Reroute
+# ═══════════════════════════════════════════════════════════════════
+# Default kill switch of the assist_tts_reroute blueprint. Off until you
+# turn it on: each rerouted turn costs 2 LLM calls + 1 TTS call.
+ai_assist_tts_reroute_enabled:
+  name: "AI Assist TTS Reroute Enabled"
+  icon: mdi:remote
+
+# ═══════════════════════════════════════════════════════════════════
 # ai_user_interview — User Interview
 # ═══════════════════════════════════════════════════════════════════
 ai_interview_mode:

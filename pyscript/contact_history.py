@@ -518,7 +518,9 @@ async def contact_history_summarize(
       llm_instance:
         name: LLM Instance
         description: >-
-          ha_text_ai sensor entity for LLM calls. Leave empty to use default.
+          ha_text_ai sensor for the LLM calls. Leave empty to use the household
+          task instance (input_text.ai_task_instance, else the install's
+          ha_text_ai sensor).
         default: ""
         selector:
           entity:
@@ -587,11 +589,9 @@ async def contact_history_summarize(
     entries_processed = 0
     llm_calls = 0
 
-    # Resolve LLM instance
+    # Blank → llm_task_call's own fallbacks (input_text.ai_task_instance,
+    # then the install's ha_text_ai sensor).
     llm_entity = llm_instance or ""
-    if not llm_entity:
-        # Try default ha_text_ai instance
-        llm_entity = "sensor.ha_text_ai"
 
     for contact in contacts_to_process:
         entries = eligible[contact]

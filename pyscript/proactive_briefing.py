@@ -32,7 +32,7 @@ from shared_utils import build_result_entity_name, resolve_active_user
 #
 # Briefing sections (each independently optional):
 #   1. Greeting     — time-aware greeting (pure Python)
-#   2. Weather      — from weather.forecast_home entity
+#   2. Weather      — from the weather entity on sensor.ai_weather_sources
 #   3. Calendar     — from L2 (calendar_today:{person}) / L1 helper
 #   4. Email        — from input_number.ai_email_priority_count
 #   5. Schedule     — first upcoming event advisory
@@ -351,13 +351,22 @@ def _build_mood_phrase(mood: str, context: str) -> str:
 
 # ── Async Section Builders ───────────────────────────────────────────────────
 
+# Published by state_bridge.py: entity_config.yaml weather_entity, else the
+# met.no entity, else the first weather entity.
+_WEATHER_SOURCES = "sensor.ai_weather_sources"
+
+
 async def _section_weather() -> str:
-    """Build weather section from weather.forecast_home."""
+    """Build the weather section from the weather entity state_bridge resolves."""
     try:
-        w_state = state.get("weather.forecast_home")  # noqa: F821
+        try:
+            weather = (state.getattr(_WEATHER_SOURCES) or {}).get("weather_entity") or ""  # noqa: F821
+            w_state = state.get(weather) if weather else ""  # noqa: F821
+        except NameError:
+            return ""  # sources not published yet, or that entity does not exist
         if not w_state or w_state in ("unavailable", "unknown"):
             return ""
-        w_attrs = state.getattr("weather.forecast_home")  # noqa: F821
+        w_attrs = state.getattr(weather)  # noqa: F821
         temp = str(w_attrs.get("temperature", "?"))
         humidity = str(w_attrs.get("humidity", "?"))
         return _format_weather_text(w_state, temp, humidity)

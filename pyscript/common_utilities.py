@@ -1353,6 +1353,67 @@ def budget_breakdown_restore(data: dict = None) -> None:
 _BUDGET_THRESHOLDS = {"essential": 0, "standard": 30, "luxury": 60}
 _EMBED_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
+# A text helper that was never set reads "unknown"; treat it like blank.
+_UNSET_INSTANCE_VALUES = ("", "unknown", "unavailable", "none")
+# How long a discovered ha_text_ai sensor is reused. Discovery only runs when
+# neither the caller nor input_text.ai_task_instance names an instance.
+_TASK_LLM_CACHE_TTL = 600
+_task_llm_cache: dict = {"at": 0.0, "sensors": None}
+_task_llm_logged: str = ""
+
+
+@pyscript_executor  # noqa: F821
+def _discover_task_llm_sensors_sync(registry_file: str) -> list | None:
+    """Enabled ha_text_ai sensors in the entity registry, oldest first (AP-55).
+
+    Returns None when the registry cannot be read.
+    """
+    import orjson as _orjson
+
+    try:
+        with open(registry_file, "rb") as f:
+            entities = _orjson.loads(f.read()).get("data", {}).get("entities", [])
+    except Exception:
+        return None
+    found = [
+        ent for ent in entities
+        if ent.get("platform") == "ha_text_ai"
+        and str(ent.get("entity_id", "")).startswith("sensor.")
+        and not ent.get("disabled_by")
+    ]
+    found.sort(key=lambda ent: ent.get("created_at") or "")
+    return [ent["entity_id"] for ent in found]
+
+
+def _clean_instance(value) -> str:
+    """An ha_text_ai instance entity ID, or "" when blank or never set."""
+    text = str(value or "").strip()
+    return "" if text.lower() in _UNSET_INSTANCE_VALUES else text
+
+
+def _discovered_task_instance() -> str:
+    """The install's ha_text_ai sensor (the oldest, if there are several), or ""."""
+    global _task_llm_logged
+    now = time.monotonic()
+    if _task_llm_cache["sensors"] is None or now - _task_llm_cache["at"] > _TASK_LLM_CACHE_TTL:
+        sensors = _discover_task_llm_sensors_sync(str(_ENTITY_REGISTRY_PATH))
+        if sensors is not None:
+            _task_llm_cache["sensors"] = sensors
+            _task_llm_cache["at"] = now
+    sensors = _task_llm_cache["sensors"] or []
+    chosen = sensors[0] if sensors else ""
+    if chosen != _task_llm_logged:
+        if len(sensors) > 1:
+            log.warning(  # noqa: F821
+                "llm_task_call: input_text.ai_task_instance is not set and there are "
+                "%d ha_text_ai sensors; using the oldest, %s. Set the helper to choose.",
+                len(sensors), chosen,
+            )
+        elif chosen:
+            log.info("llm_task_call: input_text.ai_task_instance is not set; using %s", chosen)  # noqa: F821
+        _task_llm_logged = chosen
+    return chosen
+
 
 def _read_budget_remaining() -> int:
     """Read current budget remaining percentage from the template sensor."""
@@ -1482,8 +1543,9 @@ async def llm_task_call(
       instance:
         name: Instance
         description: >-
-          ha_text_ai instance entity override. Falls back to
-          input_text.ai_task_instance helper, then default.
+          ha_text_ai sensor to use. Falls back to the
+          input_text.ai_task_instance helper, then to the install's
+          ha_text_ai sensor (the oldest, if there are several).
         selector:
           entity:
             integration: ha_text_ai
@@ -1506,18 +1568,23 @@ async def llm_task_call(
         )
         return {"status": "budget_exhausted", "budget_remaining": budget_pct, "response_text": None}
 
-    # Resolve ha_text_ai instance: param → helper → hardcoded default
-    instance_entity = ""
-    if instance:
-        instance_entity = str(instance).strip()
+    # Resolve ha_text_ai instance: param → input_text.ai_task_instance → the
+    # install's ha_text_ai sensor (oldest if there are several). Blank and
+    # "unknown" (a text helper that was never set) count as not set.
+    instance_entity = _clean_instance(instance)
     if not instance_entity:
         try:
-            instance_entity = state.get("input_text.ai_task_instance") or ""  # noqa: F821
-            instance_entity = instance_entity.strip()
-        except (TypeError, AttributeError):
+            instance_entity = _clean_instance(state.get("input_text.ai_task_instance"))  # noqa: F821
+        except (NameError, TypeError, AttributeError):
             instance_entity = ""
     if not instance_entity:
-        instance_entity = "sensor.ha_text_ai_deepseek_chat"
+        instance_entity = _discovered_task_instance()
+    if not instance_entity:
+        log.warning(  # noqa: F821
+            "llm_task_call: no ha_text_ai instance — set input_text.ai_task_instance "
+            "or add the ha_text_ai integration"
+        )
+        return {"status": "error", "error": "no_task_instance", "response_text": None}
 
     # Build service data
     svc_data = {"question": prompt, "instance": instance_entity}

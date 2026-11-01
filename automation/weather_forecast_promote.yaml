@@ -2,9 +2,16 @@ blueprint:
   name: "Weather — Tomorrow Forecast Promote"
   description: >
     Reads weather sensor states (AEMET, Met.no, etc.), sends all data to an
-    LLM for a natural-language summary, and stores the result in an
-    input_text helper for hot context injection. The integration updates
+    LLM for a natural-language summary, and stores the result on a
+    sensor (via pyscript.set_sensor_value) for hot context injection. The integration updates
     sensors on its own — this blueprint just reads and summarizes.
+
+
+    ### Recent changes
+
+    - **v1.1:** LLM Instance is used now (blank = household task instance)
+
+    - **v1:** Initial version
   domain: automation
   author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/weather_forecast_promote.yaml
@@ -121,11 +128,15 @@ blueprint:
         llm_instance:
           name: LLM Instance
           description: >
-            ha_text_ai sensor for natural language summarization.
-          default: sensor.ha_text_ai_deepseek_chat
+            ha_text_ai sensor for natural language summarization. Leave empty
+            to use the household task instance (input_text.ai_task_instance,
+            else the install's ha_text_ai sensor).
+          default: ""
           selector:
             entity:
-              domain: sensor
+              filter:
+                - integration: ha_text_ai
+                  domain: sensor
         rebuild_button:
           name: Rebuild Button
           description: "Manual rebuild trigger."
@@ -237,6 +248,7 @@ actions:
           prompt: "{{ _llm_prompt }}"
           max_tokens: 80
           temperature: 0.3
+          instance: !input llm_instance
         response_variable: _llm_result
         continue_on_error: true
       - alias: "Set llm text, llm clean, final"

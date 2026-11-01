@@ -524,10 +524,14 @@ async def _daily_aggregate():
     profile = await _aggregate_profile()
     raw_summary = profile.get("summary", "")
 
-    # Try LLM genre summary using configured task instance
+    # LLM genre summary with the household task instance: the helper, or
+    # (blank or never set) the install's ha_text_ai sensor via llm_task_call.
     genre_summary = ""
-    task_instance = state.get("input_text.ai_task_instance")  # noqa: F821
-    if task_instance and raw_summary:
+    if raw_summary:
+        try:
+            task_instance = state.get("input_text.ai_task_instance") or ""  # noqa: F821
+        except NameError:
+            task_instance = ""
         genre_summary = await _generate_genre_summary(raw_summary, task_instance, 100, "")
         # C5: Track the LLM call that _generate_genre_summary makes via llm_task_call
         # (llm_task_call already increments counters, but this was previously a blind spot
@@ -611,21 +615,13 @@ async def _generate_genre_summary(
     template = llm_prompt.strip() if llm_prompt else DEFAULT_GENRE_PROMPT
     prompt = template.replace("{max_chars}", str(max_chars)).replace("{profile}", raw_summary)
     try:
-        # Set the task instance for llm_task_call
-        old_instance = state.get("input_text.ai_task_instance")  # noqa: F821
-        state_val = llm_instance if llm_instance else old_instance  # noqa: F821
-        if state_val and state_val != old_instance:
-            input_text.set_value(  # noqa: F821
-                entity_id="input_text.ai_task_instance", value=state_val
-            )
+        # The instance is passed through. This used to write it into
+        # input_text.ai_task_instance for the call and put the old value back,
+        # which never happened when the helper was empty.
         resp = pyscript.llm_task_call(  # noqa: F821
-            prompt=prompt, max_tokens=100, temperature=0.3
+            prompt=prompt, max_tokens=100, temperature=0.3, instance=llm_instance,
         )
         result = await resp
-        if state_val and state_val != old_instance and old_instance:
-            input_text.set_value(  # noqa: F821
-                entity_id="input_text.ai_task_instance", value=old_instance
-            )
         text = result.get("response_text", "") if isinstance(result, dict) else ""
         if text:
             text = text.replace("**", "").strip()
@@ -661,9 +657,10 @@ async def music_taste_rebuild(
     fields:
       llm_instance:
         name: LLM Instance
-        description: "ha_text_ai sensor entity for genre summary (optional)."
+        description: "ha_text_ai sensor for the genre summary. Blank skips the LLM summary."
         selector:
           entity:
+            integration: ha_text_ai
             domain: sensor
       summary_max_chars:
         name: Summary Max Chars

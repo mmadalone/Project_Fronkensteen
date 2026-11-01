@@ -1,5 +1,5 @@
 blueprint:
-  name: "Proactive Bedtime Escalation (v1.7) — Presence-based nags with inline bedtime routine"
+  name: "Proactive Bedtime Escalation (v1.7.1) — Presence-based nags with inline bedtime routine"
   author: madalone
   description: '![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_bedtime_escalation-header.jpeg)
 
@@ -32,6 +32,8 @@ blueprint:
     - Independent weekend overrides for proactive and bedtime layers
 
     ### Recent changes
+
+    - **v1.7.1:** PVR channel sensor defaults to blank (was a household ID)
 
     - **v1.6:** Shared bedtime routine refactor (E-02) — autonomous and
       scheduled paths now fall through to a single shared bedtime routine
@@ -1522,9 +1524,11 @@ blueprint:
         sleepytv_pvr_sensor:
           name: PVR channel sensor
           description: >
-            REST sensor for PVR channel name. Only used with
-            "PVR channel matches" detection method.
-          default: sensor.madteevee_pvr_channel
+            Sensor whose state is the PVR channel name. Its state is matched
+            only by the "PVR channel matches" detection method; its optional
+            `plot` attribute is added to the LLM prompt whatever the method.
+            Leave empty if you have none.
+          default: ""
           selector:
             entity:
               domain: sensor
@@ -2632,7 +2636,9 @@ variables:
       {{ states(kodi_entity_val) | default('idle') == 'playing'
          and match | lower in (state_attr(kodi_entity_val, 'media_title') | default('') | lower) }}
     {% elif method == 'pvr_channel_matches' %}
-      {{ match | lower in (states(sleepytv_pvr_sensor_val) | default('') | lower) }}
+      {% set pvr_ch = states(sleepytv_pvr_sensor_val) | default('') %}
+      {{ pvr_ch not in ['off', 'not_pvr', 'unknown', 'unavailable', '']
+         and match | lower in pvr_ch | lower }}
     {% else %}
       false
     {% endif %}

@@ -321,8 +321,8 @@ async def _generate_llm_summary(slug: str, body: str) -> str:
         return cached[1]
 
     try:
+        # No instance: llm_task_call uses the household task instance.
         result = pyscript.llm_task_call(  # noqa: F821
-            instance="sensor.ha_text_ai",
             prompt=(
                 "Summarize this project in 1-2 concise sentences for a voice "
                 "assistant context line. Focus on current status and next steps. "

@@ -26,20 +26,22 @@ from shared_utils import build_result_entity_name
 #     Called by media_tracking.yaml blueprint.
 #
 # Key design:
-#   - Stateless service — no triggers, no scheduling (blueprint owns timing)
+#   - No scheduling: the blueprint owns timing. The only triggers are startup
+#     (API config + entity lookup) and entity registry changes (re-lookup)
 #   - API keys read from HA config entries at startup
 #   - Promote cache: 5 min TTL to debounce rapid triggers
 #   - L1 sensor: sensor.ai_media_upcoming (state=summary, attrs: sonarr, radarr, recent_downloads)
 #   - L2 keys: media_upcoming:summary, media_downloads:recent
 #   - Stale flag: input_boolean.ai_media_data_stale
 #
-# Data sources:
-#   - sensor.sonarr_upcoming attributes — daily upcoming TV
+# Data sources (integration entities are found in the entity registry by
+# unique_id, from the config entry the API calls use — _refresh_arr_entities):
+#   - Sonarr "upcoming" sensor attributes — daily upcoming TV
 #   - Sonarr REST /api/v3/calendar — weekly upcoming TV
-#   - calendar.radarr — upcoming movies
+#   - Radarr calendar entity — upcoming movies
 #   - Radarr REST /api/v3/history — recently downloaded movies
 #   - Sonarr REST /api/v3/history — recently downloaded TV
-#   - sensor.sonarr_queue, sensor.radarr_queue — queue counts
+#   - Sonarr and Radarr "queue" sensors — queue counts
 #
 # Dependencies:
 #   - pyscript/memory.py (L2: memory_set)
@@ -60,6 +62,92 @@ _last_downloads: set[str] = set()  # track seen titles for new-download detectio
 result_entity_name: dict[str, str] = {}
 _consecutive_failures: int = 0
 _FAILURE_NOTIFY_THRESHOLD: int = 3
+
+# Integration entities, by registry unique_id "<config entry id>_<key>", from
+# the same (first) config entry the API calls use. So any entity ID works:
+# renamed, translated (sensor.sonarr_cola) or suffixed (_2).
+_ARR_ENTITY_KEYS = {
+    "sonarr_queue": ["sonarr", "queue"],
+    "sonarr_upcoming": ["sonarr", "upcoming"],
+    "radarr_queue": ["radarr", "queue"],
+    "radarr_calendar": ["radarr", "calendar"],
+}
+_ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
+# The entity registry reaches disk 10 s after a change while HA is running.
+_REGISTRY_SETTLE_S = 20
+_arr_entities: dict[str, str] = {}
+_arr_entities_resolved: bool = False
+
+
+@pyscript_executor  # noqa: F821
+def _resolve_arr_entities_sync(registry_file: str, wanted: dict) -> dict | None:
+    """Find each wanted entity by platform + unique_id (AP-55).
+
+    wanted: {name: [platform, unique_id]}. Returns {name: entity_id} for the
+    enabled ones found, or None when the registry cannot be read.
+    """
+    import orjson as _orjson
+
+    try:
+        with open(registry_file, "rb") as f:
+            entities = _orjson.loads(f.read()).get("data", {}).get("entities", [])
+    except Exception:
+        return None
+    by_key = {}
+    for ent in entities:
+        if not ent.get("disabled_by"):
+            by_key[(ent.get("platform"), ent.get("unique_id"))] = ent.get("entity_id")
+    found = {}
+    for name, spec in wanted.items():
+        entity_id = by_key.get((spec[0], spec[1]))
+        if entity_id:
+            found[name] = entity_id
+    return found
+
+
+def _refresh_arr_entities(reason: str) -> dict:
+    """Resolve the Sonarr/Radarr entities; log when the result changes."""
+    global _arr_entities, _arr_entities_resolved
+    entry_ids = {}
+    for domain in ("sonarr", "radarr"):
+        for entry in hass.config_entries.async_entries(domain):  # noqa: F821
+            entry_ids[domain] = entry.entry_id
+            break  # the first entry, as _startup does for the API config
+    wanted = {}
+    for name, spec in _ARR_ENTITY_KEYS.items():
+        if spec[0] in entry_ids:
+            wanted[name] = [spec[0], f"{entry_ids[spec[0]]}_{spec[1]}"]
+    found = _resolve_arr_entities_sync(_ENTITY_REGISTRY_FILE, wanted)
+    if found is None:
+        log.warning(  # noqa: F821
+            "media_promote: entity registry unreadable (%s); keeping the previous entities", reason,
+        )
+        return _arr_entities
+    if found != _arr_entities or not _arr_entities_resolved:
+        log.info(  # noqa: F821
+            "media_promote: Sonarr/Radarr entities after %s: %s", reason,
+            ", ".join([f"{k}={v}" for k, v in sorted(found.items())]) or "none",
+        )
+    _arr_entities = found
+    _arr_entities_resolved = True
+    return found
+
+
+def _arr_entity(name: str) -> str:
+    """Entity ID of one Sonarr/Radarr entity, or "" when this install has none."""
+    if not _arr_entities_resolved:
+        _refresh_arr_entities("first use")
+    return _arr_entities.get(name, "")
+
+
+@event_trigger("entity_registry_updated")  # noqa: F821
+def _arr_registry_changed(**kwargs):
+    """Re-resolve after entities are added, removed or renamed (debounced)."""
+    if not _arr_entities_resolved:
+        return  # resolved on first use
+    task.unique("media_promote_arr_registry_refresh")  # noqa: F821
+    task.sleep(_REGISTRY_SETTLE_S)  # noqa: F821
+    _refresh_arr_entities("entity registry change")
 
 
 # ── Startup — Read API Keys from Config Entries ─────────────────────────────
@@ -85,6 +173,7 @@ async def _startup():
         )
     except Exception as exc:
         log.warning("media_promote: startup config read failed: %s", exc)  # noqa: F821
+    _refresh_arr_entities("startup")
     # Initialize consolidated media sensor (refreshed every 30 min)
     try:
         state.set(  # noqa: F821
@@ -223,7 +312,7 @@ def _format_recent_line(tv_recent: list, movie_recent: list) -> str:
 
 @pyscript_compile  # noqa: F821
 def _parse_sonarr_upcoming_attrs(attrs: dict) -> list:
-    """Parse sensor.sonarr_upcoming attributes into normalized list.
+    """Parse the Sonarr upcoming sensor's attributes into a normalized list.
 
     Supports two formats:
       - Structured: attrs["data"] or attrs["episodes"] = list of dicts
@@ -310,7 +399,7 @@ def _parse_sonarr_calendar_api(data: list) -> list:
 
 @pyscript_compile  # noqa: F821
 def _parse_radarr_calendar(events: list) -> list:
-    """Parse calendar.radarr events into normalized list.
+    """Parse Radarr calendar events into a normalized list.
 
     Filters out multi-day events whose start date is before today
     (e.g. "in cinemas" events that span weeks). Only shows movies
@@ -414,14 +503,17 @@ def _clean_source_title(raw: str) -> str:
 async def _fetch_upcoming_tv(days: int) -> list | None:
     """Fetch upcoming TV shows.
 
-    For daily (days=1): read sensor.sonarr_upcoming attributes (zero cost).
+    For daily (days=1): read the Sonarr upcoming sensor's attributes (zero cost).
     For weekly (days=7): call Sonarr REST API /api/v3/calendar.
     Returns None on failure, [] on success-but-empty.
     """
     if days <= 1:
         # Use native sensor attributes — zero API cost
+        upcoming_entity = _arr_entity("sonarr_upcoming")
+        if not upcoming_entity:
+            return []  # no Sonarr upcoming sensor on this install
         try:
-            attrs = state.getattr("sensor.sonarr_upcoming") or {}  # noqa: F821
+            attrs = state.getattr(upcoming_entity) or {}  # noqa: F821
             return _parse_sonarr_upcoming_attrs(attrs)
         except Exception as exc:
             log.warning("media_promote: sonarr sensor read failed: %s", exc)  # noqa: F821
@@ -464,14 +556,17 @@ async def _fetch_upcoming_tv(days: int) -> list | None:
 
 
 async def _fetch_upcoming_movies(days: int) -> list | None:
-    """Fetch upcoming movies from calendar.radarr entity."""
+    """Fetch upcoming movies from the Radarr calendar entity."""
+    calendar_entity = _arr_entity("radarr_calendar")
+    if not calendar_entity:
+        return []  # no Radarr calendar on this install
     try:
         now = datetime.now()
         start_str = now.isoformat(timespec="seconds")
         end_str = (now + timedelta(days=days)).isoformat(timespec="seconds")
 
         result = calendar.get_events(  # noqa: F821
-            entity_id="calendar.radarr",
+            entity_id=calendar_entity,
             start_date_time=start_str,
             end_date_time=end_str,
         )
@@ -591,7 +686,9 @@ def _set_stale_flag(stale: bool) -> None:
 
 
 def _get_queue_count(entity_id: str) -> int:
-    """Read queue count from a native sensor."""
+    """Read queue count from a native sensor ("" = this install has none)."""
+    if not entity_id:
+        return 0
     try:
         val = state.get(entity_id)  # noqa: F821
         if val in (None, "unknown", "unavailable"):
@@ -684,7 +781,9 @@ async def _promote_internal(
                     title="Media Tracking: Repeated API Failures",
                     message=(
                         f"Radarr/Sonarr APIs have failed {_consecutive_failures} "
-                        f"consecutive times. Check connectivity to madteevee.local."
+                        f"consecutive times. Check connectivity to "
+                        f"{_config.get('radarr_url') or 'Radarr'} and "
+                        f"{_config.get('sonarr_url') or 'Sonarr'}."
                     ),
                     notification_id="ai_media_api_failure",
                 )
@@ -710,8 +809,8 @@ async def _promote_internal(
     _set_stale_flag(False)
 
     # ── Queue counts ──
-    tv_queue = _get_queue_count("sensor.sonarr_queue")
-    movie_queue = _get_queue_count("sensor.radarr_queue")
+    tv_queue = _get_queue_count(_arr_entity("sonarr_queue"))
+    movie_queue = _get_queue_count(_arr_entity("radarr_queue"))
 
     # ── Format output ──
     sonarr_line = _format_sonarr_line(upcoming_tv, tv_queue, upcoming_days)

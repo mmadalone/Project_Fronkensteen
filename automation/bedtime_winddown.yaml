@@ -14,6 +14,8 @@ blueprint:
 
     ### Recent changes
 
+    - **v1.1:** PVR channel sensor defaults to blank (was a household ID)
+
     - **v1:** Initial version — 4 scenarios, escalation, budget gate, memory'
   domain: automation
   source_url: "https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/bedtime_winddown.yaml"
@@ -81,8 +83,8 @@ blueprint:
 
         sleepytv_pvr_sensor:
           name: "PVR channel sensor"
-          description: "Sensor showing current PVR channel name."
-          default: sensor.madteevee_pvr_channel
+          description: "Sensor showing the current PVR channel name. Leave empty if you have none."
+          default: ""
           selector:
             entity:
               domain: sensor
@@ -1058,7 +1060,9 @@ variables:
          and (state_attr(tv_media_player, 'media_title') | default('') | lower).find(match) >= 0
          and match | length > 0 }}
     {% elif method == 'pvr_channel_matches' %}
-      {{ (states(sleepytv_pvr_sensor) | default('') | lower).find(match) >= 0
+      {% set pvr_ch = states(sleepytv_pvr_sensor) | default('') %}
+      {{ pvr_ch not in ['off', 'not_pvr', 'unknown', 'unavailable', '']
+         and (pvr_ch | lower).find(match) >= 0
          and match | length > 0 }}
     {% else %}
       false

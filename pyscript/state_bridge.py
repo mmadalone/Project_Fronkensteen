@@ -14,14 +14,17 @@ Usage from a blueprint action:
         icon: mdi:brain
         friendly_name: AI My Thing
 
-Also publishes sensor.ai_zone_map: the fp2_zones and satellite_zones maps from
-entity_config.yaml, for YAML templates, which cannot read that file.
+Also publishes, for YAML templates, which cannot read entity_config.yaml:
+  sensor.ai_zone_map        fp2_zones and satellite_zones from entity_config.yaml
+  sensor.ai_weather_sources the weather entity and the outdoor temperature source
+                            (entity_config.yaml, else met.no, else the first one)
+  sensor.ai_media_map       now_playing_sensors from entity_config.yaml
 """
 
 import json as _json  # noqa: F811 — shadow-safe alias
 from datetime import datetime  # noqa: F811 — for budget state timestamps
 
-from shared_utils import reload_entity_config
+from shared_utils import load_entity_config, reload_entity_config
 
 
 # ── Budget State File I/O ─────────────────────────────────────────────────────
@@ -205,6 +208,178 @@ def _publish_zone_map():
             "satellite_zones": satellite_zones,
             "friendly_name": "AI Zone Map",
             "icon": "mdi:floor-plan",
+        },
+    )
+
+
+# ── Weather sources and media map for YAML templates ─────────────────────────
+# Same reason as the zone map: templates cannot read entity_config.yaml.
+# sensor.ai_weather_sources names the weather entity and the outdoor
+# temperature source; sensor.ai_media_map names the companion "now playing"
+# sensor of each media player that has one.
+
+WEATHER_SOURCES_ENTITY = "sensor.ai_weather_sources"
+MEDIA_MAP_ENTITY = "sensor.ai_media_map"
+_ENTITY_REGISTRY_FILE = "/config/.storage/core.entity_registry"
+# The entity registry reaches disk 10 s after a change while HA is running.
+_REGISTRY_SETTLE_S = 20
+
+_last_weather_sources = None
+
+
+@pyscript_executor  # noqa: F821
+def _met_weather_entities(registry_file, home_entry_ids):
+    """Enabled weather entities of the met.no integration, best first (AP-55).
+
+    Best = the one whose config entry follows the home location (HA's
+    onboarding creates it, track_home), then the oldest, so adding a second
+    met.no city never moves the weather away from home. Returns None when the
+    registry cannot be read.
+    """
+    import orjson as _orjson
+
+    try:
+        with open(registry_file, "rb") as f:
+            entities = _orjson.loads(f.read()).get("data", {}).get("entities", [])
+    except Exception:
+        return None
+    found = [
+        ent for ent in entities
+        if ent.get("platform") == "met"
+        and str(ent.get("entity_id", "")).startswith("weather.")
+        and not ent.get("disabled_by")
+    ]
+    found.sort(key=lambda ent: (
+        0 if ent.get("config_entry_id") in home_entry_ids else 1,
+        ent.get("created_at") or "",
+        ent["entity_id"],
+    ))
+    return [ent["entity_id"] for ent in found]
+
+
+def _config_entity(cfg, key):
+    """A single entity ID from entity_config.yaml, or "" when unset."""
+    value = cfg.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _entity_exists(entity_id):
+    try:
+        state.get(entity_id)  # noqa: F821
+        return True
+    except NameError:
+        return False
+
+
+def _publish_weather_sources(reason, cfg):
+    """Resolve and publish the weather entity and the outdoor temperature source.
+
+    Weather entity: entity_config.yaml weather_entity, else the met.no entity
+    (the one HA's onboarding creates), else the first weather entity, else
+    none. A configured entity is used even if it does not exist, so a typo
+    shows up as "Weather: Unavailable." instead of a silent switch of source.
+
+    Temperature: entity_config.yaml weather_temperature_entity, else the
+    weather entity's own temperature attribute. The template mirror in
+    packages/ai_history_context.yaml reads both.
+    """
+    global _last_weather_sources
+
+    weather = _config_entity(cfg, "weather_entity")
+    weather_source = "entity_config" if weather else ""
+    if not weather:
+        home_entry_ids = []
+        for entry in hass.config_entries.async_entries("met"):  # noqa: F821
+            if (entry.data or {}).get("track_home"):
+                home_entry_ids.append(entry.entry_id)
+        met = _met_weather_entities(_ENTITY_REGISTRY_FILE, home_entry_ids)
+        if met is None:
+            log.warning(  # noqa: F821
+                f"state_bridge: entity registry unreadable ({reason}); "
+                f"keeping the previous weather sources"
+            )
+            return
+        if met:
+            weather, weather_source = met[0], "met.no"
+    if not weather:
+        names = sorted(state.names("weather"))  # noqa: F821
+        if names:
+            weather, weather_source = names[0], "first weather entity"
+    if not weather:
+        weather_source = "none"
+
+    temperature = _config_entity(cfg, "weather_temperature_entity")
+    if temperature:
+        temperature_source = "entity_config"
+    elif weather:
+        temperature_source = "weather entity"
+    else:
+        temperature_source = "none"
+
+    state.set(  # noqa: F821
+        WEATHER_SOURCES_ENTITY, weather or "none",
+        new_attributes={
+            "weather_entity": weather,
+            "weather_source": weather_source,
+            "temperature_entity": temperature,
+            "temperature_source": temperature_source,
+            "friendly_name": "AI Weather Sources",
+            "icon": "mdi:weather-partly-cloudy",
+        },
+    )
+
+    current = (weather, weather_source, temperature, temperature_source)
+    if current != _last_weather_sources:
+        missing = [e for e in (weather, temperature) if e and not _entity_exists(e)]
+        log.info(  # noqa: F821
+            f"state_bridge: weather sources after {reason}: "
+            f"weather={weather or 'none'} ({weather_source}), "
+            f"temperature={temperature or 'the weather entity'} ({temperature_source})"
+            + (f" — not found: {', '.join(missing)}" if missing else "")
+        )
+        _last_weather_sources = current
+
+
+@time_trigger("startup")  # noqa: F821
+def _weather_sources_startup():
+    _publish_weather_sources("startup", reload_entity_config())
+
+
+@event_trigger("entity_registry_updated")  # noqa: F821
+def _weather_sources_registry_changed(**kwargs):
+    """Re-resolve after entities are added, removed or renamed.
+
+    Debounced, like person_phones: a burst of registry events yields one
+    refresh, once the registry has been written to disk. Uses the cached
+    config: a re-read here would push a half-edited entity_config.yaml to
+    every module before the planned pyscript reload.
+    """
+    task.unique("state_bridge_weather_sources_refresh")  # noqa: F821
+    task.sleep(_REGISTRY_SETTLE_S)  # noqa: F821
+    _publish_weather_sources("entity registry change", load_entity_config())
+
+
+@time_trigger("startup")  # noqa: F821
+def _publish_media_map():
+    """Publish now_playing_sensors ({media_player: sensor}) from entity_config.yaml."""
+    cfg = reload_entity_config()
+    raw = cfg.get("now_playing_sensors") or {}
+    now_playing = {}
+    if isinstance(raw, dict):
+        for player, sensor in raw.items():
+            if isinstance(player, str) and isinstance(sensor, str) and sensor.strip():
+                now_playing[player.strip()] = sensor.strip()
+    else:
+        log.warning(  # noqa: F821
+            "state_bridge: entity_config.yaml now_playing_sensors must map "
+            "media_player to sensor; ignoring it"
+        )
+    state.set(  # noqa: F821
+        MEDIA_MAP_ENTITY, str(len(now_playing)),
+        new_attributes={
+            "now_playing_sensors": now_playing,
+            "friendly_name": "AI Media Map",
+            "icon": "mdi:television-play",
         },
     )
 

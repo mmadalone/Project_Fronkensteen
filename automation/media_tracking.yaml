@@ -19,6 +19,9 @@ blueprint:
     3. Blueprint reads response → sends notification if new downloads
 
     ### Recent changes
+
+    - **v1.1:** Queue sensors default to empty: re-pick them to keep queue refreshes
+
     - **v1:** Initial implementation
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/media_tracking.yaml
@@ -193,20 +196,32 @@ blueprint:
       collapsed: true
       input:
         sonarr_queue_entity:
-          name: Sonarr queue sensor
-          description: "Sensor tracking the Sonarr download queue."
-          default: sensor.sonarr_queue
+          name: Sonarr queue sensor (optional)
+          description: >-
+            Sonarr's Queue sensor. Its changes refresh the data while
+            downloads run (see "Re-promote on queue change"). Sonarr ships
+            it disabled: enable it on the Sonarr device page first. Leave
+            empty to refresh on the schedule only.
+          default: []
           selector:
             entity:
-              domain: sensor
+              multiple: true
+              filter:
+                - integration: sonarr
+                  domain: sensor
 
         radarr_queue_entity:
-          name: Radarr queue sensor
-          description: "Sensor tracking the Radarr download queue."
-          default: sensor.radarr_queue
+          name: Radarr queue sensor (optional)
+          description: >-
+            Radarr's Queue sensor, like the Sonarr one above. Radarr also
+            ships it disabled. Leave empty to refresh on the schedule only.
+          default: []
           selector:
             entity:
-              domain: sensor
+              multiple: true
+              filter:
+                - integration: radarr
+                  domain: sensor
 
         tracking_enabled_entity:
           name: Tracking enabled toggle

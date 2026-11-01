@@ -68,9 +68,33 @@ music_players:
 # Set to your SpotifyPlus media_player entity, or "" if not using Spotify.
 spotifyplus_entity: ""
 
+# Media players with a companion "now playing" sensor that pre-classifies what
+# is on (live TV, series, film), e.g. a Kodi template sensor you made. The hot
+# context then names the channel, episode and plot instead of the player's raw
+# title. Attributes it reads: player_state, media_title, series_title, season,
+# episode, plot, pvr_channel. Leave {} if you have none.
+# Used by: state_bridge (sensor.ai_media_map) -> packages/ai_context_hot.yaml
+now_playing_sensors: {}
+# To add one, replace the line above with:
+# now_playing_sensors:
+#   media_player.YOUR_KODI: sensor.YOUR_KODI_NOW_PLAYING
+
+# Weather entity for the hot context and briefings.
+# Leave "" to use the met.no entity (the "Forecast Home" weather that HA's
+# onboarding creates), or else the first weather entity.
+# Used by: state_bridge (sensor.ai_weather_sources)
+weather_entity: ""
+
+# Outdoor temperature sensor for "Temp last 24h" in the hot context.
+# Leave "" to use the weather entity's own temperature. °F is converted.
+# Used by: state_bridge (sensor.ai_weather_sources) -> packages/ai_history_context.yaml
+weather_temperature_entity: ""
+
 # IMAP sensor
 # Used by: email_promote
 # Set to your email sensor entity, or "" if not using email features.
+# "" also turns off the IMAP health check, the stale check and the startup
+# catch-up reload.
 imap_sensor: ""
 
 # Scene Learner — zone-to-light mapping

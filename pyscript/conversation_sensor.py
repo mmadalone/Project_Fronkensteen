@@ -419,9 +419,13 @@ async def summarize_conversations(
             mode: box
       llm_instance:
         name: LLM Instance
-        description: ha_text_ai sensor entity for LLM calls. Leave empty to use default.
+        description: >-
+          ha_text_ai sensor for the LLM calls. Leave empty to use the household
+          task instance (input_text.ai_task_instance, else the install's
+          ha_text_ai sensor).
         selector:
           entity:
+            integration: ha_text_ai
             domain: sensor
       budget_floor:
         name: Budget Floor (%)
@@ -556,11 +560,10 @@ async def summarize_conversations(
 
         # ── LLM call ──
         try:
-            llm_entity = llm_instance or "sensor.ha_text_ai"
             llm_result = pyscript.llm_task_call(  # noqa: F821
                 prompt=prompt,
                 system=_SUMMARY_SYSTEM_PROMPT,
-                instance=llm_entity,
+                instance=llm_instance,  # blank → llm_task_call's own fallbacks
                 max_tokens=300,
                 temperature=0.3,
                 priority_tier="essential",  # budget gated by budget_floor above

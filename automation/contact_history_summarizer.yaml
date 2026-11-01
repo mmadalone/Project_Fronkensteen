@@ -1,5 +1,5 @@
 # =============================================================================
-# Contact History Summarizer (v1.0.0)
+# Contact History Summarizer (v1.1.0)
 # =============================================================================
 # Scheduled/event-driven job that compresses raw per-contact message entries
 # into LLM-compressed digests. Part of Per-Contact Message History.
@@ -21,7 +21,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Contact History Summarizer (v1.0.0)"
+  name: "Contact History Summarizer (v1.1.0)"
   author: madalone
   description: >
     # Contact History Summarizer
@@ -42,8 +42,15 @@ blueprint:
       path to prevent excessive runs
 
 
-    **Budget safety:** Uses the configured ha_text_ai instance (default:
-    gpt-4o-mini tier). Kill switch disables all summarization.
+    **Budget safety:** Uses the ha_text_ai instance you pick (blank = the
+    household task instance). Kill switch disables all summarization.
+
+
+    ### Recent changes
+
+    - **v1.1.0:** Fix kill switch default that broke new instances; LLM = task instance
+
+    - **v1.0.0:** Initial version
 
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/contact_history_summarizer.yaml
@@ -185,20 +192,22 @@ blueprint:
         llm_instance:
           name: LLM Instance
           description: >-
-            Which ha_text_ai sensor to use for LLM compression calls.
-          default:
-            entity_id: sensor.ha_text_ai
+            Which ha_text_ai sensor to use for LLM compression calls. Leave
+            empty to use the household task instance
+            (input_text.ai_task_instance, else the install's ha_text_ai sensor).
+          default: ""
           selector:
             entity:
-              domain: sensor
+              filter:
+                - integration: ha_text_ai
+                  domain: sensor
 
         kill_switch:
           name: Kill Switch
           description: >-
             Boolean to disable summarization without removing the automation.
             ON = enabled, OFF = disabled.
-          default:
-            entity_id: input_boolean.ai_contact_history_enabled
+          default: input_boolean.ai_contact_history_enabled
           selector:
             entity:
               domain: input_boolean

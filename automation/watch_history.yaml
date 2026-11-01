@@ -22,6 +22,9 @@ blueprint:
     4. Sensor `sensor.ai_watch_history_status` updated for dashboard + L1 hot context
 
     ### Recent changes
+
+    - **v1.1:** Now Playing sensor is optional (default empty, was a household ID)
+
     - **v1:** Initial implementation
   domain: automation
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/watch_history.yaml
@@ -50,13 +53,15 @@ blueprint:
               domain: media_player
 
         now_playing_sensor:
-          name: Now Playing sensor
+          name: Now Playing sensor (optional)
           description: >
-            Template sensor that pre-classifies what is playing.
-            Must have attributes: media_category, media_title,
-            series_title, season, episode, pvr_channel,
-            pvr_channel_number, pvr_programme.
-          default: sensor.madteevee_now_playing
+            Template sensor that pre-classifies what is playing, with the
+            attributes media_category, media_title, series_title, season,
+            episode, pvr_channel, pvr_channel_number and pvr_programme. Its
+            state changes also catch PVR channel switches. Leave empty if
+            you have none: content changes while playing are then not
+            tracked.
+          default: []
           selector:
             entity:
               domain: sensor
@@ -205,7 +210,11 @@ mode: restart
 
 variables:
   v_kodi: !input kodi_entity
-  v_now_playing: !input now_playing_sensor
+  _now_playing_input: !input now_playing_sensor
+  # [] (the default: no sensor) or one entity
+  v_now_playing: >-
+    {{ _now_playing_input if _now_playing_input is string
+       else ((_now_playing_input or []) | first | default('')) }}
   v_attr_delay: !input attribute_delay
   v_min_pvr_entity: !input min_duration_pvr_entity
   v_min_content_entity: !input min_duration_content_entity

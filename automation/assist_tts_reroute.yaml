@@ -1,5 +1,5 @@
 # =============================================================================
-# Assist TTS Reroute (v1.3.0)
+# Assist TTS Reroute (v1.3.1)
 # =============================================================================
 # Intercepts Assist pipeline conversations from a voice device with a weak
 # speaker (e.g., Unfolded Circle Remote 3), re-processes the user's question
@@ -21,7 +21,7 @@
 # =============================================================================
 
 blueprint:
-  name: "Assist TTS Reroute (v1.3.0)"
+  name: "Assist TTS Reroute (v1.3.1)"
   author: madalone
   description: >
     # Assist TTS Reroute
@@ -56,12 +56,16 @@ blueprint:
     - FP2 presence sensors (for presence mode auto-room detection)
 
     ### Recent changes
+
+    - **v1.3.1:** Kill switch defaults to the shipped ai_ helper, which starts off.
+
     - **v1.3.0:** Satellite-exclusion guard — replaces broken `satellite_id`
       check with `device_id` presence check. Voice PE satellites pass
       device_id → excluded. UC3 WebSocket pipelines pass null → allowed.
       Programmatic calls (also null device_id) caught by `[MARKER]` guard.
       Fixes Voice PE conversations being rerouted (double LLM + wrong agent).
       Davis pipeline added to dispatcher exclusion list.
+
     - **v1.2.1:** Fix double-trigger — programmatic `conversation.process`
       calls from other automations (NFM, Email, Charge Reminder) also fire
       `eoc_finished` without a `satellite_id`, causing double LLM + double
@@ -163,8 +167,10 @@ blueprint:
           name: Kill switch
           description: >-
             Input boolean that enables/disables this reroute. When OFF,
-            pipeline TTS plays only on the source device.
-          default: input_boolean.assist_tts_reroute_enabled
+            pipeline TTS plays only on the source device. The default,
+            input_boolean.ai_assist_tts_reroute_enabled, ships off: turn
+            it on to start rerouting.
+          default: input_boolean.ai_assist_tts_reroute_enabled
           selector:
             entity:
               domain: input_boolean

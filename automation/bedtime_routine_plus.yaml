@@ -4,7 +4,7 @@
 # Any fix to shared sections MUST be applied to BOTH files in the same session.
 # Media subsystem (④ audiobook vs ④–⑥ Kodi) is intentionally different — do NOT sync.
 # ───────────────────────────────────────────────────────────────────────
-# bedtime_routine_plus.yaml — v5.4.14
+# bedtime_routine_plus.yaml — v5.4.15
 blueprint:
   name: "Bedtime routine Plus – LLM-driven goodnight (Kodi)"
   author: madalone
@@ -29,6 +29,8 @@ blueprint:
     *Bedtime Routine* blueprint (`bedtime_routine.yaml`).
 
     ### Recent changes
+
+    - **v5.4.15:** PVR channel sensor defaults to blank (was a household ID)
 
     - **v5.4.14:** Audit fix — added `| int(5)` guard to all 7 bare
     `post_tts_delay_val` delay references, matching the defensive pattern
@@ -516,10 +518,11 @@ blueprint:
         sleepytv_pvr_sensor:
           name: PVR channel sensor
           description: >
-            REST sensor entity that reports the current PVR channel name.
-            Only used when detection method is "PVR channel matches".
-            Default: sensor.madteevee_pvr_channel
-          default: sensor.madteevee_pvr_channel
+            Sensor whose state is the current PVR channel name. Its state is
+            matched only by the "PVR channel matches" detection method; its
+            optional `plot` attribute is added to the LLM prompt whatever the
+            method. Leave empty if you have none.
+          default: ""
           selector:
             entity:
               domain: sensor

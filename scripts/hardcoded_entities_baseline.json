@@ -1,42 +1,13 @@
 {
-  "automation/assist_tts_reroute.yaml": [
-    "input_boolean.assist_tts_reroute_enabled"
-  ],
-  "automation/bedtime_routine_plus.yaml": [
-    "sensor.madteevee_pvr_channel"
-  ],
-  "automation/bedtime_winddown.yaml": [
-    "sensor.madteevee_pvr_channel"
-  ],
-  "automation/contact_history_summarizer.yaml": [
-    "sensor.ha_text_ai"
-  ],
-  "automation/conversation_summarizer.yaml": [
-    "sensor.ha_text_ai"
-  ],
   "automation/listen_history.yaml": [
     "media_player.bathroom_ma",
     "media_player.workshop_ma"
-  ],
-  "automation/media_tracking.yaml": [
-    "sensor.radarr_queue",
-    "sensor.sonarr_queue"
-  ],
-  "automation/music_taste_rebuild.yaml": [
-    "sensor.ha_text_ai_deepseek_chat"
-  ],
-  "automation/proactive_bedtime_escalation.yaml": [
-    "sensor.madteevee_pvr_channel"
   ],
   "automation/theatrical_mode.yaml": [
     "tts.google_en_com"
   ],
   "automation/watch_history.yaml": [
-    "media_player.madteevee",
-    "sensor.madteevee_now_playing"
-  ],
-  "automation/weather_forecast_promote.yaml": [
-    "sensor.ha_text_ai_deepseek_chat"
+    "media_player.madteevee"
   ],
   "packages/ai_context_hot.yaml": [
     "media_player.bathroom_ma",
@@ -45,14 +16,11 @@
     "media_player.ha_voice_pe_workshop_rick_esp",
     "media_player.madteevee",
     "media_player.workshop_ma",
-    "media_player.workshop_sonos",
-    "sensor.madteevee_now_playing",
-    "weather.forecast_home"
+    "media_player.workshop_sonos"
   ],
   "packages/ai_history_context.yaml": [
     "person.jessica",
-    "person.miquel",
-    "sensor.aemet_temperature"
+    "person.miquel"
   ],
   "packages/ai_identity.yaml": [
     "device_tracker.madoppo",
@@ -62,30 +30,6 @@
   "pyscript/calendar_promote.py": [
     "calendar.birthdays",
     "calendar.holidays_in_spain"
-  ],
-  "pyscript/common_utilities.py": [
-    "sensor.ha_text_ai_deepseek_chat"
-  ],
-  "pyscript/contact_history.py": [
-    "sensor.ha_text_ai"
-  ],
-  "pyscript/conversation_sensor.py": [
-    "sensor.ha_text_ai"
-  ],
-  "pyscript/email_promote.py": [
-    "sensor.gmail_messages"
-  ],
-  "pyscript/media_promote.py": [
-    "calendar.radarr",
-    "sensor.radarr_queue",
-    "sensor.sonarr_queue",
-    "sensor.sonarr_upcoming"
-  ],
-  "pyscript/proactive_briefing.py": [
-    "weather.forecast_home"
-  ],
-  "pyscript/project_promote.py": [
-    "sensor.ha_text_ai"
   ],
   "pyscript/radio_klara.py": [
     "media_player.bathroom_ma",

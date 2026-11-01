@@ -9,7 +9,7 @@
 
 # ── STATIC USER PROFILE (Shared / Generic) ────────────────────────────────────
 # These original helpers are preserved for backward compatibility.
-# The template sensor now references the per-user _miquel variants below.
+# The template sensor reads the per-user variants of the active user.
 
 # input_text: moved to helpers_input_text.yaml (C5 consolidation)
 
@@ -190,18 +190,23 @@ template:
               'media_player.ha_voice_pe_living_room_quark_esp',
               'media_player.madteevee'
             ] -%}
+            {# Companion "now playing" sensor per player: entity_config.yaml now_playing_sensors, published by state_bridge #}
+            {%- set np_map = state_attr('sensor.ai_media_map', 'now_playing_sensors') or {} -%}
+            {# Players named there are checked too, after the list above #}
+            {%- set mplayers = mplayers + ((np_map.keys() | list | reject('in', mplayers) | list) if np_map is mapping else []) -%}
             {%- set mns = namespace(playing=[]) -%}
             {%- for p in mplayers -%}
               {%- if is_state(p, 'playing') -%}
                 {%- set p_name = state_attr(p, 'friendly_name') | default(p, true) -%}
-                {%- if p == 'media_player.madteevee' and state_attr('sensor.madteevee_now_playing', 'player_state') == 'playing' -%}
-                  {%- set tv_cat = state_attr('sensor.madteevee_now_playing', 'media_category') | default('', true) -%}
-                  {%- set tv_title = state_attr('sensor.madteevee_now_playing', 'media_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
-                  {%- set tv_series = state_attr('sensor.madteevee_now_playing', 'series_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
-                  {%- set tv_season = state_attr('sensor.madteevee_now_playing', 'season') -%}
-                  {%- set tv_episode = state_attr('sensor.madteevee_now_playing', 'episode') -%}
-                  {%- set tv_plot = state_attr('sensor.madteevee_now_playing', 'plot') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
-                  {%- set tv_channel = state_attr('sensor.madteevee_now_playing', 'pvr_channel') | default('', true) -%}
+                {%- set np = np_map.get(p, '') if np_map is mapping else '' -%}
+                {%- if np and state_attr(np, 'player_state') == 'playing' -%}
+                  {%- set tv_cat = state_attr(np, 'media_category') | default('', true) -%}
+                  {%- set tv_title = state_attr(np, 'media_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_series = state_attr(np, 'series_title') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_season = state_attr(np, 'season') -%}
+                  {%- set tv_episode = state_attr(np, 'episode') -%}
+                  {%- set tv_plot = state_attr(np, 'plot') | default('', true) | regex_replace('\\[/?[BbIi]\\]', '') -%}
+                  {%- set tv_channel = state_attr(np, 'pvr_channel') | default('', true) -%}
                   {%- set tv_parts = [p_name] -%}
                   {%- if tv_series -%}
                     {%- set tv_parts = tv_parts + [tv_series ~ ' S' ~ tv_season | string ~ 'E' ~ tv_episode | string] -%}
@@ -356,7 +361,9 @@ template:
               {%- set ns.lines = ns.lines + ['Expertise routing: ' ~ eroute ~ '.'] -%}
             {%- endif -%}
 
-            {# ── WEATHER (met.no via Forecast Home) ── #}
+            {# ── WEATHER — sensor.ai_weather_sources (state_bridge): entity_config.yaml weather_entity, ── #}
+            {#    else the met.no entity, else the first weather entity; met.no until it is published  #}
+            {#    (that boot-time fallback takes the first met.no entity by name)                      #}
             {%- set wmap = {
               'clear-night': 'Clear', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional',
               'fog': 'Foggy', 'hail': 'Hail', 'lightning': 'Thunderstorm',
@@ -365,11 +372,13 @@ template:
               'snowy-rainy': 'Snow/rain', 'sunny': 'Sunny', 'windy': 'Windy',
               'windy-variant': 'Windy'
             } -%}
-            {%- set wstate = states('weather.forecast_home') -%}
+            {%- set wx = state_attr('sensor.ai_weather_sources', 'weather_entity')
+                 or (integration_entities('met') | select('match', 'weather[.]') | sort | first | default('', true)) -%}
+            {%- set wstate = states(wx) -%}
             {%- if wstate not in ['unavailable', 'unknown', 'none'] -%}
               {%- set wcond = wmap.get(wstate, wstate | title) -%}
-              {%- set wtemp = state_attr('weather.forecast_home', 'temperature') | default('?', true) -%}
-              {%- set whum = state_attr('weather.forecast_home', 'humidity') | default('?', true) -%}
+              {%- set wtemp = state_attr(wx, 'temperature') | default('?', true) -%}
+              {%- set whum = state_attr(wx, 'humidity') | default('?', true) -%}
               {%- set ns.lines = ns.lines + ['Weather: ' ~ wcond ~ ', ' ~ wtemp ~ '\u00b0C, humidity ' ~ whum ~ '%.'] -%}
             {%- else -%}
               {%- set ns.lines = ns.lines + ['Weather: Unavailable.'] -%}

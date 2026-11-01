@@ -5,6 +5,13 @@ blueprint:
     button is pressed. Merges MA play logs + Spotify data into the
     unified taste profile on sensor.ai_music_taste_status. Optionally
     generates an LLM genre/style summary (no artist names).
+
+
+    ### Recent changes
+
+    - **v1.1:** LLM Instance defaults to blank (no summary); pick your sensor
+
+    - **v1:** Initial version
   domain: automation
   author: madalone
   source_url: https://github.com/mmadalone/Project_Fronkensteen/blob/main/automation/music_taste_rebuild.yaml
@@ -78,11 +85,15 @@ blueprint:
           name: LLM Instance
           description: >
             ha_text_ai sensor for genre summary generation. Leave blank to
-            skip LLM summarization (raw profile used instead).
-          default: sensor.ha_text_ai_deepseek_chat
+            skip LLM summarization on rebuilds (raw profile used instead);
+            the daily 04:30 aggregation still uses the household task
+            instance.
+          default: ""
           selector:
             entity:
-              domain: sensor
+              filter:
+                - integration: ha_text_ai
+                  domain: sensor
         summary_max_chars:
           name: Summary Max Characters
           description: "Maximum characters for the genre summary."
