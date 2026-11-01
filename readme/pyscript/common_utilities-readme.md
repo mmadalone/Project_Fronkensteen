@@ -15,7 +15,7 @@ Provides the common infrastructure layer used by all other pyscript modules: SQL
 | `pyscript.budget_reload_model_map` | _(none)_ | _(none)_ | Reload the agent-to-model map from HA config entries. Called after pipeline changes. Also refreshes model pricing. `@service` (no response) |
 | `pyscript.budget_refresh_pricing` | _(none)_ | _(none)_ | Force-refresh per-model pricing from the OpenRouter API and write to `model_pricing.json` cache. `@service` (no response) |
 | `pyscript.budget_breakdown_restore` | `data` (dict) | _(none)_ | Restore budget breakdown state from a saved dict (e.g., after restart from L2 persistence). `@service` (no response) |
-| `pyscript.llm_task_call` | `prompt`, `system`, `model`, `max_tokens`, `temperature`, `priority_tier`, `instance` | `{status, response_text, tokens_used}` | Budget-aware LLM wrapper via `ha_text_ai`. Used for summarization, reformulation, and other non-conversational LLM tasks. `supports_response="only"` |
+| `pyscript.llm_task_call` | `prompt`, `system`, `model`, `max_tokens`, `temperature`, `priority_tier`, `instance` | `{status, response_text, tokens_used}` | Budget-aware LLM wrapper via `ha_text_ai`. Used for summarization, reformulation, and other non-conversational LLM tasks. Instance: `instance`, else `input_text.ai_task_instance`, else the install's ha_text_ai sensor. With none, returns `status: error`, `error: no_task_instance` without calling the LLM or counting budget. `supports_response="only"` |
 | `pyscript.llm_direct_embed` | `text`, `model`, `dimensions`, `priority_tier` | `{status, embedding, dimensions, tokens_used}` | Generate a vector embedding for text via OpenAI-compatible API. Used by `memory.py` for semantic search. `supports_response="only"` |
 
 ## Triggers
@@ -38,23 +38,26 @@ Provides the common infrastructure layer used by all other pyscript modules: SQL
 
 ## State Dependencies
 
-- `input_text.ai_task_instance` — Default `ha_text_ai` sensor entity for LLM task calls
+- `input_text.ai_task_instance` — Household task instance: the `ha_text_ai` sensor `llm_task_call` uses when the caller passes none. Blank or never set (`unknown`) counts as not set
 - `input_number.ai_embedding_dimensions` — Vector embedding dimensions (default: 512)
 - `input_text.ai_embedding_api_key` — API key for direct embedding calls (OpenAI-compatible endpoint)
 - `sensor.ai_budget_breakdown` — Output sensor for per-agent budget tracking data
 
 ## Package Pairing
 
-Pairs with `packages/ai_llm_budget.yaml` which defines budget counters, pricing helpers, currency selector, and the budget breakdown sensor. Also pairs with `packages/ai_context_hot.yaml` which hosts the `ha_text_ai` sensor template.
+Pairs with `packages/ai_llm_budget.yaml` which defines budget counters, pricing helpers, currency selector, and the budget breakdown sensor.
 
 ## Called By
 
 - **memory.py** — calls `llm_direct_embed` for semantic search vector generation
 - **contact_history.py** — calls `llm_task_call` for contact message summarization
+- **conversation_sensor.py** — calls `llm_task_call` for per-agent conversation summaries
+- **project_promote.py** — calls `llm_task_call` for project summaries (`auto_summary: true`)
 - **music_taste.py** — calls `llm_task_call` for genre summary generation
 - **agent_whisper.py** — calls `llm_task_call` for interaction summarization
 - **email_promote.py** — calls `conversation_with_timeout` for persona-routed email announcements
 - **All pyscript modules** — use `memory_cache_get/set` for hot-path caching
+- **weather_forecast_promote blueprint** — calls `llm_task_call` for the forecast summary
 - **ai_llm_call_counter automation** — calls `budget_track_call` for LLM and STT cost tracking
 - **Midnight reset automation** — calls `budget_track_call` with `reset=True`
 
@@ -63,6 +66,7 @@ Pairs with `packages/ai_llm_budget.yaml` which defines budget counters, pricing 
 - The cache database (`cache.db`) is separate from the L2 memory database (`memory.db`). Cache is for fast, ephemeral, in-process reads; L2 is for persistent, searchable, cross-module storage.
 - Per-key locking via `_IndexLockContext` uses a two-tier pattern: a `threading.Lock` guards the lock dictionary (microsecond hold), and per-key `asyncio.Lock`s serialize actual I/O operations. This prevents both data races and deadlocks.
 - The 5-minute conversation ID TTL constant matches HA's fixed idle timeout for conversation sessions.
-- `llm_task_call` is deliberately tool-free: it uses the `ha_text_ai` sensor pattern (a template sensor that calls OpenAI directly) rather than `conversation.process`, which would give the LLM access to HA tools. This prevents unintended side effects during summarization tasks.
+- `llm_task_call` is deliberately tool-free: it calls the `ha_text_ai` integration (`ha_text_ai.ask_question`, one sensor per instance) rather than `conversation.process`, which would give the LLM access to HA tools. This prevents unintended side effects during summarization tasks.
+- When neither the caller nor `input_text.ai_task_instance` names an instance, `llm_task_call` reads the entity registry for enabled `ha_text_ai` sensors and uses the oldest, logging which one it picked (a warning when there are several). The lookup is cached for 10 minutes.
 - Budget breakdown tracking uses an in-memory dict that is periodically persisted to L2 memory. On restart, `budget_breakdown_restore` rehydrates from L2.
 - `llm_direct_embed` calls the OpenAI embeddings API directly via `aiohttp`, bypassing HA's conversation integration entirely.

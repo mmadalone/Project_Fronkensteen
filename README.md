@@ -461,7 +461,7 @@ No YAML in this repository was written by hand. Budget sustainability is a desig
 | [Serper](https://serper.dev/) | Web search API for agents |
 | [sqlite-vec](https://github.com/asg017/sqlite-vec) | Semantic vector embeddings for L2 memory search |
 | [FluidSynth](https://www.fluidsynth.org/) / [midiutil](https://github.com/MarkCWirt/MIDIUtil) | Local MIDI synthesis for budget-aware music composition |
-| [ha_text_ai](https://github.com/) | Tool-free LLM text generation for non-conversational tasks |
+| [ha_text_ai](https://github.com/smkrv/ha-text-ai) | Tool-free LLM text generation for non-conversational tasks |
 
 ### Cultural References
 

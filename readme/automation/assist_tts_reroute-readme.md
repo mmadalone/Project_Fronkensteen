@@ -17,8 +17,8 @@ eoc_finished event fires on HA event bus
         |
         v
 Blueprint triggers:
-  S1  Extract user_input.text (original question) + satellite_id
-  S2  Guard: kill switch ON, satellite_id absent, 5s cooldown
+  S1  Extract user_input.text (original question) + device_id
+  S2  Guard: kill switch ON, no device_id (not a Voice PE satellite), 5s cooldown
   S3  Guard: text does NOT start with '[' (programmatic call filter)
   S4  Call agent_dispatch --> current agent (e.g., Deadpool) + TTS voice
   S5  Guard: dispatcher returned valid agent
@@ -34,9 +34,9 @@ Blueprint triggers:
 - **Presence-aware** -- speaker selection via FP2 zones and `tts_speaker_config.json`
 - **Ducking & priority** -- routes through `tts_queue_speak` for full queue coordination
 - **Recursive loop protection** -- `mode: single` + 5-second cooldown guard prevents `conversation.process` -> `eoc_finished` feedback loops
-- **Satellite exclusion** -- `satellite_id` filter excludes ESPHome satellites (they have their own speakers)
+- **Satellite exclusion** -- events that carry a `device_id` (ESPHome / Voice PE satellites, which have their own speakers) are skipped; WebSocket clients such as the UC Remote 3 pass none
 - **Programmatic call filter** -- skips `eoc_finished` events where the user text starts with `[` (all blueprints that call `conversation.process` use `[MARKER]` prefixes like `[NOTIFICATION]`, `[REMINDER ...]`, `[ALARM ...]`; real voice commands never do)
-- **Kill switch** -- `input_boolean.assist_tts_reroute_enabled` controls when rerouting is active
+- **Kill switch** -- `input_boolean.ai_assist_tts_reroute_enabled` (shipped in `helpers_input_boolean.yaml`, off until you turn it on) controls when rerouting is active
 
 ## Why Not `assist_pipeline/run/end`?
 
@@ -69,6 +69,7 @@ The device pipeline should use free TTS (HA Cloud/Piper) since its speaker is in
 3. Add the pipeline name to `input_text.ai_dispatcher_excluded_pipelines` (comma-separated)
 4. Configure the device to use the dedicated pipeline
 5. Create automation: **Settings -> Automations -> Create -> Use Blueprint**
+6. Turn on `input_boolean.ai_assist_tts_reroute_enabled` -- it ships off, so nothing is rerouted until you do (or pick your own input_boolean in the Kill switch input)
 
 ## Configuration
 
@@ -86,11 +87,11 @@ The device pipeline should use free TTS (HA Cloud/Piper) since its speaker is in
 </details>
 
 <details>
-<summary><strong>② Safety</strong></summary>
+<summary><strong>③ Safety</strong></summary>
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `kill_switch` | `input_boolean.assist_tts_reroute_enabled` | Master toggle for rerouting |
+| `kill_switch` | `input_boolean.ai_assist_tts_reroute_enabled` | Master toggle for rerouting. When OFF, pipeline TTS plays only on the source device. The default helper ships off: turn it on to start rerouting. |
 
 </details>
 
@@ -103,6 +104,8 @@ The device pipeline should use free TTS (HA Cloud/Piper) since its speaker is in
 
 ## Changelog
 
+- **v1.3.1:** Kill switch defaults to the shipped ai_ helper, `input_boolean.ai_assist_tts_reroute_enabled`, which starts off (each rerouted turn costs 2 LLM calls + 1 TTS call). **Breaking** if you made `input_boolean.assist_tts_reroute_enabled` yourself and left the input at its default: turn on the new helper, or pick the old one in the Kill switch input.
+- **v1.3.0:** Satellite-exclusion guard -- replaces the broken `satellite_id` check with a `device_id` presence check. Voice PE satellites pass a device_id and are excluded; UC3 WebSocket pipelines pass none and are allowed; programmatic calls (also no device_id) are caught by the `[MARKER]` guard. Fixes Voice PE conversations being rerouted (double LLM + wrong agent).
 - **v1.2.1:** Fix double-trigger bug -- programmatic `conversation.process` calls from other automations (Notification Follow-me, Email Follow-me, Charge Reminder, etc.) fire `eoc_finished` without a `satellite_id`, causing the reroute to re-process them (double LLM + double TTS + double speaker). Added `§3b` guard: skip events where user text starts with `[` (all blueprints use `[MARKER]` prefixes; real voice commands never do).
 - **v1.2.0:** Re-process with dispatcher agent -- captures user question, calls dispatcher for agent + voice, re-asks with correct persona. Recursive loop protection via `mode: single` + cooldown.
 - **v1.1.0:** Direct text capture with dispatcher voice (character/voice mismatch)

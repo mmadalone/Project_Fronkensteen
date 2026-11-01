@@ -1,4 +1,4 @@
-# AI -- Conversation Summarizer (v1.0.0)
+# AI -- Conversation Summarizer (v1.1.0)
 
 Scheduled batch summarization of raw conversation responses stored in L2 memory by `conversation_sensor.py`. Groups entries by agent persona, compresses each group via LLM into a 2--3 sentence summary, and stores summaries back in L2 with configurable retention. Summaries auto-embed on the next `embedding_batch` run.
 
@@ -62,7 +62,7 @@ Scheduled batch summarization of raw conversation responses stored in L2 memory 
 - Pyscript modules: `conversation_sensor` (stores raw conversation responses in L2), `summarize_conversations` service
 - `input_datetime.ai_conversation_summarizer_batch_time` (batch time control)
 - `input_boolean.ai_conversation_sensor_enabled` (kill switch)
-- `sensor.ha_text_ai` (or configured LLM instance)
+- `ha_text_ai` integration: the sensor picked in `llm_instance`, or the household task instance (`input_text.ai_task_instance`, else the install's ha_text_ai sensor)
 - L2 memory system (`memory.py`)
 
 ## Installation
@@ -98,7 +98,7 @@ Scheduled batch summarization of raw conversation responses stored in L2 memory 
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `llm_instance` | `sensor.ha_text_ai` | ha_text_ai sensor for LLM compression calls |
+| `llm_instance` | _(empty)_ | ha_text_ai sensor for LLM compression calls (only ha_text_ai sensors are listed). Empty = household task instance (`input_text.ai_task_instance`, else the install's ha_text_ai sensor) |
 | `budget_floor` | `30` | Skip summarization when remaining LLM budget drops below this %. 0 = always run |
 
 </details>
@@ -116,6 +116,11 @@ Scheduled batch summarization of raw conversation responses stored in L2 memory 
 - **Embedding pipeline:** Summaries auto-embed on the next `embedding_batch` run (typically 03:30), making them searchable via semantic memory queries
 - **Result logging:** Writes to `conversation_sensor.summarizer` logger at `info` level with structured metrics
 - **All pyscript calls** use `continue_on_error: true`
+
+## Changelog
+
+- **v1.1.0:** Fix defaults that broke new instances; LLM Instance = task instance. The Batch Time and Kill Switch defaults were `{entity_id: ...}` mappings, which a time trigger and a template cannot use, so an instance left at its defaults never ran; they are plain entity IDs now. LLM Instance (was a mapping naming `sensor.ha_text_ai`, which exists on no install) now defaults to the household task instance
+- **v1.0.0:** Initial version
 
 ## Author
 

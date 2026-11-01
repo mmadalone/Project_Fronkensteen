@@ -1,6 +1,6 @@
-![Contact History Summarizer (v1.0.0)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/contact_history_summarizer-header.jpeg)
+![Contact History Summarizer (v1.1.0)](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/contact_history_summarizer-header.jpeg)
 
-# Contact History Summarizer (v1.0.0)
+# Contact History Summarizer (v1.1.0)
 
 Batch job that compresses raw per-contact message entries into LLM-compressed digests for the notification follow-me contact history feature (I-47). Searches L2 memory for unsummarized `contact_msg_*` entries, groups them by contact, compresses each group via LLM into a 2-3 sentence digest, and stores the result with a configurable TTL. Three trigger modes allow tuning the cost/freshness tradeoff.
 
@@ -75,7 +75,7 @@ Batch job that compresses raw per-contact message entries into LLM-compressed di
 - `pyscript/contact_history.py` (L2 contact history services)
 - `pyscript/memory.py` (L2 memory search)
 - `input_boolean.ai_contact_history_enabled` (kill switch)
-- `sensor.ha_text_ai` (or configured LLM instance)
+- `ha_text_ai` integration: the sensor picked in `llm_instance`, or the household task instance (`input_text.ai_task_instance`, else the install's ha_text_ai sensor)
 - Notification follow-me system (I-47) generating `contact_history_log_complete` events
 
 ## Installation
@@ -110,7 +110,7 @@ Batch job that compresses raw per-contact message entries into LLM-compressed di
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `llm_instance` | `sensor.ha_text_ai` | ha_text_ai sensor for LLM compression calls |
+| `llm_instance` | _(empty)_ | ha_text_ai sensor for LLM compression calls (only ha_text_ai sensors are listed). Empty = household task instance (`input_text.ai_task_instance`, else the install's ha_text_ai sensor) |
 | `kill_switch` | `input_boolean.ai_contact_history_enabled` | Boolean to enable/disable summarization |
 
 </details>
@@ -125,6 +125,11 @@ Batch job that compresses raw per-contact message entries into LLM-compressed di
 - **Scheduled path:** Runs full batch processing across all contacts up to max_contacts limit
 - **Tagging:** Source entries are tagged as "summarized" after processing to prevent re-compression
 - **Error handling:** All pyscript calls use `continue_on_error: true`
+
+## Changelog
+
+- **v1.1.0:** Fix kill switch default that broke new instances; LLM = task instance. The Kill Switch default was an `{entity_id: ...}` mapping, which the condition template cannot use, so an instance left at its default never ran; it is a plain entity ID now. LLM Instance (was a mapping naming `sensor.ha_text_ai`) now defaults to the household task instance
+- **v1.0.0:** Initial version
 
 ## Author
 

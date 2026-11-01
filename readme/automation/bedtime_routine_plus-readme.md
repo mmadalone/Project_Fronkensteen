@@ -161,7 +161,7 @@ Fully LLM-orchestrated bedtime wind-down with Kodi media playback. The TV stays 
 |-------|---------|-------------|
 | Detection method | `media_title_contains` | Title match, content ID match, playing+title, or PVR channel. |
 | Match string | _(empty)_ | String to match against Kodi media_title or content_id. |
-| PVR channel sensor | `sensor.madteevee_pvr_channel` | REST sensor for PVR channel matching. |
+| PVR channel sensor | _(empty)_ | Sensor whose state is the current PVR channel name (matched by the PVR channel method); an optional `plot` attribute is added to the LLM prompt. Leave empty if you have none: no PVR match, no plot. |
 
 </details>
 
@@ -259,14 +259,14 @@ Fully LLM-orchestrated bedtime wind-down with Kodi media playback. The TV stays 
 | Privacy gate tier | `t1` | Privacy tier (off/T1/T2/T3). |
 | Privacy gate enabled | `input_boolean.ai_privacy_gate_enabled` | Privacy gate toggle. |
 | Privacy gate mode | `input_select.ai_privacy_gate_mode` | Mode selector. |
-| Privacy gate person | `person.miquel` | Person entity for suppression lookups. |
+| Privacy gate person | _(empty)_ | Person entity for suppression lookups. |
 
 </details>
 
 ## Technical Notes
 
 - **Mode:** `single` (silent on overflow)
-- **Version:** 5.4.14
+- **Version:** 5.4.15
 - Manual triggers bypass both the day-of-week gate and the presence gate
 - Cross-midnight day attribution: scheduled times before noon are attributed to the previous calendar day
 - The Kodi entity is automatically excluded from the "media players to stop" list
@@ -278,6 +278,7 @@ Fully LLM-orchestrated bedtime wind-down with Kodi media playback. The TV stays 
 
 ## Changelog
 
+- **v5.4.15:** PVR channel sensor defaults to blank (was a household ID)
 - **v5.4.14:** Audit fix -- `| int(5)` guard on all 7 bare `post_tts_delay_val` delay references (BRP-AUDIT-002)
 - **v5.4.13:** Audit fix -- nested `| int(4)` guard on bare `int(default_countdown)` fallback (BRP-AUDIT-001)
 

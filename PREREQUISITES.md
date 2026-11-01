@@ -23,7 +23,7 @@ Install these via HACS before proceeding. All are required for core functionalit
 | **pyscript** | Integration | Python scripting runtime. Runs all 44 pyscript modules. | [Docs](https://hacs-pyscript.readthedocs.io/) |
 | **Extended OpenAI Conversation** | Integration | LLM conversation agents. Powers all 5 AI personas. | **Use the patched version in `source_components/extended_openai_conversation/`** — do NOT install from HACS. Adds a 6-layer speech sanitizer that strips tool-call leaks from TTS output. Disable HACS auto-update for this component. |
 | **ElevenLabs Custom TTS** | Integration | Multi-voice TTS with mood modulation. | **Use the patched version in `source_components/elevenlabs_custom_tts/`** — do NOT install from HACS. Disable HACS auto-update for this component. |
-| **ha_text_ai** | Integration | LLM task execution (summarization, embedding, classification). | [Repo](https://github.com/SmartHomeEra/ha_text_ai) |
+| **ha_text_ai** | Integration | LLM task execution (summarization, classification). | [Repo](https://github.com/smkrv/ha-text-ai). One instance is enough: tasks without their own instance use `input_text.ai_task_instance`, else the install's ha_text_ai sensor (the oldest, if there are several). |
 | **OpenAI STT** | Integration | Speech-to-text via OpenAI Whisper API. | Replaceable with any HA-compatible STT provider. |
 | **OpenAI TTS** | Integration | Fallback TTS provider. | Used when ElevenLabs credits are low. |
 | **OpenAI Whisper Cloud** | Integration | Alternative STT provider. | Optional if already using OpenAI STT. Some pipeline configs reference this. |
@@ -59,6 +59,8 @@ These enable specific features. The system works without them — affected featu
 | **Spotify** (via SpotifyPlus) | Listening history for taste profiles | Music recommendations use generic profiles |
 | **Google Calendar** | Calendar-aware briefings, wake time prediction | Schedule predictions use manual wake times only |
 | **Serper** (web search) | Agent web search capability | Agents can't search the web; all other tools still work |
+
+**Sonarr/Radarr Queue sensors:** both integrations ship their Queue sensor disabled. Enable it on each integration's device page (Settings → Devices & services → Sonarr / Radarr) for queue counts in the media summaries and for the `media_tracking` blueprint's queue-change trigger (also pick the sensors in that blueprint's Infrastructure section). Without them, the summaries leave out queue counts and `media_tracking` refreshes on its schedule only.
 
 ---
 

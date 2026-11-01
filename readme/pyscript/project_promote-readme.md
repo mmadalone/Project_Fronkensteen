@@ -56,7 +56,7 @@ Pairs with `packages/ai_project_tracking.yaml` (kill switch, hot context line, s
 - **Source of truth**: Markdown files in `/config/projects/*.md` with YAML frontmatter (status, priority, category, next_action, due_date, auto_summary, summary).
 - **Promotable statuses**: Only `active` and `blocked` projects are promoted. Paused/done/archived are skipped.
 - **Promote cache**: 5-minute TTL debounces rapid triggers. Bypassed with `force=true`.
-- **LLM summaries**: When `auto_summary: true` in frontmatter, calls `pyscript.llm_task_call` to generate a summary. Cached by body hash to avoid re-summarizing unchanged content.
+- **LLM summaries**: When `auto_summary: true` in frontmatter, calls `pyscript.llm_task_call` with the household task instance (`input_text.ai_task_instance`, else the install's ha_text_ai sensor) to generate a summary. Cached by body hash to avoid re-summarizing unchanged content. If no LLM summary comes back, the frontmatter `summary` is used.
 - **Failure handling**: Consecutive scan failures increment a counter. After 3 failures, creates a persistent notification. Counter resets on success and dismisses the notification.
 - **L2 schema**: key=`project:{slug}`, tags=`project {category} {status} {priority}`, scope=user, expiry=7d.
 - **Priority sort**: high=0, medium=1, low=2. Hot context line shows highest priority first.

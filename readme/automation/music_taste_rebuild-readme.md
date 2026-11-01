@@ -71,7 +71,7 @@ Triggers a full music taste profile aggregation when a rebuild button is pressed
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `llm_instance` | `sensor.ha_text_ai_deepseek_chat` | ha_text_ai sensor for genre summary. Leave blank to skip LLM summarization |
+| `llm_instance` | *(empty)* | ha_text_ai sensor for genre summary (only ha_text_ai sensors are listed). Leave blank to skip LLM summarization on rebuilds; the daily 04:30 aggregation in `music_taste.py` still uses the household task instance |
 | `summary_max_chars` | `100` | Maximum characters for the genre summary (40-200) |
 | `llm_prompt` | *(see below)* | Custom prompt with `{profile}` and `{max_chars}` placeholders |
 
@@ -84,10 +84,11 @@ Default LLM prompt: "Given this music profile, write a concise genre/style summa
 - **Mode:** `single`
 - Scheduled trigger runs at minute :30 of the configured hour pattern
 - HA start trigger is gated by the `run_on_start` boolean with a configurable `startup_delay` (default 30s) to avoid a race condition with pyscript's `_startup()` handler, which otherwise overwrites the rebuild results (including the LLM genre summary) with the stale L2-cached profile
-- LLM summarization is handled within the pyscript service -- leave `llm_instance` blank to use raw profile instead
+- LLM summarization is handled within the pyscript service -- leave `llm_instance` blank to use raw profile instead. With it blank, every rebuild stores the raw profile as the genre summary, replacing any LLM summary the daily 04:30 aggregation made; pick a sensor to keep an LLM summary between daily runs
 
 ## Changelog
 
+- **v1.1:** LLM Instance defaults to blank (no summary); pick your sensor
 - **v1.0:** Initial release -- manual + scheduled rebuild with LLM genre summary
 
 ## Author

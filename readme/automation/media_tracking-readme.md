@@ -12,8 +12,8 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 │  ┌────────────────────────────────────────────────────┐ │
 │  │ 1. Time pattern: every N hours (periodic)         │ │
 │  │ 2. Fixed time: daily refresh (midnight default)   │ │
-│  │ 3. sensor.sonarr_queue state change               │ │
-│  │ 4. sensor.radarr_queue state change               │ │
+│  │ 3. Sonarr queue sensor state change (optional)    │ │
+│  │ 4. Radarr queue sensor state change (optional)    │ │
 │  │ 5. Kill switch turns ON (manual)                  │ │
 │  │ 6. HA startup                                     │ │
 │  └──────────────────────┬─────────────────────────────┘ │
@@ -43,13 +43,13 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 
 ## Features
 
-- **Multi-trigger architecture** -- periodic (N hours), daily (fixed time), queue-change (Sonarr/Radarr sensors), manual (kill switch), and HA startup.
+- **Multi-trigger architecture** -- periodic (N hours), daily (fixed time), queue-change (optional Sonarr/Radarr Queue sensors), manual (kill switch), and HA startup.
 - **Upcoming media window** -- configurable lookahead: today only, today + tomorrow, or weekly (7 days).
 - **Download history window** -- look back 24 hours (daily) or 7 days (weekly) for recently downloaded content.
 - **L1 hot context** -- writes upcoming media info to input_text helpers for agent hot context consumption.
 - **L2 memory** -- stores media data in L2 memory for semantic search and agent context.
 - **Download notifications** -- optional persistent notification when new downloads are detected since last check.
-- **Queue-change reactivity** -- re-promotes immediately when Sonarr or Radarr queue counts change.
+- **Queue-change reactivity** -- re-promotes immediately when Sonarr or Radarr queue counts change. Optional: pick the Queue sensors in the Infrastructure section, or leave them empty to refresh on the schedule only.
 - **Daily refresh** -- ensures "today" data stays accurate after midnight (configurable time, default 00:01).
 - **Stale data flagging** -- sets `input_boolean.ai_media_data_stale` on promotion errors.
 - **Privacy gate** -- tier-based suppression.
@@ -59,7 +59,7 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 - **Home Assistant 2024.10.0+**
 - **Sonarr and/or Radarr integrations** with API access
 - **Pyscript** with `media_promote_now` service
-- **Queue sensors** -- `sensor.sonarr_queue` and `sensor.radarr_queue` (for queue-change triggers)
+- **Queue sensors (optional)** -- the Sonarr and Radarr Queue sensors, for the queue-change triggers. Both integrations ship them disabled: enable them on the Sonarr/Radarr device page first.
 - **Kill switch** -- `input_boolean.ai_media_tracking_enabled`
 
 ## Installation
@@ -125,8 +125,8 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `sonarr_queue_entity` | `sensor.sonarr_queue` | Sensor tracking the Sonarr download queue |
-| `radarr_queue_entity` | `sensor.radarr_queue` | Sensor tracking the Radarr download queue |
+| `sonarr_queue_entity` | `[]` | Optional. Sonarr's Queue sensor (the picker lists Sonarr sensors only). Its changes refresh the data while downloads run (see `queue_trigger`). Sonarr ships it disabled: enable it on the Sonarr device page first. Empty = refresh on the schedule only |
+| `radarr_queue_entity` | `[]` | Optional. Radarr's Queue sensor, like the Sonarr one. Radarr also ships it disabled. Empty = refresh on the schedule only |
 | `tracking_enabled_entity` | `input_boolean.ai_media_tracking_enabled` | Kill switch for media tracking |
 | `data_stale_entity` | `input_boolean.ai_media_data_stale` | Boolean flagged when media data promotion fails |
 
@@ -140,7 +140,7 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 | `privacy_tier` | `off` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate master toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior selector |
-| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression lookups |
+| `privacy_gate_person` | _(empty)_ | Person entity for tier suppression lookups |
 
 </details>
 
@@ -148,12 +148,14 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 
 - **Mode:** `single` with `max_exceeded: silent` -- one refresh at a time.
 - **Queue trigger gate:** Queue-change triggers (Sonarr/Radarr) are gated by the `queue_trigger` input in the action sequence -- if disabled, the automation stops early with `stop:`.
+- **Queue inputs:** an empty queue input means its queue-change trigger never fires. The inputs only drive the triggers: the queue counts in the promoted data come from `media_promote.py`, which finds the Sonarr/Radarr Queue sensors in the entity registry itself (no queue count while they are disabled).
 - **Window mapping:** `upcoming_window` maps to days (today=1, tomorrow=2, weekly=7). `download_window` maps to hours (daily=24, weekly=168).
 - **Pyscript call:** `pyscript.media_promote_now` receives `upcoming_days`, `download_hours`, `write_l1`, and `force: false`. Returns `status`, `new_downloads_since_last`, and `recent_summary`.
 - **Error handling:** On promotion error, sets `input_boolean.ai_media_data_stale` to flag stale data for dashboard/agent awareness.
 
 ## Changelog
 
+- **v1.1:** Queue sensors default to empty: re-pick them to keep queue refreshes. **Breaking** if you enabled the Sonarr/Radarr Queue sensors and left these inputs at their defaults: select them in the Infrastructure section, or refreshes run on the schedule only.
 - **v1:** Initial implementation.
 
 ## Author

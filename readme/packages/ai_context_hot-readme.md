@@ -15,7 +15,7 @@ The central nervous system of the voice agent architecture. Assembles a live tex
 |---|---|---|
 | `sensor.ai_context_time_identity` | template sensor | Component 1: current time, day type, user identity, household |
 | `sensor.ai_context_presence` | template sensor | Component 2: FP2 zone presence, per-person identity (I-48), occupancy mode, away predictions (I-40) |
-| `sensor.ai_context_media` | template sensor | Component 3: active media players, Kodi now-playing, music taste (I-34), Radarr/Sonarr library |
+| `sensor.ai_context_media` | template sensor | Component 3: active media players, companion now-playing sensors, music taste (I-34), Radarr/Sonarr library |
 | `sensor.ai_context_environment` | template sensor | Component 4: house mode, expertise routing (I-45), weather, alarms, schedule, projects, focus, privacy, guests, interview mode (I-36) |
 | `sensor.ai_context_memory` | template sensor | Component 5: L2 memory context, last interaction self-awareness |
 | `sensor.ai_hot_context` | template sensor | Main concatenator -- joins all 5 component `lines` attributes into one context block |
@@ -26,8 +26,9 @@ This package reads from a wide range of entities across the system:
 
 - **Presence:** FP2 zones and voice satellites from `sensor.ai_zone_map` (`entity_config.yaml` `fp2_zones` / `satellite_zones`, published by `state_bridge.py`); `sensor.ai_location_<person>` per person
 - **Identity:** `sensor.occupancy_mode`, `sensor.identity_confidence_*`, identity helpers
-- **Media:** Music Assistant players, Sonos players, voice PE ESP players, MadTeeVee (Kodi)
-- **Weather:** `weather.forecast_home` (Met.no)
+- **Media:** a fixed list of Music Assistant, Sonos, voice PE ESP and Kodi players, plus every player named in `entity_config.yaml` `now_playing_sensors` (published by `state_bridge.py` on `sensor.ai_media_map`). A player with a companion "now playing" sensor there gets the rich line (series and episode or title, channel, plot) while the sensor's `player_state` is `playing`
+- **Weather:** the weather entity from `sensor.ai_weather_sources` (published by `state_bridge.py`): `entity_config.yaml` `weather_entity`, else the met.no entity (the "Forecast Home" weather HA's onboarding creates), else the first weather entity; until that sensor is published after a restart, the met.no entity directly
+- **Temperature history:** `sensor.ai_outside_temperature_24h` / `_min` / `_max` (`ai_history_context.yaml`) for the "Temp last 24h" line, fed by `sensor.ai_outside_temperature`: `entity_config.yaml` `weather_temperature_entity`, else the weather entity's own temperature (°F is converted to °C)
 - **Next alarm:** `sensor.ai_person_phones` (`pyscript/person_phones.py`) — each person's Companion App `next_alarm` sensor; with two or more alarms, each line names the person
 - **Calendar:** `input_text.ai_calendar_today_summary`, `input_text.ai_calendar_tomorrow_summary`
 - **Email:** `input_number.ai_email_priority_count`
@@ -40,7 +41,7 @@ This package reads from a wide range of entities across the system:
 - **Schedule preferences:** `input_datetime.ai_context_wake_time_weekday_{user}`, `_weekend_{user}`, `_alt_weekday_{user}`, `input_datetime.ai_context_bed_time_{user}`, `input_text.ai_context_wake_time_alt_days_{user}`
 - **Privacy:** Privacy gate helpers
 - **Watch history:** `sensor.ai_watch_history_status` (pyscript `state.set()` sensor with watch session data — "Now watching" / "Recently watched" lines)
-- **Packages:** `ai_identity.yaml`, `ai_away_patterns.yaml`, `ai_focus_guard.yaml`, `ai_media_tracking.yaml`, `ai_music_taste.yaml`, `ai_calendar_promotion.yaml`, `ai_email_promotion.yaml`, `ai_watch_history.yaml`
+- **Packages:** `ai_identity.yaml`, `ai_away_patterns.yaml`, `ai_focus_guard.yaml`, `ai_media_tracking.yaml`, `ai_music_taste.yaml`, `ai_calendar_promotion.yaml`, `ai_email_promotion.yaml`, `ai_watch_history.yaml`, `ai_history_context.yaml`
 
 ## Cross-References
 
@@ -51,8 +52,8 @@ This package reads from a wide range of entities across the system:
 ## Notes
 
 - The sensor uses a 5-component architecture: each component produces a `lines` attribute, and the main concatenator joins them with newlines, filtering out empty/unavailable parts.
-- Per-user references are currently hardcoded to `_miquel` helpers. Task 22 will add dynamic user switching based on identity confidence.
+- Per-user helpers are resolved from the active user (Task 22); nothing in the template names a person.
 - Interview mode (I-36) injects a large instruction block that makes the agent lead a structured preference-gathering conversation.
-- The Kodi (MadTeeVee) media block strips BBCode tags and file extensions from titles.
+- The rich now-playing line needs the companion sensor's `player_state` attribute to be `playing`; it reads `media_title`, `series_title`, `season`, `episode`, `pvr_channel` and `plot`, and strips BBCode tags and file extensions from titles.
 - User preference consumption (2026-03-26): 14 blueprints/modules now read from `ai_context_user_*_{user}` helpers for LLM prompt shaping. Sleep budget calculation uses weekday/weekend/alt-day wake time routing. Alarm/routine blueprints support `use_preference_wake_time` / `use_preference_bed_time` toggles for schedule-aware triggers.
 - Deployed: 2026-02-28. Updated: 2026-03-26 (preference consumption wiring).

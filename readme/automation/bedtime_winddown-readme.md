@@ -103,7 +103,7 @@ If the user leaves bed briefly (e.g., bathroom) and returns within the configure
 | `tv_media_player` | media_player | — | TV entity for sleepy detection |
 | `sleepytv_detection_method` | select | pvr_channel_matches | Detection algorithm |
 | `sleepytv_match_string` | text | — | Match string (case-insensitive) |
-| `sleepytv_pvr_sensor` | sensor | sensor.madteevee_pvr_channel | PVR channel sensor |
+| `sleepytv_pvr_sensor` | sensor | — | Sensor whose state is the current PVR channel name, used by `pvr_channel_matches`. Leave empty if you have none (no PVR match — pick another detection method) |
 | `min_presence_seconds` | number (0–600) | 0 | Extra debounce |
 | `block_if_media_playing` | boolean | false | Suppress during playback |
 
@@ -129,7 +129,7 @@ If the user leaves bed briefly (e.g., bathroom) and returns within the configure
 | `conversation_agent` | text | Rick - Bedtime | Pipeline name or agent entity |
 | `use_dispatcher` | boolean | true | Use dispatcher for persona selection |
 | `assist_satellites` | entity | _(empty)_ | Satellite entity for start_conversation offers |
-| `user_names` | text | Miquel | User name(s) for LLM personalisation (comma-separated) |
+| `user_names` | text | — | User name(s) for LLM personalisation (comma-separated) |
 | `llm_prompt` | text | _(default)_ | Base offer prompt for bedtime offers |
 | `context_entities` | entity | `[]` | Entity states appended to LLM prompt |
 | `budget_floor` | number (0–100) | 60 | Below this budget %, use static fallback |
@@ -211,7 +211,7 @@ If the user leaves bed briefly (e.g., bathroom) and returns within the configure
 | `privacy_tier` | select | t1 | Privacy tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | input_boolean | ai_privacy_gate_enabled | Privacy gate toggle |
 | `privacy_gate_mode` | input_select | ai_privacy_gate_mode | Privacy gate mode |
-| `privacy_gate_person` | entity | person.miquel | Person entity for suppression lookups |
+| `privacy_gate_person` | entity | — | Person entity for suppression lookups |
 | `ducking_flag` | input_boolean | ai_ducking_flag | Ducking flag |
 | `bypass_ducking` | boolean | false | Skip volume ducking on other speakers during TTS |
 
@@ -239,6 +239,7 @@ If the user leaves bed briefly (e.g., bathroom) and returns within the configure
 
 ## Changelog
 
+- **v1.1:** PVR channel sensor defaults to blank (was a household ID)
 - **v1:** Initial version — 4 scenarios, multi-stage escalation, budget gate, memory integration
 
 ## Author

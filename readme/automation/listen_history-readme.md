@@ -113,7 +113,7 @@ Tracks music listening sessions on Music Assistant / Spotify players and logs th
 - **Mode:** `queued` (max: 10) -- multi-player safe. Unlike `watch_history` (`restart` for single Kodi entity), this blueprint handles multiple players simultaneously.
 - **Track change trigger:** Watches `media_title` attribute changes on all target players. Guard condition ensures player is still in `playing` state (avoids spurious attribute updates during stop).
 - **`media_album_name`:** Music Assistant uses `media_album_name` (not `media_album`). The blueprint reads the correct attribute via `state_attr(entity, 'media_album_name')`.
-- **No template sensor needed:** MA/Spotify expose clean metadata directly on the media_player entity. No intermediary sensor like watch_history's `sensor.madteevee_now_playing`.
+- **No template sensor needed:** MA/Spotify expose clean metadata directly on the media_player entity. No intermediary sensor like watch_history's optional Now Playing sensor.
 - **HA restart recovery:** 10-second delay after HA start, then iterates all tracked players via `repeat.for_each` and recovers any still in `playing` state.
 
 ## Changelog

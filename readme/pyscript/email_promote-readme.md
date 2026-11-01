@@ -17,6 +17,8 @@ Task 18b of the Voice Context Architecture. Filters incoming IMAP emails and pro
 | `@time_trigger("cron(2 0 * * *)")` | `email_promote_midnight` | Midnight reset: clears email count, runs IMAP health check |
 | `@time_trigger("cron(*/30 * * * *)")` | `email_check_stale` | Every 30 minutes: flags email as stale if IMAP sensor hasn't changed within configurable timeout |
 
+The IMAP steps (health check, startup catch-up reload, stale check) run only when `entity_config.yaml` `imap_sensor` names a sensor. Blank, the installer default, turns them off; email classification still runs.
+
 ## Key Functions
 
 - `_extract_sender_parts()` — Parses email sender field into (name, email) tuple. Handles "Name <email>", "<email>", and bare email formats.
@@ -39,7 +41,7 @@ Task 18b of the Voice Context Architecture. Filters incoming IMAP emails and pro
 - `input_text.ai_email_last_priority` — Last priority email subject
 - `sensor.identity_confidence_{person}` — Identity confidence gate (suppressed below 70%, person resolved dynamically from IMAP sensor)
 - `sensor.ai_llm_budget_remaining` — Budget gate for LLM reformulation
-- `sensor.gmail_messages` — IMAP sensor (health check target)
+- `entity_config.yaml` `imap_sensor` — IMAP sensor watched by the health check, the stale check and the startup reload (blank turns them off)
 
 ## Package Pairing
 
@@ -60,3 +62,4 @@ Pairs with `packages/ai_email_promotion.yaml` which defines all email filter hel
 - Built-in priority keywords include: shipping, delivery, appointment, urgent, invoice, confirmation, password reset, security alert, payment, receipt.
 - Urgent keywords (TTS triggers): urgent, security alert, password reset, immediate.
 - The `suppress_tts` parameter allows callers (like `email_follow_me`) to promote to L2 without triggering TTS when they handle announcements themselves.
+- `sensor.ai_email_stale` carries an `imap_sensor` attribute naming the sensor it watches. The "Email Stale Reload" automation in `packages/ai_system_recovery.yaml` reads it to find the IMAP config entry to reload once the flag has been on for 15 minutes.

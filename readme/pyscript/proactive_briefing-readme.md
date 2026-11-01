@@ -23,7 +23,7 @@ Note: No cron triggers in the pyscript module. All scheduling (morning, afternoo
 
 ### Section Assemblers (each independently failable)
 - `_section_greeting(hour)` -- Time-aware greeting (pure Python, no external calls)
-- `_section_weather()` -- Weather from `weather.forecast_home` entity
+- `_section_weather()` -- Weather from the weather entity named on `sensor.ai_weather_sources` (published by `state_bridge.py`); left out until that sensor is published, or when the entity is unavailable
 - `_section_calendar(hour)` -- Calendar from `input_text.ai_calendar_today_summary` (L1 helper populated by calendar_promote)
 - `_section_email(hour)` -- From `input_number.ai_email_priority_count`
 - `_section_schedule()` -- Next upcoming event advisory with prep timing
@@ -45,7 +45,7 @@ Note: No cron triggers in the pyscript module. All scheduling (morning, afternoo
 - `input_boolean.ai_proactive_briefing_enabled` -- Kill switch
 - `input_boolean.ai_test_mode` -- Test mode
 - `input_text.ai_last_briefing_summary` -- Output: last briefing summary text
-- `weather.forecast_home` -- Weather data
+- `sensor.ai_weather_sources` attr `weather_entity` -- Weather entity to read: `entity_config.yaml` `weather_entity`, else the met.no entity, else the first weather entity
 - `input_number.ai_email_priority_count` -- Email count
 - `sensor.ai_predictive_schedule_status` attr `bedtime_recommendation` -- Bedtime advisory
 - `input_datetime.ai_predicted_wake_time` -- Wake time
@@ -62,7 +62,7 @@ Pairs with `packages/ai_proactive_briefing.yaml` (kill switch, last briefing sum
 
 - **Blueprints**: `proactive_briefing.yaml` (unified blueprint with per-instance scheduling, presence gating, content config) calls `proactive_briefing_now`
 - **LLM agents**: "Give me my briefing" voice command triggers via automation
-- **Depends on**: `pyscript/memory.py` (L2), `pyscript/tts_queue.py` (TTS), `pyscript/notification_dedup.py` (dedup), `pyscript/agent_dispatcher.py` (persona selection), `pyscript/common_utilities.py` (budget tracking)
+- **Depends on**: `pyscript/memory.py` (L2), `pyscript/tts_queue.py` (TTS), `pyscript/notification_dedup.py` (dedup), `pyscript/agent_dispatcher.py` (persona selection), `pyscript/common_utilities.py` (budget tracking), `pyscript/state_bridge.py` (weather sources)
 
 ## Notes
 

@@ -1,4 +1,4 @@
-# Proactive Bedtime Escalation (v1.7)
+# Proactive Bedtime Escalation (v1.7.1)
 
 ![Proactive Bedtime Escalation](https://raw.githubusercontent.com/mmadalone/Project_Fronkensteen/main/images/header/proactive_bedtime_escalation-header.jpeg)
 
@@ -303,7 +303,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 |-------|---------|-------------|
 | `sleepytv_detection_method` | `media_title_contains` | Detection method |
 | `sleepytv_match_string` | *(empty)* | Match string (empty = disabled) |
-| `sleepytv_pvr_sensor` | `sensor.madteevee_pvr_channel` | PVR channel sensor |
+| `sleepytv_pvr_sensor` | *(empty)* | Sensor whose state is the PVR channel name (matched by the PVR channel method); an optional `plot` attribute is added to the LLM prompt. Leave empty if you have none (no PVR match, no plot) |
 
 </details>
 
@@ -390,7 +390,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 | `privacy_tier` | `t2` | Privacy gate tier (off/t1/t2/t3) |
 | `privacy_gate_enabled` | `input_boolean.ai_privacy_gate_enabled` | Privacy gate system toggle |
 | `privacy_gate_mode` | `input_select.ai_privacy_gate_mode` | Privacy gate behavior |
-| `privacy_gate_person` | `person.miquel` | Person entity for tier suppression |
+| `privacy_gate_person` | *(empty)* | Person entity for tier suppression |
 
 </details>
 
@@ -434,6 +434,7 @@ Unified presence-based escalation blueprint with inline bedtime routine. Combine
 
 ## Changelog
 
+- **v1.7.1:** PVR channel sensor defaults to blank (was a household ID)
 - **v1.7:** Bed presence sensor (⑱) -- binary sensor confirms user is in bed, bypasses escalation
 - **v1.6:** Shared bedtime routine refactor (E-02) -- deduplicated action sequences
 - **v1.5:** Bed presence sensor, stale mutex safety net, removed freeform/both Kodi modes

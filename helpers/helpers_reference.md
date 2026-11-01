@@ -214,6 +214,7 @@ Queues TTS messages, manages speaker selection, handles playback timing.
 | `input_boolean.ai_tts_queue_active` | boolean | E [system] | ON while the TTS queue is processing. | OFF |
 | `input_boolean.ai_tts_volume_restore` | boolean | E | Enable volume restoration after TTS playback (software ducking speakers). | ON |
 | `input_boolean.ai_tts_strip_stage_directions` | boolean | E | Strip `*stage directions*` from TTS text before speaking. | ON |
+| `input_boolean.ai_assist_tts_reroute_enabled` | boolean | E | Kill switch of the Assist TTS Reroute blueprint (the default of its Kill switch input). OFF by default (each rerouted turn costs 2 LLM calls + 1 TTS call). | **OFF** |
 | `input_text.ai_default_speaker` | text | E [config] | Entity ID of default speaker when zone detection fails. | — |
 | `input_text.ai_default_tts_voice` | text | E [config] | Default TTS voice identifier. | — |
 | `input_text.ai_tts_zone_priority` | text | E [config] | CSV of zone names in priority order. When multiple zones detect presence, first zone wins. | — |
@@ -324,7 +325,7 @@ Announces important emails via TTS and filters out noise.
 | `input_text.ai_email_follow_me_dedup_uids` | text | E [system] | UIDs of recently announced emails (dedup). | — |
 | `input_text.ai_email_follow_me_last_subject` | text | E [system] | Last announced email subject. | — |
 | `input_datetime.ai_email_last_announce` | datetime | E [system] | Timestamp of last email announcement. | — |
-| `input_number.ai_email_stale_timeout` | number | D | Minutes before IMAP sensor is considered stale. | 120 min |
+| `input_number.ai_email_stale_timeout` | number | D | Minutes before IMAP sensor is considered stale. Used only when `entity_config.yaml` `imap_sensor` is set. | 120 min |
 
 ---
 
@@ -635,7 +636,7 @@ SQLite-backed memory system with vector search. Handles embedding, archiving, an
 | `input_text.ai_embedding_api_url` | text | E [config] | Embedding API endpoint. | `https://openrouter.ai/api/v1` |
 | `input_text.ai_embedding_api_key` | text | E [config] | API key (password mode). | — |
 | `input_text.ai_embedding_model` | text | E [config] | Embedding model name. | `text-embedding-3-small` |
-| `input_text.ai_task_instance` | text | E [config] | ha_text_ai sensor entity for LLM task calls. | `sensor.ha_text_ai_deepseek_chat` |
+| `input_text.ai_task_instance` | text | E | ha_text_ai sensor for LLM task calls that don't name their own instance. Optional: blank uses the install's ha_text_ai sensor (the oldest, if there are several). | — |
 | `input_text.ai_memory_archive_protection_tags` | text | E | Space-separated tags that protect entries from archiving. | `important remember pinned permanent` |
 | `input_text.ai_memory_search_query` | text | E | Dashboard search field. | — |
 | `input_text.ai_memory_archive_search_query` | text | E | Dashboard archive search field. | — |

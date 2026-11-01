@@ -84,7 +84,7 @@ Also configure `pyscript/tts_speaker_config.json` — the single source of truth
 | `input_text.ai_embedding_api_url` | text | OpenRouter | Your embedding API endpoint |
 | `input_text.ai_embedding_api_key` | text | — | Your API key (stored as password) |
 | `input_text.ai_embedding_model` | text | `text-embedding-3-small` | Embedding model name |
-| `input_text.ai_task_instance` | text | `sensor.ha_text_ai_deepseek_chat` | Your ha_text_ai sensor entity |
+| `input_text.ai_task_instance` | text | — | Optional. Your ha_text_ai sensor entity; blank uses the install's ha_text_ai sensor (the oldest, if there are several) |
 | `input_text.ai_budget_fallback_agent` | text | `homeassistant` | Conversation agent to use when budget is exceeded |
 | `input_number.ai_elevenlabs_credit_floor` | number | 5000 | Character count floor before TTS swaps to HA Cloud. Set negative to disable (allow overage). |
 | `input_select.ai_budget_currency` | select | `EUR` | Your preferred currency symbol |
@@ -99,6 +99,8 @@ Also configure `pyscript/tts_speaker_config.json` — the single source of truth
 | `input_text.ai_email_blocked_keywords` | text | Subject keywords to block |
 | `input_text.ai_email_urgent_keywords` | text | Keywords that trigger urgent announcement |
 | `input_select.ai_email_filter_mode` | select | `whitelist`, `blacklist`, or `hybrid` |
+
+Also set `imap_sensor` in `pyscript/entity_config.yaml` to your IMAP sensor. Blank turns off the IMAP health check, the stale check and the startup catch-up reload; email classification still runs.
 
 ### 7. Presence Sensors (if using FP2/presence features)
 
@@ -155,6 +157,7 @@ Every major feature has a master toggle (`input_boolean`). All default to ON unl
 | `ai_memory_search_enrich` | Memory Search Enrichment | ON |
 | `ai_memory_semantic_autolink` | Semantic Autolink | **OFF** |
 | `ai_ambient_music_enabled` | Ambient Music | **OFF** |
+| `ai_assist_tts_reroute_enabled` | Assist TTS Reroute | **OFF** |
 | `ai_notifications_master_enabled` | All Notifications (gate) | ON |
 | `ai_budget_fallback_active` | Budget Fallback Mode | OFF (set by system) |
 | `ai_test_mode` | Test Mode | **OFF** |

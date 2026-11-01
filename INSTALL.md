@@ -189,7 +189,10 @@ Edit `entity_config.yaml` to map YOUR entities:
 | `calendars` | Your calendar entity IDs (main, holidays, birthdays) |
 | `music_players` | Your Music Assistant player entity IDs |
 | `spotifyplus_entity` | Your SpotifyPlus sensor entity (or empty string) |
-| `imap_sensor` | Your email sensor entity (or empty string) |
+| `now_playing_sensors` | Media players that have a companion "now playing" sensor, as `media_player: sensor` pairs, so the hot context reports those players and names the channel, episode and plot (or `{}`) |
+| `weather_entity` | Weather entity for the hot context and briefings (or empty string: the met.no entity HA's onboarding creates, else the first weather entity) |
+| `weather_temperature_entity` | Your outdoor temperature sensor for "Temp last 24h" (or empty string: the weather entity's own temperature) |
+| `imap_sensor` | Your email sensor entity (or empty string, which also turns off the IMAP health check, the stale check and the startup catch-up reload; email classification still runs) |
 | `scene_learner_lights` | Light entities per zone |
 | `persons` | Per-person config: calendar, notify service, spotify, imap |
 | `vsync_zones` | Speaker groups per zone with ducking strategy |

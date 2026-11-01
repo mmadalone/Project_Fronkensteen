@@ -6,7 +6,7 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 
 | Service | Parameters | Returns | Description |
 |---------|-----------|---------|-------------|
-| `pyscript.music_taste_rebuild` | `llm_instance`, `summary_max_chars`, `llm_prompt` | `{status, op, top_artists, total_plays, genre_summary}` | Force a full profile aggregation now. Optionally generates an LLM genre/style summary. `supports_response="optional"` |
+| `pyscript.music_taste_rebuild` | `llm_instance`, `summary_max_chars`, `llm_prompt` | `{status, op, top_artists, total_plays, genre_summary}` | Force a full profile aggregation now. Generates an LLM genre/style summary when `llm_instance` names an ha_text_ai sensor; blank skips it. `supports_response="optional"` |
 | `pyscript.music_taste_stats` | _(none)_ | `{status, op, summary, top_artists, top_tracks, total_plays, has_spotify, last_updated}` | Return current taste profile for debugging and dashboard display. `supports_response="optional"` |
 
 ## Triggers
@@ -16,7 +16,7 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 | `@state_trigger` (dynamic, per MA player) | `_on_media_playing` | Registered at startup from `entity_config.yaml` `music_players`. Logs tracks as they start playing. Filters out radio streams and TTS. |
 | `@time_trigger("period(0, 30)")` | `_poll_playing_media` | 30-second polling fallback: catches tracks on players not in the MA_PLAYERS list (only `media_content_type == "music"`). |
 | `@time_trigger("cron(0 4 * * *)")` | `_spotify_daily_pull` | Daily at 04:00: pulls top artists (medium_term), top tracks, and recently played from SpotifyPlus. |
-| `@time_trigger("cron(30 4 * * *)")` | `_daily_aggregate` | Daily at 04:30: merges MA play logs + Spotify data into a unified taste profile. Optionally generates LLM genre summary. |
+| `@time_trigger("cron(30 4 * * *)")` | `_daily_aggregate` | Daily at 04:30: merges MA play logs + Spotify data into a unified taste profile. Generates the LLM genre summary with the household task instance. |
 | `@time_trigger("startup")` | `_startup` | Restores taste profile from L2 on startup, sets status sensor |
 
 ## Key Functions
@@ -30,7 +30,7 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 ## State Dependencies
 
 - `input_boolean.ai_music_taste_enabled` — Kill switch
-- `input_text.ai_task_instance` — LLM instance for genre summary generation
+- `input_text.ai_task_instance` — Household task instance for the daily genre summary (read only)
 - SpotifyPlus entity — discovered from `entity_config.yaml` `spotifyplus_entity`
 - Music Assistant players — discovered from `entity_config.yaml` `music_players`
 
@@ -53,5 +53,5 @@ Pairs with `packages/ai_music_taste.yaml` (if it exists) or the kill switch is d
 - L2 key pattern: `music_play:{normalized_artist}:{title_hash}` with 365-day expiry. Each entry is a JSON object with play count, rooms, source, and last_played timestamp.
 - Spotify data uses `medium_term` time range (~6 months) for top artists and tracks.
 - The polling fallback (`period(0, 30)`) only catches `media_content_type == "music"` to avoid logging TTS, announcements, or video playback.
-- Genre summary generation is optional and budget-gated: it only runs if an LLM instance is configured and the profile has data.
+- Genre summary generation is optional and budget-gated, and needs profile data. `music_taste_rebuild` runs it only when `llm_instance` is set. The daily aggregation always runs it with the household task instance: `input_text.ai_task_instance`, or the install's ha_text_ai sensor when the helper is blank or was never set (no ha_text_ai at all → raw profile).
 - Room tracking: each play log includes the room derived from the media player entity name, enabling per-room listening pattern analysis.
