@@ -26,7 +26,37 @@ _active_sessions: dict[str, dict] = {}   # entity_id → session dict
 _daily_entries: list[dict] = []           # today's logged entries
 _daily_index: int = 0                     # session counter for L2 keys
 _last_summary_date: str = ""              # date of last rollover
+_MEMORY_DB = "/config/memory.db"
 result_entity_name: dict[str, str] = {}   # cached friendly name
+
+
+@pyscript_executor  # noqa: F821
+def _l2_max_listen_index(db_path: str, date_str: str) -> int:
+    """Highest index already stored for listen:{date}:N in L2, or 0 (AP-55).
+
+    memory.py normalizes keys (listen:2026-11-02:3 → listen_2026_11_02_3);
+    both spellings are matched.
+    """
+    import re as _re
+    import sqlite3 as _sqlite3
+
+    day = date_str.replace("-", "_")
+    pattern = _re.compile(r"^listen[_:]" + _re.escape(day).replace("_", "[-_]") + r"[_:](\d+)$")
+    highest = 0
+    try:
+        con = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute("SELECT key FROM mem WHERE key LIKE ?", (f"listen_{day}_%",)).fetchall()
+            rows += con.execute("SELECT key FROM mem WHERE key LIKE ?", (f"listen:{date_str}:%",)).fetchall()
+        finally:
+            con.close()
+    except Exception:
+        return 0
+    for (key,) in rows:
+        match = pattern.match(key)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return highest
 
 
 # ── Startup ──────────────────────────────────────────────────────────────────
@@ -39,6 +69,11 @@ async def _startup():
     _daily_entries = []
     _last_summary_date = datetime.now().strftime("%Y-%m-%d")
     _daily_index = 0
+    # Never reuse an index L2 already holds: memory keys are unique, so a
+    # restart that reset the index made the next listen overwrite the day's
+    # first entry.
+    l2_index = _l2_max_listen_index(_MEMORY_DB, _last_summary_date)
+    _daily_index = max(_daily_index, l2_index)
     _ensure_result_entity_name(force=True)
     _update_sensor("idle")
     log.info("listen_history: startup — ready")  # noqa: F821

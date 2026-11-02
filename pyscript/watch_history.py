@@ -2,12 +2,14 @@
 
 Tracks what is watched on Kodi media players, classifies content
 (PVR/movie/series/addon/streaming), measures watch duration, and logs
-to L2 memory. Uses template sensors for pre-classified metadata plus
-Kodi JSON-RPC for definitive source detection (plugin:// file path).
+to L2 memory. Metadata comes from the Kodi media player, Kodi JSON-RPC
+(definitive source detection from the plugin:// file path) and, optionally,
+a now-playing template sensor of your own.
 
 Blueprint-driven: watch_history.yaml owns triggers and config knobs;
 this module provides stateless services for start/pause/stop events.
 """
+import asyncio
 import time
 from aiohttp import ClientSession, ClientTimeout
 from datetime import datetime
@@ -26,15 +28,18 @@ from shared_utils import build_result_entity_name
 #
 # Key design:
 #   - Stateless services — blueprint owns triggers
-#   - Metadata from template sensors + JSON-RPC source detection
-#   - Duration tracked via timestamps in module-level session dict
+#   - Metadata from the media player + JSON-RPC source detection, plus an
+#     optional now-playing template sensor (the blueprint's Now Playing input)
+#   - Duration tracked via timestamps in module-level session dict; the day's
+#     state is saved to watch_history_state.json and restored at startup
 #   - Minimum duration thresholds filter channel surfing / accidental plays
 #   - Daily summary written to L2 for hot context
 #
 # Data sources:
-#   sensor.madteevee_now_playing — pre-classified (live_tv/series/movie/video)
-#     with PVR channel, season/episode, cleaned titles
+#   media_player (Kodi) — state, title, series/season/episode
 #   Kodi JSON-RPC Player.GetItem — file property for plugin:// source detection
+#   now-playing template sensor (optional, your own) — pre-classified
+#     live_tv/series/movie/video with PVR channel, season/episode, cleaned titles
 #
 # L2 keys:
 #   watch:{date}:{index}       — individual watch entry (30d default)
@@ -44,7 +49,7 @@ from shared_utils import build_result_entity_name
 #   - pyscript/memory.py (L2: memory_set)
 #   - pyscript/entity_config.yaml (kodi_devices section)
 #   - packages/ai_watch_history.yaml (helpers)
-#   - template.yaml (sensor.madteevee_now_playing)
+#   - /config/pyscript/watch_history_state.json (runtime state, written here)
 # =============================================================================
 
 _KODI_API_TIMEOUT = 5  # seconds
@@ -61,6 +66,98 @@ _last_summary_date: str = ""
 _daily_index: int = 0
 result_entity_name: dict[str, str] = {}
 _kodi_devices: dict[str, dict] = {}  # entity_id → {"url": str, "auth": str|None}
+
+# The day's counters, entries and open sessions are saved here after every
+# change and restored at startup. Without it a restart or a reload of this
+# module reset the index, and the next watch overwrote watch:{date}:1 in L2
+# (keys are unique), and the day's summary lost everything before it.
+_STATE_FILE = "/config/pyscript/watch_history_state.json"
+_MEMORY_DB = "/config/memory.db"
+# One save at a time, so the newest snapshot is always the last one written.
+_state_lock = asyncio.Lock()
+
+
+@pyscript_executor  # noqa: F821
+def _read_state_file(path: str) -> dict | None:
+    """The saved daily state, or None (AP-55)."""
+    import json as _json
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = _json.load(f)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+@pyscript_executor  # noqa: F821
+def _write_state_file(path: str, data: dict) -> bool:
+    """Write the daily state atomically (AP-55)."""
+    import json as _json
+    import os as _os
+    import tempfile as _tempfile
+
+    # A unique temp file per write: two overlapping saves must never share one.
+    base = _os.path.basename(path).replace("_state.json", "")
+    try:
+        fd, tmp = _tempfile.mkstemp(dir=_os.path.dirname(path), prefix=base + ".", suffix="_state.json.tmp")
+    except Exception:
+        return False
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            _json.dump(data, f, ensure_ascii=False)
+        _os.replace(tmp, path)
+        return True
+    except Exception:
+        try:
+            _os.unlink(tmp)
+        except Exception:
+            pass
+        return False
+
+
+@pyscript_executor  # noqa: F821
+def _l2_max_watch_index(db_path: str, date_str: str) -> int:
+    """Highest index already stored for watch:{date}:N in L2, or 0 (AP-55).
+
+    memory.py normalizes keys (watch:2026-11-01:3 → watch_2026_11_01_3);
+    both spellings are matched.
+    """
+    import re as _re
+    import sqlite3 as _sqlite3
+
+    day = date_str.replace("-", "_")
+    pattern = _re.compile(r"^watch[_:]" + _re.escape(day).replace("_", "[-_]") + r"[_:](\d+)$")
+    highest = 0
+    try:
+        con = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = con.execute("SELECT key FROM mem WHERE key LIKE ?", (f"watch_{day}_%",)).fetchall()
+            rows += con.execute("SELECT key FROM mem WHERE key LIKE ?", (f"watch:{date_str}:%",)).fetchall()
+        finally:
+            con.close()
+    except Exception:
+        return 0
+    for (key,) in rows:
+        match = pattern.match(key)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return highest
+
+
+async def _save_state() -> None:
+    """Save the day's state; failures are logged, never raised."""
+    async with _state_lock:
+        data = {
+            "date": _last_summary_date,
+            "index": _daily_index,
+            "entries": [dict(e) for e in _daily_entries],
+            "channel_flips": _daily_channel_flips,
+            "flip_details": [dict(f) for f in _daily_flip_details],
+            "sessions": {k: dict(v) for k, v in _active_sessions.items()},
+        }
+        if not _write_state_file(_STATE_FILE, data):
+            log.warning("watch_history: could not save the daily state to %s", _STATE_FILE)  # noqa: F821
 
 
 @pyscript_compile  # noqa: F821
@@ -88,7 +185,7 @@ def _load_kodi_config() -> dict:
             creds = _b64_encode(f"{username}:{password}")
             auth = f"Basic {creds}"
         device = {"url": url, "auth": auth}
-        # Map by name slug (e.g., "madteevee" → media_player.madteevee)
+        # Map by name slug (e.g., "Living Room" → media_player.living_room)
         name = entry.data.get("name", "").lower().replace(" ", "_").replace("-", "_")
         if name:
             devices[f"media_player.{name}"] = device
@@ -309,6 +406,50 @@ async def _startup():
     _last_summary_date = datetime.now().strftime("%Y-%m-%d")
     _daily_index = 0
 
+    # Restore the day saved before this restart or reload.
+    saved = _read_state_file(_STATE_FILE)
+    if not saved:
+        saved = {}
+    if saved.get("date"):
+        _last_summary_date = str(saved.get("date"))
+        _daily_index = _safe_int(saved.get("index")) or 0
+        _daily_entries = [e for e in (saved.get("entries") or []) if isinstance(e, dict)]
+        _daily_channel_flips = _safe_int(saved.get("channel_flips")) or 0
+        _daily_flip_details = [f for f in (saved.get("flip_details") or []) if isinstance(f, dict)]
+
+    # An open session survives a reload of this module, not an HA restart: only
+    # after a reload does the status sensor still show it (state_bridge seeds
+    # it idle at boot, and the blueprint's HA-start recovery takes over).
+    restored_state = ""
+    try:
+        live_state = str(state.get(RESULT_ENTITY) or "")  # noqa: F821
+        live_attrs = state.getattr(RESULT_ENTITY) or {}  # noqa: F821
+    except NameError:
+        live_state, live_attrs = "", {}
+    live_started = str(live_attrs.get("started_at") or "")
+    if live_started and (live_state.startswith("watching") or live_state.startswith("paused")):
+        try:
+            live_ts = datetime.fromisoformat(live_started).timestamp()
+        except ValueError:
+            live_ts = 0
+        for ent_id, sess in (saved.get("sessions") or {}).items():
+            if isinstance(sess, dict) and live_ts and abs(float(sess.get("start_time") or 0) - live_ts) < 2:
+                _active_sessions[ent_id] = sess
+                restored_state = "paused" if live_state.startswith("paused") else "watching"
+
+    # A saved day that has ended gets its summary now.
+    await _check_daily_rollover()
+    # Never reuse an index L2 already holds, even if the state file is missing.
+    l2_index = _l2_max_watch_index(_MEMORY_DB, _last_summary_date)
+    _daily_index = max(_daily_index, l2_index)
+    await _save_state()
+    if saved.get("date") or _daily_index:
+        log.info(  # noqa: F821
+            "watch_history: restored %s — %d entries, %d channel flips, next index %d, %d open session(s)",
+            _last_summary_date, len(_daily_entries), _daily_channel_flips,
+            _daily_index + 1, len(_active_sessions),
+        )
+
     # Load Kodi JSON-RPC config from HA config entries (same pattern as media_promote.py)
     _kodi_devices = {}
     try:
@@ -322,7 +463,10 @@ async def _startup():
         log.warning("watch_history: kodi config load failed: %s", exc)  # noqa: F821
 
     _ensure_result_entity_name(force=True)
-    _update_sensor("idle")
+    if restored_state:
+        _update_sensor(restored_state, session=list(_active_sessions.values())[0])
+    else:
+        _update_sensor("idle")
     log.info("watch_history: startup — ready")  # noqa: F821
 
 
@@ -619,6 +763,7 @@ async def _check_daily_rollover() -> None:
     _daily_flip_details = []
     _daily_index = 0
     _last_summary_date = today
+    await _save_state()
 
 
 # ── Close Active Session (internal) ─────────────────────────────────────────
@@ -653,6 +798,7 @@ async def _close_session(
                 "programme": session.get("pvr_programme", session.get("media_title", "")),
                 "duration_s": duration_s,
             })
+        await _save_state()
         return {
             "logged": False,
             "duration_s": duration_s,
@@ -695,6 +841,7 @@ async def _close_session(
         "duration_s": duration_s,
         "category": cat,
     })
+    await _save_state()
 
     return {
         "logged": True,
@@ -828,6 +975,7 @@ async def watch_history_start(
     }
 
     _active_sessions[entity_id] = session
+    await _save_state()
     _update_sensor("watching", session=session)
 
     log.info(  # noqa: F821

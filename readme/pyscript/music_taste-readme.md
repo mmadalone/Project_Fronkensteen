@@ -17,7 +17,7 @@ I-34 of the Voice Context Architecture. Logs what gets played on Music Assistant
 | `@time_trigger("period(0, 30)")` | `_poll_playing_media` | 30-second polling fallback: catches tracks on players not in the MA_PLAYERS list (only `media_content_type == "music"`). |
 | `@time_trigger("cron(0 4 * * *)")` | `_spotify_daily_pull` | Daily at 04:00: pulls top artists (medium_term), top tracks, and recently played from SpotifyPlus. |
 | `@time_trigger("cron(30 4 * * *)")` | `_daily_aggregate` | Daily at 04:30: merges MA play logs + Spotify data into a unified taste profile. Generates the LLM genre summary with the household task instance. |
-| `@time_trigger("startup")` | `_startup` | Restores taste profile from L2 on startup, sets status sensor |
+| `@time_trigger("startup")` | `_startup` | Restores the taste profile from L2 and the last genre summary from `/config/pyscript/music_taste_state.json`, sets status sensor |
 
 ## Key Functions
 
@@ -52,6 +52,7 @@ Pairs with `packages/ai_music_taste.yaml` (if it exists) or the kill switch is d
 - Weighted scoring for artist ranking: MA plays are weighted 2x (actual listening behavior) while Spotify position contributes a descending bonus (top artist = 15 pts, second = 14, etc.). This ensures local listening habits outweigh historical Spotify data.
 - L2 key pattern: `music_play:{normalized_artist}:{title_hash}` with 365-day expiry. Each entry is a JSON object with play count, rooms, source, and last_played timestamp.
 - Spotify data uses `medium_term` time range (~6 months) for top artists and tracks.
+- The genre summary is saved to `/config/pyscript/music_taste_state.json` each time it is published and restored at startup, so a restart no longer drops the hot context back to the raw profile until 04:30. It is runtime state, so it is kept out of memory.db, which is what agents search.
 - The polling fallback (`period(0, 30)`) only catches `media_content_type == "music"` to avoid logging TTS, announcements, or video playback.
 - Genre summary generation is optional and budget-gated, and needs profile data. `music_taste_rebuild` runs it only when `llm_instance` is set. The daily aggregation always runs it with the household task instance: `input_text.ai_task_instance`, or the install's ha_text_ai sensor when the helper is blank or was never set (no ha_text_ai at all → raw profile).
 - Room tracking: each play log includes the room derived from the media player entity name, enabling per-room listening pattern analysis.

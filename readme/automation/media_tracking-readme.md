@@ -74,7 +74,7 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `refresh_interval` | `"6"` | Hours between automatic refreshes (1/2/6/12/24) |
+| `refresh_interval` | `"6"` | Hours between automatic refreshes, on the hour: 2 = every even hour, 6 = 00/06/12/18 (options 1/2/6/12/24) |
 | `enable_daily_refresh` | `true` | Run a fixed-time daily refresh |
 | `daily_refresh_time` | `00:01:00` | Time for the daily refresh |
 | `queue_trigger` | `true` | Re-promote on Sonarr/Radarr queue count change |
@@ -155,6 +155,7 @@ Promotes Radarr/Sonarr data to L1 hot context, L2 memory, and optionally sends d
 
 ## Changelog
 
+- **v1.2:** Refresh interval fires every N hours. It fired once a day at hour N, because a time pattern reads `hours: 2` as "at 02:00"; the trigger now runs hourly and a condition keeps every Nth hour, so stored values keep working.
 - **v1.1:** Queue sensors default to empty: re-pick them to keep queue refreshes. **Breaking** if you enabled the Sonarr/Radarr Queue sensors and left these inputs at their defaults: select them in the Infrastructure section, or refreshes run on the schedule only.
 - **v1:** Initial implementation.
 

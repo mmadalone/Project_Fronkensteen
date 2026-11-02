@@ -23,6 +23,12 @@ KILL_SWITCH = "input_boolean.ai_music_taste_enabled"
 L2_SPOTIFY_EXPIRY = 30  # days
 L2_PROFILE_EXPIRY = 30  # days
 PROFILE_KEY = "music_taste:profile"
+# The genre summary last published on the sensor, saved so a restart restores it
+# instead of dropping the hot context back to the raw profile until the next
+# 04:30 aggregation. Runtime state, so a JSON file: memory.db is what agents
+# search.
+_STATE_FILE = "/config/pyscript/music_taste_state.json"
+_state_file_lock = asyncio.Lock()
 
 
 def _helper_int(entity_id, default):
@@ -123,6 +129,55 @@ async def _l2_set(
     except Exception as exc:
         log.warning(f"music_taste: L2 set failed key={key}: {exc}")  # noqa: F821
         return False
+
+
+@pyscript_executor  # noqa: F821
+def _read_state_file(path: str) -> dict | None:
+    """The saved state, or None (AP-55)."""
+    import json as _json
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = _json.load(f)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+@pyscript_executor  # noqa: F821
+def _write_state_file(path: str, data: dict) -> bool:
+    """Write the state atomically (AP-55)."""
+    import json as _json
+    import os as _os
+    import tempfile as _tempfile
+
+    # A unique temp file per write: two overlapping saves must never share one.
+    base = _os.path.basename(path).replace("_state.json", "")
+    try:
+        fd, tmp = _tempfile.mkstemp(dir=_os.path.dirname(path), prefix=base + ".", suffix="_state.json.tmp")
+    except Exception:
+        return False
+    try:
+        with _os.fdopen(fd, "w", encoding="utf-8") as f:
+            _json.dump(data, f, ensure_ascii=False)
+        _os.replace(tmp, path)
+        return True
+    except Exception:
+        try:
+            _os.unlink(tmp)
+        except Exception:
+            pass
+        return False
+
+
+async def _save_genre_summary(value: str) -> None:
+    """Persist the published genre summary (restored by _startup).
+
+    An empty value is saved too, so a restart never brings back an older one.
+    """
+    async with _state_file_lock:
+        if not _write_state_file(_STATE_FILE, {"genre_summary": value or "", "updated": _now_iso()}):
+            log.warning(f"music_taste: could not save the genre summary to {_STATE_FILE}")  # noqa: F821
 
 
 async def _l2_get(key: str) -> dict | None:
@@ -537,11 +592,13 @@ async def _daily_aggregate():
         # (llm_task_call already increments counters, but this was previously a blind spot
         # if called via a different path — now explicitly documented as tracked)
 
+    published_genre = genre_summary if genre_summary else raw_summary
+    await _save_genre_summary(published_genre)
     _set_result(
         "ok",
         op="aggregate",
         summary=raw_summary,
-        genre_summary=genre_summary if genre_summary else raw_summary,
+        genre_summary=published_genre,
         top_artists=json.dumps(profile.get("top_artists", [])),
         top_tracks=json.dumps(profile.get("top_tracks", [])),
         total_plays=profile.get("total_plays", 0),
@@ -577,10 +634,15 @@ async def _startup():
     if resp and resp.get("status") == "ok" and resp.get("value"):
         try:
             profile = json.loads(resp["value"])
+            saved = _read_state_file(_STATE_FILE)
+            if not saved:
+                saved = {}
+            genre = str(saved.get("genre_summary") or "")
             _set_result(
                 "ok",
                 op="startup",
                 summary=profile.get("summary", ""),
+                genre_summary=genre or profile.get("summary", ""),
                 top_artists=json.dumps(profile.get("top_artists", [])),
                 top_tracks=json.dumps(profile.get("top_tracks", [])),
                 total_plays=profile.get("total_plays", 0),
@@ -693,11 +755,13 @@ async def music_taste_rebuild(
             raw_summary, llm_instance, int(summary_max_chars), llm_prompt
         )
 
+    published_genre = genre_summary if genre_summary else raw_summary
+    await _save_genre_summary(published_genre)
     _set_result(
         "ok",
         op="rebuild",
         summary=raw_summary,
-        genre_summary=genre_summary if genre_summary else raw_summary,
+        genre_summary=published_genre,
         top_artists=json.dumps(profile.get("top_artists", [])),
         top_tracks=json.dumps(profile.get("top_tracks", [])),
         total_plays=profile.get("total_plays", 0),

@@ -1,6 +1,6 @@
 # Kodi Watch History Tracker -- Pyscript Module
 
-Tracks what is watched on Kodi across all sources (PVR, YouTube, Netflix, Prime Video, Movistar+, Disney+, HBO Max, Filmin, library content). Classifies content via JSON-RPC source detection, EPG data, and direct media_player entity reads. Measures watch duration with configurable minimum thresholds and logs to L2 memory. Stateless services driven by the `watch_history.yaml` blueprint -- the module has no scheduling of its own beyond startup config loading.
+Tracks what is watched on Kodi across all sources (PVR, YouTube, Netflix, Prime Video, Movistar+, Disney+, HBO Max, Filmin, library content). Classifies content via JSON-RPC source detection, EPG data, and direct media_player entity reads. Measures watch duration with configurable minimum thresholds and logs to L2 memory. Stateless services driven by the `watch_history.yaml` blueprint -- the module has no scheduling of its own beyond startup config loading. The day's counters, entries and open sessions are saved to `/config/pyscript/watch_history_state.json` and restored at startup.
 
 ## Services
 
@@ -22,6 +22,7 @@ Tracks what is watched on Kodi across all sources (PVR, YouTube, Netflix, Prime 
 - `_fetch_active_epg()` -- For PVR content: calls `PVR.GetBroadcasts` on the active channel, performs linear scan in batches of 30 for `isactive=True` broadcast. Extracts season, episode number, episode name from EPG metadata.
 - `_b64_encode()` -- `@pyscript_compile` function for base64 auth header encoding (sandbox blocks `import base64` in regular pyscript context).
 - `_l2_set()` -- Writes watch session to L2 memory with key `watch:{date}:{index}` and tags `media,watch_history,{category},{source}`.
+- `_save_state()` / `_startup()` -- The day's state (index, entries, channel flips, open sessions) is written to `watch_history_state.json` after every change and restored at startup. A saved day that has ended gets its summary then, and the next index never goes below the highest `watch:{date}:N` already in L2, so a restart can't overwrite the day's earlier entries (memory keys are unique). Open sessions are restored only after a reload of this module, when the status sensor still shows them; after an HA restart the blueprint's start-up recovery opens a new one.
 
 ## State Dependencies
 
@@ -57,6 +58,7 @@ Pairs with `packages/ai_watch_history.yaml` (thin doc package). All triggers and
 
 - **v1:** Initial implementation.
 - **v1.1:** Template sensor circular dependency resolved — `series_title`/`season`/`episode` read from media_player only, no pyscript fallback (AP-78).
+- **v1.2:** The day's state survives restarts and reloads (`watch_history_state.json`). Before, a restart reset the index, and the next watch overwrote that day's first L2 entry; the day's summary also lost everything logged before the restart.
 
 ## Author
 

@@ -263,6 +263,19 @@ def _config_entity(cfg, key):
     return value.strip() if isinstance(value, str) else ""
 
 
+def _is_orphan(entity_id):
+    """True for a registry entry that no integration provides any more.
+
+    HA gives those a placeholder state with restored: true. Moving a met.no
+    location through its options flow leaves one behind (the weather entity's
+    unique_id is the coordinates), and it must not outrank the live entity.
+    """
+    try:
+        return bool((state.getattr(entity_id) or {}).get("restored"))  # noqa: F821
+    except NameError:
+        return True
+
+
 def _entity_exists(entity_id):
     try:
         state.get(entity_id)  # noqa: F821
@@ -300,6 +313,8 @@ def _publish_weather_sources(reason, cfg):
             )
             return
         if met:
+            provided = [e for e in met if not _is_orphan(e)]
+            met = provided + [e for e in met if e not in provided]
             weather, weather_source = met[0], "met.no"
     if not weather:
         names = sorted(state.names("weather"))  # noqa: F821

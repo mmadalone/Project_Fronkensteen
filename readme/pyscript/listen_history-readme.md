@@ -24,6 +24,7 @@ Tracks music listening sessions on Music Assistant / Spotify players with durati
 - `_close_session()` -- Duration computation, threshold check, L2 write with dynamic tags, daily entry tracking.
 - `_check_daily_rollover()` -- Midnight rollover: writes yesterday's summary to L2, resets daily counters.
 - `_l2_set()` -- Writes listen session to L2 memory with key `listen:{date}:{index}` and tags `media,listen_history,{source},{content_type}`.
+- `_l2_max_listen_index()` -- At startup the day's index starts after the highest `listen:{date}:N` already in L2. Memory keys are unique, so resetting the index to 0 on a restart made the next listen overwrite that day's first entry.
 
 ## State Dependencies
 
@@ -56,6 +57,7 @@ Pairs with `packages/ai_listen_history.yaml` (thin doc package). All triggers an
 ## Changelog
 
 - **v1:** Initial implementation.
+- **v1.1:** A restart no longer overwrites the day's earlier listens: the index starts after the highest one already in L2. (The day's in-memory list still starts empty after a restart.)
 
 ## Author
 

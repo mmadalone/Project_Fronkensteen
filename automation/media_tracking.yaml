@@ -20,6 +20,8 @@ blueprint:
 
     ### Recent changes
 
+    - **v1.2:** Refresh interval fires every N hours (it ran once a day at hour N)
+
     - **v1.1:** Queue sensors default to empty: re-pick them to keep queue refreshes
 
     - **v1:** Initial implementation
@@ -43,7 +45,8 @@ blueprint:
         refresh_interval:
           name: Refresh interval (hours)
           description: >
-            Hours between automatic refreshes. Lower values = more API calls.
+            Hours between automatic refreshes, on the hour (2 = every even
+            hour, 6 = 00/06/12/18). Lower values = more API calls.
           default: "6"
           selector:
             select:
@@ -314,10 +317,12 @@ variables:
 # ── Triggers ──────────────────────────────────────────────────────────────
 
 triggers:
-  # 1. Periodic — every N hours
+  # 1. Periodic — hourly; the "Periodic: every N hours" condition keeps every
+  #    Nth hour. (Feeding the input to time_pattern `hours:` meant "at hour N":
+  #    "2" fired once a day at 02:00, not every 2 hours.)
   - trigger: time_pattern
     id: periodic
-    hours: !input refresh_interval
+    hours: "/1"
 
   # 2. Daily — fixed time (default midnight)
   - trigger: time
@@ -358,6 +363,11 @@ conditions:
   - condition: template
     value_template: >-
       {{ trigger.id != 'daily' or v_enable_daily_refresh }}
+  - alias: "Periodic: every N hours"
+    condition: template
+    value_template: >-
+      {{ trigger.id != 'periodic'
+         or now().hour % ([1, (v_refresh_interval | string | replace('/', '')) | int(6)] | max) == 0 }}
   - alias: "Privacy gate"
     condition: template
     value_template: >-
